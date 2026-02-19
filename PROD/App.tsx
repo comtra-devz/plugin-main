@@ -8,7 +8,6 @@ import { Subscription } from './views/Subscription';
 import { Documentation } from './views/Documentation';
 import { Privacy } from './views/Privacy';
 import { Terms } from './views/Terms';
-import { Landing } from './views/Landing';
 import { Affiliate } from './views/Affiliate';
 import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
@@ -81,17 +80,11 @@ export default function App() {
   const totalCredits = (MAX_FREE_USES_PER_TOOL - usage.audit) + (MAX_FREE_USES_PER_TOOL - usage.gen) + (MAX_FREE_USES_PER_TOOL - usage.code);
   const creditsLabel = user?.plan === 'PRO' ? '∞' : `${Math.max(0, totalCredits)}`;
 
-  // Website Landing Page View (Outside Layout/Auth)
-  if (view === ViewState.WEBSITE) {
-    return <Landing onBack={() => { setView(ViewState.AUDIT); setShowLogin(true); }} />;
-  }
-
   // If showing login but view is Privacy, don't show modal
   if (showLogin && view !== ViewState.PRIVACY) {
-      return <LoginModal 
-        onLogin={handleLogin} 
-        onOpenPrivacy={handleOpenPrivacy} 
-        onGoToWebsite={() => { setShowLogin(false); setView(ViewState.WEBSITE); }}
+      return <LoginModal
+        onLogin={handleLogin}
+        onOpenPrivacy={handleOpenPrivacy}
       />;
   }
 

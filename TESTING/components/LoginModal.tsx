@@ -4,19 +4,10 @@ import { BRUTAL, COLORS } from '../constants';
 interface Props {
   onLogin: () => void;
   onOpenPrivacy: () => void;
-  onGoToWebsite: () => void;
 }
 
-export const LoginModal: React.FC<Props> = ({ onLogin, onOpenPrivacy, onGoToWebsite }) => (
+export const LoginModal: React.FC<Props> = ({ onLogin, onOpenPrivacy }) => (
   <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4" style={{ backgroundColor: COLORS.primary }}>
-    
-    <button 
-      onClick={onGoToWebsite}
-      data-component="Login: Go Website Button"
-      className="absolute top-4 right-4 bg-white border-2 border-black px-3 py-2 font-bold uppercase text-xs text-black hover:bg-black hover:text-white shadow-[4px_4px_0_0_#000] transition-all active:translate-y-1 active:shadow-none"
-    >
-      Go to Website ↗
-    </button>
 
     <div data-component="Login: Card" className={`${BRUTAL.card} max-w-sm w-full text-center py-10 relative shadow-[8px_8px_0px_0px_#000] z-10`}>
       <div data-component="Login: Badge" className="inline-block bg-black text-white px-3 py-1 text-xs font-bold uppercase mb-4 rotate-2 transform">
