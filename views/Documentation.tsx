@@ -40,7 +40,7 @@ const TUTORIALS = {
       <div className="space-y-2 text-xs leading-relaxed text-gray-700">
         <p><strong className="text-black">What is Drift?</strong> Drift occurs when your Figma designs have evolved, but the production code (Storybook/GitHub) is outdated.</p>
         <p><strong className="text-black">The Flow (Figma → Code):</strong> Figma is the Source of Truth. When you update a component here, it must be pushed to developers to maintain parity.</p>
-        <p><strong className="text-black">How to fix:</strong> Go to the Code tab > Sync. Comtra detects the difference and lets you "Push to Storybook/GitHub" to update the live component properties instantly.</p>
+        <p><strong className="text-black">How to fix:</strong> Go to the Code tab &gt; Sync. Comtra detects the difference and lets you "Push to Storybook/GitHub" to update the live component properties instantly.</p>
         <div className="bg-gray-100 p-2 mt-2 border-l-2 border-black">
             <p className="font-bold text-black mb-1">Advanced Prototypes:</p>
             <p>When syncing prototypes to GitHub or Bitbucket, you can enable <strong className="text-black">AI Motion</strong> (auto-generation of React Three Fiber/GSAP animations) and <strong className="text-black">Smart Linking</strong> to let AI automatically wire page routes.</p>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BRUTAL, AdminTeamMember } from '../types';
-import { Confetti } from '../../../../TESTING/components/Confetti';
+import { Confetti } from '../../../../components/Confetti';
 import { StrictConfirmationModal } from '../components/Shared';
 
 const MOCK_TEAM: AdminTeamMember[] = [
