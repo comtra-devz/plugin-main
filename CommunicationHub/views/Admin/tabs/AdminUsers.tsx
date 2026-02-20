@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { BRUTAL, AdminUser } from '../types';
 import { StatWidget, StrictConfirmationModal } from '../components/Shared';
-import { Confetti } from '../../../../TESTING/components/Confetti';
+import { Confetti } from '../../../../components/Confetti';
 
 interface Props {
     users: AdminUser[];
