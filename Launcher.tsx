@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import AppProd from './PROD/App';
 import AppTest from './TESTING/App';
-import { MasterPlanView } from './MasterPlan/MasterPlanView';
 import { CommunicationHub } from './CommunicationHub';
 
 // Launcher-specific styles to avoid dependencies on PROD/TESTING folders
@@ -12,11 +11,10 @@ const LAUNCHER_STYLES = {
 };
 
 export const Launcher = () => {
-  const [env, setEnv] = useState<'HOME' | 'PROD' | 'TEST' | 'MASTER' | 'COMM' | 'ADMIN'>('HOME');
+  const [env, setEnv] = useState<'HOME' | 'PROD' | 'TEST' | 'COMM' | 'ADMIN'>('HOME');
 
   if (env === 'PROD') return <AppProd />;
   if (env === 'TEST') return <AppTest />;
-  if (env === 'MASTER') return <MasterPlanView onBack={() => setEnv('HOME')} />;
   if (env === 'COMM') return <CommunicationHub onBack={() => setEnv('HOME')} />;
   if (env === 'ADMIN') return <CommunicationHub onBack={() => setEnv('HOME')} initialSection="ADMIN" />;
 
@@ -54,24 +52,16 @@ export const Launcher = () => {
 
           <div className="h-px bg-gray-300 my-2"></div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button 
-                onClick={() => setEnv('MASTER')}
-                className={`${LAUNCHER_STYLES.btn} py-3 text-[10px] bg-black text-white hover:bg-gray-800 flex justify-center items-center gap-1`}
-            >
-                <span>🛠 Master Plan</span>
-            </button>
-            <button 
-                onClick={() => setEnv('COMM')}
-                className={`${LAUNCHER_STYLES.btn} py-3 text-[10px] bg-blue-600 text-white hover:bg-blue-500 flex justify-center items-center gap-1`}
-            >
-                <span>📢 Comms Hub</span>
-            </button>
-          </div>
+          <button
+              onClick={() => setEnv('COMM')}
+              className={`${LAUNCHER_STYLES.btn} w-full py-3 text-[10px] bg-blue-600 text-white hover:bg-blue-500 flex justify-center items-center gap-1`}
+          >
+              <span>📢 Comms Hub</span>
+          </button>
 
-          <button 
+          <button
             onClick={() => setEnv('ADMIN')}
-            className={`${LAUNCHER_STYLES.btn} w-full py-3 text-[10px] bg-[#ffc900] text-black hover:bg-yellow-400 flex justify-center items-center gap-2 mt-2`}
+            className={`${LAUNCHER_STYLES.btn} w-full py-3 text-[10px] bg-[#ffc900] text-black hover:bg-yellow-400 flex justify-center items-center gap-2`}
           >
             <span>🛡️ Admin Dashboard</span>
           </button>

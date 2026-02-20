@@ -8,7 +8,6 @@ export enum ViewState {
   DOCUMENTATION = 'DOCUMENTATION',
   PRIVACY = 'PRIVACY',
   TERMS = 'TERMS',
-  WEBSITE = 'WEBSITE',
   AFFILIATE = 'AFFILIATE'
 }
 
