@@ -1,22 +1,20 @@
 // build.mjs
 // Compiles controller.ts (Figma main thread) into dist/code.js
-// The content of dist/ui.html is inlined as the __html__ global,
-// which Figma uses when figma.showUI(__html__) is called.
+//
+// __html__ is NOT inlined here — Figma injects it automatically at runtime
+// from the "ui" field in manifest.json ("ui": "dist/ui.html").
+// Inlining the HTML would embed React JS (with import() calls) as a string
+// inside code.js, causing Figma's sandbox to reject it with SyntaxError.
 
 import { build } from 'esbuild';
-import { readFileSync } from 'fs';
-
-const html = readFileSync('./dist/ui.html', 'utf-8');
 
 await build({
   entryPoints: ['./controller.ts'],
   bundle: true,
+  format: 'iife',
   outfile: './dist/code.js',
   target: 'es6',
   platform: 'browser',
-  define: {
-    __html__: JSON.stringify(html),
-  },
   tsconfig: './tsconfig.plugin.json',
   minify: false,
   logLevel: 'info',
