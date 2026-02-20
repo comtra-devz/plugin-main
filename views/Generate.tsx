@@ -321,7 +321,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usa
             <div className="flex flex-col gap-0 relative z-[1]">
                 <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">
                   <span>AI Terminal</span>
-                  <span className="opacity-70 font-mono">v1.0-TEST</span>
+                  <span className="opacity-70 font-mono">v1.0</span>
                 </div>
                 
                 {/* TEST ONLY: Helper Controls */}

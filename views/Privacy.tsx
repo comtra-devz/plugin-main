@@ -17,7 +17,7 @@ export const Privacy: React.FC = () => {
         </div>
         
         <div className="mt-6 pt-4 border-t-2 border-dashed border-black text-[10px] text-gray-500">
-          Last updated: October 2023 (TEST ENV)
+          Last updated: October 2023
         </div>
       </div>
     </div>

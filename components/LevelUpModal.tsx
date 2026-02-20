@@ -17,7 +17,6 @@ export const LevelUpModal: React.FC<Props> = ({ oldLevel, newLevel, discount, on
       <div className={`${BRUTAL.card} max-w-xs w-full bg-white text-center relative overflow-hidden transform transition-all scale-100`}>
         {/* Decorative Background */}
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#ff90e8] via-[#ffc900] to-[#ff90e8]"></div>
-        <span className="absolute top-2 right-2 text-[8px] bg-yellow-400 border border-black px-1 font-bold">TEST</span>
         
         <div className="mb-4 mt-2">
             <span className="text-4xl animate-bounce inline-block">🚀</span>

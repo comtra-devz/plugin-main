@@ -20,7 +20,7 @@ const StatBox = ({ label, value, color = 'bg-white' }: { label: string; value: n
 export const UserStatsWidget: React.FC<Props> = ({ stats, compact = false }) => {
   return (
     <div className={`${BRUTAL.card} ${compact ? 'p-3' : 'p-4'} bg-gray-50`}>
-      {!compact && <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2">Production Metrics <span className="text-[8px] bg-yellow-400 border border-black px-1">TEST</span></h3>}
+      {!compact && <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2">Production Metrics</h3>}
       
       <div className="grid grid-cols-2 gap-4 mb-4">
          <div className="col-span-2 bg-black text-white p-2 border-2 border-black shadow-[4px_4px_0_0_#ff90e8] flex justify-between items-center">

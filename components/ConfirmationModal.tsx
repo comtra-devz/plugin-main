@@ -17,7 +17,7 @@ export const ConfirmationModal: React.FC<Props> = ({ title, message, onConfirm, 
       <div className={`${BRUTAL.card} max-w-xs w-full bg-white relative animate-in zoom-in-95 duration-200`}>
         <div className={`text-center border-b-2 border-black pb-2 mb-4 ${isWarning ? 'bg-red-100 -mx-4 -mt-4 p-4 border-b-2 border-black' : ''}`}>
             <h3 className={`font-black uppercase text-lg ${isWarning ? 'text-red-600' : 'text-black'}`}>
-                {title} <span className="text-[8px] bg-yellow-400 text-black px-1 ml-1 align-top border border-black">TEST</span>
+                {title}
             </h3>
         </div>
         

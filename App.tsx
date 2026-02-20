@@ -92,12 +92,7 @@ export default function AppTest() {
   return (
     <>
       <DebugInspector />
-      
-      {/* TEST BADGE OVERLAY */}
-      <div className="fixed top-20 right-0 z-[100] bg-yellow-400 text-black font-black uppercase text-[10px] px-2 py-1 rotate-45 translate-x-4 border-2 border-black pointer-events-none">
-        TEST ENV
-      </div>
-      
+
       <Layout 
         current={view} 
         setView={(v) => {

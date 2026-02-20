@@ -16,8 +16,8 @@ export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, onConfirm, 
         
         {/* Receipt Header */}
         <div className="bg-yellow-400 text-black p-3 text-center border-b-2 border-dashed border-black">
-          <h3 className="font-bold uppercase text-lg tracking-widest">TEST RECEIPT</h3>
-          <p className="text-[10px]">SIMULATED CHARGE</p>
+          <h3 className="font-bold uppercase text-lg tracking-widest">Scan Receipt</h3>
+          <p className="text-[10px]">Simulated charge</p>
         </div>
 
         {/* Receipt Body */}

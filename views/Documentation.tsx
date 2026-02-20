@@ -89,7 +89,7 @@ export const Documentation: React.FC = () => {
 
       {/* Header */}
       <div className={`${BRUTAL.card} bg-[#ffc900]`}>
-        <h2 className="text-2xl font-black uppercase mb-1">Knowledge Base <span className="text-[10px] bg-black text-white px-1 align-top ml-1">TEST</span></h2>
+        <h2 className="text-2xl font-black uppercase mb-1">Knowledge Base</h2>
         <p className="text-xs font-bold">Master the system. Scale your workflow.</p>
       </div>
 
@@ -173,7 +173,7 @@ export const Documentation: React.FC = () => {
           <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6" onClick={() => setShowSupportModal(false)}>
               <div className={`${BRUTAL.card} max-w-sm w-full bg-white relative`} onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => setShowSupportModal(false)} className="absolute top-2 right-2 font-bold text-xl">×</button>
-                  <h3 className="font-black uppercase text-lg mb-4 bg-black text-white inline-block px-2">Support Ticket <span className="text-[8px] bg-yellow-400 text-black px-1 ml-1 align-top border border-black">TEST</span></h3>
+                  <h3 className="font-black uppercase text-lg mb-4 bg-black text-white inline-block px-2">Support Ticket</h3>
                   
                   <div className="space-y-4">
                       <div>

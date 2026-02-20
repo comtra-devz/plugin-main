@@ -38,7 +38,7 @@ export const Affiliate: React.FC = () => {
   return (
     <div className="p-4 pb-24 flex flex-col gap-6">
       <div className={`${BRUTAL.card} bg-white`}>
-        <h2 className="text-2xl font-black uppercase mb-1 bg-black text-white inline-block px-2">Partner Program <span className="text-[10px] bg-yellow-400 text-black px-1 ml-1 align-top">TEST</span></h2>
+        <h2 className="text-2xl font-black uppercase mb-1 bg-black text-white inline-block px-2">Partner Program</h2>
         <p className="text-xs text-gray-600 mb-6 font-medium mt-2">
             Share Comtra with your friends. You earn <strong className="text-black">5%</strong> on every payment they make, forever.
         </p>

@@ -14,7 +14,7 @@ export const LoginModal: React.FC<Props> = ({ onLogin, onOpenPrivacy }) => (
         Design System AI
       </div>
       
-      <h1 data-component="Login: Title" className="text-5xl font-black uppercase mb-1 tracking-tighter leading-[0.9] text-black">Comtra <span className="text-sm bg-yellow-400 text-black px-1 align-top transform -rotate-12 inline-block">TEST</span></h1>
+      <h1 data-component="Login: Title" className="text-5xl font-black uppercase mb-1 tracking-tighter leading-[0.9] text-black">Comtra</h1>
       
       <div className="px-6 space-y-3 mt-8">
         <button 

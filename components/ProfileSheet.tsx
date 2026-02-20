@@ -80,7 +80,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, onClose, onL
         </button>
       </div>
       <div data-component="Profile: Footer Version" className="bg-gray-100 p-2 text-[10px] font-mono text-center border-t-2 border-black">
-        v1.0.7-TEST
+        v1.0.7
       </div>
     </div>
   </div>
