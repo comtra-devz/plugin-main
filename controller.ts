@@ -1,9 +1,7 @@
 // This file runs in the Figma main thread (sandbox)
 // It handles API calls to the Figma document
+/// <reference types="@figma/plugin-typings" />
 
-export {};
-
-declare const figma: any;
 declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
@@ -24,7 +22,7 @@ figma.ui.onmessage = async (msg: any) => {
   }
 
   if (msg.type === 'apply-fix') {
-    const node = figma.getNodeById(msg.layerId);
+    const node = await figma.getNodeByIdAsync(msg.layerId);
     if (node && 'fills' in node) {
       // Example fix: Clone to support undo implicitly if needed, 
       // but usually we just set the property.
@@ -36,7 +34,7 @@ figma.ui.onmessage = async (msg: any) => {
   }
 
   if (msg.type === 'undo-fix') {
-    const node = figma.getNodeById(msg.layerId);
+    const node = await figma.getNodeByIdAsync(msg.layerId);
     if (node) {
       figma.notify("Changes reverted");
       // Logic to revert specific properties would go here

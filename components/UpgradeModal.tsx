@@ -1,15 +1,21 @@
+
 import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
 
 const TIERS = [
   { id: '1w', label: '1 Week', price: '€7', sub: 'Just trying', limit: '20 prompts' },
   { id: '1m', label: '1 Month', price: '€25', sub: 'Standard', limit: '100 prompts/mo' },
-  { id: '6m', label: '6 Months', price: '€99', sub: 'Save 30%', rec: true, limit: '600 prompts' },
-  { id: '1y', label: '1 Year', price: '€250', sub: 'Best Value', limit: '3000 prompts' },
+  { id: '6m', label: '6 Months', price: '€99', sub: 'Save 30%', rec: true, limit: '800 prompts' },
+  { id: '1y', label: '1 Year', price: '€250', sub: 'Best Value', limit: 'Unlimited prompts' },
 ];
 
-export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: () => void }> = ({ onClose, onUpgrade }) => {
+export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: string) => void }> = ({ onClose, onUpgrade }) => {
   const [sel, setSel] = useState('6m');
+  const [promoCode, setPromoCode] = useState('');
+
+  const openDiscord = () => {
+      window.open('https://discord.gg/comtra', '_blank');
+  };
 
   return (
     <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
@@ -17,7 +23,7 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: () => void
         <button onClick={onClose} className="absolute top-2 right-2 font-bold text-xl">×</button>
         <h2 className="text-2xl font-black uppercase mb-4 bg-[#ffc900] inline-block px-1">Unlock Pro</h2>
         
-        <div className="space-y-3 mb-6">
+        <div className="space-y-3 mb-4">
           {TIERS.map(t => (
             <div 
               key={t.id} 
@@ -39,11 +45,24 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: () => void
           ))}
         </div>
 
-        <button onClick={onUpgrade} className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] flex justify-center items-center gap-2`}>
-          <span>Pay via Stripe</span>
+        <div className="mb-4">
+            <label className="text-[10px] font-bold uppercase mb-1 block leading-tight">
+              Have a discount code? If not, check our <span onClick={openDiscord} className="underline cursor-pointer hover:text-[#ff90e8]">Discord community</span>.
+            </label>
+            <input 
+                type="text" 
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="ENTER CODE"
+                className="w-full border-2 border-black p-2 font-mono text-sm uppercase placeholder:text-gray-400 bg-white outline-none"
+            />
+        </div>
+
+        <button onClick={() => onUpgrade(sel)} className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] flex justify-center items-center gap-2`}>
+          <span>Pay now</span>
           <span className="text-xs">→</span>
         </button>
-        <p className="text-[10px] text-center mt-3 text-gray-500">Secure checkout via Stripe. Cancel anytime.</p>
+        <p className="text-[10px] text-center mt-3 text-gray-500">Secure checkout via Lemon Squeezy. Cancel anytime.</p>
       </div>
     </div>
   );

@@ -1,31 +1,38 @@
-import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+
+import React, { useState, useEffect } from 'react';
+import { TIER_LIMITS } from '../constants';
 import { UserPlan } from '../types';
+import { Confetti } from '../components/Confetti.tsx';
+import { TokensTab } from './Code/tabs/TokensTab.tsx';
+import { TargetTab } from './Code/tabs/TargetTab.tsx';
+import { SyncTab } from './Code/tabs/SyncTab.tsx';
+import { LevelUpModal } from '../components/LevelUpModal.tsx';
 
 interface Props { 
   plan: UserPlan; 
+  userTier?: string;
   onUnlockRequest: () => void;
   usageCount: number;
   onUse: () => void;
 }
 
-const LANGUAGES = [
-  { id: 'REACT', label: 'React + Tailwind' },
-  { id: 'STORYBOOK', label: 'Storybook (.stories.tsx)' },
-  { id: 'LIQUID', label: 'Shopify Liquid' },
-  { id: 'CSS', label: 'HTML + Clean CSS' },
-  { id: 'VUE', label: 'Vue 3' },
-  { id: 'SVELTE', label: 'Svelte' },
-  { id: 'ANGULAR', label: 'Angular' },
+const SYNC_ITEMS_MOCK = [
+  { id: 'c1', name: 'Primary Button', status: 'DRIFT', lastEdited: '2h ago', desc: 'Padding inconsistency: Figma 12px vs Code 16px' },
+  { id: 'c2', name: 'Input Field', status: 'DRIFT', lastEdited: '5h ago', desc: 'Missing focus state definition in Figma' },
+  { id: 'c3', name: 'Navbar', status: 'DRIFT', lastEdited: '1d ago', desc: 'Color token mismatch: primary-500 vs primary-600' },
 ];
 
-const MAX_FREE_USES = 3;
+const COOLDOWN_MS = 120000; // 2 Minutes
 
-type Tab = 'TOKENS' | 'TARGET';
+type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, onUnlockRequest, usageCount, onUse }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCount, onUse }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
+  // Cooldown State
+  const [cooldowns, setCooldowns] = useState<{ [key: string]: number }>({});
+  const [now, setNow] = useState(Date.now());
+
   // Single Target State
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [lang, setLang] = useState('REACT');
@@ -34,58 +41,164 @@ export const Code: React.FC<Props> = ({ plan, onUnlockRequest, usageCount, onUse
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSyncingComp, setIsSyncingComp] = useState(false);
   const [lastSyncedComp, setLastSyncedComp] = useState<Date | null>(null);
-
+  
   // Tokens / CSS State
   const [isSyncingTokens, setIsSyncingTokens] = useState(false);
-  const [lastSyncedTokens, setLastSyncedTokens] = useState<Date | null>(null);
+  
+  // Dual Timestamp Logic for Tokens Tab
+  const [lastGeneratedCssDate, setLastGeneratedCssDate] = useState<Date | null>(null);
+  const [lastSyncedStorybookDate, setLastSyncedStorybookDate] = useState<Date | null>(null);
+  
+  const [tokenSyncSource, setTokenSyncSource] = useState<'Storybook' | 'GitHub' | 'Bitbucket' | null>(null);
   const [generatedCss, setGeneratedCss] = useState<string | null>(null);
   const [isGeneratingCss, setIsGeneratingCss] = useState(false);
   const [copiedCss, setCopiedCss] = useState(false);
 
-  const isPro = plan === 'PRO';
-  const remaining = Math.max(0, MAX_FREE_USES - usageCount);
-  const canUseFeature = isPro || remaining > 0;
+  // JSON State
+  const [generatedJson, setGeneratedJson] = useState<string | null>(null);
+  const [isGeneratingJson, setIsGeneratingJson] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [lastGeneratedJsonDate, setLastGeneratedJsonDate] = useState<Date | null>(null);
+  
+  // Deep Sync State
+  const [activeSyncTab, setActiveSyncTab] = useState<'SB' | 'GH' | 'BB'>('SB');
+  const [isSbConnected, setIsSbConnected] = useState(false);
+  const [isSyncScanning, setIsSyncScanning] = useState(false);
+  const [syncItems, setSyncItems] = useState<typeof SYNC_ITEMS_MOCK>([]);
+  const [hasSyncScanned, setHasSyncScanned] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [lastSyncAllDate, setLastSyncAllDate] = useState<Date | null>(null);
+  const [expandedDriftId, setExpandedDriftId] = useState<string | null>(null);
+  const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
 
-  const handleAction = (action: () => void) => {
+  // Level Up State
+  const [showLevelUp, setShowLevelUp] = useState(false);
+
+  const isPro = plan === 'PRO';
+  const isAnnual = userTier === '1y';
+  
+  // Credit Limit Logic
+  const limit = isPro 
+    ? (userTier && TIER_LIMITS[userTier] ? TIER_LIMITS[userTier] : TIER_LIMITS['PRO']) 
+    : TIER_LIMITS['FREE'];
+    
+  // Mocking previous usage for Pro to make it look realistic (450 used), Free starts at 0 + session usage
+  const effectiveUsage = isPro ? 450 + usageCount : usageCount;
+  const remaining = Math.max(0, limit - effectiveUsage);
+  
+  const canUseFeature = isPro || remaining > 0;
+  const creditsDisplay = isPro ? `${limit - effectiveUsage}/${limit}` : `${remaining}/${limit}`;
+
+  // Calculated State for Tokens Sync Status
+  // If Storybook date is newer or equal to CSS/JSON date, we are synced.
+  const isTokensSynced = lastSyncedStorybookDate && lastGeneratedCssDate && lastSyncedStorybookDate >= lastGeneratedCssDate;
+  const isJsonSynced = lastSyncedStorybookDate && lastGeneratedJsonDate && lastSyncedStorybookDate >= lastGeneratedJsonDate;
+
+  // Timer Tick
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getRemainingTime = (key: string) => {
+    const end = cooldowns[key];
+    if (!end || end < now) return null;
+    const diff = Math.ceil((end - now) / 1000);
+    const m = Math.floor(diff / 60).toString().padStart(2, '0');
+    const s = (diff % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const startCooldown = (key: string) => {
+    setCooldowns(prev => ({ ...prev, [key]: Date.now() + COOLDOWN_MS }));
+  };
+
+  const handleAction = (action: () => void, requiresCredit = false) => {
     if (!canUseFeature) {
       onUnlockRequest();
       return;
     }
+    if (requiresCredit && !isPro) onUse();
     action();
   };
 
+  const getTimeStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
   // --- MOCK GENERATORS ---
   const generateCodeString = () => {
-    if (lang === 'CSS') return `.btn {\n  background: #ff90e8;\n  border: 2px solid #000;\n  padding: 8px 16px;\n  cursor: pointer;\n}`;
-    if (lang === 'VUE') return `<template>\n  <button class="btn">Click me</button>\n</template>`;
-    if (lang === 'LIQUID') return `{% render 'button', label: 'Click me', class: 'btn-primary' %}`;
-    if (lang === 'STORYBOOK') return `import type { Meta, StoryObj } from '@storybook/react';\nimport { Button } from './Button';\n\nconst meta: Meta<typeof Button> = {\n  component: Button,\n};\nexport default meta;\n\ntype Story = StoryObj<typeof Button>;\n\nexport const Primary: Story = {\n  args: {\n    primary: true,\n    label: 'Button',\n  },\n};`;
-    return `export const Button = () => (\n  <button className="bg-[#ff90e8] border-2 border-black p-2 hover:bg-[#ffc900] transition-all">\n    Click me\n  </button>\n);`;
+    const ts = getTimeStamp();
+    if (lang === 'CSS') return `/* Generated on ${ts} */\n.btn {\n  background: #ff90e8;\n  border: 2px solid #000;\n  padding: 8px 16px;\n  cursor: pointer;\n}`;
+    if (lang === 'VUE') return `<!-- Generated on ${ts} -->\n<template>\n  <button class="btn">Click me</button>\n</template>`;
+    if (lang === 'LIQUID') return `{% comment %} Generated on ${ts} {% endcomment %}\n{% render 'button', label: 'Click me', class: 'btn-primary' %}`;
+    if (lang === 'STORYBOOK') return `// Generated on ${ts}\nimport type { Meta, StoryObj } from '@storybook/react';\nimport { Button } from './Button';\n\nconst meta: Meta<typeof Button> = {\n  component: Button,\n};\nexport default meta;\n\ntype Story = StoryObj<typeof Button>;\n\nexport const Primary: Story = {\n  args: {\n    primary: true,\n    label: 'Button',\n  },\n};`;
+    return `// Generated on ${ts}\nexport const Button = () => (\n  <button className="bg-[#ff90e8] border-2 border-black p-2 hover:bg-[#ffc900] transition-all">\n    Click me\n  </button>\n);`;
   };
 
   const getRawCss = () => {
-    return `:root {\n  --primary: #ff90e8;\n  --surface: #ffffff;\n  --border: 2px solid #000;\n}\n\n.component-base {\n  background: var(--primary);\n  border: var(--border);\n}`;
+    return `/* Generated on ${getTimeStamp()} */\n:root {\n  --primary: #ff90e8;\n  --surface: #ffffff;\n  --border: 2px solid #000;\n}\n\n.component-base {\n  background: var(--primary);\n  border: var(--border);\n}`;
+  };
+
+  const getRawJson = () => {
+    return JSON.stringify({
+      meta: {
+        generatedAt: getTimeStamp(),
+        version: "1.0.0"
+      },
+      tokens: {
+        colors: {
+          primary: "#ff90e8",
+          surface: "#ffffff",
+          text: "#000000"
+        },
+        spacing: {
+          sm: "4px",
+          md: "8px",
+          lg: "16px"
+        },
+        border: "2px solid #000"
+      }
+    }, null, 2);
   };
 
   // --- HANDLERS ---
   const handleGenerate = () => {
      handleAction(() => {
         setIsGenerating(true);
+        // Generation always uses generic credits if not Pro
         if(!isPro) onUse();
         setTimeout(() => {
           setGeneratedCode(generateCodeString());
           setIsGenerating(false);
+          // Reset sync if code changes
+          setLastSyncedComp(null);
         }, 1500);
      });
   };
 
   const handleGenerateCss = () => {
+    // Uses CSS Update Cooldown
     handleAction(() => {
       setIsGeneratingCss(true);
       if(!isPro) onUse();
       setTimeout(() => {
         setGeneratedCss(getRawCss());
         setIsGeneratingCss(false);
+        // Update CSS Gen Date. This will make "Sync Storybook" active again if it was synced.
+        setLastGeneratedCssDate(new Date()); 
+        startCooldown('css_update');
+      }, 1000);
+    });
+  };
+
+  const handleGenerateJson = () => {
+    handleAction(() => {
+      setIsGeneratingJson(true);
+      if(!isPro) onUse();
+      setTimeout(() => {
+        setGeneratedJson(getRawJson());
+        setIsGeneratingJson(false);
+        setLastGeneratedJsonDate(new Date());
+        startCooldown('json_update');
       }, 1000);
     });
   };
@@ -101,201 +214,200 @@ export const Code: React.FC<Props> = ({ plan, onUnlockRequest, usageCount, onUse
     navigator.clipboard.writeText(generatedCss || "");
     setTimeout(() => setCopiedCss(false), 2000);
   };
+
+  const handleCopyJson = () => {
+    setCopiedJson(true);
+    navigator.clipboard.writeText(generatedJson || "");
+    setTimeout(() => setCopiedJson(false), 2000);
+  };
   
-  const handleSyncComp = () => {
+  const handleSyncComp = (target: 'SB' | 'GH' | 'BB') => {
     if (!isPro) {
       onUnlockRequest();
       return;
     }
     if (!selectedLayer) return;
+    if (target === 'GH' || target === 'BB') return; 
+
+    // Credit usage for sync
+    if(!isAnnual) onUse(); 
+
     setIsSyncingComp(true);
     setTimeout(() => {
       setLastSyncedComp(new Date());
       setIsSyncingComp(false);
+      startCooldown('comp_sync');
     }, 2000);
   };
 
-  const handleTokenSync = () => {
+  const handleTokenSync = (target: 'SB' | 'GH' | 'BB') => {
      if (!isPro) {
        onUnlockRequest();
        return;
      }
+     
+     if (target === 'GH' || target === 'BB') return;
+
+     // Credit usage for sync
+     if(!isAnnual) onUse();
+
      setIsSyncingTokens(true);
      setTimeout(() => {
-       setLastSyncedTokens(new Date());
+       setLastSyncedStorybookDate(new Date());
+       setTokenSyncSource(target === 'SB' ? 'Storybook' : target === 'GH' ? 'GitHub' : 'Bitbucket');
        setIsSyncingTokens(false);
+       startCooldown('token_sync');
      }, 2000);
   };
 
+  const handleSelectLayer = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLayerSelectionFeedback(id);
+    setTimeout(() => setLayerSelectionFeedback(null), 2000);
+  };
+
+  // Sync Logic
+  const handleConnectSb = () => {
+    setIsSbConnected(true);
+  };
+
+  const handleSyncScan = () => {
+    // Check Cooldown
+    if (getRemainingTime('scan_sync')) return;
+
+    if(!isAnnual) onUse(); // Uses credits
+
+    setIsSyncScanning(true);
+    setTimeout(() => {
+      setIsSyncScanning(false);
+      setSyncItems(SYNC_ITEMS_MOCK);
+      setHasSyncScanned(true);
+      startCooldown('scan_sync');
+    }, 2000);
+  };
+
+  const handleSyncItem = (id: string, e?: React.MouseEvent) => {
+    if(e) e.stopPropagation();
+    setSyncItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const handleSyncAll = () => {
+    if(!isAnnual) onUse(); // Uses credits
+    setSyncItems([]);
+    setLastSyncAllDate(new Date());
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 2000);
+  };
+
   return (
-    <div className="p-4 pb-24 flex flex-col gap-4">
+    <div className="p-4 pb-24 flex flex-col gap-4 relative">
+      {showConfetti && <Confetti />}
+      {showLevelUp && (
+          <LevelUpModal 
+            oldLevel={4}
+            newLevel={5}
+            discount={5}
+            onClose={() => setShowLevelUp(false)}
+          />
+      )}
       
-      {/* Credit Banner (Visible for Pro too) */}
+      {/* Credit Banner */}
       <div className="flex justify-center mb-2">
         <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${remaining === 0 && !isPro ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-          {isPro ? 'Credits: ∞' : `Free Exports Remaining: ${remaining}/${MAX_FREE_USES}`}
+          {isPro ? `Credits: ${creditsDisplay}` : `Free Credits Remaining: ${remaining}/${limit}`}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-2 border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
+      <div className="grid grid-cols-3 border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
         <button 
           onClick={() => setActiveTab('TOKENS')}
-          className={`py-2 text-xs font-black uppercase transition-colors ${activeTab === 'TOKENS' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+          className={`py-2 text-[10px] font-black uppercase transition-colors ${activeTab === 'TOKENS' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
-          CSS & Tokens
+          Tokens
         </button>
         <button 
           onClick={() => setActiveTab('TARGET')}
-          className={`py-2 text-xs font-black uppercase transition-colors ${activeTab === 'TARGET' ? 'bg-black text-white' : 'hover:bg-gray-100 border-l-2 border-black'}`}
+          className={`py-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'TARGET' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
-          Single Target
+          Target
+        </button>
+        <button 
+          onClick={() => setActiveTab('SYNC')}
+          className={`py-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'SYNC' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+        >
+          Sync
         </button>
       </div>
 
       {/* TAB 1: CSS & TOKENS */}
       {activeTab === 'TOKENS' && (
-        <div className="flex flex-col gap-4 animate-in slide-in-from-left-2">
-           <div className="bg-white border-2 border-black p-3 text-[10px] font-medium leading-tight shadow-[4px_4px_0_0_#000]">
-              <span className="font-bold uppercase block mb-1">⚠️ Crucial Step</span>
-              You must copy/paste this code into your project's global stylesheet first. It defines the core variables required for individual components to work correctly.
-           </div>
-
-           <div className="flex flex-col gap-1 border-2 border-black bg-black p-4 text-white shadow-[4px_4px_0_0_#000]">
-            <div className="flex justify-between items-end mb-2 border-b border-gray-700 pb-2">
-                <label className="text-[10px] font-bold uppercase pl-1 inline-block w-fit px-1 text-[#ff90e8]">Raw CSS & Tokens</label>
-                
-                <div className={`px-2 py-0.5 border border-white text-[9px] font-bold uppercase ${lastSyncedTokens ? 'bg-[#ffc900] text-black border-none' : 'bg-gray-800 text-gray-400'}`}>
-                    {lastSyncedTokens ? 'Synced' : 'Not Synced'}
-                </div>
-            </div>
-            
-            {lastSyncedTokens && (
-                <div className="text-[9px] font-mono text-gray-400 mb-2 p-1 text-right">
-                    Last update: {lastSyncedTokens.toLocaleDateString()} {lastSyncedTokens.toLocaleTimeString()}
-                </div>
-            )}
-
-            {!generatedCss ? (
-              <button 
-                  onClick={handleGenerateCss} 
-                  className={`${BRUTAL.btn} bg-white text-black border-white w-full text-xs flex justify-center items-center gap-2 mt-2 hover:bg-gray-200`}
-                  disabled={isGeneratingCss}
-                >
-                  {isGeneratingCss ? 'Generating CSS...' : 'Generate CSS & Tokens'}
-                </button>
-            ) : (
-              <div className="animate-in fade-in">
-                <div className="bg-[#1a1a1a] border border-gray-700 p-2 font-mono text-[9px] text-[#ffc900] h-32 overflow-y-auto mb-3 custom-scrollbar">
-                  <pre>{generatedCss}</pre>
-                </div>
-                <div className="flex gap-2">
-                    <button className={`${BRUTAL.btn} flex-1 text-[10px] bg-white text-black border-white hover:bg-gray-200`} onClick={handleCopyCss}>
-                      {copiedCss ? 'COPIED!' : 'Copy CSS'}
-                    </button>
-                    <button 
-                        className={`${BRUTAL.btn} flex-1 text-[10px] bg-transparent text-white border-white relative hover:bg-white hover:text-black`} 
-                        onClick={handleTokenSync}
-                        disabled={isSyncingTokens}
-                    >
-                      {isSyncingTokens ? 'Syncing...' : 'Sync Storybook'}
-                      <span className="absolute bottom-0.5 right-1 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">PRO</span>
-                    </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <TokensTab 
+            lastGeneratedCssDate={lastGeneratedCssDate}
+            lastSyncedStorybookDate={lastSyncedStorybookDate}
+            generatedCss={generatedCss}
+            isGeneratingCss={isGeneratingCss}
+            copiedCss={copiedCss}
+            handleGenerateCss={handleGenerateCss}
+            handleCopyCss={handleCopyCss}
+            handleTokenSync={handleTokenSync}
+            isSyncingTokens={isSyncingTokens}
+            getRemainingTime={getRemainingTime}
+            isTokensSynced={isTokensSynced}
+            generatedJson={generatedJson}
+            lastGeneratedJsonDate={lastGeneratedJsonDate}
+            isGeneratingJson={isGeneratingJson}
+            copiedJson={copiedJson}
+            handleGenerateJson={handleGenerateJson}
+            handleCopyJson={handleCopyJson}
+            isJsonSynced={isJsonSynced}
+        />
       )}
 
       {/* TAB 2: SINGLE TARGET */}
       {activeTab === 'TARGET' && (
-        <div className="flex flex-col gap-4 animate-in slide-in-from-right-2">
-          {/* Layer Selection */}
-          <div className={`${BRUTAL.card} bg-white py-3 flex flex-col gap-2`}>
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold uppercase">Target Layer</span>
-              <button onClick={() => { setSelectedLayer(selectedLayer ? null : "Button_Primary"); setGeneratedCode(null); }} className="text-[10px] font-bold bg-black text-white px-2 py-1">
-                {selectedLayer ? 'Deselect' : 'Select Frame'}
-              </button>
-            </div>
-            {selectedLayer ? (
-              <span className="font-mono text-xs text-gray-500">{selectedLayer}</span>
-            ) : (
-              <span className="text-[10px] text-red-500 italic">No layer selected in Figma</span>
-            )}
-          </div>
+        <TargetTab
+            selectedLayer={selectedLayer}
+            setSelectedLayer={setSelectedLayer}
+            lang={lang}
+            setLang={setLang}
+            generatedCode={generatedCode}
+            setGeneratedCode={setGeneratedCode}
+            copied={copied}
+            isGenerating={isGenerating}
+            handleGenerate={handleGenerate}
+            handleCopy={handleCopy}
+            handleSyncComp={handleSyncComp}
+            isSyncingComp={isSyncingComp}
+            lastSyncedComp={lastSyncedComp}
+            getRemainingTime={getRemainingTime}
+            setLastSyncedComp={setLastSyncedComp}
+        />
+      )}
 
-          {selectedLayer && (
-            <>
-              {/* Code Generation */}
-              <div className="flex flex-col gap-2 animate-in slide-in-from-top-2">
-                <div className="flex justify-between items-end">
-                  <label className="text-[10px] font-bold uppercase pl-1">Output Format</label>
-                  <div className="relative w-1/2">
-                    <select 
-                      value={lang} 
-                      onChange={(e) => { setLang(e.target.value); setGeneratedCode(null); }}
-                      className={`${BRUTAL.input} appearance-none bg-white pr-8 text-[10px] font-bold uppercase py-1 h-8`}
-                    >
-                      {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none font-bold text-[8px]">▼</div>
-                  </div>
-                </div>
-
-                {!generatedCode ? (
-                  <button 
-                    onClick={handleGenerate} 
-                    className={`${BRUTAL.btn} bg-white w-full text-xs flex justify-center items-center gap-2`}
-                    disabled={isGenerating}
-                  >
-                    {isGenerating ? 'Generating...' : 'Generate Code'}
-                  </button>
-                ) : (
-                  <div className="animate-in fade-in">
-                    <div className={`${BRUTAL.card} font-mono text-[10px] bg-[#1a1a1a] text-gray-300 overflow-x-auto h-48 p-3 relative mb-2`}>
-                      <div className="absolute top-2 right-2 text-[9px] text-gray-500 uppercase">{lang}</div>
-                      <pre>{generatedCode}</pre>
-                    </div>
-                    <button onClick={handleCopy} className={`${BRUTAL.btn} bg-white w-full text-xs`}>
-                      {copied ? 'COPIED!' : 'COPY CODE'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Component Sync Section */}
-              <div className={`${BRUTAL.card} bg-[#e0f2fe] border-black border-2 relative overflow-hidden animate-in slide-in-from-top-2`}>
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex flex-col">
-                    <h3 className="font-black uppercase text-sm">Storybook Connect</h3>
-                    <p className="text-[10px] text-gray-600">Sync this component.</p>
-                  </div>
-                  <div className={`px-2 py-0.5 border-2 border-black text-[9px] font-bold uppercase ${lastSyncedComp ? 'bg-[#ffc900] text-black' : 'bg-gray-200 text-gray-500'}`}>
-                    {lastSyncedComp ? 'Synced' : 'Not Synced'}
-                  </div>
-                </div>
-
-                <button 
-                  onClick={handleSyncComp} 
-                  disabled={isSyncingComp}
-                  className={`${BRUTAL.btn} w-full flex justify-center items-center gap-2 relative ${isSyncingComp ? 'bg-gray-300' : `bg-[${COLORS.primary}]`}`}
-                >
-                  {isSyncingComp ? (
-                    <span>Weaving connection...</span>
-                  ) : (
-                    <>
-                      <span className="text-lg">⚡</span>
-                      <span>Sync Component</span>
-                    </>
-                  )}
-                  <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+      {/* TAB 3: SYNCHRONIZE */}
+      {activeTab === 'SYNC' && (
+        <SyncTab 
+            isPro={isPro}
+            onUnlockRequest={onUnlockRequest}
+            activeSyncTab={activeSyncTab}
+            setActiveSyncTab={setActiveSyncTab}
+            isSbConnected={isSbConnected}
+            handleConnectSb={handleConnectSb}
+            hasSyncScanned={hasSyncScanned}
+            handleSyncScan={handleSyncScan}
+            isSyncScanning={isSyncScanning}
+            getRemainingTime={getRemainingTime}
+            syncItems={syncItems}
+            expandedDriftId={expandedDriftId}
+            setExpandedDriftId={setExpandedDriftId}
+            handleSelectLayer={handleSelectLayer}
+            layerSelectionFeedback={layerSelectionFeedback}
+            handleSyncItem={handleSyncItem}
+            handleSyncAll={handleSyncAll}
+            lastSyncAllDate={lastSyncAllDate}
+            onScanComplete={() => setShowLevelUp(true)}
+        />
       )}
 
     </div>

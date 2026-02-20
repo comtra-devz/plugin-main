@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { BRUTAL, RequestItem, RequestCategory } from '../types';
-import { Confetti } from '../../../../TESTING/components/Confetti'; // Reusing existing component for now
+import { Confetti } from '../../../../components/Confetti'; // Reusing existing component for now
 
 const INITIAL_REQUESTS: RequestItem[] = [
     { 

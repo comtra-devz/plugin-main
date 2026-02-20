@@ -1,0 +1,14 @@
+{
+  "name": "Comtra - AI Design System",
+  "id": "COMTRA_PLUGIN_DEV_ID",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["generativelanguage.googleapis.com"],
+    "reasoning": "Uses Google Gemini API for AI-powered design system analysis, wireframe generation and code export",
+    "devAllowedDomains": ["http://localhost:3000"]
+  }
+}

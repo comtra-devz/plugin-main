@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Layout } from './components/Layout';
 import { Audit } from './views/Audit';
@@ -6,25 +7,50 @@ import { Code } from './views/Code';
 import { Subscription } from './views/Subscription';
 import { Documentation } from './views/Documentation';
 import { Privacy } from './views/Privacy';
-import { Landing } from './views/Landing';
+import { Terms } from './views/Terms';
+import { Affiliate } from './views/Affiliate';
+import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
+import { DebugInspector } from './components/DebugInspector';
 import { ViewState, UserPlan, User } from './types';
 
-export default function App() {
+const MAX_FREE_USES_PER_TOOL = 10;
+
+export default function AppTest() {
   const [view, setView] = useState<ViewState>(ViewState.AUDIT);
   const [user, setUser] = useState<User | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showLogin, setShowLogin] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   
+  // State for passing context from Audit to Generate
+  const [genPrompt, setGenPrompt] = useState('');
+  
   // Free Trial Usage State
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
 
   const handleLogin = () => {
-    // New user starts as FREE
-    setUser({ name: 'Designer', email: 'user@gmail.com', avatar: 'D', plan: 'FREE' });
+    // New user starts as FREE with Mock Stats
+    setUser({ 
+        name: 'Designer', 
+        email: 'user@gmail.com', 
+        avatar: 'D', 
+        plan: 'FREE',
+        stats: {
+            maxHealthScore: 98,
+            wireframesGenerated: 100,
+            wireframesModified: 200,
+            analyzedA11y: 100,
+            analyzedUX: 200,
+            analyzedProto: 400,
+            syncedStorybook: 100,
+            syncedGithub: 200,
+            syncedBitbucket: 0,
+            affiliatesCount: 3
+        }
+    });
     setShowLogin(false);
   };
 
@@ -34,10 +60,11 @@ export default function App() {
     setShowLogin(true);
     setView(ViewState.AUDIT);
     setUsage({ gen: 0, code: 0, audit: 0 }); // Reset local session usage on logout
+    setGenPrompt('');
   };
 
-  const handleUpgrade = () => {
-    if (user) setUser({ ...user, plan: 'PRO' });
+  const handleUpgrade = (tier: string) => {
+    if (user) setUser({ ...user, plan: 'PRO', tier });
     setShowUpgrade(false);
   };
 
@@ -50,22 +77,27 @@ export default function App() {
     setView(ViewState.PRIVACY);
   };
 
-  // Website Landing Page View (Outside Layout/Auth)
-  if (view === ViewState.WEBSITE) {
-    return <Landing onBack={() => { setView(ViewState.AUDIT); setShowLogin(true); }} />;
-  }
+  // Calculate global credits for Profile Menu
+  const totalCredits = (MAX_FREE_USES_PER_TOOL - usage.audit) + (MAX_FREE_USES_PER_TOOL - usage.gen) + (MAX_FREE_USES_PER_TOOL - usage.code);
+  const creditsLabel = user?.plan === 'PRO' ? '∞' : `${Math.max(0, totalCredits)}/30`;
 
   // If showing login but view is Privacy, don't show modal
   if (showLogin && view !== ViewState.PRIVACY) {
-      return <LoginModal 
-        onLogin={handleLogin} 
-        onOpenPrivacy={handleOpenPrivacy} 
-        onGoToWebsite={() => { setShowLogin(false); setView(ViewState.WEBSITE); }}
+      return <LoginModal
+        onLogin={handleLogin}
+        onOpenPrivacy={handleOpenPrivacy}
       />;
   }
 
   return (
     <>
+      <DebugInspector />
+      
+      {/* TEST BADGE OVERLAY */}
+      <div className="fixed top-20 right-0 z-[100] bg-yellow-400 text-black font-black uppercase text-[10px] px-2 py-1 rotate-45 translate-x-4 border-2 border-black pointer-events-none">
+        TEST ENV
+      </div>
+      
       <Layout 
         current={view} 
         setView={(v) => {
@@ -81,33 +113,45 @@ export default function App() {
         {view === ViewState.AUDIT && (
            <Audit 
               plan={user?.plan || 'FREE'} 
+              userTier={user?.tier}
               onUnlockRequest={handleUnlockRequest}
               usageCount={usage.audit}
               onUse={() => setUsage(p => ({ ...p, audit: p.audit + 1 }))}
+              onNavigateToGenerate={(prompt) => {
+                  setGenPrompt(prompt);
+                  setView(ViewState.GENERATE);
+              }}
            />
         )}
         
         {view === ViewState.GENERATE && (
           <Generate 
             plan={user?.plan || 'FREE'} 
+            userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest} 
             usageCount={usage.gen}
             onUse={() => setUsage(p => ({ ...p, gen: p.gen + 1 }))}
+            initialPrompt={genPrompt}
           />
         )}
         
         {view === ViewState.CODE && (
           <Code 
             plan={user?.plan || 'FREE'} 
+            userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
             usageCount={usage.code}
             onUse={() => setUsage(p => ({ ...p, code: p.code + 1 }))}
           />
         )}
         
+        {view === ViewState.ANALYTICS && user && <Analytics stats={user.stats} />}
+
         {view === ViewState.SUBSCRIPTION && <Subscription user={user} onUpgrade={() => setShowUpgrade(true)} />}
         {view === ViewState.DOCUMENTATION && <Documentation />}
         {view === ViewState.PRIVACY && <Privacy />}
+        {view === ViewState.TERMS && <Terms />}
+        {view === ViewState.AFFILIATE && <Affiliate />}
 
         {showUpgrade && (
           <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} />
@@ -116,6 +160,7 @@ export default function App() {
         {showProfile && user && (
           <ProfileSheet 
             user={user} 
+            creditsLabel={creditsLabel}
             onClose={() => setShowProfile(false)} 
             onLogout={handleLogout}
             onManageSub={() => {
@@ -128,6 +173,14 @@ export default function App() {
             }}
             onOpenPrivacy={() => {
               setView(ViewState.PRIVACY);
+              setShowProfile(false);
+            }}
+            onOpenTerms={() => {
+              setView(ViewState.TERMS);
+              setShowProfile(false);
+            }}
+            onOpenAffiliate={() => {
+              setView(ViewState.AFFILIATE);
               setShowProfile(false);
             }}
           />
