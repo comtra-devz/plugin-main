@@ -1,9 +1,7 @@
 // This file runs in the Figma main thread (sandbox)
 // It handles API calls to the Figma document
+/// <reference types="@figma/plugin-typings" />
 
-export {};
-
-declare const figma: any;
 declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
