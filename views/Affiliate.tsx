@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
-import { AffiliateTransaction } from '../types_test';
+import { AffiliateTransaction } from '../types';
 
 // Mock Data
 const MOCK_TRANSACTIONS: AffiliateTransaction[] = [
@@ -19,7 +19,14 @@ export const Affiliate: React.FC = () => {
   const progress = Math.min(100, (balance / payoutThreshold) * 100);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(referralCode);
+    const ta = document.createElement('textarea');
+    ta.value = referralCode;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

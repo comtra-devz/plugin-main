@@ -1,15 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
+// AI service stub — live calls will be re-enabled once the integration phase begins.
+// Keeping @google/genai out of the bundle avoids dynamic import() rejections and
+// permission policy violations inside Figma's sandboxed webview.
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-export const generateDesignSuggestions = async (prompt: string): Promise<string> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-    });
-    return response.text || "No suggestions.";
-  } catch (e) {
-    return "AI Service Unavailable (TEST ENV)";
-  }
+export const generateDesignSuggestions = async (_prompt: string): Promise<string> => {
+  return "AI Service Unavailable (TEST ENV)";
 };

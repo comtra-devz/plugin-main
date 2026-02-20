@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
-import { UserStats } from '../types_test';
+import { UserStats } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
 import { Confetti } from '../components/Confetti';
 
