@@ -7,7 +7,7 @@
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["generativelanguage.googleapis.com"],
+    "allowedDomains": ["https://generativelanguage.googleapis.com"],
     "reasoning": "Uses Google Gemini API for AI-powered design system analysis, wireframe generation and code export",
     "devAllowedDomains": ["http://localhost:3000"]
   }
