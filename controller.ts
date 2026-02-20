@@ -22,7 +22,7 @@ figma.ui.onmessage = async (msg: any) => {
   }
 
   if (msg.type === 'apply-fix') {
-    const node = figma.getNodeById(msg.layerId);
+    const node = await figma.getNodeByIdAsync(msg.layerId);
     if (node && 'fills' in node) {
       // Example fix: Clone to support undo implicitly if needed, 
       // but usually we just set the property.
@@ -34,7 +34,7 @@ figma.ui.onmessage = async (msg: any) => {
   }
 
   if (msg.type === 'undo-fix') {
-    const node = figma.getNodeById(msg.layerId);
+    const node = await figma.getNodeByIdAsync(msg.layerId);
     if (node) {
       figma.notify("Changes reverted");
       // Logic to revert specific properties would go here
