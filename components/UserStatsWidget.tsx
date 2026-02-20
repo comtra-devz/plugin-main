@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { BRUTAL, COLORS } from '../constants';
-import { UserStats } from '../types_test';
+import { UserStats } from '../types';
 
 interface Props {
   stats: UserStats;

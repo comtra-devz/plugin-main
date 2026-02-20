@@ -203,21 +203,32 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
     });
   };
 
-  const handleCopy = () => { 
-    setCopied(true); 
-    navigator.clipboard.writeText(generatedCode || "");
-    setTimeout(() => setCopied(false), 2000); 
+  const copyToClipboard = (text: string) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
+  };
+
+  const handleCopy = () => {
+    setCopied(true);
+    copyToClipboard(generatedCode || "");
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleCopyCss = () => {
     setCopiedCss(true);
-    navigator.clipboard.writeText(generatedCss || "");
+    copyToClipboard(generatedCss || "");
     setTimeout(() => setCopiedCss(false), 2000);
   };
 
   const handleCopyJson = () => {
     setCopiedJson(true);
-    navigator.clipboard.writeText(generatedJson || "");
+    copyToClipboard(generatedJson || "");
     setTimeout(() => setCopiedJson(false), 2000);
   };
   

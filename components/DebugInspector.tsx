@@ -43,10 +43,16 @@ export const DebugInspector: React.FC = () => {
         const compName = componentEl.getAttribute('data-component');
         const textToCopy = `[EDIT REQUEST] File: ${compName}`;
         
-        navigator.clipboard.writeText(textToCopy).then(() => {
-          setToast(`Copied: ${compName}`);
-          setTimeout(() => setToast(null), 2000);
-        });
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); } catch (_) {}
+        document.body.removeChild(ta);
+        setToast(`Copied: ${compName}`);
+        setTimeout(() => setToast(null), 2000);
       }
     };
 
