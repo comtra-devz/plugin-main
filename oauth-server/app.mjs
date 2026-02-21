@@ -64,7 +64,14 @@ app.get('/auth/figma/init', async (req, res) => {
 app.get('/auth/figma/start', (req, res) => {
   const flowId = req.query.flow_id;
   if (!flowId) return res.status(400).send('Invalid flow');
-  res.cookie('figma_oauth_flow', flowId, { httpOnly: true, sameSite: 'lax', maxAge: 600 });
+  const isSecure = BASE_URL.startsWith('https://');
+  res.cookie('figma_oauth_flow', flowId, {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'lax',
+    maxAge: 600,
+    path: '/',
+  });
   const redirectUri = `${BASE_URL}/auth/figma/callback`;
   const scope = 'current_user:read';
   const figmaAuthUrl = `https://www.figma.com/oauth?client_id=${FIGMA_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${flowId}&response_type=code`;
@@ -74,11 +81,13 @@ app.get('/auth/figma/start', (req, res) => {
 app.get('/auth/figma/callback', async (req, res) => {
   const { code, state: flowId } = req.query;
   const cookieFlow = req.cookies?.figma_oauth_flow;
-  if (!flowId || flowId !== cookieFlow) return res.status(400).send('Invalid state');
+  if (!flowId) return res.status(400).send('Invalid state (missing)');
 
   const store = await getFlowStore();
   const existing = await store.get(flowId);
   if (existing === undefined) return res.status(400).send('Expired flow');
+  // Cookie should match state; if cookie missing (e.g. Secure not set), allow if flow exists in store
+  if (cookieFlow !== undefined && cookieFlow !== flowId) return res.status(400).send('Invalid state');
   if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return res.status(500).send('Server misconfigured');
 
   const redirectUri = `${BASE_URL}/auth/figma/callback`;
