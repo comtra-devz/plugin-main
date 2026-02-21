@@ -1,8 +1,9 @@
 {
   "rewrites": [
-    {
-      "source": "/auth/figma/(.*)",
-      "destination": "/api/figma-oauth?x_path=$1"
-    }
+    { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
+    { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },
+    { "source": "/auth/figma/start", "destination": "/api/figma-oauth/start" },
+    { "source": "/auth/figma/callback", "destination": "/api/figma-oauth/callback" },
+    { "source": "/auth/figma/poll", "destination": "/api/figma-oauth/poll" }
   ]
 }
