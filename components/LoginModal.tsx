@@ -5,9 +5,10 @@ interface Props {
   onLoginWithFigma: () => void;
   onOpenPrivacy: () => void;
   oauthInProgress?: boolean;
+  loginError?: string | null;
 }
 
-export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, oauthInProgress }) => (
+export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, oauthInProgress, loginError }) => (
   <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4" style={{ backgroundColor: COLORS.primary }}>
 
     <div data-component="Login: Card" className={`${BRUTAL.card} max-w-sm w-full text-center py-10 relative shadow-[8px_8px_0px_0px_#000] z-10`}>
@@ -18,6 +19,11 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
       <h1 data-component="Login: Title" className="text-5xl font-black uppercase mb-1 tracking-tighter leading-[0.9] text-black">Comtra</h1>
       
       <div className="px-6 space-y-3 mt-8">
+        {loginError && (
+          <p className="text-sm font-bold text-red-600 bg-red-100 border border-red-300 px-3 py-2 rounded">
+            {loginError}
+          </p>
+        )}
         {oauthInProgress ? (
           <p className="text-sm font-bold text-black/80">
             Apri il browser per accedere con Figma, poi torna qui.

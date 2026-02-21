@@ -50,6 +50,7 @@ export default function AppTest() {
   const [showLogin, setShowLogin] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [oauthInProgress, setOauthInProgress] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
@@ -74,15 +75,22 @@ export default function AppTest() {
 
   /** Reindirizza l'iframe alla pagina OAuth sul nostro server (stesso origin). Così postMessage(..., 'https://www.figma.com') funziona. */
   const handleLoginWithFigma = async () => {
+    setLoginError(null);
     try {
       setOauthInProgress(true);
-      const res = await fetch(`${AUTH_BACKEND_URL}/api/figma-oauth/init`);
-      if (!res.ok) throw new Error('Init failed');
-      const { authUrl, readKey } = await res.json();
+      const initUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/init`;
+      const res = await fetch(initUrl);
+      if (!res.ok) throw new Error(`Init failed: ${res.status}`);
+      const data = await res.json();
+      const authUrl = data?.authUrl;
+      const readKey = data?.readKey;
+      if (!authUrl || !readKey) throw new Error('Risposta server non valida');
       const pluginHandlerUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/plugin?read_key=${encodeURIComponent(readKey)}&auth_url=${encodeURIComponent(authUrl)}&plugin_id=${encodeURIComponent(FIGMA_PLUGIN_ID)}`;
       window.location.href = pluginHandlerUrl;
-    } catch (_) {
+    } catch (e) {
       setOauthInProgress(false);
+      const msg = e instanceof Error ? e.message : 'Errore di connessione';
+      setLoginError(msg === 'Failed to fetch' || msg.includes('fetch') ? 'Impossibile contattare il server. Verifica di aver fatto build con VITE_AUTH_BACKEND_URL=https://auth.comtra.dev' : msg);
     }
   };
 
@@ -120,6 +128,7 @@ export default function AppTest() {
           onLoginWithFigma={handleLoginWithFigma}
           onOpenPrivacy={handleOpenPrivacy}
           oauthInProgress={oauthInProgress}
+          loginError={loginError}
         />
       );
   }
