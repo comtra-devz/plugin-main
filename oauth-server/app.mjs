@@ -184,7 +184,7 @@ app.get('/auth/figma/plugin', (req, res) => {
   const authUrl = req.query.auth_url;
   const pluginId = req.query.plugin_id || 'COMTRA_PLUGIN_DEV_ID';
   if (!readKey || !authUrl) return res.status(400).send('Missing read_key or auth_url');
-  const pollUrl = `${BASE_URL}/auth/figma/poll?read_key=${encodeURIComponent(readKey)}`;
+  const pollUrl = `${BASE_URL}/api/figma-oauth/poll?read_key=${encodeURIComponent(readKey)}`;
   const html = `<!DOCTYPE html>
 <html lang="it">
 <head>

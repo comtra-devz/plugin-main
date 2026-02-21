@@ -76,10 +76,10 @@ export default function AppTest() {
   const handleLoginWithFigma = async () => {
     try {
       setOauthInProgress(true);
-      const res = await fetch(`${AUTH_BACKEND_URL}/auth/figma/init`);
+      const res = await fetch(`${AUTH_BACKEND_URL}/api/figma-oauth/init`);
       if (!res.ok) throw new Error('Init failed');
       const { authUrl, readKey } = await res.json();
-      const pluginHandlerUrl = `${AUTH_BACKEND_URL}/auth/figma/plugin?read_key=${encodeURIComponent(readKey)}&auth_url=${encodeURIComponent(authUrl)}&plugin_id=${encodeURIComponent(FIGMA_PLUGIN_ID)}`;
+      const pluginHandlerUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/plugin?read_key=${encodeURIComponent(readKey)}&auth_url=${encodeURIComponent(authUrl)}&plugin_id=${encodeURIComponent(FIGMA_PLUGIN_ID)}`;
       window.location.href = pluginHandlerUrl;
     } catch (_) {
       setOauthInProgress(false);
