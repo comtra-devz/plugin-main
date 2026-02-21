@@ -1,7 +1,7 @@
-/** Base URL del server OAuth (va hostato in HTTPS). In build: VITE_AUTH_BACKEND_URL; in dev default localhost */
+/** Base URL del server OAuth. In build: VITE_AUTH_BACKEND_URL; default production: auth.comtra.dev */
 export const AUTH_BACKEND_URL =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_AUTH_BACKEND_URL) ||
-  'http://localhost:3456';
+  'https://auth.comtra.dev';
 
 /** Plugin ID (manifest); usato per postMessage sicuro verso Figma */
 export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
