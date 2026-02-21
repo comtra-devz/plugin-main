@@ -1,5 +1,8 @@
 {
   "rewrites": [
-    { "source": "/auth/figma/(.*)", "destination": "/api/figma-oauth" }
+    {
+      "source": "/auth/figma/(.*)",
+      "destination": "/api/figma-oauth?x_path=$1"
+    }
   ]
 }
