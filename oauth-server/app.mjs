@@ -174,4 +174,69 @@ app.get('/auth/figma/poll', async (req, res) => {
   res.json(data);
 });
 
+/**
+ * Pagina OAuth "plugin handler": caricata nell'iframe del plugin (stesso origin del server).
+ * Così l'iframe ha origin auth.comtra.dev e postMessage(..., 'https://www.figma.com') funziona.
+ * Vedi: https://developers.figma.com/docs/plugins/oauth-with-plugins/
+ */
+app.get('/auth/figma/plugin', (req, res) => {
+  const readKey = req.query.read_key;
+  const authUrl = req.query.auth_url;
+  const pluginId = req.query.plugin_id || 'COMTRA_PLUGIN_DEV_ID';
+  if (!readKey || !authUrl) return res.status(400).send('Missing read_key or auth_url');
+  const pollUrl = `${BASE_URL}/auth/figma/poll?read_key=${encodeURIComponent(readKey)}`;
+  const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Figma – Comtra</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
+    .card { background: #fff; border: 2px solid #000; padding: 2rem; max-width: 360px; text-align: center; box-shadow: 6px 6px 0 #000; }
+    h1 { font-size: 1.2rem; margin: 0 0 0.5rem; }
+    p { color: #333; margin: 0 0 1rem; font-size: 0.9rem; }
+    .done { color: green; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Login con Figma</h1>
+    <p id="msg">Apertura finestra di login…</p>
+  </div>
+  <script>
+    (function() {
+      var authUrl = ${JSON.stringify(authUrl)};
+      var pollUrl = ${JSON.stringify(pollUrl)};
+      var pluginId = ${JSON.stringify(pluginId)};
+      window.open(authUrl, '_blank');
+      var msg = document.getElementById('msg');
+      msg.textContent = 'Completa il login nella finestra aperta, poi torna qui.';
+      var interval = setInterval(function() {
+        fetch(pollUrl)
+          .then(function(r) {
+            if (r.status === 202) return null;
+            if (!r.ok) return null;
+            return r.json();
+          })
+          .then(function(data) {
+            if (data && data.user) {
+              clearInterval(interval);
+              parent.postMessage(
+                { pluginMessage: { type: 'oauth-complete', user: data.user }, pluginId: pluginId },
+                'https://www.figma.com'
+              );
+              msg.innerHTML = 'Login completato. <span class="done">Chiudi il plugin e riaprilo per continuare.</span>';
+            }
+          })
+          .catch(function() {});
+      }, 2000);
+    })();
+  </script>
+</body>
+</html>`;
+  res.send(html);
+});
+
 export default app;

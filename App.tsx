@@ -50,8 +50,7 @@ export default function AppTest() {
   const [showLogin, setShowLogin] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [oauthInProgress, setOauthInProgress] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
+
   const [genPrompt, setGenPrompt] = useState('');
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
 
@@ -67,40 +66,21 @@ export default function AppTest() {
         setUser(normalizeOAuthUser(msg.user));
         setShowLogin(false);
         setOauthInProgress(false);
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
       }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
+  /** Reindirizza l'iframe alla pagina OAuth sul nostro server (stesso origin). Così postMessage(..., 'https://www.figma.com') funziona. */
   const handleLoginWithFigma = async () => {
     try {
       setOauthInProgress(true);
       const res = await fetch(`${AUTH_BACKEND_URL}/auth/figma/init`);
+      if (!res.ok) throw new Error('Init failed');
       const { authUrl, readKey } = await res.json();
-      window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl } }, '*');
-      pollRef.current = setInterval(async () => {
-        try {
-          const pollRes = await fetch(`${AUTH_BACKEND_URL}/auth/figma/poll?read_key=${encodeURIComponent(readKey)}`);
-          if (pollRes.status === 202) return;
-          if (!pollRes.ok) return;
-          const data = await pollRes.json();
-          if (data.user) {
-            if (pollRef.current) {
-              clearInterval(pollRef.current);
-              pollRef.current = null;
-            }
-            window.parent.postMessage(
-              { pluginMessage: { type: 'oauth-complete', user: data.user }, pluginId: FIGMA_PLUGIN_ID },
-              'https://www.figma.com'
-            );
-          }
-        } catch (_) {}
-      }, 2000);
+      const pluginHandlerUrl = `${AUTH_BACKEND_URL}/auth/figma/plugin?read_key=${encodeURIComponent(readKey)}&auth_url=${encodeURIComponent(authUrl)}&plugin_id=${encodeURIComponent(FIGMA_PLUGIN_ID)}`;
+      window.location.href = pluginHandlerUrl;
     } catch (_) {
       setOauthInProgress(false);
     }
