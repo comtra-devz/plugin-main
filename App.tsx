@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Layout } from './components/Layout';
 import { Audit } from './views/Audit';
 import { Generate } from './views/Generate';
@@ -14,9 +14,34 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { DebugInspector } from './components/DebugInspector';
-import { ViewState, UserPlan, User } from './types';
+import { ViewState, User } from './types';
+import { AUTH_BACKEND_URL, FIGMA_PLUGIN_ID } from './constants';
 
 const MAX_FREE_USES_PER_TOOL = 10;
+
+function normalizeOAuthUser(raw: { name?: string; email?: string; img_url?: string | null; plan?: string; stats?: User['stats'] }): User {
+  const name = raw.name || 'User';
+  const initials = name.split(/\s+/).map(s => s[0]).join('').toUpperCase().slice(0, 2) || name.charAt(0).toUpperCase();
+  return {
+    name,
+    email: raw.email || '',
+    avatar: initials,
+    img_url: raw.img_url ?? undefined,
+    plan: (raw.plan as User['plan']) || 'FREE',
+    stats: raw.stats || {
+      maxHealthScore: 0,
+      wireframesGenerated: 0,
+      wireframesModified: 0,
+      analyzedA11y: 0,
+      analyzedUX: 0,
+      analyzedProto: 0,
+      syncedStorybook: 0,
+      syncedGithub: 0,
+      syncedBitbucket: 0,
+      affiliatesCount: 0,
+    },
+  };
+}
 
 export default function AppTest() {
   const [view, setView] = useState<ViewState>(ViewState.AUDIT);
@@ -24,42 +49,70 @@ export default function AppTest() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showLogin, setShowLogin] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
+  const [oauthInProgress, setOauthInProgress] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  // State for passing context from Audit to Generate
   const [genPrompt, setGenPrompt] = useState('');
-  
-  // Free Trial Usage State
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
 
-  const handleLogin = () => {
-    // New user starts as FREE with Mock Stats
-    setUser({ 
-        name: 'Designer', 
-        email: 'user@gmail.com', 
-        avatar: 'D', 
-        plan: 'FREE',
-        stats: {
-            maxHealthScore: 98,
-            wireframesGenerated: 100,
-            wireframesModified: 200,
-            analyzedA11y: 100,
-            analyzedUX: 200,
-            analyzedProto: 400,
-            syncedStorybook: 100,
-            syncedGithub: 200,
-            syncedBitbucket: 0,
-            affiliatesCount: 3
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const msg = e.data?.pluginMessage;
+      if (!msg) return;
+      if (msg.type === 'restore-user' && msg.user) {
+        setUser(normalizeOAuthUser(msg.user));
+        setShowLogin(false);
+      }
+      if (msg.type === 'login-success' && msg.user) {
+        setUser(normalizeOAuthUser(msg.user));
+        setShowLogin(false);
+        setOauthInProgress(false);
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
         }
-    });
-    setShowLogin(false);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  const handleLoginWithFigma = async () => {
+    try {
+      setOauthInProgress(true);
+      const res = await fetch(`${AUTH_BACKEND_URL}/auth/figma/init`);
+      const { authUrl, readKey } = await res.json();
+      window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl } }, '*');
+      pollRef.current = setInterval(async () => {
+        try {
+          const pollRes = await fetch(`${AUTH_BACKEND_URL}/auth/figma/poll?read_key=${encodeURIComponent(readKey)}`);
+          if (pollRes.status === 202) return;
+          if (!pollRes.ok) return;
+          const data = await pollRes.json();
+          if (data.user) {
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+            window.parent.postMessage(
+              { pluginMessage: { type: 'oauth-complete', user: data.user }, pluginId: FIGMA_PLUGIN_ID },
+              'https://www.figma.com'
+            );
+          }
+        } catch (_) {}
+      }, 2000);
+    } catch (_) {
+      setOauthInProgress(false);
+    }
   };
 
   const handleLogout = () => {
+    window.parent.postMessage({ pluginMessage: { type: 'logout' } }, '*');
     setUser(null);
     setShowProfile(false);
     setShowLogin(true);
     setView(ViewState.AUDIT);
-    setUsage({ gen: 0, code: 0, audit: 0 }); // Reset local session usage on logout
+    setUsage({ gen: 0, code: 0, audit: 0 });
     setGenPrompt('');
   };
 
@@ -81,12 +134,14 @@ export default function AppTest() {
   const totalCredits = (MAX_FREE_USES_PER_TOOL - usage.audit) + (MAX_FREE_USES_PER_TOOL - usage.gen) + (MAX_FREE_USES_PER_TOOL - usage.code);
   const creditsLabel = user?.plan === 'PRO' ? '∞' : `${Math.max(0, totalCredits)}/30`;
 
-  // If showing login but view is Privacy, don't show modal
   if (showLogin && view !== ViewState.PRIVACY) {
-      return <LoginModal
-        onLogin={handleLogin}
-        onOpenPrivacy={handleOpenPrivacy}
-      />;
+      return (
+        <LoginModal
+          onLoginWithFigma={handleLoginWithFigma}
+          onOpenPrivacy={handleOpenPrivacy}
+          oauthInProgress={oauthInProgress}
+        />
+      );
   }
 
   return (

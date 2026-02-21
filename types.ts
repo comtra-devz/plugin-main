@@ -29,7 +29,10 @@ export interface UserStats {
 export interface User {
   name: string;
   email: string;
+  /** Iniziali (es. "JD") o singola lettera; usato se manca img_url */
   avatar: string;
+  /** URL immagine profilo Figma (opzionale) */
+  img_url?: string | null;
   plan: UserPlan;
   tier?: string; // '1w', '1m', '6m', '1y'
   stats: UserStats;

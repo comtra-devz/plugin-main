@@ -2,11 +2,12 @@ import React from 'react';
 import { BRUTAL, COLORS } from '../constants';
 
 interface Props {
-  onLogin: () => void;
+  onLoginWithFigma: () => void;
   onOpenPrivacy: () => void;
+  oauthInProgress?: boolean;
 }
 
-export const LoginModal: React.FC<Props> = ({ onLogin, onOpenPrivacy }) => (
+export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, oauthInProgress }) => (
   <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4" style={{ backgroundColor: COLORS.primary }}>
 
     <div data-component="Login: Card" className={`${BRUTAL.card} max-w-sm w-full text-center py-10 relative shadow-[8px_8px_0px_0px_#000] z-10`}>
@@ -17,20 +18,26 @@ export const LoginModal: React.FC<Props> = ({ onLogin, onOpenPrivacy }) => (
       <h1 data-component="Login: Title" className="text-5xl font-black uppercase mb-1 tracking-tighter leading-[0.9] text-black">Comtra</h1>
       
       <div className="px-6 space-y-3 mt-8">
-        <button 
-          onClick={onLogin}
-          data-component="Login: Figma Button"
-          className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-gray-800 flex items-center justify-center gap-3 py-3 border-white`}
-        >
-          <svg width="18" height="27" viewBox="0 0 18 27" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4.5 27C6.98528 27 9 24.9853 9 22.5V18H4.5C2.01472 18 0 20.0147 0 22.5C0 24.9853 2.01472 27 4.5 27Z" fill="#0ACF83"/>
-            <path d="M0 13.5C0 11.0147 2.01472 9 4.5 9H9V18H4.5C2.01472 18 0 15.9853 0 13.5Z" fill="#A259FF"/>
-            <path d="M0 4.5C0 2.01472 2.01472 0 4.5 0H9V9H4.5C2.01472 9 0 6.98528 0 4.5Z" fill="#F24E1E"/>
-            <path d="M9 0H13.5C15.9853 0 18 2.01472 18 4.5C18 6.98528 15.9853 9 13.5 9H9V0Z" fill="#FF7262"/>
-            <path d="M18 13.5C18 15.9853 15.9853 18 13.5 18H9V9H13.5C15.9853 9 18 11.0147 18 13.5Z" fill="#1ABCFE"/>
-          </svg>
-          Login with Figma
-        </button>
+        {oauthInProgress ? (
+          <p className="text-sm font-bold text-black/80">
+            Apri il browser per accedere con Figma, poi torna qui.
+          </p>
+        ) : (
+          <button 
+            onClick={onLoginWithFigma}
+            data-component="Login: Figma Button"
+            className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-gray-800 flex items-center justify-center gap-3 py-3 border-white`}
+          >
+            <svg width="18" height="27" viewBox="0 0 18 27" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4.5 27C6.98528 27 9 24.9853 9 22.5V18H4.5C2.01472 18 0 20.0147 0 22.5C0 24.9853 2.01472 27 4.5 27Z" fill="#0ACF83"/>
+              <path d="M0 13.5C0 11.0147 2.01472 9 4.5 9H9V18H4.5C2.01472 18 0 15.9853 0 13.5Z" fill="#A259FF"/>
+              <path d="M0 4.5C0 2.01472 2.01472 0 4.5 0H9V9H4.5C2.01472 9 0 6.98528 0 4.5Z" fill="#F24E1E"/>
+              <path d="M9 0H13.5C15.9853 0 18 2.01472 18 4.5C18 6.98528 15.9853 9 13.5 9H9V0Z" fill="#FF7262"/>
+              <path d="M18 13.5C18 15.9853 15.9853 18 13.5 18H9V9H13.5C15.9853 9 18 11.0147 18 13.5Z" fill="#1ABCFE"/>
+            </svg>
+            Login with Figma
+          </button>
+        )}
       </div>
 
       <div className="mt-8 pt-6 border-t-2 border-dashed border-black mx-6 text-left">

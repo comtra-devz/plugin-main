@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/auth/figma/(.*)", "destination": "/api/figma-oauth" }
+  ]
+}

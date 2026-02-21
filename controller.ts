@@ -6,9 +6,33 @@ declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
 
+// Restore saved user on load
+(async () => {
+  try {
+    const user = await figma.clientStorage.getAsync('figmaOAuthUser');
+    if (user) figma.ui.postMessage({ type: 'restore-user', user });
+  } catch (_) {}
+})();
+
 figma.ui.onmessage = async (msg: any) => {
   if (msg.type === 'resize-window') {
     figma.ui.resize(msg.width, msg.height);
+  }
+
+  if (msg.type === 'open-oauth-url') {
+    if (msg.authUrl) figma.openExternal(msg.authUrl);
+  }
+
+  if (msg.type === 'oauth-complete') {
+    const user = msg.user;
+    if (user) {
+      await figma.clientStorage.setAsync('figmaOAuthUser', user);
+      figma.ui.postMessage({ type: 'login-success', user });
+    }
+  }
+
+  if (msg.type === 'logout') {
+    await figma.clientStorage.deleteAsync('figmaOAuthUser');
   }
 
   if (msg.type === 'get-selection') {
