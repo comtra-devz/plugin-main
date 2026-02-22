@@ -1,0 +1,11 @@
+{
+  "name": "comtra-auth-deploy",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "cookie-parser": "^1.4.6",
+    "redis": "^4.6.0"
+  }
+}
