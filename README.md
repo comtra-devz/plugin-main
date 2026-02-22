@@ -290,6 +290,12 @@ Costo per operazione:
 
 ---
 
+## Login con Figma (OAuth)
+
+Il flusso "Login with Figma" usa un server OAuth deployato separatamente (es. auth.comtra.dev). Guida unica: **[docs/OAUTH-FIGMA.md](docs/OAUTH-FIGMA.md)** (setup Vercel, dominio, variabili, verifica con `npm run check-auth`).
+
+---
+
 ## Run Locally
 
 **Prerequisites:** Node.js
