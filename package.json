@@ -8,6 +8,7 @@
     "build": "vite build && mv dist/index.html dist/ui.html && node build.mjs",
     "build:ui": "vite build && mv dist/index.html dist/ui.html",
     "build:plugin": "node build.mjs",
+    "check-auth": "node check-auth.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
