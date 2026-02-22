@@ -11,8 +11,26 @@ const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:3456').replace(/\/$/, '');
 
-// Store: in Vercel usa KV (obbligatorio), altrimenti memoria
+// Store: REDIS_URL (Redis Labs ecc.), oppure Vercel KV (KV_REST_*), altrimenti memoria
 async function createFlowStore() {
+  if (process.env.REDIS_URL) {
+    const { createClient } = await import('redis');
+    const client = createClient({ url: process.env.REDIS_URL });
+    client.on('error', () => {});
+    await client.connect();
+    return {
+      async set(key, value) {
+        await client.set(key, JSON.stringify(value), { EX: 600 });
+      },
+      async get(key) {
+        const v = await client.get(key);
+        return v == null ? undefined : JSON.parse(v);
+      },
+      async delete(key) {
+        await client.del(key);
+      },
+    };
+  }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv');
     return {
