@@ -90,7 +90,10 @@ export default function AppTest() {
     } catch (e) {
       setOauthInProgress(false);
       const msg = e instanceof Error ? e.message : 'Errore di connessione';
-      setLoginError(msg === 'Failed to fetch' || msg.includes('fetch') ? 'Impossibile contattare il server. Verifica di aver fatto build con VITE_AUTH_BACKEND_URL=https://auth.comtra.dev' : msg);
+      const isNetwork = msg === 'Failed to fetch' || /fetch|network|CORS/i.test(msg);
+      setLoginError(isNetwork
+        ? `Impossibile contattare il server (${msg}). Controlla che auth.comtra.dev sia online e che il plugin sia stato ricaricato dopo il build.`
+        : msg);
     }
   };
 
