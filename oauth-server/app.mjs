@@ -50,7 +50,16 @@ function getFlowStore() {
 
 const app = express();
 app.use(cookieParser());
-app.use(cors({ origin: true }));
+// Plugin Figma ha origin 'null': senza questo la fetch viene bloccata da CORS
+app.use(cors({
+  origin: (origin, cb) => {
+    if (origin == null || origin === '' || origin === 'null') {
+      cb(null, '*');
+    } else {
+      cb(null, true);
+    }
+  },
+}));
 app.use(express.json());
 
 app.get('/auth/figma/init', async (req, res) => {
