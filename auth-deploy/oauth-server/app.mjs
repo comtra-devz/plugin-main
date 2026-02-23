@@ -152,19 +152,39 @@ function getReturnToFigmaHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login completato – Comtra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Tiny5&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
-    .card { background: #fff; border: 2px solid #000; padding: 2rem; max-width: 360px; text-align: center; box-shadow: 6px 6px 0 #000; }
-    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
-    p { color: #333; margin: 0 0 1rem; }
+    body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
+    h1 { font-family: 'Tiny5', sans-serif; font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; color: #000; text-transform: uppercase; letter-spacing: 0.05em; }
+    p { font-size: 0.95rem; color: #000; margin: 0 0 1.5rem; font-weight: 500; }
+    .fuse-wrap { margin: 1.5rem 0; }
+    .fuse-svg { display: block; }
+    @keyframes burn {
+      from { stroke-dashoffset: 0; }
+      to { stroke-dashoffset: 180; }
+    }
+    .fuse-line { stroke-dasharray: 180; animation: burn 5s linear forwards; }
+    @keyframes spark { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .spark { animation: spark 0.3s ease-in-out infinite; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Login completato</h1>
-    <p>Puoi chiudere questa finestra e tornare al plugin in Figma.</p>
+  <h1>Login completato</h1>
+  <p>Puoi chiudere questa finestra e tornare al plugin in Figma.</p>
+  <div class="fuse-wrap">
+    <svg class="fuse-svg" width="220" height="90" viewBox="0 0 220 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="155" y="30" width="55" height="35" rx="2" fill="#fff" stroke="#000" stroke-width="3"/>
+      <rect x="158" y="33" width="49" height="29" fill="#ffc900" stroke="#000" stroke-width="1" opacity="0.3"/>
+      <path class="fuse-line" pathLength="180" d="M 155 48 Q 160 85, 115 50 Q 70 15, 25 50" stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <circle class="spark" cx="25" cy="50" r="8" fill="#ffc900" stroke="#000" stroke-width="2"/>
+    </svg>
   </div>
+  <script>
+    setTimeout(function() { window.close(); }, 5000);
+  </script>
 </body>
 </html>`;
 }
