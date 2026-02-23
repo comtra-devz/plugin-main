@@ -3,6 +3,7 @@ import React from 'react';
 interface Props {
   nodeCount: number;
   cost: number;
+  sizeLabel?: string;
   target: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -14,7 +15,7 @@ function getComplexityLabel(nodes: number): string {
   return 'HIGH (Enterprise)';
 }
 
-export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, target, onConfirm, onCancel }) => {
+export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, sizeLabel, target, onConfirm, onCancel }) => {
   return (
     <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6">
       <div className="bg-white border-2 border-black shadow-[8px_8px_0_0_#fff] max-w-xs w-full font-mono relative overflow-hidden">
@@ -34,8 +35,15 @@ export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, target, onC
           
           <div className="flex justify-between border-b border-black/10 pb-2">
             <span className="text-gray-500 uppercase">Nodes</span>
-            <span className="font-bold">{nodeCount}</span>
+            <span className="font-bold">{nodeCount.toLocaleString()}</span>
           </div>
+
+          {sizeLabel && (
+            <div className="flex justify-between border-b border-black/10 pb-2">
+              <span className="text-gray-500 uppercase">Size</span>
+              <span className="font-bold">{sizeLabel}</span>
+            </div>
+          )}
 
           <div className="flex justify-between border-b border-black/10 pb-2">
             <span className="text-gray-500 uppercase">Complexity</span>

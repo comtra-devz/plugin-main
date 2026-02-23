@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT } from '../../constants';
+import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
 import { CircularScore } from '../../components/widgets/CircularScore';
 import { Confetti } from '../../components/Confetti';
@@ -49,7 +49,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
 
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false);
-  const [scanStats, setScanStats] = useState({ nodes: 0, cost: 0, target: 'All Pages' });
+  const [scanStats, setScanStats] = useState({ nodes: 0, cost: 0, sizeLabel: '', target: 'All Pages' });
   const [pendingScanType, setPendingScanType] = useState<'MAIN' | 'DEEP' | null>(null);
 
   // Confirmation Modal State
@@ -205,9 +205,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
         setScanProgress({ percent: 100, count: msg.count ?? 0 });
         const count = msg.count ?? 0;
         const target = msg.target ?? 'All Pages';
-        let cost = 5;
-        if (count > 250) cost = Math.ceil(count / 50);
-        setScanStats({ nodes: count, cost, target });
+        const { cost, sizeLabel } = getScanCostAndSize(count);
+        setScanStats({ nodes: count, cost, sizeLabel, target });
         setPendingScanType('MAIN');
         setShowReceipt(true);
       }
@@ -233,11 +232,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
         onUnlockRequest();
         return;
     }
-    const mockNodes = Math.floor(Math.random() * 1000) + 50; 
-    let cost = 5; 
-    if (mockNodes > 250) cost = Math.ceil(mockNodes / 50);
-
-    setScanStats({ nodes: mockNodes, cost, target: 'Current Selection' });
+    const mockNodes = Math.floor(Math.random() * 1000) + 50;
+    const { cost, sizeLabel } = getScanCostAndSize(mockNodes);
+    setScanStats({ nodes: mockNodes, cost, sizeLabel, target: 'Current Selection' });
     setPendingScanType('DEEP');
     setShowReceipt(true);
   };
@@ -450,8 +447,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
       {showSuccess && <SuccessModal score={score} onClose={() => setShowSuccess(false)} />}
       {showReceipt && (
           <ScanReceiptModal 
-            nodeCount={scanStats.nodes} 
-            cost={scanStats.cost} 
+            nodeCount={scanStats.nodes}
+            cost={scanStats.cost}
+            sizeLabel={scanStats.sizeLabel}
             target={scanStats.target}
             onConfirm={handleConfirmScan} 
             onCancel={() => setShowReceipt(false)} 

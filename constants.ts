@@ -32,6 +32,22 @@ export const TIER_LIMITS: Record<string, number> = {
   'PRO': 3000 
 };
 
+/** Scan cost by document size (node count). Used for audit: full count required for library comparison. */
+export const SCAN_SIZE_TIERS: { maxNodes: number; label: string; cost: number }[] = [
+  { maxNodes: 500, label: 'Small', cost: 2 },
+  { maxNodes: 5_000, label: 'Medium', cost: 5 },
+  { maxNodes: 50_000, label: 'Large', cost: 8 },
+  { maxNodes: Infinity, label: 'Huge', cost: 11 }
+];
+
+export function getScanCostAndSize(nodeCount: number): { cost: number; sizeLabel: string } {
+  for (const tier of SCAN_SIZE_TIERS) {
+    if (nodeCount <= tier.maxNodes) return { cost: tier.cost, sizeLabel: tier.label };
+  }
+  const last = SCAN_SIZE_TIERS[SCAN_SIZE_TIERS.length - 1];
+  return { cost: last.cost, sizeLabel: last.label };
+}
+
 export const PRIVACY_CONTENT = [
   {
     title: "1. Data Collection",
