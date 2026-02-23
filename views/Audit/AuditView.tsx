@@ -71,6 +71,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [scanProgress, setScanProgress] = useState({ percent: 0, count: 0 });
 
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
@@ -149,8 +150,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
         setDocumentPages(msg.pages);
         setSelectedPageId((prev) => (prev ? prev : msg.pages[0]?.id ?? null));
       }
+      if (msg.type === 'count-nodes-progress') {
+        setScanProgress({ percent: msg.percent ?? 0, count: msg.count ?? 0 });
+      }
       if (msg.type === 'count-nodes-result') {
         setIsCalculating(false);
+        setScanProgress({ percent: 100, count: msg.count ?? 0 });
         const count = msg.count ?? 0;
         const target = msg.target ?? 'All Pages';
         let cost = 5;
@@ -170,6 +175,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
       return;
     }
     setIsCalculating(true);
+    setScanProgress({ percent: 0, count: 0 });
     const scope = scanScope;
     const pageId = scope === 'page' ? selectedPageId : undefined;
     window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId } }, '*');
@@ -517,6 +523,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
             onStartScan={handleStartScan}
             onShare={handleShare}
             isCalculating={isCalculating}
+            scanProgress={scanProgress}
             issueListProps={issueListProps}
         />
       )}

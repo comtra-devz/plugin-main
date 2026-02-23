@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { BRUTAL, COLORS } from '../../../constants';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
@@ -33,6 +33,7 @@ interface Props {
   onStartScan: () => void;
   onShare: () => void;
   isCalculating: boolean;
+  scanProgress: { percent: number; count: number };
   issueListProps: any;
 }
 
@@ -62,6 +63,7 @@ export const DesignSystemTab: React.FC<Props> = ({
   onStartScan,
   onShare,
   isCalculating,
+  scanProgress,
   issueListProps
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
@@ -129,6 +131,19 @@ export const DesignSystemTab: React.FC<Props> = ({
             >
                 {isCalculating ? 'CALCULATING NODES...' : 'Scan Design'}
             </button>
+            {isCalculating && (
+              <div className="mt-3">
+                <div className="h-3 w-full border-2 border-black bg-white overflow-hidden">
+                  <div 
+                    className="h-full bg-[#ffc900] transition-all duration-150 ease-out"
+                    style={{ width: `${scanProgress.percent}%` }}
+                  />
+                </div>
+                <p className="text-[10px] font-bold text-center mt-1">
+                  {scanProgress.percent}% — {scanProgress.count.toLocaleString()} nodes
+                </p>
+              </div>
+            )}
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
               No credits will be deducted at this point yet.
             </p>
@@ -225,6 +240,19 @@ export const DesignSystemTab: React.FC<Props> = ({
       >
           <span>{isCalculating ? 'CALCULATING...' : 'Scan Again'}</span>
       </button>
+      {isCalculating && (
+        <div className="mt-2">
+          <div className="h-3 w-full border-2 border-black bg-white overflow-hidden">
+            <div 
+              className="h-full bg-[#ffc900] transition-all duration-150 ease-out"
+              style={{ width: `${scanProgress.percent}%` }}
+            />
+          </div>
+          <p className="text-[10px] font-bold text-center mt-1">
+            {scanProgress.percent}% — {scanProgress.count.toLocaleString()} nodes
+          </p>
+        </div>
+      )}
 
       {/* Categories */}
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
