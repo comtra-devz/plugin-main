@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { APP_VERSION, BRUTAL, COLORS } from '../constants';
+import { APP_VERSION, COLORS } from '../constants';
 import { User } from '../types';
 
 interface Props {
@@ -18,19 +18,19 @@ interface Props {
 export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
-    <div data-component="Profile: Sheet Container" className={`${BRUTAL.card} absolute top-16 right-4 w-72 p-0 overflow-hidden animate-in slide-in-from-top-2`}>
-      <div className={`bg-[${COLORS.primary}] p-2 border-b-2 border-black`}>
+    <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
+      <div className={`bg-[${COLORS.primary}] p-4 border-b-2 border-black`}>
         <h3 data-component="Profile: User Email" className="font-black text-sm break-words">{user.email || '—'}</h3>
         <div className="flex justify-between items-center mt-2 gap-1">
             <span data-component="Profile: Plan Badge" className="inline-block bg-black text-white text-[10px] px-2 py-0.5 font-bold uppercase shrink-0">{user.plan} PLAN</span>
             <span data-component="Profile: Credits Badge" className="text-[10px] font-bold uppercase border-2 border-black px-2 py-0.5 bg-white min-w-0">Credits: {creditsLabel}</span>
         </div>
       </div>
-      <div className="px-2 py-1 flex flex-col gap-1">
+      <div className="p-2 flex flex-col gap-1">
         <button 
           data-component="Profile: Partner Button"
           onClick={() => window.open('https://comtra.ai/partner', '_blank')}
-          className="text-left text-sm font-bold bg-[#ffc900] hover:bg-yellow-400 py-2 px-2 border-2 border-black mb-2 flex justify-between items-center shadow-[2px_2px_0_0_#000]"
+          className="text-left text-sm font-bold bg-[#ffc900] hover:bg-yellow-400 p-2 border-2 border-black mb-2 flex justify-between items-center shadow-[2px_2px_0_0_#000]"
         >
           <span>Become Partner</span>
           <span>→</span>
@@ -39,34 +39,34 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, onClose, onL
         <button 
           data-component="Profile: Manage Sub Button"
           onClick={onManageSub}
-          className="text-left text-sm font-bold hover:bg-gray-100 py-1 px-2 border border-transparent hover:border-black transition-all"
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
         >
           Manage Subscription
         </button>
         <button 
           onClick={onOpenAffiliate}
-          className="text-left text-sm font-bold hover:bg-gray-100 py-1 px-2 border border-transparent hover:border-black transition-all"
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
         >
           Affiliate Program
         </button>
         <button 
           data-component="Profile: Docs Button"
           onClick={onOpenDocs}
-          className="text-left text-sm font-bold hover:bg-gray-100 py-1 px-2 border border-transparent hover:border-black transition-all"
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
         >
           Documentation & Help
         </button>
         <button 
           data-component="Profile: Terms Button"
           onClick={onOpenTerms}
-          className="text-left text-sm font-bold hover:bg-gray-100 py-1 px-2 border border-transparent hover:border-black transition-all"
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
         >
           Terms & Conditions
         </button>
         <button 
           data-component="Profile: Privacy Button"
           onClick={onOpenPrivacy}
-          className="text-left text-sm font-bold hover:bg-gray-100 py-1 px-2 border border-transparent hover:border-black transition-all"
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
         >
           Privacy & Policy
         </button>
@@ -74,7 +74,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, onClose, onL
         <button 
           data-component="Profile: Logout Button"
           onClick={() => { onClose(); onLogout(); }} 
-          className="text-left text-sm font-bold hover:bg-red-100 text-red-600 py-1 px-2 border border-transparent hover:border-black transition-all w-full"
+          className="text-left text-sm font-bold hover:bg-red-100 text-red-600 p-2 border border-transparent hover:border-black transition-all w-full"
         >
           Logout
         </button>
