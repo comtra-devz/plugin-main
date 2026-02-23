@@ -6,6 +6,13 @@ import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory } from '../data';
 import { AuditIssue } from '../../../types';
 
+export type ScanScope = 'all' | 'current' | 'page';
+
+interface DocumentPage {
+  id: string;
+  name: string;
+}
+
 interface Props {
   hasAudited: boolean;
   score: number;
@@ -13,20 +20,26 @@ interface Props {
   categories: ExtendedAuditCategory[];
   activeCat: string | null;
   setActiveCat: (id: string | null) => void;
-  excludedPages: string[];
-  setExcludedPages: React.Dispatch<React.SetStateAction<string[]>>;
-  isPagesDropdownOpen: boolean;
-  setIsPagesDropdownOpen: (open: boolean) => void;
-  pageSearch: string;
-  setPageSearch: (val: string) => void;
-  filteredPages: string[];
+  documentPages: DocumentPage[];
+  scanScope: ScanScope;
+  setScanScope: (s: ScanScope) => void;
+  selectedPageId: string | null;
+  setSelectedPageId: (id: string | null) => void;
+  isScopeDropdownOpen: boolean;
+  setIsScopeDropdownOpen: (open: boolean) => void;
   isPro: boolean;
   displayIssues: AuditIssue[];
   activeIssues: AuditIssue[];
   onStartScan: () => void;
   onShare: () => void;
-  toggleExcludedPage: (page: string) => void;
+  isCalculating: boolean;
   issueListProps: any;
+}
+
+function getScopeLabel(scope: ScanScope, selectedPage: DocumentPage | null): string {
+  if (scope === 'all') return 'All Pages';
+  if (scope === 'current') return 'Current Selection';
+  return selectedPage ? selectedPage.name : 'Select Page';
 }
 
 export const DesignSystemTab: React.FC<Props> = ({
@@ -36,29 +49,25 @@ export const DesignSystemTab: React.FC<Props> = ({
   categories,
   activeCat,
   setActiveCat,
-  excludedPages,
-  setExcludedPages,
-  isPagesDropdownOpen,
-  setIsPagesDropdownOpen,
-  pageSearch,
-  setPageSearch,
-  filteredPages,
+  documentPages,
+  scanScope,
+  setScanScope,
+  selectedPageId,
+  setSelectedPageId,
+  isScopeDropdownOpen,
+  setIsScopeDropdownOpen,
   isPro,
   displayIssues,
   activeIssues,
   onStartScan,
   onShare,
-  toggleExcludedPage,
+  isCalculating,
   issueListProps
 }) => {
-  const [isCalculating, setIsCalculating] = useState(false);
+  const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
   const handleScanClick = () => {
-    setIsCalculating(true);
-    setTimeout(() => {
-        onStartScan();
-        setIsCalculating(false);
-    }, 800);
+    onStartScan();
   };
 
   if (!hasAudited) {
@@ -68,36 +77,43 @@ export const DesignSystemTab: React.FC<Props> = ({
           <CircularScore score={0} label="Ready" size="sm" />
           <p className="text-xs font-medium text-gray-500 mt-4 px-4 mb-4">Let's see how your system shines today.</p>
           
-          {/* Pages Filter (Empty State) */}
+          {/* Scope Selection */}
           <div className="relative z-20 text-left mb-2 px-4">
               <div 
-                  onClick={() => setIsPagesDropdownOpen(!isPagesDropdownOpen)}
+                  onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
                   className={`${BRUTAL.input} flex justify-between items-center cursor-pointer h-10 bg-white`}
               >
                   <span className="text-xs font-bold uppercase">
-                      {excludedPages.length > 0 ? `${excludedPages.length} Pages Excluded` : 'All Pages Included'}
+                      {getScopeLabel(scanScope, selectedPage)}
                   </span>
-                  <span>{isPagesDropdownOpen ? '▲' : '▼'}</span>
+                  <span>{isScopeDropdownOpen ? '▲' : '▼'}</span>
               </div>
-              {isPagesDropdownOpen && (
+              {isScopeDropdownOpen && (
                   <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] p-2 text-left z-30">
-                      <input 
-                          type="text" 
-                          placeholder="Search Page..." 
-                          className="w-full border-b border-black p-1 text-xs font-mono outline-none mb-2"
-                          value={pageSearch}
-                          onChange={(e) => setPageSearch(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                      />
+                      <div 
+                          onClick={(e) => { e.stopPropagation(); setScanScope('all'); setIsScopeDropdownOpen(false); }}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                      >
+                          <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
+                          <span className="text-xs font-bold">All Pages</span>
+                      </div>
+                      <div 
+                          onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                      >
+                          <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'current' ? 'bg-black' : 'bg-white'}`}></div>
+                          <span className="text-xs font-bold">Current Selection</span>
+                      </div>
+                      <div className="border-t border-gray-200 my-1"></div>
                       <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                          {filteredPages.map(page => (
+                          {documentPages.map(page => (
                               <div 
-                                  key={page} 
-                                  onClick={(e) => { e.stopPropagation(); toggleExcludedPage(page); }}
+                                  key={page.id} 
+                                  onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
                                   className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1"
                               >
-                                  <div className={`w-3 h-3 border border-black flex items-center justify-center ${excludedPages.includes(page) ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                                  <span className={`text-xs ${excludedPages.includes(page) ? 'line-through text-gray-400' : 'text-black'}`}>{page}</span>
+                                  <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`}></div>
+                                  <span className="text-xs">{page.name}</span>
                               </div>
                           ))}
                       </div>
@@ -109,11 +125,13 @@ export const DesignSystemTab: React.FC<Props> = ({
             <button 
                 onClick={handleScanClick} 
                 disabled={isCalculating}
-                className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 relative hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait`}
+                className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait`}
             >
                 {isCalculating ? 'CALCULATING NODES...' : 'Scan Design'}
-                {!isCalculating && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">CALCULATE COST</span>}
             </button>
+            <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
+              No credits will be deducted at this point yet.
+            </p>
           </div>
         </div>
       </div>
@@ -155,36 +173,43 @@ export const DesignSystemTab: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Pages Filter */}
+      {/* Scope Selection */}
       <div className="relative z-20">
           <div 
-              onClick={() => setIsPagesDropdownOpen(!isPagesDropdownOpen)}
+              onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
               className={`${BRUTAL.input} flex justify-between items-center cursor-pointer h-10`}
           >
               <span className="text-xs font-bold uppercase">
-                  {excludedPages.length > 0 ? `${excludedPages.length} Pages Excluded` : 'All Pages Included'}
+                  {getScopeLabel(scanScope, selectedPage)}
               </span>
-              <span>{isPagesDropdownOpen ? '▲' : '▼'}</span>
+              <span>{isScopeDropdownOpen ? '▲' : '▼'}</span>
           </div>
-          {isPagesDropdownOpen && (
+          {isScopeDropdownOpen && (
               <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] p-2">
-                  <input 
-                      type="text" 
-                      placeholder="Search Page..." 
-                      className="w-full border-b border-black p-1 text-xs font-mono outline-none mb-2"
-                      value={pageSearch}
-                      onChange={(e) => setPageSearch(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                  />
+                  <div 
+                      onClick={(e) => { e.stopPropagation(); setScanScope('all'); setIsScopeDropdownOpen(false); }}
+                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                  >
+                      <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
+                      <span className="text-xs font-bold">All Pages</span>
+                  </div>
+                  <div 
+                      onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
+                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                  >
+                      <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'current' ? 'bg-black' : 'bg-white'}`}></div>
+                      <span className="text-xs font-bold">Current Selection</span>
+                  </div>
+                  <div className="border-t border-gray-200 my-1"></div>
                   <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                      {filteredPages.map(page => (
+                      {documentPages.map(page => (
                           <div 
-                              key={page} 
-                              onClick={(e) => { e.stopPropagation(); toggleExcludedPage(page); }}
+                              key={page.id} 
+                              onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
                               className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1"
                           >
-                              <div className={`w-3 h-3 border border-black flex items-center justify-center ${excludedPages.includes(page) ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                              <span className={`text-xs ${excludedPages.includes(page) ? 'line-through text-gray-400' : 'text-black'}`}>{page}</span>
+                              <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`}></div>
+                              <span className="text-xs">{page.name}</span>
                           </div>
                       ))}
                   </div>
@@ -196,10 +221,9 @@ export const DesignSystemTab: React.FC<Props> = ({
       <button 
           onClick={handleScanClick}
           disabled={isCalculating}
-          className={`${BRUTAL.btn} w-full bg-white text-black border-black flex justify-center items-center gap-2 relative shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
+          className={`${BRUTAL.btn} w-full bg-white text-black border-black flex justify-center items-center gap-2 shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
       >
           <span>{isCalculating ? 'CALCULATING...' : 'Scan Again'}</span>
-          {!isCalculating && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">CALCULATE COST</span>}
       </button>
 
       {/* Categories */}

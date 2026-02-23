@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
 import { CircularScore } from '../../components/widgets/CircularScore';
@@ -7,12 +7,11 @@ import { Confetti } from '../../components/Confetti';
 import { SuccessModal } from '../../components/SuccessModal';
 import { ScanReceiptModal } from '../../components/ScanReceiptModal';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
-import { DesignSystemTab } from './tabs/DesignSystemTab';
+import { DesignSystemTab, ScanScope } from './tabs/DesignSystemTab';
 import { DeepAnalysisTab } from './tabs/DeepAnalysisTab';
 import { 
   LOADING_MSGS, 
   CATEGORIES, 
-  MOCK_PAGES, 
   DS_ISSUES, 
   A11Y_ISSUES, 
   UX_ISSUES, 
@@ -50,7 +49,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
 
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false);
-  const [scanStats, setScanStats] = useState({ nodes: 0, cost: 0 });
+  const [scanStats, setScanStats] = useState({ nodes: 0, cost: 0, target: 'All Pages' });
   const [pendingScanType, setPendingScanType] = useState<'MAIN' | 'DEEP' | null>(null);
 
   // Confirmation Modal State
@@ -63,10 +62,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
     onConfirm: () => void;
   } | null>(null);
 
-  // Excluded Pages Logic
+  // Excluded Pages Logic (for issue filtering)
   const [excludedPages, setExcludedPages] = useState<string[]>([]);
-  const [isPagesDropdownOpen, setIsPagesDropdownOpen] = useState(false);
-  const [pageSearch, setPageSearch] = useState('');
+
+  // Scope & Document Pages (for node scan)
+  const [documentPages, setDocumentPages] = useState<{ id: string; name: string }[]>([]);
+  const [scanScope, setScanScope] = useState<ScanScope>('all');
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
@@ -131,19 +135,45 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
     return () => clearInterval(interval);
   }, [isScanning]);
 
-  const handleStartScan = () => {
+  // Fetch document pages on mount
+  useEffect(() => {
+    window.parent.postMessage({ pluginMessage: { type: 'get-pages' } }, '*');
+  }, []);
+
+  // Listen for plugin messages
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data?.pluginMessage;
+      if (!msg) return;
+      if (msg.type === 'pages-result' && msg.pages) {
+        setDocumentPages(msg.pages);
+        setSelectedPageId((prev) => (prev ? prev : msg.pages[0]?.id ?? null));
+      }
+      if (msg.type === 'count-nodes-result') {
+        setIsCalculating(false);
+        const count = msg.count ?? 0;
+        const target = msg.target ?? 'All Pages';
+        let cost = 5;
+        if (count > 250) cost = Math.ceil(count / 50);
+        setScanStats({ nodes: count, cost, target });
+        setPendingScanType('MAIN');
+        setShowReceipt(true);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const handleStartScan = useCallback(() => {
     if (!isPro && remaining === 0) {
       onUnlockRequest();
       return;
     }
-    const mockNodes = Math.floor(Math.random() * 400) + 150; 
-    let cost = 5;
-    if (mockNodes > 250) cost = Math.ceil(mockNodes / 50);
-
-    setScanStats({ nodes: mockNodes, cost });
-    setPendingScanType('MAIN');
-    setShowReceipt(true);
-  };
+    setIsCalculating(true);
+    const scope = scanScope;
+    const pageId = scope === 'page' ? selectedPageId : undefined;
+    window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId } }, '*');
+  }, [isPro, remaining, onUnlockRequest, scanScope, selectedPageId]);
 
   const handleDeepScan = () => {
     if (!isPro && remaining === 0) {
@@ -154,7 +184,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
     let cost = 5; 
     if (mockNodes > 250) cost = Math.ceil(mockNodes / 50);
 
-    setScanStats({ nodes: mockNodes, cost });
+    setScanStats({ nodes: mockNodes, cost, target: 'Current Selection' });
     setPendingScanType('DEEP');
     setShowReceipt(true);
   };
@@ -304,14 +334,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
      window.open('https://www.linkedin.com/sharing/share-offsite/?url=https://comtra.ai', '_blank');
   };
 
-  const toggleExcludedPage = (page: string) => {
-      if (excludedPages.includes(page)) {
-          setExcludedPages(prev => prev.filter(p => p !== page));
-      } else {
-          setExcludedPages(prev => [...prev, page]);
-      }
-  };
-
   const handleNavDeviation = (e: React.MouseEvent, issueId: string, layerIds: string[], direction: 'prev' | 'next') => {
       e.stopPropagation();
       const currentIndex = deviationNavIndex[issueId] || 0;
@@ -323,8 +345,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
       setDeviationNavIndex(prev => ({ ...prev, [issueId]: newIndex }));
       handleSelectLayer(e, layerIds[newIndex]); 
   };
-
-  const filteredPages = MOCK_PAGES.filter(p => p.toLowerCase().includes(pageSearch.toLowerCase()));
 
   // Shared props for IssueList to avoid repetition
   const issueListProps = {
@@ -379,6 +399,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
           <ScanReceiptModal 
             nodeCount={scanStats.nodes} 
             cost={scanStats.cost} 
+            target={scanStats.target}
             onConfirm={handleConfirmScan} 
             onCancel={() => setShowReceipt(false)} 
           />
@@ -483,19 +504,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
             categories={CATEGORIES}
             activeCat={activeCat}
             setActiveCat={setActiveCat}
-            excludedPages={excludedPages}
-            setExcludedPages={setExcludedPages}
-            isPagesDropdownOpen={isPagesDropdownOpen}
-            setIsPagesDropdownOpen={setIsPagesDropdownOpen}
-            pageSearch={pageSearch}
-            setPageSearch={setPageSearch}
-            filteredPages={filteredPages}
+            documentPages={documentPages}
+            scanScope={scanScope}
+            setScanScope={setScanScope}
+            selectedPageId={selectedPageId}
+            setSelectedPageId={setSelectedPageId}
+            isScopeDropdownOpen={isScopeDropdownOpen}
+            setIsScopeDropdownOpen={setIsScopeDropdownOpen}
             isPro={isPro}
             displayIssues={displayIssues}
             activeIssues={activeIssues}
             onStartScan={handleStartScan}
             onShare={handleShare}
-            toggleExcludedPage={toggleExcludedPage}
+            isCalculating={isCalculating}
             issueListProps={issueListProps}
         />
       )}

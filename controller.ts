@@ -45,6 +45,52 @@ figma.ui.onmessage = async (msg: any) => {
     figma.ui.postMessage({ type: 'selection-changed', nodes });
   }
 
+  if (msg.type === 'get-pages') {
+    const pages = figma.root.children.map((p: PageNode) => ({ id: p.id, name: p.name }));
+    figma.ui.postMessage({ type: 'pages-result', pages });
+  }
+
+  if (msg.type === 'count-nodes') {
+    const scope = msg.scope as 'all' | 'current' | 'page';
+    let count = 0;
+    let target = '';
+
+    function countDescendants(node: SceneNode): number {
+      let n = 1;
+      if ('children' in node) {
+        for (const child of node.children) {
+          n += countDescendants(child as SceneNode);
+        }
+      }
+      return n;
+    }
+
+    if (scope === 'current') {
+      const sel = figma.currentPage.selection;
+      for (const node of sel) {
+        count += countDescendants(node as SceneNode);
+      }
+      target = sel.length > 0 ? 'Current Selection' : 'Current Selection (empty)';
+    } else if (scope === 'page' && msg.pageId) {
+      const page = figma.getNodeById(msg.pageId) as PageNode | null;
+      if (page && page.type === 'PAGE') {
+        for (const child of page.children) {
+          count += countDescendants(child as SceneNode);
+        }
+        target = page.name;
+      }
+    } else {
+      for (const page of figma.root.children) {
+        for (const child of page.children) {
+          count += countDescendants(child as SceneNode);
+        }
+      }
+      target = 'All Pages';
+    }
+
+    figma.ui.postMessage({ type: 'count-nodes-result', count, target });
+  }
+
   if (msg.type === 'apply-fix') {
     const node = await figma.getNodeByIdAsync(msg.layerId);
     if (node && 'fills' in node) {

@@ -73,13 +73,10 @@ export const DeepAnalysisTab: React.FC<DeepAnalysisTabProps> = ({
             <div className="animate-in fade-in mt-4">
                 <button 
                     onClick={handleScanClick}
-                    className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black flex justify-center items-center gap-2 relative h-12 disabled:bg-gray-200 disabled:cursor-wait`}
+                    className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black flex justify-center items-center gap-2 h-12 disabled:bg-gray-200 disabled:cursor-wait`}
                     disabled={isDeepScanning || isCalculating}
                 >
                     {isCalculating ? 'CALCULATING NODES...' : (isDeepScanning ? 'Scanning...' : 'Scan Wireframe')}
-                    {!isCalculating && !isDeepScanning && (
-                        <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">CALCULATE COST</span>
-                    )}
                 </button>
             </div>
          ) : (

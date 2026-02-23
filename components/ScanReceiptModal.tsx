@@ -1,40 +1,45 @@
-
 import React from 'react';
-import { BRUTAL } from '../constants';
 
 interface Props {
   nodeCount: number;
   cost: number;
+  target: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, onConfirm, onCancel }) => {
+function getComplexityLabel(nodes: number): string {
+  if (nodes < 100) return 'LOW';
+  if (nodes < 500) return 'STD (Regular)';
+  return 'HIGH (Enterprise)';
+}
+
+export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, target, onConfirm, onCancel }) => {
   return (
     <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6">
       <div className="bg-white border-2 border-black shadow-[8px_8px_0_0_#fff] max-w-xs w-full font-mono relative overflow-hidden">
         
         {/* Receipt Header */}
         <div className="bg-yellow-400 text-black p-3 text-center border-b-2 border-dashed border-black">
-          <h3 className="font-bold uppercase text-lg tracking-widest">Scan Receipt</h3>
-          <p className="text-[10px]">Simulated charge</p>
+          <h3 className="font-bold uppercase text-lg tracking-widest">Calculation Results</h3>
+          <p className="text-[10px]">Everything in detail</p>
         </div>
 
         {/* Receipt Body */}
         <div className="p-6 text-xs space-y-4">
           <div className="flex justify-between border-b border-black/10 pb-2">
             <span className="text-gray-500 uppercase">Target</span>
-            <span className="font-bold">Current Selection</span>
+            <span className="font-bold">{target}</span>
           </div>
           
           <div className="flex justify-between border-b border-black/10 pb-2">
-            <span className="text-gray-500 uppercase">Est. Nodes</span>
+            <span className="text-gray-500 uppercase">Nodes</span>
             <span className="font-bold">{nodeCount}</span>
           </div>
 
           <div className="flex justify-between border-b border-black/10 pb-2">
             <span className="text-gray-500 uppercase">Complexity</span>
-            <span className="font-bold">{nodeCount > 250 ? 'HIGH (Enterprise)' : 'STD (Regular)'}</span>
+            <span className="font-bold">{getComplexityLabel(nodeCount)}</span>
           </div>
 
           <div className="flex justify-between items-center pt-2">
