@@ -4,6 +4,22 @@ Guida unica per il flusso OAuth del plugin (Login with Figma). Il deploy usa la 
 
 ---
 
+## Regole per un nuovo Vercel (obbligatorie)
+
+| Impostazione | Valore | Note |
+|--------------|--------|------|
+| **Repository** | `comtra-devz/plugin-main` | Questa repo. |
+| **Root Directory** | `auth-deploy` | Solo questa cartella viene deployata. |
+| **Framework Preset** | **Other** | Non usare Vite. |
+| **Build Command** | (vuoto o default) | Nessun build: solo le API in `api/`. |
+| **Output Directory** | (vuoto) | Non impostare. |
+| **Dominio** | `auth.comtra.dev` | Da aggiungere dopo la creazione. |
+| **Variabili** | Vedi sotto §3 | FIGMA_CLIENT_ID, FIGMA_CLIENT_SECRET, BASE_URL, REDIS_URL. |
+
+Se Root Directory non è `auth-deploy` o Framework è Vite, le route `/api/figma-oauth/*` non vengono deployate e il login restituirà 404.
+
+---
+
 ## 1. Progetto Vercel per auth.comtra.dev
 
 1. **Vercel** → **Add New** → **Project**.
