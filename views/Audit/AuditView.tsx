@@ -155,14 +155,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
     }
     setFakeProgressPercent(0);
     let cancelled = false;
+    const FAKE_CAP = 95; // never show 100% from fake; only real result sets 100%
     const scheduleNext = (current: number) => {
-      if (cancelled || current >= 100) return;
+      if (cancelled || current >= FAKE_CAP) return;
       const step = Math.floor(Math.random() * 10) + 4; // 4–13%
       const delay = 60 + Math.floor(Math.random() * 160); // 60–220ms
       fakeProgressRef.current = setTimeout(() => {
         if (cancelled) return;
         setFakeProgressPercent(prev => {
-          const next = Math.min(100, prev + step);
+          const next = Math.min(FAKE_CAP, prev + step);
           scheduleNext(next);
           return next;
         });
@@ -173,7 +174,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
       if (cancelled) return;
       setFakeProgressPercent(prev => {
         const step = Math.floor(Math.random() * 10) + 4;
-        const next = Math.min(100, prev + step);
+        const next = Math.min(FAKE_CAP, prev + step);
         scheduleNext(next);
         return next;
       });
