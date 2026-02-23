@@ -13,7 +13,6 @@ import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
-import { DebugInspector } from './components/DebugInspector';
 import { ViewState, User } from './types';
 import { AUTH_BACKEND_URL, FIGMA_PLUGIN_ID } from './constants';
 
@@ -169,8 +168,6 @@ export default function AppTest() {
 
   return (
     <>
-      <DebugInspector />
-
       <Layout 
         current={view} 
         setView={(v) => {

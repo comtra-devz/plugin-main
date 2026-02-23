@@ -24,13 +24,9 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
         <button 
           onClick={onOpenProfile}
           data-component="Layout: Avatar Button"
-          className="size-8 rounded-full bg-black border-2 border-white text-white font-bold flex items-center justify-center text-xs hover:bg-[#ffc900] hover:text-black transition-colors overflow-hidden shrink-0"
+          className="size-8 rounded-full bg-black border-2 border-white text-white font-bold flex items-center justify-center text-xs uppercase hover:bg-[#ffc900] hover:text-black transition-colors shrink-0"
         >
-          {user.img_url ? (
-            <img src={user.img_url} alt="" className="w-full h-full object-cover" />
-          ) : (
-            user.avatar || user.name.charAt(0)
-          )}
+          <span>{(user.avatar || user.name.charAt(0)).toUpperCase()}</span>
         </button>
       )}
     </header>
