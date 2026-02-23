@@ -54,52 +54,86 @@ figma.ui.onmessage = async (msg: any) => {
     const scope = msg.scope as 'all' | 'current' | 'page';
     let target = '';
 
-    let roots: SceneNode[] = [];
-    if (scope === 'current') {
-      const sel = figma.currentPage.selection;
-      for (let i = sel.length - 1; i >= 0; i--) roots.push(sel[i] as SceneNode);
-      target = roots.length > 0 ? 'Current Selection' : 'Current Selection (empty)';
-    } else if (scope === 'page' && msg.pageId) {
-      const page = figma.getNodeById(msg.pageId) as PageNode | null;
-      if (page && page.type === 'PAGE') {
-        const ch = page.children as readonly SceneNode[];
-        for (let i = ch.length - 1; i >= 0; i--) roots.push(ch[i]);
-        target = page.name;
-      }
-    } else {
-      for (const page of figma.root.children) {
-        const ch = page.children as readonly SceneNode[];
-        for (let i = ch.length - 1; i >= 0; i--) roots.push(ch[i]);
-      }
-      target = 'All Pages';
-    }
-
-    const BATCH_SIZE = 50;
-    const YIELD_MS = 12;
+    const BATCH_SIZE = 60;
+    const YIELD_MS = 8;
+    const PUSH_CHUNK = 150;
+    const MAX_NODES = 2_000_000;
     const delay = () => new Promise<void>(r => setTimeout(r, YIELD_MS));
 
     const stack: SceneNode[] = [];
-    for (let i = roots.length - 1; i >= 0; i--) stack.push(roots[i]);
+
+    async function pushChunkReverse(arr: readonly SceneNode[], startIdx: number, endIdx: number) {
+      for (let i = endIdx; i >= startIdx; i--) stack.push(arr[i]);
+    }
+
+    async function fillStackWithRoots(): Promise<void> {
+      if (scope === 'current') {
+        const sel = figma.currentPage.selection;
+        target = sel.length > 0 ? 'Current Selection' : 'Current Selection (empty)';
+        for (let i = sel.length - 1; i >= 0; i -= PUSH_CHUNK) {
+          const start = Math.max(0, i - PUSH_CHUNK + 1);
+          await pushChunkReverse(sel as readonly SceneNode[], start, i);
+          if (start > 0) await delay();
+        }
+      } else if (scope === 'page' && msg.pageId) {
+        const page = figma.getNodeById(msg.pageId) as PageNode | null;
+        if (page && page.type === 'PAGE') {
+          target = page.name;
+          const ch = page.children as readonly SceneNode[];
+          for (let i = ch.length - 1; i >= 0; i -= PUSH_CHUNK) {
+            const start = Math.max(0, i - PUSH_CHUNK + 1);
+            await pushChunkReverse(ch, start, i);
+            if (start > 0) await delay();
+          }
+        }
+      } else {
+        target = 'All Pages';
+        for (const page of figma.root.children) {
+          const ch = page.children as readonly SceneNode[];
+          for (let i = ch.length - 1; i >= 0; i -= PUSH_CHUNK) {
+            const start = Math.max(0, i - PUSH_CHUNK + 1);
+            await pushChunkReverse(ch, start, i);
+            if (start > 0) await delay();
+          }
+        }
+      }
+    }
 
     let count = 0;
     const run = async () => {
       figma.ui.postMessage({ type: 'count-nodes-progress', count: 0, percent: 1 });
-      while (stack.length > 0) {
+      await fillStackWithRoots();
+
+      let hitLimit = false;
+      while (stack.length > 0 && !hitLimit) {
         let processed = 0;
-        while (stack.length > 0 && processed < BATCH_SIZE) {
+        while (stack.length > 0 && processed < BATCH_SIZE && count < MAX_NODES) {
           const node = stack.pop()!;
           count++;
           if ('children' in node && node.children) {
             const ch = node.children as readonly SceneNode[];
-            for (let i = ch.length - 1; i >= 0; i--) stack.push(ch[i]);
+            if (ch.length <= PUSH_CHUNK) {
+              for (let i = ch.length - 1; i >= 0; i--) stack.push(ch[i]);
+            } else {
+              for (let i = ch.length - 1; i >= 0; i -= PUSH_CHUNK) {
+                const start = Math.max(0, i - PUSH_CHUNK + 1);
+                for (let j = i; j >= start; j--) stack.push(ch[j]);
+                if (start > 0) await delay();
+              }
+            }
           }
           processed++;
         }
+        if (count >= MAX_NODES) hitLimit = true;
         const pct = count > 0 ? Math.max(2, Math.min(95, Math.floor(count / 80))) : 1;
         figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
-        if (stack.length > 0) await delay();
+        if (stack.length > 0 && !hitLimit) await delay();
       }
-      figma.ui.postMessage({ type: 'count-nodes-result', count, target });
+      figma.ui.postMessage({
+        type: 'count-nodes-result',
+        count,
+        target: hitLimit ? `${target} (partial, limit ${MAX_NODES.toLocaleString()})` : target
+      });
     };
     run();
   }
