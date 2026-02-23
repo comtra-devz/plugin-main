@@ -6,7 +6,7 @@ declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
 
-// Restore saved user on load
+// Restore saved user on load. Session is stored in clientStorage with no expiry (indefinite until logout).
 (async () => {
   try {
     const user = await figma.clientStorage.getAsync('figmaOAuthUser');

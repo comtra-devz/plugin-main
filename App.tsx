@@ -52,6 +52,7 @@ export default function AppTest() {
   const [oauthInProgress, setOauthInProgress] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [logoutToast, setLogoutToast] = useState<string | null>(null);
+  const pollReadKeyRef = useRef<string | null>(null);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
@@ -80,7 +81,7 @@ export default function AppTest() {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  /** Reindirizza l'iframe alla pagina OAuth sul nostro server (stesso origin). Così postMessage(..., 'https://www.figma.com') funziona. */
+  /** Apre OAuth nel browser esterno e fa polling dall'UI: l'utente resta sulla login e poi va in home senza "chiudi e riapri". */
   const handleLoginWithFigma = async () => {
     setLoginError(null);
     try {
@@ -92,8 +93,8 @@ export default function AppTest() {
       const authUrl = data?.authUrl;
       const readKey = data?.readKey;
       if (!authUrl || !readKey) throw new Error('Risposta server non valida');
-      const pluginHandlerUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/plugin?read_key=${encodeURIComponent(readKey)}&auth_url=${encodeURIComponent(authUrl)}&plugin_id=${encodeURIComponent(FIGMA_PLUGIN_ID)}`;
-      window.location.href = pluginHandlerUrl;
+      pollReadKeyRef.current = readKey;
+      window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl } }, '*');
     } catch (e) {
       setOauthInProgress(false);
       const msg = e instanceof Error ? e.message : 'Errore di connessione';
@@ -103,6 +104,26 @@ export default function AppTest() {
         : msg);
     }
   };
+
+  useEffect(() => {
+    const readKey = pollReadKeyRef.current;
+    if (!readKey || !oauthInProgress) return;
+    const pollUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/poll?read_key=${encodeURIComponent(readKey)}`;
+    const interval = setInterval(async () => {
+      try {
+        const r = await fetch(pollUrl);
+        if (r.status === 202) return;
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data?.user) {
+          pollReadKeyRef.current = null;
+          clearInterval(interval);
+          window.parent.postMessage({ pluginMessage: { type: 'oauth-complete', user: data.user } }, '*');
+        }
+      } catch (_) {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [oauthInProgress]);
 
   const handleLogout = () => {
     window.parent.postMessage({ pluginMessage: { type: 'logout' } }, '*');
