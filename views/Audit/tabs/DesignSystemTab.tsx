@@ -129,15 +129,8 @@ export const DesignSystemTab: React.FC<Props> = ({
                 disabled={isCalculating}
                 className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex flex-col justify-center items-center gap-0 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait relative overflow-hidden`}
             >
-                <span className="flex items-center gap-2">
-                  {isCalculating ? (
-                    <>
-                      <span className="inline-block size-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      <span>CALCULATING NODES... {scanProgress.percent}%</span>
-                    </>
-                  ) : (
-                    'Scan Design'
-                  )}
+                <span>
+                  {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Design'}
                 </span>
                 {isCalculating && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-white overflow-hidden">
@@ -242,15 +235,8 @@ export const DesignSystemTab: React.FC<Props> = ({
           disabled={isCalculating}
           className={`${BRUTAL.btn} w-full bg-white text-black border-black flex flex-col justify-center items-center gap-0 relative overflow-hidden shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
       >
-          <span className="flex items-center gap-2">
-            {isCalculating ? (
-              <>
-                <span className="inline-block size-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                <span>CALCULATING... {scanProgress.percent}%</span>
-              </>
-            ) : (
-              'Scan Again'
-            )}
+          <span>
+            {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}
           </span>
           {isCalculating && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 overflow-hidden">

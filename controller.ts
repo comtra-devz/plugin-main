@@ -74,8 +74,8 @@ figma.ui.onmessage = async (msg: any) => {
       target = 'All Pages';
     }
 
-    const BATCH_SIZE = 80;
-    const YIELD_MS = 24;
+    const BATCH_SIZE = 50;
+    const YIELD_MS = 12;
     const delay = () => new Promise<void>(r => setTimeout(r, YIELD_MS));
 
     const stack: SceneNode[] = [];
@@ -83,6 +83,7 @@ figma.ui.onmessage = async (msg: any) => {
 
     let count = 0;
     const run = async () => {
+      figma.ui.postMessage({ type: 'count-nodes-progress', count: 0, percent: 1 });
       while (stack.length > 0) {
         let processed = 0;
         while (stack.length > 0 && processed < BATCH_SIZE) {
@@ -94,7 +95,7 @@ figma.ui.onmessage = async (msg: any) => {
           }
           processed++;
         }
-        const pct = Math.min(95, Math.floor((count / 10000) * 95));
+        const pct = count > 0 ? Math.max(2, Math.min(95, Math.floor(count / 80))) : 1;
         figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
         if (stack.length > 0) await delay();
       }
