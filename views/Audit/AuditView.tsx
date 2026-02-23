@@ -72,6 +72,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
   const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [scanProgress, setScanProgress] = useState({ percent: 0, count: 0 });
+  const [fakeProgressPercent, setFakeProgressPercent] = useState(0);
+  const fakeProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
@@ -140,6 +142,50 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
   useEffect(() => {
     window.parent.postMessage({ pluginMessage: { type: 'get-pages' } }, '*');
   }, []);
+
+  // Fake progress: random steps and delays so the bar feels real in fast (non-problematic) cases
+  useEffect(() => {
+    if (!isCalculating) {
+      setFakeProgressPercent(0);
+      if (fakeProgressRef.current) {
+        clearTimeout(fakeProgressRef.current);
+        fakeProgressRef.current = null;
+      }
+      return;
+    }
+    setFakeProgressPercent(0);
+    let cancelled = false;
+    const scheduleNext = (current: number) => {
+      if (cancelled || current >= 100) return;
+      const step = Math.floor(Math.random() * 10) + 4; // 4–13%
+      const delay = 60 + Math.floor(Math.random() * 160); // 60–220ms
+      fakeProgressRef.current = setTimeout(() => {
+        if (cancelled) return;
+        setFakeProgressPercent(prev => {
+          const next = Math.min(100, prev + step);
+          scheduleNext(next);
+          return next;
+        });
+      }, delay);
+    };
+    const firstDelay = 80 + Math.floor(Math.random() * 120);
+    fakeProgressRef.current = setTimeout(() => {
+      if (cancelled) return;
+      setFakeProgressPercent(prev => {
+        const step = Math.floor(Math.random() * 10) + 4;
+        const next = Math.min(100, prev + step);
+        scheduleNext(next);
+        return next;
+      });
+    }, firstDelay);
+    return () => {
+      cancelled = true;
+      if (fakeProgressRef.current) {
+        clearTimeout(fakeProgressRef.current);
+        fakeProgressRef.current = null;
+      }
+    };
+  }, [isCalculating]);
 
   // Listen for plugin messages
   useEffect(() => {
@@ -523,7 +569,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
             onStartScan={handleStartScan}
             onShare={handleShare}
             isCalculating={isCalculating}
-            scanProgress={scanProgress}
+            scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
             issueListProps={issueListProps}
         />
       )}
