@@ -178,30 +178,33 @@ function getReturnToFigmaHtml() {
     body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
     h1 { font-family: 'Tiny5', sans-serif; font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; color: #000; text-transform: uppercase; letter-spacing: 0.05em; }
     p { font-size: 0.95rem; color: #000; margin: 0 0 1.5rem; font-weight: 500; }
-    .fuse-wrap { margin: 1.5rem 0; }
-    .fuse-svg { display: block; }
-    @keyframes burn {
-      from { stroke-dashoffset: 0; }
-      to { stroke-dashoffset: 180; }
-    }
-    .fuse-line { stroke-dasharray: 180; animation: burn 5s linear forwards; }
-    @keyframes spark { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-    .spark { animation: spark 0.3s ease-in-out infinite; }
+    .dynamite-wrap { margin: 1.5rem 0; }
+    .fuse-burn { stroke-dasharray: 200; stroke-dashoffset: 200; animation: burn 5s linear forwards; }
+    @keyframes burn { to { stroke-dashoffset: 0; } }
+    .ember-glow { animation: glow 0.2s ease-in-out infinite alternate; }
+    @keyframes glow { from { opacity: 1; } to { opacity: 0.6; } }
   </style>
 </head>
 <body>
   <h1>Login completato</h1>
-  <p>Puoi chiudere questa finestra e tornare al plugin in Figma.</p>
-  <div class="fuse-wrap">
-    <svg class="fuse-svg" width="220" height="90" viewBox="0 0 220 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="155" y="30" width="55" height="35" rx="2" fill="#fff" stroke="#000" stroke-width="3"/>
-      <rect x="158" y="33" width="49" height="29" fill="#ffc900" stroke="#000" stroke-width="1" opacity="0.3"/>
-      <path class="fuse-line" pathLength="180" d="M 155 48 Q 160 85, 115 50 Q 70 15, 25 50" stroke="#8B4513" stroke-width="10" fill="none" stroke-linecap="round"/>
-      <circle class="spark" cx="25" cy="50" r="8" fill="#ffc900" stroke="#000" stroke-width="2"/>
+  <p>Questa finestra si chiuderà e tornerai a Figma.</p>
+  <div class="dynamite-wrap">
+    <svg width="180" height="120" viewBox="0 0 180 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="130" y="50" width="40" height="55" rx="4" fill="#f5f0e6" stroke="#000" stroke-width="3"/>
+      <rect x="133" y="65" width="34" height="8" fill="#c00" stroke="#000" stroke-width="1"/>
+      <path d="M 20 55 Q 45 25, 70 55 Q 95 85, 120 55 Q 145 25, 168 50" stroke="#8B4513" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path class="fuse-burn" d="M 20 55 Q 45 25, 70 55 Q 95 85, 120 55 Q 145 25, 168 50" stroke="#4a3728" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle class="ember ember-glow" r="10" fill="#ffc900" stroke="#000" stroke-width="2">
+        <animateMotion dur="5s" fill="freeze" path="M 20 55 Q 45 25, 70 55 Q 95 85, 120 55 Q 145 25, 168 50"/>
+      </circle>
+      <circle cx="20" cy="55" r="6" fill="#ff6b00" stroke="#000" stroke-width="2"/>
     </svg>
   </div>
   <script>
-    setTimeout(function() { window.close(); }, 5000);
+    setTimeout(function() {
+      try { window.location.href = 'figma://'; } catch(e) {}
+      setTimeout(function() { window.close(); }, 300);
+    }, 5000);
   </script>
 </body>
 </html>`;
