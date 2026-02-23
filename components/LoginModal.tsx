@@ -54,7 +54,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
           Your data is encrypted and protected according to GDPR standards.
         </p>
         <div data-component="Login: Powered By" className="text-[10px] font-bold uppercase tracking-wider text-black/40 mt-4 text-center">
-          Powered by Cordiska
+          Powered by Cordiska & Ben
         </div>
       </div>
     </div>

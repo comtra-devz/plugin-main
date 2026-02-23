@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Audit } from './views/Audit';
 import { Generate } from './views/Generate';
@@ -52,7 +52,7 @@ export default function AppTest() {
   const [oauthInProgress, setOauthInProgress] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [logoutToast, setLogoutToast] = useState<string | null>(null);
-  const pollReadKeyRef = useRef<string | null>(null);
+  const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
@@ -75,6 +75,7 @@ export default function AppTest() {
         setUser(normalizeOAuthUser(msg.user));
         setShowLogin(false);
         setOauthInProgress(false);
+        setOauthReadKey(null);
       }
     };
     window.addEventListener('message', onMessage);
@@ -93,7 +94,7 @@ export default function AppTest() {
       const authUrl = data?.authUrl;
       const readKey = data?.readKey;
       if (!authUrl || !readKey) throw new Error('Risposta server non valida');
-      pollReadKeyRef.current = readKey;
+      setOauthReadKey(readKey);
       window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl } }, '*');
     } catch (e) {
       setOauthInProgress(false);
@@ -106,9 +107,8 @@ export default function AppTest() {
   };
 
   useEffect(() => {
-    const readKey = pollReadKeyRef.current;
-    if (!readKey || !oauthInProgress) return;
-    const pollUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/poll?read_key=${encodeURIComponent(readKey)}`;
+    if (!oauthReadKey || !oauthInProgress) return;
+    const pollUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/poll?read_key=${encodeURIComponent(oauthReadKey)}`;
     const interval = setInterval(async () => {
       try {
         const r = await fetch(pollUrl);
@@ -116,14 +116,14 @@ export default function AppTest() {
         if (!r.ok) return;
         const data = await r.json();
         if (data?.user) {
-          pollReadKeyRef.current = null;
+          setOauthReadKey(null);
           clearInterval(interval);
           window.parent.postMessage({ pluginMessage: { type: 'oauth-complete', user: data.user } }, '*');
         }
       } catch (_) {}
     }, 2000);
     return () => clearInterval(interval);
-  }, [oauthInProgress]);
+  }, [oauthInProgress, oauthReadKey]);
 
   const handleLogout = () => {
     window.parent.postMessage({ pluginMessage: { type: 'logout' } }, '*');
