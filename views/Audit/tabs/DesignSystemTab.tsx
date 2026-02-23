@@ -127,23 +127,27 @@ export const DesignSystemTab: React.FC<Props> = ({
             <button 
                 onClick={handleScanClick} 
                 disabled={isCalculating}
-                className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait`}
+                className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex flex-col justify-center items-center gap-0 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait relative overflow-hidden`}
             >
-                {isCalculating ? 'CALCULATING NODES...' : 'Scan Design'}
+                <span className="flex items-center gap-2">
+                  {isCalculating ? (
+                    <>
+                      <span className="inline-block size-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <span>CALCULATING NODES... {scanProgress.percent}%</span>
+                    </>
+                  ) : (
+                    'Scan Design'
+                  )}
+                </span>
+                {isCalculating && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white overflow-hidden">
+                    <div 
+                      className="h-full bg-[#ffc900] transition-all duration-150 ease-out"
+                      style={{ width: `${scanProgress.percent}%` }}
+                    />
+                  </div>
+                )}
             </button>
-            {isCalculating && (
-              <div className="mt-3">
-                <div className="h-3 w-full border-2 border-black bg-white overflow-hidden">
-                  <div 
-                    className="h-full bg-[#ffc900] transition-all duration-150 ease-out"
-                    style={{ width: `${scanProgress.percent}%` }}
-                  />
-                </div>
-                <p className="text-[10px] font-bold text-center mt-1">
-                  {scanProgress.percent}% — {scanProgress.count.toLocaleString()} nodes
-                </p>
-              </div>
-            )}
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
               No credits will be deducted at this point yet.
             </p>
@@ -236,23 +240,27 @@ export const DesignSystemTab: React.FC<Props> = ({
       <button 
           onClick={handleScanClick}
           disabled={isCalculating}
-          className={`${BRUTAL.btn} w-full bg-white text-black border-black flex justify-center items-center gap-2 shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
+          className={`${BRUTAL.btn} w-full bg-white text-black border-black flex flex-col justify-center items-center gap-0 relative overflow-hidden shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
       >
-          <span>{isCalculating ? 'CALCULATING...' : 'Scan Again'}</span>
+          <span className="flex items-center gap-2">
+            {isCalculating ? (
+              <>
+                <span className="inline-block size-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <span>CALCULATING... {scanProgress.percent}%</span>
+              </>
+            ) : (
+              'Scan Again'
+            )}
+          </span>
+          {isCalculating && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 overflow-hidden">
+              <div 
+                className="h-full bg-[#ffc900] transition-all duration-150 ease-out"
+                style={{ width: `${scanProgress.percent}%` }}
+              />
+            </div>
+          )}
       </button>
-      {isCalculating && (
-        <div className="mt-2">
-          <div className="h-3 w-full border-2 border-black bg-white overflow-hidden">
-            <div 
-              className="h-full bg-[#ffc900] transition-all duration-150 ease-out"
-              style={{ width: `${scanProgress.percent}%` }}
-            />
-          </div>
-          <p className="text-[10px] font-bold text-center mt-1">
-            {scanProgress.percent}% — {scanProgress.count.toLocaleString()} nodes
-          </p>
-        </div>
-      )}
 
       {/* Categories */}
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>

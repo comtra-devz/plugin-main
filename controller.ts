@@ -56,23 +56,26 @@ figma.ui.onmessage = async (msg: any) => {
 
     let roots: SceneNode[] = [];
     if (scope === 'current') {
-      roots = [...figma.currentPage.selection] as SceneNode[];
+      const sel = figma.currentPage.selection;
+      for (let i = sel.length - 1; i >= 0; i--) roots.push(sel[i] as SceneNode);
       target = roots.length > 0 ? 'Current Selection' : 'Current Selection (empty)';
     } else if (scope === 'page' && msg.pageId) {
       const page = figma.getNodeById(msg.pageId) as PageNode | null;
       if (page && page.type === 'PAGE') {
-        roots = [...page.children] as SceneNode[];
+        const ch = page.children as readonly SceneNode[];
+        for (let i = ch.length - 1; i >= 0; i--) roots.push(ch[i]);
         target = page.name;
       }
     } else {
       for (const page of figma.root.children) {
-        roots.push(...(page.children as SceneNode[]));
+        const ch = page.children as readonly SceneNode[];
+        for (let i = ch.length - 1; i >= 0; i--) roots.push(ch[i]);
       }
       target = 'All Pages';
     }
 
-    const BATCH_SIZE = 300;
-    const YIELD_MS = 8;
+    const BATCH_SIZE = 80;
+    const YIELD_MS = 24;
     const delay = () => new Promise<void>(r => setTimeout(r, YIELD_MS));
 
     const stack: SceneNode[] = [];
