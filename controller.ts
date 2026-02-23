@@ -53,33 +53,78 @@ figma.ui.onmessage = async (msg: any) => {
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
     let target = '';
-    const roots: SceneNode[] = [];
+    const yieldTick = () => new Promise<void>(r => setTimeout(r, 0));
+    const INIT_PUSH_CHUNK = 6000;
 
-    if (scope === 'current') {
-      const sel = figma.currentPage.selection;
-      target = sel.length > 0 ? 'Current Selection' : 'Current Selection (empty)';
-      roots.push(...(sel as SceneNode[]));
-    } else if (scope === 'page' && msg.pageId) {
-      const page = figma.getNodeById(msg.pageId) as PageNode | null;
-      if (page && page.type === 'PAGE') {
-        target = page.name;
-        roots.push(page);
+    const stack: SceneNode[] = [];
+
+    const pushChunk = (arr: readonly SceneNode[], fromIdx: number, toIdx: number) => {
+      for (let i = toIdx; i >= fromIdx; i--) stack.push(arr[i]);
+    };
+
+    (async () => {
+      if (scope === 'current') {
+        const sel = figma.currentPage.selection;
+        target = sel.length > 0 ? 'Current Selection' : 'Current Selection (empty)';
+        for (let i = sel.length - 1; i >= 0; i -= INIT_PUSH_CHUNK) {
+          const start = Math.max(0, i - INIT_PUSH_CHUNK + 1);
+          pushChunk(sel as readonly SceneNode[], start, i);
+          if (start > 0) await yieldTick();
+        }
+      } else if (scope === 'page' && msg.pageId) {
+        const page = figma.getNodeById(msg.pageId) as PageNode | null;
+        if (page && page.type === 'PAGE') {
+          target = page.name;
+          const ch = page.children as readonly SceneNode[];
+          for (let i = ch.length - 1; i >= 0; i -= INIT_PUSH_CHUNK) {
+            const start = Math.max(0, i - INIT_PUSH_CHUNK + 1);
+            pushChunk(ch, start, i);
+            if (start > 0) await yieldTick();
+          }
+        }
+      } else {
+        target = 'All Pages';
+        for (const page of figma.root.children) {
+          const ch = page.children as readonly SceneNode[];
+          for (let i = ch.length - 1; i >= 0; i -= INIT_PUSH_CHUNK) {
+            const start = Math.max(0, i - INIT_PUSH_CHUNK + 1);
+            pushChunk(ch, start, i);
+            if (start > 0) await yieldTick();
+          }
+        }
       }
-    } else {
-      target = 'All Pages';
-      roots.push(...(figma.root.children as SceneNode[]));
-    }
 
-    let count = 0;
-    const totalRoots = roots.length;
-    for (let r = 0; r < totalRoots; r++) {
-      const root = roots[r];
-      const descendants = (root as any).findAll ? (root as any).findAll(() => true) : [];
-      count += 1 + (Array.isArray(descendants) ? descendants.length : 0);
-      const pct = totalRoots > 1 ? Math.max(2, Math.min(95, Math.floor((100 * (r + 1)) / totalRoots))) : 95;
-      figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
-    }
-    figma.ui.postMessage({ type: 'count-nodes-result', count, target });
+      const NODES_PER_YIELD = 3500;
+      const PUSH_YIELD_THRESHOLD = 5000;
+      let count = 0;
+      figma.ui.postMessage({ type: 'count-nodes-progress', count: 0, percent: 1 });
+
+      while (stack.length > 0) {
+        let processed = 0;
+        while (stack.length > 0 && processed < NODES_PER_YIELD) {
+          const node = stack.pop()!;
+          count++;
+          if ('children' in node && node.children) {
+            const ch = node.children as readonly SceneNode[];
+            if (ch.length <= PUSH_YIELD_THRESHOLD) {
+              for (let i = ch.length - 1; i >= 0; i--) stack.push(ch[i]);
+            } else {
+              for (let i = ch.length - 1; i >= 0; i -= PUSH_YIELD_THRESHOLD) {
+                const start = Math.max(0, i - PUSH_YIELD_THRESHOLD + 1);
+                for (let j = i; j >= start; j--) stack.push(ch[j]);
+                if (start > 0) await yieldTick();
+              }
+            }
+          }
+          processed++;
+        }
+        const pct = count > 0 ? Math.max(2, Math.min(95, Math.floor(count / 80))) : 1;
+        figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
+        if (stack.length > 0) await yieldTick();
+      }
+
+      figma.ui.postMessage({ type: 'count-nodes-result', count, target });
+    })();
   }
 
   if (msg.type === 'apply-fix') {
