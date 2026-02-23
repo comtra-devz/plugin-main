@@ -1,3 +1,6 @@
+/** Versione UI del plugin; aggiornare qui quando si va live (es. 1.0.1, 1.1.0). */
+export const APP_VERSION = '1.0.0';
+
 /** Base URL del server OAuth. In build: VITE_AUTH_BACKEND_URL; default production: auth.comtra.dev */
 export const AUTH_BACKEND_URL =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_AUTH_BACKEND_URL) ||

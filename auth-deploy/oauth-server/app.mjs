@@ -157,16 +157,13 @@ function getReturnToFigmaHtml() {
     body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
     .card { background: #fff; border: 2px solid #000; padding: 2rem; max-width: 360px; text-align: center; box-shadow: 6px 6px 0 #000; }
     h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
-    p { color: #333; margin: 0 0 1.5rem; }
-    .back { display: inline-block; background: #000; color: #fff; padding: 0.75rem 1.5rem; text-decoration: none; font-weight: bold; border: 2px solid #000; }
-    .back:hover { background: #333; }
+    p { color: #333; margin: 0 0 1rem; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Login completato</h1>
-    <p>Torna su Figma e usa il plugin Comtra. Puoi chiudere questa finestra.</p>
-    <a href="#" onclick="window.close(); return false;" class="back">Chiudi e torna a Figma</a>
+    <p>Puoi chiudere questa finestra e tornare al plugin in Figma.</p>
   </div>
 </body>
 </html>`;

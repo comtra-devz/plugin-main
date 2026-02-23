@@ -65,6 +65,7 @@ Il server deve ricordare lo stato OAuth tra init, callback e poll. Senza store c
 ## 5. Figma
 
 - [Figma → Your apps](https://www.figma.com/developers/apps) → la tua OAuth app.
+- **App name**: imposta il nome dell’app su **Comtra** (così nella schermata di consenso l’utente vedrà “Comtra would like to access...” invece di “OAuth would like to access...”).
 - **Redirect URL**: aggiungi **`https://auth.comtra.dev/auth/figma/callback`**.
 - **Scopes**: almeno **current_user:read**.
 

@@ -21,11 +21,11 @@ const MAX_FREE_USES_PER_TOOL = 10;
 
 function normalizeOAuthUser(raw: { name?: string; email?: string; img_url?: string | null; plan?: string; stats?: User['stats'] }): User {
   const name = raw.name || 'User';
-  const initials = name.split(/\s+/).map(s => s[0]).join('').toUpperCase().slice(0, 2) || name.charAt(0).toUpperCase();
+  const firstInitial = name.trim().charAt(0).toUpperCase() || 'U';
   return {
     name,
     email: raw.email || '',
-    avatar: initials,
+    avatar: firstInitial,
     img_url: raw.img_url ?? undefined,
     plan: (raw.plan as User['plan']) || 'FREE',
     stats: raw.stats || {
@@ -51,9 +51,16 @@ export default function AppTest() {
   const [showProfile, setShowProfile] = useState(false);
   const [oauthInProgress, setOauthInProgress] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [logoutToast, setLogoutToast] = useState<string | null>(null);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
+
+  useEffect(() => {
+    if (!logoutToast) return;
+    const t = setTimeout(() => setLogoutToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [logoutToast]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -102,6 +109,7 @@ export default function AppTest() {
     setUser(null);
     setShowProfile(false);
     setShowLogin(true);
+    setLogoutToast('Sei stato disconnesso.');
     setView(ViewState.AUDIT);
     setUsage({ gen: 0, code: 0, audit: 0 });
     setGenPrompt('');
@@ -128,10 +136,12 @@ export default function AppTest() {
   if (showLogin && view !== ViewState.PRIVACY) {
       return (
         <LoginModal
-          onLoginWithFigma={handleLoginWithFigma}
+          onLoginWithFigma={() => { setLogoutToast(null); handleLoginWithFigma(); }}
           onOpenPrivacy={handleOpenPrivacy}
           oauthInProgress={oauthInProgress}
           loginError={loginError}
+          logoutToast={logoutToast}
+          onDismissToast={() => setLogoutToast(null)}
         />
       );
   }

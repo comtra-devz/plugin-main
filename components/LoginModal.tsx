@@ -6,9 +6,11 @@ interface Props {
   onOpenPrivacy: () => void;
   oauthInProgress?: boolean;
   loginError?: string | null;
+  logoutToast?: string | null;
+  onDismissToast?: () => void;
 }
 
-export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, oauthInProgress, loginError }) => (
+export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, oauthInProgress, loginError, logoutToast, onDismissToast }) => (
   <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4" style={{ backgroundColor: COLORS.primary }}>
 
     <div data-component="Login: Card" className={`${BRUTAL.card} max-w-sm w-full text-center py-10 relative shadow-[8px_8px_0px_0px_#000] z-10`}>
@@ -56,5 +58,25 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
         </div>
       </div>
     </div>
+
+    {logoutToast && (
+      <div
+        data-component="Login: Logout Toast"
+        role="status"
+        className="mt-4 max-w-sm w-full border-2 border-black bg-white px-4 py-2.5 text-sm font-bold shadow-[4px_4px_0px_0px_#000] z-10 flex items-center justify-center gap-2"
+      >
+        <span className="flex-1 text-center">{logoutToast}</span>
+        {onDismissToast && (
+          <button
+            type="button"
+            onClick={onDismissToast}
+            className="shrink-0 w-6 h-6 flex items-center justify-center text-black/60 hover:text-black border border-transparent hover:border-black rounded"
+            aria-label="Chiudi avviso"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    )}
   </div>
 );
