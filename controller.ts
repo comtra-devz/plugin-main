@@ -55,9 +55,10 @@ figma.ui.onmessage = async (msg: any) => {
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
     let target = '';
-    const yieldTick = () => new Promise<void>(r => setTimeout(r, 0));
-    const INIT_PUSH_CHUNK = 800;
-    const PUSH_YIELD_THRESHOLD = 800;
+    const YIELD_MS = 5;
+    const yieldTick = () => new Promise<void>(r => setTimeout(r, YIELD_MS));
+    const INIT_PUSH_CHUNK = 500;
+    const PUSH_YIELD_THRESHOLD = 500;
 
     const stack: SceneNode[] = [];
 
@@ -105,7 +106,7 @@ figma.ui.onmessage = async (msg: any) => {
           }
         }
 
-        const PROGRESS_EVERY = 50;
+        const PROGRESS_EVERY = 20;
 
         while (stack.length > 0) {
           const node = stack.pop()!;

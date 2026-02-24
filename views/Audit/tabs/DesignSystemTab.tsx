@@ -136,7 +136,7 @@ export const DesignSystemTab: React.FC<Props> = ({
                   />
                 )}
                 <span className="relative z-10">
-                  {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Design'}
+                  {isCalculating ? `CALCULATING... ${scanProgress.percent}% (${(scanProgress.count ?? 0).toLocaleString()} nodes)` : 'Scan Design'}
                 </span>
             </button>
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
@@ -240,7 +240,7 @@ export const DesignSystemTab: React.FC<Props> = ({
             />
           )}
           <span className="relative z-10">
-            {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}
+            {isCalculating ? `CALCULATING... ${scanProgress.percent}% (${(scanProgress.count ?? 0).toLocaleString()} nodes)` : 'Scan Again'}
           </span>
       </button>
 
