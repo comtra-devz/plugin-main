@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize } from '../../constants';
+import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, COUNT_CAP } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
 import { CircularScore } from '../../components/widgets/CircularScore';
 import { Confetti } from '../../components/Confetti';
@@ -233,7 +233,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
     setScanProgress({ percent: 0, count: 0 });
     const scope = scanScope;
     const pageId = scope === 'page' ? selectedPageId : undefined;
-    window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId } }, '*');
+    window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId, countCap: COUNT_CAP } }, '*');
   }, [isPro, remaining, onUnlockRequest, scanScope, selectedPageId]);
 
   const handleDeepScan = () => {

@@ -32,13 +32,16 @@ export const TIER_LIMITS: Record<string, number> = {
   'PRO': 3000 
 };
 
-/** Scan cost by document size (node count). Used for audit: full count required for library comparison. */
+/** Scan cost by document size (node count). Used for audit; detailed count (library vs instances) happens later. */
 export const SCAN_SIZE_TIERS: { maxNodes: number; label: string; cost: number }[] = [
   { maxNodes: 500, label: 'Small', cost: 2 },
   { maxNodes: 5_000, label: 'Medium', cost: 5 },
   { maxNodes: 50_000, label: 'Large', cost: 8 },
   { maxNodes: Infinity, label: 'Huge', cost: 11 }
 ];
+
+/** Max nodes we count before stopping; progress % = count/COUNT_CAP. Keeps scan time bounded (~10s target). Above this = Huge tier. */
+export const COUNT_CAP = 400_000;
 
 export function getScanCostAndSize(nodeCount: number): { cost: number; sizeLabel: string } {
   for (const tier of SCAN_SIZE_TIERS) {

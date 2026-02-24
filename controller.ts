@@ -54,6 +54,7 @@ figma.ui.onmessage = async (msg: any) => {
   // Receipt is always shown; on error we send count-nodes-error so the UI can show it.
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
+    const countCap = Math.max(1, Number(msg.countCap) || 400_000);
     let target = '';
     const YIELD_MS = 5;
     const yieldTick = () => new Promise<void>(r => setTimeout(r, YIELD_MS));
@@ -107,8 +108,9 @@ figma.ui.onmessage = async (msg: any) => {
         }
 
         const PROGRESS_EVERY = 20;
+        let hitCap = false;
 
-        while (stack.length > 0) {
+        while (stack.length > 0 && count < countCap) {
           const node = stack.pop()!;
           count++;
           await yieldTick();
@@ -124,13 +126,16 @@ figma.ui.onmessage = async (msg: any) => {
               }
             }
           }
-          if (count % PROGRESS_EVERY === 0 || stack.length === 0) {
-            const pct = count > 0 ? Math.max(2, Math.min(95, Math.floor(count / 80))) : 1;
+          if (count % PROGRESS_EVERY === 0 || stack.length === 0 || count >= countCap) {
+            const pct = count >= countCap ? 100 : Math.min(100, Math.floor((count / countCap) * 100));
             figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
           }
         }
 
-        figma.ui.postMessage({ type: 'count-nodes-result', count, target });
+        if (count >= countCap) hitCap = true;
+        const resultCount = hitCap ? countCap : count;
+        const resultTarget = hitCap ? `${target} (${countCap.toLocaleString()}+ nodes)` : target;
+        figma.ui.postMessage({ type: 'count-nodes-result', count: resultCount, target: resultTarget });
       } catch (e: any) {
         const errMsg = String(e?.message || e);
         figma.notify(`Count failed at ${count} nodes: ${errMsg}`, { error: true });
