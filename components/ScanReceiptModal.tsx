@@ -15,7 +15,17 @@ function getComplexityLabel(nodes: number): string {
   return 'HIGH (Enterprise)';
 }
 
+function roundTo3SigFigs(n: number): number {
+  if (n < 1000) return n;
+  const exp = Math.floor(Math.log10(n));
+  const scale = Math.pow(10, exp - 2);
+  return Math.round(n / scale) * scale;
+}
+
 export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, sizeLabel, target, onConfirm, onCancel }) => {
+  const targetOnly = target.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  const sizeDisplay = sizeLabel === '200k+' ? '200k+' : roundTo3SigFigs(nodeCount).toLocaleString();
+
   return (
     <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6">
       <div className="bg-white border-2 border-black shadow-[8px_8px_0_0_#fff] max-w-xs w-full font-mono relative overflow-hidden">
@@ -30,20 +40,13 @@ export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, sizeLabel, 
         <div className="p-6 text-xs space-y-4">
           <div className="flex justify-between border-b border-black/10 pb-2">
             <span className="text-gray-500 uppercase">Target</span>
-            <span className="font-bold">{target}</span>
-          </div>
-          
-          <div className="flex justify-between border-b border-black/10 pb-2">
-            <span className="text-gray-500 uppercase">Nodes</span>
-            <span className="font-bold">{nodeCount.toLocaleString()}</span>
+            <span className="font-bold">{targetOnly}</span>
           </div>
 
-          {sizeLabel && (
-            <div className="flex justify-between border-b border-black/10 pb-2">
-              <span className="text-gray-500 uppercase">Size</span>
-              <span className="font-bold">{sizeLabel}</span>
-            </div>
-          )}
+          <div className="flex justify-between border-b border-black/10 pb-2">
+            <span className="text-gray-500 uppercase">Size</span>
+            <span className="font-bold">{sizeDisplay}</span>
+          </div>
 
           <div className="flex justify-between border-b border-black/10 pb-2">
             <span className="text-gray-500 uppercase">Complexity</span>

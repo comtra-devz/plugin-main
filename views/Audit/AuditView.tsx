@@ -72,8 +72,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
   const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [scanProgress, setScanProgress] = useState({ percent: 0, count: 0 });
-  const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
-  const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [fakeProgressPercent, setFakeProgressPercent] = useState(0);
   const fakeProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,27 +142,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
   useEffect(() => {
     window.parent.postMessage({ pluginMessage: { type: 'get-pages' } }, '*');
   }, []);
-
-  // Timer: runs while scan is in progress, stops when count-nodes-result is received (isCalculating false)
-  useEffect(() => {
-    if (!isCalculating) {
-      if (scanTimerRef.current) {
-        clearInterval(scanTimerRef.current);
-        scanTimerRef.current = null;
-      }
-      return;
-    }
-    setScanElapsedSeconds(0);
-    scanTimerRef.current = setInterval(() => {
-      setScanElapsedSeconds(s => s + 1);
-    }, 1000);
-    return () => {
-      if (scanTimerRef.current) {
-        clearInterval(scanTimerRef.current);
-        scanTimerRef.current = null;
-      }
-    };
-  }, [isCalculating]);
 
   // Fake progress: random steps and delays so the bar feels real in fast (non-problematic) cases
   useEffect(() => {
@@ -601,7 +578,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
             onShare={handleShare}
             isCalculating={isCalculating}
             scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
-            scanElapsedSeconds={scanElapsedSeconds}
             issueListProps={issueListProps}
         />
       )}

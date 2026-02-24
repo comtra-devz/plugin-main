@@ -34,7 +34,6 @@ interface Props {
   onShare: () => void;
   isCalculating: boolean;
   scanProgress: { percent: number; count: number };
-  scanElapsedSeconds: number;
   issueListProps: any;
 }
 
@@ -65,10 +64,8 @@ export const DesignSystemTab: React.FC<Props> = ({
   onShare,
   isCalculating,
   scanProgress,
-  scanElapsedSeconds,
   issueListProps
 }) => {
-  const formatElapsed = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
   const handleScanClick = () => {
@@ -139,14 +136,9 @@ export const DesignSystemTab: React.FC<Props> = ({
                   />
                 )}
                 <span className="relative z-10">
-                  {isCalculating ? `CALCULATING... ${scanProgress.percent}% (${(scanProgress.count ?? 0).toLocaleString()} nodes)` : 'Scan Design'}
+                  {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Design'}
                 </span>
             </button>
-            {isCalculating && (
-              <p className="text-[10px] font-mono text-gray-600 mt-1 text-center" aria-hidden>
-                Time: {formatElapsed(scanElapsedSeconds)}
-              </p>
-            )}
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
               No credits will be deducted at this point yet.
             </p>
@@ -248,14 +240,9 @@ export const DesignSystemTab: React.FC<Props> = ({
             />
           )}
           <span className="relative z-10">
-            {isCalculating ? `CALCULATING... ${scanProgress.percent}% (${(scanProgress.count ?? 0).toLocaleString()} nodes)` : 'Scan Again'}
+            {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}
           </span>
       </button>
-      {isCalculating && (
-        <p className="text-[10px] font-mono text-gray-600 text-center -mt-1" aria-hidden>
-          Time: {formatElapsed(scanElapsedSeconds)}
-        </p>
-      )}
 
       {/* Categories */}
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
