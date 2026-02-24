@@ -1,12 +1,6 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # Comtra — AI Design System Plugin
 
 **Comtra** è un plugin Figma con interfaccia web che audita, genera e sincronizza il tuo design system usando l'AI. Ha un'estetica brutalist con palette nero/bianco/rosa (`#ff90e8`)/giallo (`#ffc900`).
-
-View your app in AI Studio: https://ai.studio/apps/drive/1Ceuam5sFVDVY8ya-RGcCr0WDGTjAUGD2
 
 ---
 
@@ -68,13 +62,24 @@ La schermata principale del plugin. Mostra un **banner crediti** in giallo rotat
 **Tab 1 — Design System**
 
 - **Circular Score**: indicatore circolare con punteggio percentuale (es. 78%) del health score del design system
-- **Filtro pagine**: dropdown per escludere specifiche pagine Figma dall'analisi
+- **Scope scan**: dropdown per scegliere **All Pages**, **Current Selection** o una **pagina singola** del documento
 - **Categorie** cliccabili (Tokens, Colors, Typography, Grids, Components...) con punteggio e conteggio problemi
-- **Pulsante "Start Scan"**: mostra prima un **Scan Receipt Modal** con:
-  - Numero di nodi analizzati (casuale tra 150–550)
-  - Costo in crediti (variabile in base ai nodi)
-  - Pulsanti "Confirm" / "Cancel"
-- **Progress bar animata** durante la scansione con messaggi di loading ciclici
+- **Pulsante "Scan Design" / "Scan Again"**:
+  - Avvia il **conteggio nodi** (traversata asincrona in batch, senza bloccare l’UI; per file con caricamento dinamico pagine si usa `figma.loadAllPagesAsync()` prima di accedere ai figli)
+  - **Progress bar** gialla che riempie il bottone: percentuale reale verso il massimo conteggio (cap 200.000 nodi). Progresso inviato ogni 2.000 nodi per un avanzamento fluido; file più piccoli arrivano al 100% alla fine del conteggio
+  - **Timer** sotto la CTA (temporaneo): tempo trascorso in `m:ss` fino al termine del conteggio
+  - Al termine: **Scan Receipt Modal** con:
+    - **Target** (All Pages / Current Selection / nome pagina)
+    - **Nodes** (conteggio, con separatore migliaia)
+    - **Size** (Small / Medium / Large / 200k+ in base agli scaglioni)
+    - **Complexity** (LOW / STD / HIGH)
+    - **TOTAL COST** in crediti (vedi sotto)
+    - Pulsanti "Authorize Charge" / "Cancel Operation"
+  - Testo sotto la CTA: "No credits will be deducted at this point yet."
+- **Conteggio nodi (controller)**:
+  - Cap massimo: **200.000 nodi** (`COUNT_CAP` in `constants.ts`). Oltre si ferma e si considera tier **200k+**
+  - Batch da 6.000 nodi con yield tra un batch e l’altro; push figli a chunk da 4.000 per nodi con molti figli; nessun blocco del main thread
+  - In caso di errore (es. pagina non caricata): `count-nodes-error` + `figma.notify` con messaggio e conteggio raggiunto
 - **Lista Issue** (espandibile singolarmente):
   - Severità: `HIGH` (rosso) / `MED` (giallo) / `LOW` (grigio)
   - Layer ID cliccabile per navigare in Figma
@@ -273,7 +278,11 @@ Programma affiliazione con tracking delle commissioni (transazioni PENDING / CLE
 | PRO 1 Year | Illimitati | Sync senza cooldown |
 
 Costo per operazione:
-- **Audit Scan**: 5 crediti base + variabile sui nodi (1 credito ogni 50 nodi oltre 250)
+- **Audit Scan**: a **scaglioni** in base al numero di nodi (conteggio fino a max 200.000; oltre = tier 200k+):
+  - **Small** (≤500 nodi): 2 crediti
+  - **Medium** (≤5.000): 5 crediti
+  - **Large** (≤50.000): 8 crediti
+  - **200k+** (>50.000 o conteggio fermato a 200k): 11 crediti
 - **Generate**: 3 crediti
 - **Code / Sync**: 1 credito (gratis con piano annuale)
 
@@ -286,7 +295,7 @@ Costo per operazione:
 - **Tailwind CSS** (via CDN)
 - **@google/genai** — Gemini API per la generazione AI
 - **Font**: Space Grotesk + Tiny5 (titoli hero)
-- **Platform**: Figma Plugin API + Google AI Studio
+- **Platform**: Figma Plugin API (manifest con `documentAccess: "dynamic-page"`; uso di `loadAllPagesAsync` dove richiesto)
 
 ---
 

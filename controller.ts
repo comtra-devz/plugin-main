@@ -50,16 +50,19 @@ figma.ui.onmessage = async (msg: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
-  // Count nodes: fully async, yield after every node so the main thread never blocks.
-  // Receipt is always shown; on error we send count-nodes-error so the UI can show it.
+  // Count nodes: batch traversal with yield between batches only. Fast; UI stays responsive.
+  // No library needed — Figma API is the only way to read the tree; we optimize by batching.
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
-    const countCap = Math.max(1, Number(msg.countCap) || 400_000);
+    const rawCap = msg.countCap;
+    const countCap = (rawCap === undefined || rawCap === null || Number(rawCap) <= 0 || !Number.isFinite(Number(rawCap)))
+      ? Infinity
+      : Math.max(1, Number(rawCap));
     let target = '';
-    const YIELD_MS = 5;
-    const yieldTick = () => new Promise<void>(r => setTimeout(r, YIELD_MS));
-    const INIT_PUSH_CHUNK = 500;
-    const PUSH_YIELD_THRESHOLD = 500;
+    const yieldTick = () => new Promise<void>(r => setTimeout(r, 0));
+    const BATCH_SIZE = 6000;
+    const PUSH_CHUNK = 4000;
+    const INIT_PUSH_CHUNK = 4000;
 
     const stack: SceneNode[] = [];
 
@@ -107,34 +110,49 @@ figma.ui.onmessage = async (msg: any) => {
           }
         }
 
-        const PROGRESS_EVERY = 20;
         let hitCap = false;
+        const PROGRESS_STEP = 2000;
+        let lastSentCount = 0;
 
         while (stack.length > 0 && count < countCap) {
-          const node = stack.pop()!;
-          count++;
-          await yieldTick();
-          if ('children' in node && node.children) {
-            const ch = node.children as readonly SceneNode[];
-            if (ch.length <= PUSH_YIELD_THRESHOLD) {
-              for (let i = ch.length - 1; i >= 0; i--) stack.push(ch[i]);
-            } else {
-              for (let i = ch.length - 1; i >= 0; i -= PUSH_YIELD_THRESHOLD) {
-                const start = Math.max(0, i - PUSH_YIELD_THRESHOLD + 1);
-                for (let j = i; j >= start; j--) stack.push(ch[j]);
-                if (start > 0) await yieldTick();
+          let processed = 0;
+          while (stack.length > 0 && processed < BATCH_SIZE && count < countCap) {
+            const node = stack.pop()!;
+            count++;
+            if ('children' in node && node.children) {
+              const ch = node.children as readonly SceneNode[];
+              if (ch.length <= PUSH_CHUNK) {
+                for (let i = ch.length - 1; i >= 0; i--) stack.push(ch[i]);
+              } else {
+                for (let i = ch.length - 1; i >= 0; i -= PUSH_CHUNK) {
+                  const start = Math.max(0, i - PUSH_CHUNK + 1);
+                  for (let j = i; j >= start; j--) stack.push(ch[j]);
+                  if (start > 0) await yieldTick();
+                }
               }
             }
+            processed++;
+            if (countCap !== Infinity && count - lastSentCount >= PROGRESS_STEP) {
+              lastSentCount = count;
+              const pct = Math.min(100, Math.floor((count / countCap) * 100));
+              figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
+            }
           }
-          if (count % PROGRESS_EVERY === 0 || stack.length === 0 || count >= countCap) {
+          if (countCap === Infinity) {
+            const pct = Math.min(95, Math.floor(count / 5000));
+            figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
+          } else if (count - lastSentCount > 0 || stack.length === 0 || count >= countCap) {
+            lastSentCount = count;
             const pct = count >= countCap ? 100 : Math.min(100, Math.floor((count / countCap) * 100));
             figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
           }
+          if (stack.length > 0 && count < countCap) await yieldTick();
         }
 
-        if (count >= countCap) hitCap = true;
+        if (countCap !== Infinity && count >= countCap) hitCap = true;
         const resultCount = hitCap ? countCap : count;
         const resultTarget = hitCap ? `${target} (${countCap.toLocaleString()}+ nodes)` : target;
+        figma.ui.postMessage({ type: 'count-nodes-progress', count: resultCount, percent: 100 });
         figma.ui.postMessage({ type: 'count-nodes-result', count: resultCount, target: resultTarget });
       } catch (e: any) {
         const errMsg = String(e?.message || e);

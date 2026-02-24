@@ -2,6 +2,8 @@
 
 Guida unica per il flusso OAuth del plugin (Login with Figma). Il deploy usa la cartella **auth-deploy** su un **progetto Vercel dedicato** (stesso repo **plugin-main**, Root Directory = `auth-deploy`).
 
+**Flusso utente:** click "Login with Figma" → Figma apre il browser per il consenso → dopo l’autorizzazione redirect a `auth.comtra.dev`, che mostra la pagina "Login completato" e dopo qualche secondo reindirizza/chiude tornando a Figma; il plugin riceve l’utente via poll e mostra la dashboard.
+
 ---
 
 ## Regole per un nuovo Vercel (obbligatorie)
