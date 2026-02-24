@@ -214,6 +214,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
           setShowReceipt(true);
         }, minLoadingMs);
       }
+      if (msg.type === 'count-nodes-error') {
+        setIsCalculating(false);
+        setScanProgress({ percent: 0, count: msg.count ?? 0 });
+        console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
+      }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
