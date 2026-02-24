@@ -10,7 +10,6 @@ export const NavBar: React.FC<NavProps> = ({ current, onChange }) => (
         view !== ViewState.DOCUMENTATION && 
         view !== ViewState.PRIVACY && 
         view !== ViewState.TERMS && 
-        view !== ViewState.WEBSITE &&
         view !== ViewState.AFFILIATE
       )
       .map((view) => (

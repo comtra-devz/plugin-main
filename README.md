@@ -13,35 +13,13 @@ La prima schermata che l'utente vede è il **LoginModal**, su sfondo rosa pieno 
 - **Badge** "Design System AI" in alto, ruotato leggermente
 - **Titolo** "Comtra" in font nero uppercase extra-large
 - **CTA principale**: pulsante nero con logo Figma multicolore e testo "Login with Figma"
-- **Pulsante secondario** in alto a destra: "Go to Website ↗" (porta alla Landing Page)
 - **Footer**: link a Terms of Service, menzione GDPR, scritta "Powered by Cordiska"
 
-> Il click su "Login with Figma" autentica l'utente e lo porta direttamente alla schermata principale (AUDIT). Il click su "Go to Website" mostra la Landing Page marketing prima di entrare nel plugin.
+> Il click su "Login with Figma" autentica l'utente e lo porta direttamente alla schermata principale (AUDIT).
 
 ---
 
-### 2. Landing Page (opzionale)
-
-Accessibile tramite "Go to Website" dal login o dalla navbar interna. Non richiede autenticazione.
-
-- **Navbar fissa** nera con logo Comtra e pulsante "Use the Figma Plugin" (rosa) per tornare al login
-- **Hero** con effetto typewriter: "Stop / Wrestling / Figma" + sottotitolo descrittivo
-- **Mockup interattivo** stile browser Mac con skeleton loader
-- **Marquee animato**: "Smart Routing • Drift Detection • Semantic HTML • Accessibility Check • Design System Audit • Storybook Sync"
-- **3 Feature Cards** (sfondo nero):
-  - *Refine, Don't Redraw* — genera wireframe dai tuoi token esistenti
-  - *Code that works* — esporta React/Vue/Liquid, sync Storybook
-  - *Target: Perfection* — audit per accessibilità, naming, consistenza
-- **Sezione "How it works"** con 3 card in stack sticky:
-  1. **01 Audit** — Scan your System
-  2. **02 Fix** — Auto-Correction
-  3. **03 Generate** — Deploy to Code
-- **Sezione video** con placeholder tutorial su sfondo giallo
-- **Footer** con CTA "Try for Free Now", link Partner/Privacy/Cookies, "Made by Cordiska"
-
----
-
-### 3. App Principale — Layout Condiviso
+### 2. App Principale — Layout Condiviso
 
 Dopo il login, tutte le schermate condividono il layout base:
 
@@ -53,7 +31,7 @@ Dopo il login, tutte le schermate condividono il layout base:
 
 ---
 
-### 4. View AUDIT (default dopo login)
+### 3. View AUDIT (default dopo login)
 
 La schermata principale del plugin. Mostra un **banner crediti** in giallo rotato con il saldo corrente (es. `Free Credits Remaining: 10/10`).
 
@@ -111,7 +89,7 @@ Stessa struttura Deep Analysis per problemi nel prototipo (link rotti, stati man
 
 ---
 
-### 5. View GENERATE
+### 4. View GENERATE
 
 Generazione AI di wireframe e componenti rispettando il design system corrente.
 
@@ -141,7 +119,7 @@ Generazione AI di wireframe e componenti rispettando il design system corrente.
 
 ---
 
-### 6. View CODE
+### 5. View CODE
 
 Esportazione codice e sincronizzazione con strumenti di sviluppo. 3 tab interne.
 
@@ -172,7 +150,7 @@ Esportazione codice e sincronizzazione con strumenti di sviluppo. 3 tab interne.
 
 ---
 
-### 7. View STATS (Analytics)
+### 6. View STATS (Analytics)
 
 Sistema di gamification che traccia l'attività dell'utente.
 
@@ -214,7 +192,7 @@ Sistema di gamification che traccia l'attività dell'utente.
 
 ---
 
-### 8. Profile Sheet (click avatar in header)
+### 7. Profile Sheet (click avatar in header)
 
 Pannello laterale top-right che si apre sopra il contenuto.
 
@@ -231,7 +209,7 @@ Pannello laterale top-right che si apre sopra il contenuto.
 
 ---
 
-### 9. Upgrade Modal
+### 8. Upgrade Modal
 
 Si apre quando i crediti sono esauriti oppure dalla view Subscription.
 
@@ -250,7 +228,7 @@ Si apre quando i crediti sono esauriti oppure dalla view Subscription.
 
 ---
 
-### 10. View SUBSCRIPTION
+### 9. View SUBSCRIPTION
 
 Accessibile da Profile Sheet.
 
@@ -261,7 +239,7 @@ Accessibile da Profile Sheet.
 
 ---
 
-### 11. View AFFILIATE
+### 10. View AFFILIATE
 
 Programma affiliazione con tracking delle commissioni (transazioni PENDING / CLEARED e codice referral personale).
 
