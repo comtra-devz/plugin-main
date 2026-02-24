@@ -50,11 +50,13 @@ figma.ui.onmessage = async (msg: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
+  // Count nodes: fully async with regular yields so the main thread never blocks.
+  // That way we always send count-nodes-result and the receipt is always shown (no freeze on huge files).
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
     let target = '';
     const yieldTick = () => new Promise<void>(r => setTimeout(r, 0));
-    const INIT_PUSH_CHUNK = 6000;
+    const INIT_PUSH_CHUNK = 3000;
 
     const stack: SceneNode[] = [];
 
@@ -94,8 +96,8 @@ figma.ui.onmessage = async (msg: any) => {
         }
       }
 
-      const NODES_PER_YIELD = 3500;
-      const PUSH_YIELD_THRESHOLD = 5000;
+      const NODES_PER_YIELD = 1200;
+      const PUSH_YIELD_THRESHOLD = 2500;
       let count = 0;
       figma.ui.postMessage({ type: 'count-nodes-progress', count: 0, percent: 1 });
 

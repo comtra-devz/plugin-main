@@ -201,14 +201,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
         setScanProgress({ percent: msg.percent ?? 0, count: msg.count ?? 0 });
       }
       if (msg.type === 'count-nodes-result') {
-        setIsCalculating(false);
-        setScanProgress({ percent: 100, count: msg.count ?? 0 });
         const count = msg.count ?? 0;
         const target = msg.target ?? 'All Pages';
         const { cost, sizeLabel } = getScanCostAndSize(count);
         setScanStats({ nodes: count, cost, sizeLabel, target });
         setPendingScanType('MAIN');
-        setShowReceipt(true);
+        setScanProgress(prev => ({ ...prev, count }));
+        const minLoadingMs = 1200 + Math.floor(Math.random() * 1000);
+        setTimeout(() => {
+          setScanProgress({ percent: 100, count });
+          setIsCalculating(false);
+          setShowReceipt(true);
+        }, minLoadingMs);
       }
     };
     window.addEventListener('message', handler);
