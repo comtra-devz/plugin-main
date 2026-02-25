@@ -9,6 +9,23 @@ export const AUTH_BACKEND_URL =
 /** Plugin ID (manifest); usato per postMessage sicuro verso Figma */
 export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
 
+/** Email degli utenti di test: crediti infiniti di default; opzione "Simula Free Tier" per testare logica reale. Da rimuovere o svuotare in produzione. */
+export const TEST_USER_EMAILS = ['ben.bugli@gmail.com', 'foscacordidonne@gmail.com'];
+
+const STORAGE_KEY_SIMULATE_FREE = 'comtra_simulate_free_tier';
+export function getSimulateFreeTierFromStorage(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_SIMULATE_FREE) === 'true';
+  } catch {
+    return false;
+  }
+}
+export function setSimulateFreeTierInStorage(value: boolean): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_SIMULATE_FREE, value ? 'true' : 'false');
+  } catch {}
+}
+
 export const COLORS = {
   primary: '#ff90e8',
   yellow: '#ffc900',

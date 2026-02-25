@@ -7,6 +7,9 @@ interface Props {
   user: User;
   creditsLabel: string;
   lowCreditsWarning?: boolean;
+  isTestUser?: boolean;
+  simulateFreeTier?: boolean;
+  onSimulateFreeTierChange?: (value: boolean) => void;
   onClose: () => void;
   onLogout: () => void;
   onManageSub: () => void;
@@ -16,7 +19,7 @@ interface Props {
   onOpenAffiliate: () => void;
 }
 
-export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWarning, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
+export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
@@ -42,6 +45,18 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
           <span>→</span>
         </button>
         
+        {isTestUser && onSimulateFreeTierChange && (
+          <div className="flex items-center justify-between p-2 border border-dashed border-gray-400 bg-gray-50 mb-1">
+            <span className="text-[10px] font-bold uppercase text-gray-700">Simula Free Tier</span>
+            <button
+              data-component="Profile: Simulate Free Tier Toggle"
+              onClick={() => onSimulateFreeTierChange(!simulateFreeTier)}
+              className={`text-[10px] font-bold uppercase px-2 py-1 border-2 border-black ${simulateFreeTier ? 'bg-[#ffc900] text-black' : 'bg-white text-gray-600'}`}
+            >
+              {simulateFreeTier ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        )}
         <button 
           data-component="Profile: Manage Sub Button"
           onClick={onManageSub}

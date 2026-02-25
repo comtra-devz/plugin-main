@@ -23,6 +23,7 @@ interface Props {
   userTier?: string;
   onUnlockRequest: () => void;
   creditsRemaining: number | null;
+  useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   onNavigateToGenerate?: (prompt: string) => void;
@@ -30,7 +31,7 @@ interface Props {
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, estimateCredits, consumeCredits, onNavigateToGenerate }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -98,8 +99,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const isPro = plan === 'PRO';
-  const remaining = isPro ? Infinity : (creditsRemaining ?? 0);
-  const creditsDisplay = isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
+  const infiniteForTest = !!useInfiniteCreditsForTest;
+  const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
+  const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
+  const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
   // Determine which issue set to use
   let currentIssues = DS_ISSUES;
@@ -218,7 +221,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   }, []);
 
   const handleStartScan = useCallback(() => {
-    if (!isPro && remaining === 0) {
+    if (knownZeroCredits) {
       onUnlockRequest();
       return;
     }
@@ -227,10 +230,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     const scope = scanScope;
     const pageId = scope === 'page' ? selectedPageId : undefined;
     window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId, countCap: COUNT_CAP } }, '*');
-  }, [isPro, remaining, onUnlockRequest, scanScope, selectedPageId]);
+  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
 
   const handleDeepScan = () => {
-    if (!isPro && remaining === 0) {
+    if (knownZeroCredits) {
         onUnlockRequest();
         return;
     }
@@ -243,7 +246,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   const handleConfirmScan = async () => {
       const cost = scanStats.cost;
-      if (!isPro && cost > 0) {
+      if (!useInfiniteCreditsForTest && !isPro && cost > 0) {
         const result = await consumeCredits({ action_type: 'audit', credits_consumed: cost });
         if (result.error === 'Insufficient credits') {
           onUnlockRequest();
@@ -525,8 +528,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       )}
 
       <div className="flex justify-center mb-2">
-        <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${remaining === 0 && !isPro ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-          {isPro ? `Credits: ${creditsDisplay}` : `Credits: ${creditsDisplay}`}
+        <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
+          Credits: {creditsDisplay}
         </div>
       </div>
 

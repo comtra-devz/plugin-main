@@ -9,6 +9,7 @@ interface Props {
   userTier?: string;
   onUnlockRequest: () => void;
   creditsRemaining: number | null;
+  useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
@@ -31,7 +32,7 @@ const DESIGN_SYSTEMS = [
   "Uber Base Web"
 ];
 
-export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, estimateCredits, consumeCredits, initialPrompt }) => {
+export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
@@ -73,9 +74,11 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   }, []);
 
   const isPro = plan === 'PRO';
-  const remaining = isPro ? Infinity : (creditsRemaining ?? 0);
+  const infiniteForTest = !!useInfiniteCreditsForTest;
+  const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
   const canGenerate = isPro || remaining > 0;
-  const creditsDisplay = isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
+  const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
+  const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
   // Helper to update content state - Ignores Chips, requires text
   const checkContent = () => {
@@ -202,8 +205,8 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
       
       {/* Credit Banner */}
       <div className="flex justify-center mb-2">
-          <div data-component="Generate: Credit Banner" className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${remaining === 0 && !isPro ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-            {isPro ? `Credits: ${creditsDisplay}` : `Free Credits Remaining: ${remaining}/${MAX_FREE_USES}`}
+          <div data-component="Generate: Credit Banner" className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
+            Credits: {creditsDisplay}
           </div>
       </div>
 
@@ -347,7 +350,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                 disabled={!hasContent || loading || (!canGenerate && !isPro)}
                 className={`${BRUTAL.btn} ${canGenerate && hasContent ? `bg-[${COLORS.primary}] text-black hover:bg-white hover:border-black` : 'bg-gray-300 text-gray-500 cursor-not-allowed'} w-full flex justify-center items-center gap-2 relative`}
             >
-                {loading ? 'Weaving Magic...' : !isPro && remaining === 0 ? 'Unlock Unlimited AI' : (
+                {loading ? 'Weaving Magic...' : knownZeroCredits ? 'Unlock Unlimited AI' : (
                     selectedLayer ? 'Modify Component' : 'Create Wireframes'
                 )}
                 {!loading && canGenerate && (

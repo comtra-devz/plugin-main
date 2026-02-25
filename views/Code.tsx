@@ -12,6 +12,7 @@ interface Props {
   userTier?: string;
   onUnlockRequest: () => void;
   creditsRemaining: number | null;
+  useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
 }
@@ -26,7 +27,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, estimateCredits, consumeCredits }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -76,9 +77,11 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   const isPro = plan === 'PRO';
   const isAnnual = userTier === '1y';
-  const remaining = isPro ? Infinity : (creditsRemaining ?? 0);
+  const infiniteForTest = !!useInfiniteCreditsForTest;
+  const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
   const canUseFeature = isPro || remaining > 0;
-  const creditsDisplay = isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
+  const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
+  const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
   // Calculated State for Tokens Sync Status
   // If Storybook date is newer or equal to CSS/JSON date, we are synced.
@@ -300,8 +303,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       
       {/* Credit Banner */}
       <div className="flex justify-center mb-2">
-        <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${remaining === 0 && !isPro ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-          {isPro ? `Credits: ${creditsDisplay}` : `Credits: ${creditsDisplay}`}
+        <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
+          Credits: {creditsDisplay}
         </div>
       </div>
 

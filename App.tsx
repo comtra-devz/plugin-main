@@ -14,7 +14,7 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ViewState, User } from './types';
-import { AUTH_BACKEND_URL } from './constants';
+import { AUTH_BACKEND_URL, TEST_USER_EMAILS, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage } from './constants';
 
 export interface CreditsState {
   remaining: number;
@@ -61,6 +61,10 @@ export default function AppTest() {
 
   const [genPrompt, setGenPrompt] = useState('');
   const [credits, setCredits] = useState<CreditsState | null>(null);
+  const [simulateFreeTier, setSimulateFreeTier] = useState(getSimulateFreeTierFromStorage);
+
+  const isTestUser = user ? TEST_USER_EMAILS.includes(user.email.toLowerCase().trim()) : false;
+  const useInfiniteCreditsForTest = isTestUser && !simulateFreeTier;
 
   useEffect(() => {
     if (!logoutToast) return;
@@ -201,10 +205,22 @@ export default function AppTest() {
     return { credits_remaining: data.credits_remaining };
   }, [user?.authToken]);
 
-  const creditsLabel = user?.plan === 'PRO' ? '∞' : (credits === null ? '—' : `${credits.remaining}/${credits.total}`);
+  const creditsLabel = useInfiniteCreditsForTest
+    ? '∞ (test)'
+    : user?.plan === 'PRO'
+      ? '∞'
+      : credits === null
+        ? (user?.authToken ? '—' : '— (re-login to sync)')
+        : `${credits.remaining}/${credits.total}`;
   const creditsRemaining = credits?.remaining ?? null;
-  const hasZeroCredits = user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining <= 0;
-  const lowCreditsWarning = user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining > 0 && creditsRemaining <= 5;
+  const hasZeroCredits = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining <= 0;
+  const lowCreditsWarning = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining > 0 && creditsRemaining <= 5;
+
+  const handleSimulateFreeTierChange = (value: boolean) => {
+    setSimulateFreeTier(value);
+    setSimulateFreeTierInStorage(value);
+    if (value && user?.authToken) fetchCredits();
+  };
 
   if (showLogin && view !== ViewState.PRIVACY) {
       return (
@@ -239,6 +255,7 @@ export default function AppTest() {
               userTier={user?.tier}
               onUnlockRequest={handleUnlockRequest}
               creditsRemaining={creditsRemaining}
+              useInfiniteCreditsForTest={useInfiniteCreditsForTest}
               estimateCredits={estimateCredits}
               consumeCredits={consumeCredits}
               onNavigateToGenerate={(prompt) => {
@@ -254,6 +271,7 @@ export default function AppTest() {
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
             creditsRemaining={creditsRemaining}
+            useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
             initialPrompt={genPrompt}
@@ -266,6 +284,7 @@ export default function AppTest() {
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
             creditsRemaining={creditsRemaining}
+            useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
           />
@@ -273,7 +292,7 @@ export default function AppTest() {
         
         {view === ViewState.ANALYTICS && user && <Analytics stats={user.stats} />}
 
-        {view === ViewState.SUBSCRIPTION && <Subscription user={user} onUpgrade={() => setShowUpgrade(true)} />}
+        {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={credits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
         {view === ViewState.DOCUMENTATION && <Documentation />}
         {view === ViewState.PRIVACY && <Privacy />}
         {view === ViewState.TERMS && <Terms />}
@@ -292,6 +311,9 @@ export default function AppTest() {
             user={user} 
             creditsLabel={creditsLabel}
             lowCreditsWarning={lowCreditsWarning}
+            isTestUser={isTestUser}
+            simulateFreeTier={simulateFreeTier}
+            onSimulateFreeTierChange={handleSimulateFreeTierChange}
             onClose={() => setShowProfile(false)} 
             onLogout={handleLogout}
             onManageSub={() => {
