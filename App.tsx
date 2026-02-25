@@ -14,14 +14,19 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ViewState, User } from './types';
-import { AUTH_BACKEND_URL, FIGMA_PLUGIN_ID } from './constants';
+import { AUTH_BACKEND_URL } from './constants';
 
-const MAX_FREE_USES_PER_TOOL = 10;
+export interface CreditsState {
+  remaining: number;
+  total: number;
+  used: number;
+}
 
-function normalizeOAuthUser(raw: { name?: string; email?: string; img_url?: string | null; plan?: string; stats?: User['stats'] }): User {
+function normalizeOAuthUser(raw: { id?: string; name?: string; email?: string; img_url?: string | null; plan?: string; stats?: User['stats']; authToken?: string }): User {
   const name = raw.name || 'User';
   const firstInitial = name.trim().charAt(0).toUpperCase() || 'U';
   return {
+    id: raw.id,
     name,
     email: raw.email || '',
     avatar: firstInitial,
@@ -39,6 +44,7 @@ function normalizeOAuthUser(raw: { name?: string; email?: string; img_url?: stri
       syncedBitbucket: 0,
       affiliatesCount: 0,
     },
+    authToken: raw.authToken,
   };
 }
 
@@ -54,13 +60,34 @@ export default function AppTest() {
   const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
 
   const [genPrompt, setGenPrompt] = useState('');
-  const [usage, setUsage] = useState({ gen: 0, code: 0, audit: 0 });
+  const [credits, setCredits] = useState<CreditsState | null>(null);
 
   useEffect(() => {
     if (!logoutToast) return;
     const t = setTimeout(() => setLogoutToast(null), 5000);
     return () => clearTimeout(t);
   }, [logoutToast]);
+
+  const fetchCredits = React.useCallback(async () => {
+    if (!user?.authToken) return;
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      setCredits({
+        remaining: data.credits_remaining ?? 0,
+        total: data.credits_total ?? 0,
+        used: data.credits_used ?? 0,
+      });
+    } catch (_) {}
+  }, [user?.authToken]);
+
+  useEffect(() => {
+    if (user?.authToken) fetchCredits();
+    else setCredits(null);
+  }, [user?.authToken, user?.id, fetchCredits]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -127,11 +154,11 @@ export default function AppTest() {
   const handleLogout = () => {
     window.parent.postMessage({ pluginMessage: { type: 'logout' } }, '*');
     setUser(null);
+    setCredits(null);
     setShowProfile(false);
     setShowLogin(true);
     setLogoutToast('Sei stato disconnesso.');
     setView(ViewState.AUDIT);
-    setUsage({ gen: 0, code: 0, audit: 0 });
     setGenPrompt('');
   };
 
@@ -149,9 +176,35 @@ export default function AppTest() {
     setView(ViewState.PRIVACY);
   };
 
-  // Calculate global credits for Profile Menu
-  const totalCredits = (MAX_FREE_USES_PER_TOOL - usage.audit) + (MAX_FREE_USES_PER_TOOL - usage.gen) + (MAX_FREE_USES_PER_TOOL - usage.code);
-  const creditsLabel = user?.plan === 'PRO' ? '∞' : `${Math.max(0, totalCredits)}/30`;
+  const estimateCredits = React.useCallback(async (payload: { action_type: string; node_count?: number }) => {
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/credits/estimate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) return { estimated_credits: 5 };
+    const data = await r.json();
+    return { estimated_credits: data.estimated_credits ?? 5 };
+  }, []);
+
+  const consumeCredits = React.useCallback(async (payload: { action_type: string; credits_consumed: number; file_id?: string }) => {
+    if (!user?.authToken) return { error: 'Unauthorized' as const };
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/credits/consume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (r.status === 402) return { error: 'Insufficient credits' as const, credits_remaining: data.credits_remaining };
+    if (!r.ok) return { error: 'Server error' as const };
+    setCredits({ remaining: data.credits_remaining, total: data.credits_total, used: data.credits_used });
+    return { credits_remaining: data.credits_remaining };
+  }, [user?.authToken]);
+
+  const creditsLabel = user?.plan === 'PRO' ? '∞' : (credits === null ? '—' : `${credits.remaining}/${credits.total}`);
+  const creditsRemaining = credits?.remaining ?? null;
+  const hasZeroCredits = user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining <= 0;
+  const lowCreditsWarning = user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining > 0 && creditsRemaining <= 5;
 
   if (showLogin && view !== ViewState.PRIVACY) {
       return (
@@ -185,8 +238,9 @@ export default function AppTest() {
               plan={user?.plan || 'FREE'} 
               userTier={user?.tier}
               onUnlockRequest={handleUnlockRequest}
-              usageCount={usage.audit}
-              onUse={() => setUsage(p => ({ ...p, audit: p.audit + 1 }))}
+              creditsRemaining={creditsRemaining}
+              estimateCredits={estimateCredits}
+              consumeCredits={consumeCredits}
               onNavigateToGenerate={(prompt) => {
                   setGenPrompt(prompt);
                   setView(ViewState.GENERATE);
@@ -198,9 +252,10 @@ export default function AppTest() {
           <Generate 
             plan={user?.plan || 'FREE'} 
             userTier={user?.tier}
-            onUnlockRequest={handleUnlockRequest} 
-            usageCount={usage.gen}
-            onUse={() => setUsage(p => ({ ...p, gen: p.gen + 1 }))}
+            onUnlockRequest={handleUnlockRequest}
+            creditsRemaining={creditsRemaining}
+            estimateCredits={estimateCredits}
+            consumeCredits={consumeCredits}
             initialPrompt={genPrompt}
           />
         )}
@@ -210,8 +265,9 @@ export default function AppTest() {
             plan={user?.plan || 'FREE'} 
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
-            usageCount={usage.code}
-            onUse={() => setUsage(p => ({ ...p, code: p.code + 1 }))}
+            creditsRemaining={creditsRemaining}
+            estimateCredits={estimateCredits}
+            consumeCredits={consumeCredits}
           />
         )}
         
@@ -223,14 +279,19 @@ export default function AppTest() {
         {view === ViewState.TERMS && <Terms />}
         {view === ViewState.AFFILIATE && <Affiliate />}
 
-        {showUpgrade && (
-          <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} />
+        {(showUpgrade || hasZeroCredits) && (
+          <UpgradeModal
+            onClose={() => !hasZeroCredits && setShowUpgrade(false)}
+            onUpgrade={handleUpgrade}
+            forceOpen={hasZeroCredits}
+          />
         )}
 
         {showProfile && user && (
           <ProfileSheet 
             user={user} 
             creditsLabel={creditsLabel}
+            lowCreditsWarning={lowCreditsWarning}
             onClose={() => setShowProfile(false)} 
             onLogout={handleLogout}
             onManageSub={() => {

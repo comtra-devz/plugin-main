@@ -27,6 +27,7 @@ export interface UserStats {
 }
 
 export interface User {
+  id?: string;
   name: string;
   email: string;
   /** Iniziali (es. "JD") o singola lettera; usato se manca img_url */
@@ -36,6 +37,8 @@ export interface User {
   plan: UserPlan;
   tier?: string; // '1w', '1m', '6m', '1y'
   stats: UserStats;
+  /** JWT per API credits; presente dopo login OAuth (nuovo flusso) */
+  authToken?: string;
 }
 
 export interface AuditCategory {

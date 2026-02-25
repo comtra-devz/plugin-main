@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { TIER_LIMITS } from '../constants';
 import { UserPlan } from '../types';
 import { Confetti } from '../components/Confetti.tsx';
 import { TokensTab } from './Code/tabs/TokensTab.tsx';
@@ -12,8 +11,9 @@ interface Props {
   plan: UserPlan; 
   userTier?: string;
   onUnlockRequest: () => void;
-  usageCount: number;
-  onUse: () => void;
+  creditsRemaining: number | null;
+  estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
+  consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
 }
 
 const SYNC_ITEMS_MOCK = [
@@ -26,7 +26,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCount, onUse }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, estimateCredits, consumeCredits }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -76,18 +76,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
 
   const isPro = plan === 'PRO';
   const isAnnual = userTier === '1y';
-  
-  // Credit Limit Logic
-  const limit = isPro 
-    ? (userTier && TIER_LIMITS[userTier] ? TIER_LIMITS[userTier] : TIER_LIMITS['PRO']) 
-    : TIER_LIMITS['FREE'];
-    
-  // Mocking previous usage for Pro to make it look realistic (450 used), Free starts at 0 + session usage
-  const effectiveUsage = isPro ? 450 + usageCount : usageCount;
-  const remaining = Math.max(0, limit - effectiveUsage);
-  
+  const remaining = isPro ? Infinity : (creditsRemaining ?? 0);
   const canUseFeature = isPro || remaining > 0;
-  const creditsDisplay = isPro ? `${limit - effectiveUsage}/${limit}` : `${remaining}/${limit}`;
+  const creditsDisplay = isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
 
   // Calculated State for Tokens Sync Status
   // If Storybook date is newer or equal to CSS/JSON date, we are synced.
@@ -118,7 +109,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
       onUnlockRequest();
       return;
     }
-    if (requiresCredit && !isPro) onUse();
     action();
   };
 
@@ -164,8 +154,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
   const handleGenerate = () => {
      handleAction(() => {
         setIsGenerating(true);
-        // Generation always uses generic credits if not Pro
-        if(!isPro) onUse();
         setTimeout(() => {
           setGeneratedCode(generateCodeString());
           setIsGenerating(false);
@@ -176,10 +164,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
   };
 
   const handleGenerateCss = () => {
-    // Uses CSS Update Cooldown
     handleAction(() => {
       setIsGeneratingCss(true);
-      if(!isPro) onUse();
       setTimeout(() => {
         setGeneratedCss(getRawCss());
         setIsGeneratingCss(false);
@@ -193,7 +179,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
   const handleGenerateJson = () => {
     handleAction(() => {
       setIsGeneratingJson(true);
-      if(!isPro) onUse();
       setTimeout(() => {
         setGeneratedJson(getRawJson());
         setIsGeneratingJson(false);
@@ -240,9 +225,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
     if (!selectedLayer) return;
     if (target === 'GH' || target === 'BB') return; 
 
-    // Credit usage for sync
-    if(!isAnnual) onUse(); 
-
     setIsSyncingComp(true);
     setTimeout(() => {
       setLastSyncedComp(new Date());
@@ -258,9 +240,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
      }
      
      if (target === 'GH' || target === 'BB') return;
-
-     // Credit usage for sync
-     if(!isAnnual) onUse();
 
      setIsSyncingTokens(true);
      setTimeout(() => {
@@ -286,8 +265,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
     // Check Cooldown
     if (getRemainingTime('scan_sync')) return;
 
-    if(!isAnnual) onUse(); // Uses credits
-
     setIsSyncScanning(true);
     setTimeout(() => {
       setIsSyncScanning(false);
@@ -303,7 +280,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
   };
 
   const handleSyncAll = () => {
-    if(!isAnnual) onUse(); // Uses credits
     setSyncItems([]);
     setLastSyncAllDate(new Date());
     setShowConfetti(true);
@@ -325,7 +301,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCo
       {/* Credit Banner */}
       <div className="flex justify-center mb-2">
         <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${remaining === 0 && !isPro ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-          {isPro ? `Credits: ${creditsDisplay}` : `Free Credits Remaining: ${remaining}/${limit}`}
+          {isPro ? `Credits: ${creditsDisplay}` : `Credits: ${creditsDisplay}`}
         </div>
       </div>
 

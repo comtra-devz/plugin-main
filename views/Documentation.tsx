@@ -60,7 +60,7 @@ const FAQS = [
   { q: "How much does a Scan cost?", a: "A standard Audit Scan costs 5 Credits. If you scan a huge prototype (>250 nodes), it costs +1 Credit for every 50 extra nodes. You always see a receipt before paying." },
   { q: "What happens to my data?", a: "We process your Figma structure ephemerally. We calculate a hash, send it to the AI for analysis, and then discard the raw data. We do NOT train models on your designs." },
   { q: "Can I export to Tailwind?", a: "Yes! React + Tailwind is our default and most optimized export format. It respects your Figma Variables mapping." },
-  { q: "Do unused credits roll over?", a: "Free tier credits reset monthly (10/mo). Pro subscription credits (e.g. 600) are valid for the duration of your 6-month cycle." },
+  { q: "Do unused credits roll over?", a: "Free tier: 25 credits are a one-time welcome bonus (no reset, no expiry). Pro subscription credits are valid for the duration of your subscription cycle." },
 ];
 
 export const Documentation: React.FC = () => {

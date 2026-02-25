@@ -6,6 +6,7 @@ import { User } from '../types';
 interface Props {
   user: User;
   creditsLabel: string;
+  lowCreditsWarning?: boolean;
   onClose: () => void;
   onLogout: () => void;
   onManageSub: () => void;
@@ -15,7 +16,7 @@ interface Props {
   onOpenAffiliate: () => void;
 }
 
-export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
+export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWarning, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
@@ -25,6 +26,11 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, onClose, onL
             <span data-component="Profile: Plan Badge" className="inline-block bg-black text-white text-[10px] px-2 py-0.5 font-bold uppercase shrink-0">{user.plan} PLAN</span>
             <span data-component="Profile: Credits Badge" className="text-[10px] font-bold uppercase border-2 border-black px-2 py-0.5 bg-white min-w-0">Credits: {creditsLabel}</span>
         </div>
+        {lowCreditsWarning && (
+          <p data-component="Profile: Low Credits Warning" className="text-[10px] font-bold uppercase mt-2 bg-[#ffc900] border border-black px-2 py-1">
+            Credits in esaurimento — Passa a PRO
+          </p>
+        )}
       </div>
       <div className="p-2 flex flex-col gap-1">
         <button 

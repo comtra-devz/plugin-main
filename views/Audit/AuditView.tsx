@@ -22,14 +22,15 @@ interface Props {
   plan: UserPlan; 
   userTier?: string;
   onUnlockRequest: () => void;
-  usageCount: number;
-  onUse: () => void;
+  creditsRemaining: number | null;
+  estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
+  consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   onNavigateToGenerate?: (prompt: string) => void;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCount, onUse, onNavigateToGenerate }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, estimateCredits, consumeCredits, onNavigateToGenerate }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -97,16 +98,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const isPro = plan === 'PRO';
-  
-  // Credit Limit Logic
-  const limit = isPro 
-    ? (userTier && TIER_LIMITS[userTier] ? TIER_LIMITS[userTier] : TIER_LIMITS['PRO']) 
-    : TIER_LIMITS['FREE'];
-    
-  const effectiveUsage = isPro ? 450 + usageCount : usageCount;
-  const remaining = Math.max(0, limit - effectiveUsage);
-  
-  const creditsDisplay = isPro ? `${limit - effectiveUsage}/${limit}` : `${remaining}/${limit}`;
+  const remaining = isPro ? Infinity : (creditsRemaining ?? 0);
+  const creditsDisplay = isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
 
   // Determine which issue set to use
   let currentIssues = DS_ISSUES;
@@ -248,10 +241,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
     setShowReceipt(true);
   };
 
-  const handleConfirmScan = () => {
-      if (!isPro) onUse();
+  const handleConfirmScan = async () => {
+      const cost = scanStats.cost;
+      if (!isPro && cost > 0) {
+        const result = await consumeCredits({ action_type: 'audit', credits_consumed: cost });
+        if (result.error === 'Insufficient credits') {
+          onUnlockRequest();
+          return;
+        }
+        if (result.error) return;
+      }
       setShowReceipt(false);
-      
+
       if (pendingScanType === 'MAIN') {
           setIsScanning(true);
       } else if (pendingScanType === 'DEEP') {
@@ -525,7 +526,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageC
 
       <div className="flex justify-center mb-2">
         <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${remaining === 0 && !isPro ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-          {isPro ? `Credits: ${creditsDisplay}` : `Free Credits Remaining: ${remaining}/${limit}`}
+          {isPro ? `Credits: ${creditsDisplay}` : `Credits: ${creditsDisplay}`}
         </div>
       </div>
 

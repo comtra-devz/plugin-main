@@ -3,13 +3,13 @@ import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
 
 const TIERS = [
-  { id: '1w', label: '1 Week', price: '€7', sub: 'Just trying', limit: '20 prompts' },
-  { id: '1m', label: '1 Month', price: '€25', sub: 'Standard', limit: '100 prompts/mo' },
-  { id: '6m', label: '6 Months', price: '€99', sub: 'Save 30%', rec: true, limit: '800 prompts' },
-  { id: '1y', label: '1 Year', price: '€250', sub: 'Best Value', limit: 'Unlimited prompts' },
+  { id: '1w', label: '1 Week', price: '€7', sub: 'Just trying', limit: '20 credits' },
+  { id: '1m', label: '1 Month', price: '€25', sub: 'Standard', limit: '100 credits/mo' },
+  { id: '6m', label: '6 Months', price: '€99', sub: 'Save 30%', rec: true, limit: '800 credits' },
+  { id: '1y', label: '1 Year', price: '€250', sub: 'Best Value', limit: 'Unlimited credits' },
 ];
 
-export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: string) => void }> = ({ onClose, onUpgrade }) => {
+export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: string) => void; forceOpen?: boolean }> = ({ onClose, onUpgrade, forceOpen }) => {
   const [sel, setSel] = useState('6m');
   const [promoCode, setPromoCode] = useState('');
 
@@ -18,9 +18,9 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: str
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-      <div className={`${BRUTAL.card} max-w-sm w-full relative max-h-[90vh] overflow-y-auto`}>
-        <button onClick={onClose} className="absolute top-2 right-2 font-bold text-xl">×</button>
+    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={(e) => { if (forceOpen) e.stopPropagation(); else e.target === e.currentTarget && onClose(); }}>
+      <div className={`${BRUTAL.card} max-w-sm w-full relative max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+        {!forceOpen && <button onClick={onClose} className="absolute top-2 right-2 font-bold text-xl">×</button>}
         <h2 className="text-2xl font-black uppercase mb-4 bg-[#ffc900] inline-block px-1">Unlock Pro</h2>
         
         <div className="space-y-3 mb-4">

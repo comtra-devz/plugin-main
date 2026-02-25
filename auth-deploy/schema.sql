@@ -1,0 +1,29 @@
+-- Comtra credits: users + credit_transactions
+-- Run once (e.g. Vercel Postgres dashboard or CLI) to create tables.
+
+-- id = Figma user id (from OAuth)
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT,
+  name TEXT,
+  img_url TEXT,
+  plan TEXT NOT NULL DEFAULT 'FREE',
+  plan_expires_at TIMESTAMPTZ,
+  credits_total INTEGER NOT NULL DEFAULT 25,
+  credits_used INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- credits_remaining is always computed server-side as (credits_total - credits_used)
+CREATE TABLE IF NOT EXISTS credit_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action_type TEXT NOT NULL,
+  credits_consumed INTEGER NOT NULL,
+  file_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_created_at ON credit_transactions(created_at);

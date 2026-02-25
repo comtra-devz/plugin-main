@@ -15,7 +15,7 @@ Guida unica per il flusso OAuth del plugin (Login with Figma). Il deploy usa la 
 | **Framework Preset** | **Other** | Non usare Vite. |
 | **Build Command** | (vuoto o default) | Nessun build: solo le API in `api/`. |
 | **Output Directory** | (vuoto) | Non impostare. |
-| **Dominio** | `auth.comtra.dev` | Da aggiungere dopo la creazione. |
+| **Dominio** | `auth.comtra.dev` | Già presente per questo servizio; verificare che sia associato al progetto. |
 | **Variabili** | Vedi sotto §3 | FIGMA_CLIENT_ID, FIGMA_CLIENT_SECRET, BASE_URL, REDIS_URL. |
 
 Se Root Directory non è `auth-deploy` o Framework è Vite, le route `/api/figma-oauth/*` non vengono deployate e il login restituirà 404.
@@ -35,8 +35,7 @@ Se Root Directory non è `auth-deploy` o Framework è Vite, le route `/api/figma
 
 ## 2. Dominio e DNS
 
-1. Nel nuovo progetto → **Settings** → **Domains** → **Add** → **auth.comtra.dev**.
-2. Nel **DNS** del dominio (es. OVH): crea un record **CNAME** per **auth** con il valore indicato da Vercel (es. `cname.vercel-dns.com`).
+**auth.comtra.dev** è già il dominio del servizio. Nel progetto → **Settings** → **Domains** verifica che **auth.comtra.dev** sia presente e **Valid**. Se il CNAME era già configurato in passato, non serve rifare il DNS.
 
 ---
 
@@ -88,7 +87,7 @@ Tutti i check devono essere **OK**. Poi prova **Login with Figma** dal plugin in
 ## Checklist rapida
 
 - [ ] Progetto Vercel con Root Directory = **auth-deploy** (repo plugin-main).
-- [ ] Dominio **auth.comtra.dev** assegnato al progetto; DNS configurato.
+- [ ] Dominio **auth.comtra.dev** associato al progetto e Valid (già presente).
 - [ ] Variabili: **FIGMA_CLIENT_ID**, **FIGMA_CLIENT_SECRET**, **BASE_URL**, **REDIS_URL**.
 - [ ] Redis collegato al progetto (o REDIS_URL impostata).
 - [ ] Figma: Redirect URL = `https://auth.comtra.dev/auth/figma/callback`.

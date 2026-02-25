@@ -1,15 +1,18 @@
 /**
  * Express app per Figma OAuth. Usato da Vercel (api/figma-oauth).
- * Store: REDIS_URL o memoria.
+ * Store: REDIS_URL o memoria. Credits: POSTGRES_URL + JWT_SECRET.
  */
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { randomBytes } from 'crypto';
+import jwt from 'jsonwebtoken';
 
 const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:3456').replace(/\/$/, '');
+const JWT_SECRET = process.env.JWT_SECRET || 'comtra-dev-secret-change-in-prod';
+const FREE_TIER_CREDITS = 25;
 
 async function createFlowStore() {
   if (process.env.REDIS_URL) {
@@ -140,6 +143,26 @@ app.get('/auth/figma/callback', async (req, res) => {
     },
   };
 
+  if (process.env.POSTGRES_URL) {
+    try {
+      const { sql } = await import('@vercel/postgres');
+      await sql`
+        INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, updated_at)
+        VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          email = EXCLUDED.email,
+          name = EXCLUDED.name,
+          img_url = EXCLUDED.img_url,
+          updated_at = NOW()
+      `;
+    } catch (err) {
+      console.error('Postgres upsert user', err);
+    }
+  }
+
+  const authToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '365d' });
+  user.authToken = authToken;
+
   await store.set(flowId, { user });
   res.clearCookie('figma_oauth_flow');
   res.send(getReturnToFigmaHtml());
@@ -244,6 +267,104 @@ app.get('/auth/figma/plugin', (req, res) => {
 </body>
 </html>`;
   res.send(html);
+});
+
+function getUserIdFromToken(req) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) return null;
+  try {
+    const decoded = jwt.verify(auth.slice(7), JWT_SECRET);
+    return decoded.sub || null;
+  } catch {
+    return null;
+  }
+}
+
+function estimateCreditsByAction(actionType, nodeCount) {
+  const n = nodeCount ?? 0;
+  if (actionType === 'audit' || actionType === 'scan') {
+    if (n <= 500) return 2;
+    if (n <= 5000) return 5;
+    if (n <= 50000) return 8;
+    return 11;
+  }
+  if (actionType === 'wireframe_gen' || actionType === 'generate') return 3;
+  if (actionType === 'proto_scan') return 2;
+  if (actionType === 'a11y_check') return 2;
+  if (actionType === 'ux_audit') return 4;
+  if (actionType === 'sync') return 1;
+  return 5;
+}
+
+app.get('/api/credits', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!process.env.POSTGRES_URL) {
+    return res.json({ credits_remaining: FREE_TIER_CREDITS, credits_total: FREE_TIER_CREDITS, credits_used: 0, plan: 'FREE', plan_expires_at: null });
+  }
+  try {
+    const { sql } = await import('@vercel/postgres');
+    const r = await sql`SELECT credits_total, credits_used, plan, plan_expires_at FROM users WHERE id = ${userId}`;
+    if (r.rows.length === 0) {
+      return res.json({ credits_remaining: FREE_TIER_CREDITS, credits_total: FREE_TIER_CREDITS, credits_used: 0, plan: 'FREE', plan_expires_at: null });
+    }
+    const row = r.rows[0];
+    const total = Number(row.credits_total) || 0;
+    const used = Number(row.credits_used) || 0;
+    const remaining = Math.max(0, total - used);
+    res.json({
+      credits_remaining: remaining,
+      credits_total: total,
+      credits_used: used,
+      plan: row.plan || 'FREE',
+      plan_expires_at: row.plan_expires_at ?? null,
+    });
+  } catch (err) {
+    console.error('GET /api/credits', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/credits/estimate', async (req, res) => {
+  const body = req.body || {};
+  const actionType = body.action_type || 'audit';
+  const nodeCount = body.node_count != null ? Number(body.node_count) : undefined;
+  const estimated = estimateCreditsByAction(actionType, nodeCount);
+  res.json({ estimated_credits: estimated });
+});
+
+app.post('/api/credits/consume', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const actionType = body.action_type || 'audit';
+  const creditsConsumed = Math.max(0, Math.floor(Number(body.credits_consumed) || 0));
+  const fileId = body.file_id || null;
+  if (creditsConsumed <= 0) return res.status(400).json({ error: 'credits_consumed must be positive' });
+
+  if (!process.env.POSTGRES_URL) {
+    return res.json({ credits_remaining: Math.max(0, FREE_TIER_CREDITS - creditsConsumed), credits_total: FREE_TIER_CREDITS, credits_used: creditsConsumed });
+  }
+  try {
+    const { sql } = await import('@vercel/postgres');
+    const r = await sql`SELECT credits_total, credits_used FROM users WHERE id = ${userId}`;
+    if (r.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const row = r.rows[0];
+    const total = Number(row.credits_total) || 0;
+    const used = Number(row.credits_used) || 0;
+    const remaining = Math.max(0, total - used);
+    if (remaining < creditsConsumed) return res.status(402).json({ error: 'Insufficient credits', credits_remaining: remaining });
+
+    await sql`UPDATE users SET credits_used = credits_used + ${creditsConsumed}, updated_at = NOW() WHERE id = ${userId}`;
+    await sql`INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id) VALUES (${userId}, ${actionType}, ${creditsConsumed}, ${fileId})`;
+
+    const newUsed = used + creditsConsumed;
+    const newRemaining = Math.max(0, total - newUsed);
+    res.json({ credits_remaining: newRemaining, credits_total: total, credits_used: newUsed });
+  } catch (err) {
+    console.error('POST /api/credits/consume', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 export default app;

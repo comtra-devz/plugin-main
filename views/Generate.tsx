@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { BRUTAL, COLORS, TIER_LIMITS } from '../constants';
+import { BRUTAL, COLORS } from '../constants';
 import { generateDesignSuggestions } from '../services/geminiService';
 import { UserPlan } from '../types';
 
@@ -8,8 +8,9 @@ interface Props {
   plan: UserPlan; 
   userTier?: string;
   onUnlockRequest: () => void;
-  usageCount: number;
-  onUse: () => void;
+  creditsRemaining: number | null;
+  estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
+  consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
 }
 
@@ -30,9 +31,7 @@ const DESIGN_SYSTEMS = [
   "Uber Base Web"
 ];
 
-const MAX_FREE_USES = 10;
-
-export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usageCount, onUse, initialPrompt }) => {
+export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, estimateCredits, consumeCredits, initialPrompt }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
@@ -74,13 +73,9 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usa
   }, []);
 
   const isPro = plan === 'PRO';
-  const remaining = Math.max(0, MAX_FREE_USES - usageCount);
+  const remaining = isPro ? Infinity : (creditsRemaining ?? 0);
   const canGenerate = isPro || remaining > 0;
-
-  // Credit Limit Logic
-  const totalCredits = userTier && TIER_LIMITS[userTier] ? TIER_LIMITS[userTier] : (plan === 'PRO' ? 3000 : 10);
-  const usedCredits = plan === 'PRO' ? 450 : usageCount; // Mock usage for Pro
-  const creditsDisplay = plan === 'PRO' ? `${totalCredits - usedCredits}/${totalCredits}` : `${remaining}/${MAX_FREE_USES}`;
+  const creditsDisplay = isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
 
   // Helper to update content state - Ignores Chips, requires text
   const checkContent = () => {
@@ -162,9 +157,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, usa
     setLoading(true);
     setShowReport(false);
     setConversionSelected(false);
-    
-    if (!isPro) onUse();
-    
+
     const rawText = inputRef.current?.innerText || "";
     const dsContext = `[Context: ${selectedSystem}] ${rawText}`;
 

@@ -15,7 +15,7 @@ export const Terms: React.FC = () => {
           
           <p>
             <strong className="block text-black uppercase mb-1">2. Credits & Usage</strong>
-            Credits are consumed upon initiating actions (e.g., Scan, Generate, Fix). Unused credits for the Free Tier reset monthly. Pro Tier credits depend on the active subscription cycle.
+            Credits are consumed when you confirm an action (e.g., Scan, Generate, Sync). New users receive 25 credits as a one-time welcome bonus; they do not reset or expire. Pro Tier credits depend on the active subscription cycle.
           </p>
           
           <p>
