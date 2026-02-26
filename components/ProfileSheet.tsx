@@ -10,6 +10,8 @@ interface Props {
   isTestUser?: boolean;
   simulateFreeTier?: boolean;
   onSimulateFreeTierChange?: (value: boolean) => void;
+  usingSimulatedCredits?: boolean;
+  onResetSimulatedCredits?: () => void;
   onClose: () => void;
   onLogout: () => void;
   onManageSub: () => void;
@@ -19,7 +21,7 @@ interface Props {
   onOpenAffiliate: () => void;
 }
 
-export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
+export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms, onOpenAffiliate }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
@@ -34,6 +36,11 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
             Credits in esaurimento — Passa a PRO
           </p>
         )}
+        {simulateFreeTier && creditsLabel.includes('—') && (
+          <p data-component="Profile: Simulate Free Tier Sync Hint" className="text-[10px] font-bold mt-2 bg-white/90 border border-black px-2 py-1">
+            Con Simula Free Tier attivo servono i crediti dal server: effettua di nuovo il <strong>login</strong> (Logout poi Login with Figma) per vedere i 25 crediti free.
+          </p>
+        )}
       </div>
       <div className="p-2 flex flex-col gap-1">
         <button 
@@ -46,15 +53,23 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
         </button>
         
         {isTestUser && onSimulateFreeTierChange && (
-          <div className="flex items-center justify-between p-2 border border-dashed border-gray-400 bg-gray-50 mb-1">
-            <span className="text-[10px] font-bold uppercase text-gray-700">Simula Free Tier</span>
-            <button
-              data-component="Profile: Simulate Free Tier Toggle"
-              onClick={() => onSimulateFreeTierChange(!simulateFreeTier)}
-              className={`text-[10px] font-bold uppercase px-2 py-1 border-2 border-black ${simulateFreeTier ? 'bg-[#ffc900] text-black' : 'bg-white text-gray-600'}`}
-            >
-              {simulateFreeTier ? 'ON' : 'OFF'}
-            </button>
+          <div className="p-2 border border-dashed border-gray-400 bg-gray-50 mb-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase text-gray-700">Simula Free Tier</span>
+              <button
+                data-component="Profile: Simulate Free Tier Toggle"
+                onClick={() => onSimulateFreeTierChange(!simulateFreeTier)}
+                className={`text-[10px] font-bold uppercase px-2 py-1 border-2 border-black shrink-0 ${simulateFreeTier ? 'bg-[#ffc900] text-black' : 'bg-white text-gray-600'}`}
+              >
+                {simulateFreeTier ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            <p className="text-[9px] text-gray-500 mt-1">ON = limiti reali (25 credits, paywall a 0)</p>
+            {usingSimulatedCredits && onResetSimulatedCredits && (
+              <button type="button" onClick={onResetSimulatedCredits} className="text-[9px] font-bold text-gray-600 underline mt-1 hover:text-black">
+                Reset 25 crediti simulati
+              </button>
+            )}
           </div>
         )}
         <button 

@@ -12,7 +12,33 @@ export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
 /** Email degli utenti di test: crediti infiniti di default; opzione "Simula Free Tier" per testare logica reale. Da rimuovere o svuotare in produzione. */
 export const TEST_USER_EMAILS = ['ben.bugli@gmail.com', 'foscacordidonne@gmail.com'];
 
+/** Crediti free tier (usati anche per simulazione test user quando API non disponibile). */
+export const FREE_TIER_CREDITS = 25;
+
 const STORAGE_KEY_SIMULATE_FREE = 'comtra_simulate_free_tier';
+const STORAGE_KEY_SIMULATED_CREDITS_PREFIX = 'comtra_test_simulated_credits_';
+
+export function getSimulatedCreditsFromStorage(email: string): { remaining: number; total: number; used: number } | null {
+  try {
+    const key = STORAGE_KEY_SIMULATED_CREDITS_PREFIX + email.toLowerCase().trim();
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (o && typeof o.remaining === 'number' && typeof o.total === 'number' && typeof o.used === 'number') {
+      return { remaining: Math.max(0, o.remaining), total: o.total, used: o.used };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSimulatedCreditsInStorage(email: string, value: { remaining: number; total: number; used: number }): void {
+  try {
+    const key = STORAGE_KEY_SIMULATED_CREDITS_PREFIX + email.toLowerCase().trim();
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
 export function getSimulateFreeTierFromStorage(): boolean {
   try {
     return localStorage.getItem(STORAGE_KEY_SIMULATE_FREE) === 'true';
@@ -66,6 +92,30 @@ export function getScanCostAndSize(nodeCount: number): { cost: number; sizeLabel
   }
   const last = SCAN_SIZE_TIERS[SCAN_SIZE_TIERS.length - 1];
   return { cost: last.cost, sizeLabel: last.label };
+}
+
+/** Lemon Squeezy: base checkout URL (store custom domain). Aggiungere ?aff=CODICE per attribuzione affiliato. */
+export const LEMON_SQUEEZY_CHECKOUT_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_SQUEEZY_CHECKOUT_BASE) || 'https://comtra.lemonsqueezy.com/checkout/buy';
+
+/**
+ * Variant ID Lemon Squeezy per tier (override con env VITE_LEMON_VARIANT_* se serve).
+ */
+export const LEMON_SQUEEZY_VARIANT_IDS: Record<string, string> = {
+  '1w': (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_VARIANT_1W) || '1345293',
+  '1m': (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_VARIANT_1M) || '1345303',
+  '6m': (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_VARIANT_6M) || '1345310',
+  '1y': (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_VARIANT_1Y) || '1345319',
+};
+
+export function buildCheckoutUrl(tier: string, affiliateCode?: string): string {
+  const variantId = LEMON_SQUEEZY_VARIANT_IDS[tier] || LEMON_SQUEEZY_VARIANT_IDS['6m'];
+  const base = `${LEMON_SQUEEZY_CHECKOUT_BASE}/${variantId}`;
+  const code = affiliateCode?.trim();
+  if (!code) return base;
+  const params = new URLSearchParams();
+  params.set('aff', code);
+  params.set('checkout[custom][aff]', code); // ripassa il codice nel webhook come meta.custom_data.aff
+  return `${base}?${params.toString()}`;
 }
 
 export const PRIVACY_CONTENT = [

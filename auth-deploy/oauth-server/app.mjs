@@ -155,6 +155,8 @@ app.get('/auth/figma/callback', async (req, res) => {
           img_url = EXCLUDED.img_url,
           updated_at = NOW()
       `;
+      const aff = await sql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
+      if (aff.rows.length > 0) user.stats.affiliatesCount = Number(aff.rows[0].total_referrals) || 0;
     } catch (err) {
       console.error('Postgres upsert user', err);
     }
@@ -363,6 +365,55 @@ app.post('/api/credits/consume', async (req, res) => {
     res.json({ credits_remaining: newRemaining, credits_total: total, credits_used: newUsed });
   } catch (err) {
     console.error('POST /api/credits/consume', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Affiliate self-service: ottieni o registra codice (JWT)
+function randomAffiliateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+app.get('/api/affiliates/me', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!process.env.POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
+  try {
+    const { sql } = await import('@vercel/postgres');
+    const r = await sql`SELECT affiliate_code, total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Not an affiliate', affiliate_code: null });
+    res.json({ affiliate_code: r.rows[0].affiliate_code, total_referrals: Number(r.rows[0].total_referrals) || 0 });
+  } catch (err) {
+    console.error('GET /api/affiliates/me', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/affiliates/register', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!process.env.POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
+  try {
+    const { sql } = await import('@vercel/postgres');
+    let r = await sql`SELECT affiliate_code FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
+    if (r.rows.length > 0) {
+      return res.json({ affiliate_code: r.rows[0].affiliate_code, already_registered: true });
+    }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = randomAffiliateCode();
+      try {
+        await sql`INSERT INTO affiliates (user_id, affiliate_code) VALUES (${userId}, ${code})`;
+        return res.status(201).json({ affiliate_code: code });
+      } catch (e) {
+        if (e.code !== '23505') throw e; // unique violation = retry with new code
+      }
+    }
+    res.status(500).json({ error: 'Could not generate unique code' });
+  } catch (err) {
+    console.error('POST /api/affiliates/register', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

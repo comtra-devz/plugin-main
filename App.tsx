@@ -14,7 +14,7 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ViewState, User } from './types';
-import { AUTH_BACKEND_URL, TEST_USER_EMAILS, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage } from './constants';
+import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 
 export interface CreditsState {
   remaining: number;
@@ -62,9 +62,28 @@ export default function AppTest() {
   const [genPrompt, setGenPrompt] = useState('');
   const [credits, setCredits] = useState<CreditsState | null>(null);
   const [simulateFreeTier, setSimulateFreeTier] = useState(getSimulateFreeTierFromStorage);
+  /** Per utenti di test con "Simula Free Tier" ON quando l'API non restituisce crediti: simulazione locale (25 crediti, consumo in localStorage). */
+  const [simulatedCredits, setSimulatedCredits] = useState<CreditsState | null>(null);
 
   const isTestUser = user ? TEST_USER_EMAILS.includes(user.email.toLowerCase().trim()) : false;
   const useInfiniteCreditsForTest = isTestUser && !simulateFreeTier;
+
+  useEffect(() => {
+    if (!user || !isTestUser || !simulateFreeTier || credits !== null) return;
+    if (simulatedCredits !== null) return;
+    const stored = getSimulatedCreditsFromStorage(user.email);
+    const initial = stored ?? { remaining: FREE_TIER_CREDITS, total: FREE_TIER_CREDITS, used: 0 };
+    setSimulatedCredits(initial);
+    if (!stored) setSimulatedCreditsInStorage(user.email, initial);
+  }, [user?.email, isTestUser, simulateFreeTier, credits, simulatedCredits]);
+
+  const effectiveCredits: CreditsState | null = credits !== null
+    ? credits
+    : isTestUser && simulateFreeTier && user
+      ? (simulatedCredits ?? { remaining: FREE_TIER_CREDITS, total: FREE_TIER_CREDITS, used: 0 })
+      : null;
+  const effectiveCreditsRemaining = effectiveCredits?.remaining ?? null;
+  const usingSimulatedCredits = isTestUser && simulateFreeTier && credits === null && user !== null;
 
   useEffect(() => {
     if (!logoutToast) return;
@@ -159,6 +178,7 @@ export default function AppTest() {
     window.parent.postMessage({ pluginMessage: { type: 'logout' } }, '*');
     setUser(null);
     setCredits(null);
+    setSimulatedCredits(null);
     setShowProfile(false);
     setShowLogin(true);
     setLogoutToast('Sei stato disconnesso.');
@@ -166,7 +186,9 @@ export default function AppTest() {
     setGenPrompt('');
   };
 
-  const handleUpgrade = (tier: string) => {
+  const handleUpgrade = (tier: string, affiliateCode?: string) => {
+    const url = buildCheckoutUrl(tier, affiliateCode);
+    window.open(url, '_blank');
     if (user) setUser({ ...user, plan: 'PRO', tier });
     setShowUpgrade(false);
   };
@@ -192,6 +214,16 @@ export default function AppTest() {
   }, []);
 
   const consumeCredits = React.useCallback(async (payload: { action_type: string; credits_consumed: number; file_id?: string }) => {
+    const cost = Math.max(0, payload.credits_consumed);
+    const isSimulated = isTestUser && simulateFreeTier && credits === null && user;
+    if (isSimulated) {
+      const current = simulatedCredits ?? getSimulatedCreditsFromStorage(user.email) ?? { remaining: FREE_TIER_CREDITS, total: FREE_TIER_CREDITS, used: 0 };
+      if (current.remaining < cost) return { error: 'Insufficient credits' as const, credits_remaining: current.remaining };
+      const next: CreditsState = { remaining: current.remaining - cost, total: current.total, used: current.used + cost };
+      setSimulatedCredits(next);
+      setSimulatedCreditsInStorage(user.email, next);
+      return { credits_remaining: next.remaining };
+    }
     if (!user?.authToken) return { error: 'Unauthorized' as const };
     const r = await fetch(`${AUTH_BACKEND_URL}/api/credits/consume`, {
       method: 'POST',
@@ -203,23 +235,26 @@ export default function AppTest() {
     if (!r.ok) return { error: 'Server error' as const };
     setCredits({ remaining: data.credits_remaining, total: data.credits_total, used: data.credits_used });
     return { credits_remaining: data.credits_remaining };
-  }, [user?.authToken]);
+  }, [user?.authToken, user?.email, isTestUser, simulateFreeTier, credits, simulatedCredits]);
 
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
       ? '∞'
-      : credits === null
+      : effectiveCredits === null
         ? (user?.authToken ? '—' : '— (re-login to sync)')
-        : `${credits.remaining}/${credits.total}`;
-  const creditsRemaining = credits?.remaining ?? null;
-  const hasZeroCredits = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining <= 0;
-  const lowCreditsWarning = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && creditsRemaining !== null && creditsRemaining > 0 && creditsRemaining <= 5;
+        : `${effectiveCredits.remaining}/${effectiveCredits.total}${usingSimulatedCredits ? ' (simulati)' : ''}`;
+  const hasZeroCredits = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && effectiveCreditsRemaining !== null && effectiveCreditsRemaining <= 0;
+  const lowCreditsWarning = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && effectiveCreditsRemaining !== null && effectiveCreditsRemaining > 0 && effectiveCreditsRemaining <= 5;
 
   const handleSimulateFreeTierChange = (value: boolean) => {
     setSimulateFreeTier(value);
     setSimulateFreeTierInStorage(value);
     if (value && user?.authToken) fetchCredits();
+    if (value && user && isTestUser && simulatedCredits === null) {
+      const stored = getSimulatedCreditsFromStorage(user.email);
+      setSimulatedCredits(stored ?? { remaining: FREE_TIER_CREDITS, total: FREE_TIER_CREDITS, used: 0 });
+    }
   };
 
   if (showLogin && view !== ViewState.PRIVACY) {
@@ -254,7 +289,7 @@ export default function AppTest() {
               plan={user?.plan || 'FREE'} 
               userTier={user?.tier}
               onUnlockRequest={handleUnlockRequest}
-              creditsRemaining={creditsRemaining}
+              creditsRemaining={effectiveCreditsRemaining}
               useInfiniteCreditsForTest={useInfiniteCreditsForTest}
               estimateCredits={estimateCredits}
               consumeCredits={consumeCredits}
@@ -270,7 +305,7 @@ export default function AppTest() {
             plan={user?.plan || 'FREE'} 
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
-            creditsRemaining={creditsRemaining}
+            creditsRemaining={effectiveCreditsRemaining}
             useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
@@ -283,7 +318,7 @@ export default function AppTest() {
             plan={user?.plan || 'FREE'} 
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
-            creditsRemaining={creditsRemaining}
+            creditsRemaining={effectiveCreditsRemaining}
             useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
@@ -292,11 +327,11 @@ export default function AppTest() {
         
         {view === ViewState.ANALYTICS && user && <Analytics stats={user.stats} />}
 
-        {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={credits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
+        {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={effectiveCredits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
         {view === ViewState.DOCUMENTATION && <Documentation />}
         {view === ViewState.PRIVACY && <Privacy />}
         {view === ViewState.TERMS && <Terms />}
-        {view === ViewState.AFFILIATE && <Affiliate />}
+        {view === ViewState.AFFILIATE && <Affiliate user={user} />}
 
         {(showUpgrade || hasZeroCredits) && (
           <UpgradeModal
@@ -314,6 +349,13 @@ export default function AppTest() {
             isTestUser={isTestUser}
             simulateFreeTier={simulateFreeTier}
             onSimulateFreeTierChange={handleSimulateFreeTierChange}
+            usingSimulatedCredits={usingSimulatedCredits}
+            onResetSimulatedCredits={() => {
+              if (!user) return;
+              const reset = { remaining: FREE_TIER_CREDITS, total: FREE_TIER_CREDITS, used: 0 };
+              setSimulatedCredits(reset);
+              setSimulatedCreditsInStorage(user.email, reset);
+            }}
             onClose={() => setShowProfile(false)} 
             onLogout={handleLogout}
             onManageSub={() => {

@@ -9,9 +9,9 @@ const TIERS = [
   { id: '1y', label: '1 Year', price: '€250', sub: 'Best Value', limit: 'Unlimited credits' },
 ];
 
-export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: string) => void; forceOpen?: boolean }> = ({ onClose, onUpgrade, forceOpen }) => {
+export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: string, affiliateCode?: string) => void; forceOpen?: boolean }> = ({ onClose, onUpgrade, forceOpen }) => {
   const [sel, setSel] = useState('6m');
-  const [promoCode, setPromoCode] = useState('');
+  const [affiliateCode, setAffiliateCode] = useState('');
 
   const openDiscord = () => {
       window.open('https://discord.gg/comtra', '_blank');
@@ -47,18 +47,18 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: str
 
         <div className="mb-4">
             <label className="text-[10px] font-bold uppercase mb-1 block leading-tight">
-              Have a discount code? If not, check our <span onClick={openDiscord} className="underline cursor-pointer hover:text-[#ff90e8]">Discord community</span>.
+              Codice affiliato (opzionale). Se vuoto, checkout senza attribuzione. <span onClick={openDiscord} className="underline cursor-pointer hover:text-[#ff90e8]">Discord</span>.
             </label>
             <input 
                 type="text" 
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value)}
+                value={affiliateCode}
+                onChange={(e) => setAffiliateCode(e.target.value)}
                 placeholder="ENTER CODE"
                 className="w-full border-2 border-black p-2 font-mono text-sm uppercase placeholder:text-gray-400 bg-white outline-none"
             />
         </div>
 
-        <button onClick={() => onUpgrade(sel)} className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] flex justify-center items-center gap-2`}>
+        <button onClick={() => onUpgrade(sel, affiliateCode.trim() || undefined)} className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] flex justify-center items-center gap-2`}>
           <span>Pay now</span>
           <span className="text-xs">→</span>
         </button>

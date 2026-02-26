@@ -27,3 +27,19 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_created_at ON credit_transactions(created_at);
+
+-- Affiliates: referrer = user_id (Figma), codice univoco, metriche
+CREATE TABLE IF NOT EXISTS affiliates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  affiliate_code TEXT NOT NULL UNIQUE,
+  lemon_affiliate_id TEXT,
+  total_referrals INTEGER NOT NULL DEFAULT 0,
+  total_earnings_cents INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_affiliates_user_id ON affiliates(user_id);
+CREATE INDEX IF NOT EXISTS idx_affiliates_affiliate_code ON affiliates(affiliate_code);
+CREATE INDEX IF NOT EXISTS idx_affiliates_lemon_id ON affiliates(lemon_affiliate_id);

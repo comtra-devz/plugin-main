@@ -1,26 +1,77 @@
+import React, { useState, useEffect } from 'react';
+import { BRUTAL, COLORS, AUTH_BACKEND_URL, buildCheckoutUrl } from '../constants';
+import { User } from '../types';
 
-import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
-import { AffiliateTransaction } from '../types';
+interface Props {
+  user: User | null;
+}
 
-// Mock Data
-const MOCK_TRANSACTIONS: AffiliateTransaction[] = [
-    { id: 'txn_1', date: '20 Oct 2023', amount: '€99.00', commission: '€4.95', status: 'CLEARED' },
-    { id: 'txn_2', date: '22 Oct 2023', amount: '€25.00', commission: '€1.25', status: 'PENDING' },
-    { id: 'txn_3', date: '23 Oct 2023', amount: '€250.00', commission: '€12.50', status: 'PENDING' },
-];
-
-export const Affiliate: React.FC = () => {
+export const Affiliate: React.FC<Props> = ({ user }) => {
+  const [affiliateCode, setAffiliateCode] = useState<string | null>(null);
+  const [totalReferrals, setTotalReferrals] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const [registering, setRegistering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  
-  const referralCode = "COMTRA-DESIGN-TEST";
-  const balance = 18.70; // Mock balance
-  const payoutThreshold = 10.00;
-  const progress = Math.min(100, (balance / payoutThreshold) * 100);
 
+  useEffect(() => {
+    if (!user?.authToken) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setError(null);
+      try {
+        const r = await fetch(`${AUTH_BACKEND_URL}/api/affiliates/me`, {
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        });
+        if (cancelled) return;
+        if (r.ok) {
+          const data = await r.json();
+          setAffiliateCode(data.affiliate_code || null);
+          setTotalReferrals(data.total_referrals ?? 0);
+        } else {
+          setAffiliateCode(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError('Impossibile caricare il programma affiliati.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.authToken]);
+
+  const handleGetCode = async () => {
+    if (!user?.authToken) return;
+    setRegistering(true);
+    setError(null);
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/affiliates/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: '{}',
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.affiliate_code) {
+        setAffiliateCode(data.affiliate_code);
+        setTotalReferrals(0);
+      } else {
+        setError(data.error || 'Registrazione fallita.');
+      }
+    } catch {
+      setError('Registrazione fallita.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const referralLink = affiliateCode ? buildCheckoutUrl('6m', affiliateCode) : '';
   const handleCopy = () => {
+    if (!referralLink) return;
     const ta = document.createElement('textarea');
-    ta.value = referralCode;
+    ta.value = referralLink;
     ta.style.cssText = 'position:fixed;opacity:0';
     document.body.appendChild(ta);
     ta.focus();
@@ -31,81 +82,82 @@ export const Affiliate: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleWithdraw = () => {
-      alert("Withdrawal request sent!");
-  };
+  if (!user) {
+    return (
+      <div className="p-4 pb-24">
+        <div className={`${BRUTAL.card} bg-white`}>
+          <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
+          <p className="text-sm text-gray-600">Accedi con Figma per ottenere il tuo codice affiliato e condividere Comtra.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user.authToken) {
+    return (
+      <div className="p-4 pb-24">
+        <div className={`${BRUTAL.card} bg-white`}>
+          <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
+          <p className="text-sm text-gray-600">Effettua il login (Login with Figma) per ottenere il tuo codice affiliato.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 pb-24 flex flex-col gap-6">
       <div className={`${BRUTAL.card} bg-white`}>
         <h2 className="text-2xl font-black uppercase mb-1 bg-black text-white inline-block px-2">Partner Program</h2>
         <p className="text-xs text-gray-600 mb-6 font-medium mt-2">
-            Share Comtra with your friends. You earn <strong className="text-black">5%</strong> on every payment they make, forever.
+          Condividi Comtra: quando qualcuno acquista con il tuo link, viene attribuito a te. Le metriche sono nel tuo profilo (Affiliates).
         </p>
 
-        {/* Code Section */}
-        <div className="bg-[#f0f0f0] border-2 border-black p-4 mb-6 relative">
-            <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Your Unique Code</label>
-            <div className="flex gap-2">
-                <code className="flex-1 bg-white border border-gray-400 p-2 font-mono text-xs font-bold truncate">
-                    {referralCode}
-                </code>
-                <button 
-                    onClick={handleCopy}
-                    className="bg-black text-white px-3 py-1 text-[10px] font-bold uppercase hover:bg-[#ff90e8] hover:text-black transition-colors"
-                >
-                    {copied ? 'Copied' : 'Copy'}
-                </button>
-            </div>
-        </div>
+        {error && (
+          <p className="text-xs text-red-600 font-bold mb-2 bg-red-50 border border-red-200 px-2 py-1">{error}</p>
+        )}
 
-        {/* Balance Section */}
-        <div className="border-t-2 border-dashed border-black pt-4 mb-6">
-            <div className="flex justify-between items-end mb-2">
-                <span className="text-xs font-bold uppercase">Current Balance</span>
-                <span className="text-2xl font-black">€{balance.toFixed(2)}</span>
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="w-full h-4 border-2 border-black p-0.5 bg-gray-100 rounded-sm mb-1">
-                <div 
-                   className="h-full bg-[#ffc900] transition-all duration-500" 
-                   style={{ width: `${progress}%` }}
-                ></div>
-            </div>
-            <div className="flex justify-between text-[9px] font-mono text-gray-500 mb-4">
-                <span>€0.00</span>
-                <span>Threshold: €{payoutThreshold.toFixed(2)}</span>
-            </div>
-
-            <button 
-                onClick={handleWithdraw}
-                disabled={balance < payoutThreshold}
-                className={`w-full py-3 text-xs font-black uppercase border-2 border-black flex justify-center items-center gap-2 ${balance >= payoutThreshold ? `bg-[${COLORS.primary}] text-black hover:bg-white` : 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-300'}`}
+        {loading ? (
+          <p className="text-sm text-gray-500">Caricamento…</p>
+        ) : !affiliateCode ? (
+          <div className="bg-[#f0f0f0] border-2 border-black p-4">
+            <p className="text-xs text-gray-600 mb-2">Non hai ancora un codice affiliato. Registrati in un click.</p>
+            <button
+              onClick={handleGetCode}
+              disabled={registering}
+              className={`${BRUTAL.btn} bg-[${COLORS.primary}] font-bold uppercase text-sm py-2 px-4 border-2 border-black disabled:opacity-60`}
             >
-                {balance >= payoutThreshold ? 'Withdraw Money' : `Reach €${payoutThreshold} to Withdraw`}
+              {registering ? 'Registrazione…' : 'Ottieni il tuo codice affiliato'}
             </button>
-        </div>
-
-        {/* History */}
-        <div>
-            <h3 className="font-bold uppercase text-sm mb-3">Affiliate History</h3>
-            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
-                {MOCK_TRANSACTIONS.map(txn => (
-                    <div key={txn.id} className="flex justify-between items-center p-2 border border-gray-200 text-xs">
-                        <div>
-                            <div className="font-mono font-bold text-[10px] text-gray-400">ID: {txn.id}</div>
-                            <div className="font-medium text-[10px]">{txn.date}</div>
-                        </div>
-                        <div className="text-right">
-                            <div className="font-black text-green-600">+ {txn.commission}</div>
-                            <div className={`text-[8px] font-bold uppercase ${txn.status === 'CLEARED' ? 'text-black' : 'text-gray-400'}`}>{txn.status}</div>
-                        </div>
-                    </div>
-                ))}
+          </div>
+        ) : (
+          <>
+            <div className="bg-[#f0f0f0] border-2 border-black p-4 mb-4">
+              <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Il tuo codice</label>
+              <code className="block bg-white border border-gray-400 p-2 font-mono text-sm font-bold">{affiliateCode}</code>
             </div>
-        </div>
-
+            <div className="border-t-2 border-dashed border-black pt-4">
+              <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Link da condividere</label>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={referralLink}
+                  className="flex-1 bg-white border-2 border-black p-2 font-mono text-[10px] truncate"
+                />
+                <button
+                  onClick={handleCopy}
+                  className="bg-black text-white px-3 py-2 text-[10px] font-bold uppercase hover:bg-[#ff90e8] hover:text-black transition-colors border-2 border-black"
+                >
+                  {copied ? 'Copiato' : 'Copia'}
+                </button>
+              </div>
+            </div>
+            {totalReferrals > 0 && (
+              <p className="text-xs font-bold uppercase mt-4 text-gray-600">
+                Referral attribuiti: <span className="text-black">{totalReferrals}</span>
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

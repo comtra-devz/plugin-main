@@ -34,6 +34,7 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `REDIS_URL` | URL Redis (OAuth) | già fatto |
 | `POSTGRES_URL` | URL connessione Postgres (Supabase) | **da aggiungere** — vedi sotto |
 | `JWT_SECRET` | Stringa segreta lunga (es. `openssl rand -hex 32`) | **da aggiungere** |
+| `LEMON_SQUEEZY_WEBHOOK_SECRET` | Signing secret del webhook Lemon Squeezy (6–40 caratteri) | **da aggiungere** per affiliate |
 
 Dopo ogni modifica alle variabili: **Redeploy**.
 
@@ -45,9 +46,9 @@ Dopo ogni modifica alle variabili: **Redeploy**.
 
 1. **Connect**: nella modale "Connect Project" seleziona il **progetto Vercel** che serve auth.comtra.dev (quello con Root Directory = `auth-deploy`). Tieni spuntati gli ambienti che usi (es. Production, Preview). Nel campo **Custom Prefix** imposta **`POSTGRES`** così Vercel creerà una variabile tipo **`POSTGRES_URL`** (il nostro backend la usa con questo nome). Clicca **Connect**.
 2. **POSTGRES_URL**: dopo il connect, in Vercel → **Settings** → **Environment Variables** dovresti vedere **`POSTGRES_URL`** (o simile). Se il nome è diverso, aggiungi manualmente **`POSTGRES_URL`** con lo stesso valore (Connection string da Supabase → Project Settings → Database).
-3. **Schema** (una tantum): Supabase Dashboard → **SQL Editor** → **New query** → incolla il contenuto di **`auth-deploy/schema.sql`** → **Run**.
+3. **Schema** (una tantum): Supabase Dashboard → **SQL Editor** → **New query** → incolla **l’intero** contenuto di **`auth-deploy/schema.sql`** (include `users`, `credit_transactions`, `affiliates`) → **Run**.
 
-Contenuto minimo da eseguire (è in `auth-deploy/schema.sql`):
+Contenuto minimo (è in `auth-deploy/schema.sql`):
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -74,6 +75,20 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_created_at ON credit_transactions(created_at);
+
+-- Tabella affiliates (referrer = user_id Figma, codice univoco, total_referrals aggiornato dal webhook)
+CREATE TABLE IF NOT EXISTS affiliates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  affiliate_code TEXT NOT NULL UNIQUE,
+  lemon_affiliate_id TEXT,
+  total_referrals INTEGER NOT NULL DEFAULT 0,
+  total_earnings_cents INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_affiliates_user_id ON affiliates(user_id);
+CREATE INDEX IF NOT EXISTS idx_affiliates_affiliate_code ON affiliates(affiliate_code);
 ```
 
 ---
@@ -84,7 +99,18 @@ Se non l’hai già messa: genera una stringa segreta (es. `openssl rand -hex 32
 
 ---
 
-## 4. Redeploy e verifica
+## 4. Lemon Squeezy (affiliate)
+
+1. **Webhook in Lemon Squeezy**: Dashboard Lemon Squeezy → **Settings** → **Webhooks** → Add endpoint:
+   - **URL**: `https://auth.comtra.dev/api/webhooks/lemonsqueezy`
+   - **Eventi**: seleziona almeno **Order created**
+   - **Signing secret**: genera/copia il secret (6–40 caratteri) e mettilo in Vercel come **`LEMON_SQUEEZY_WEBHOOK_SECRET`**.
+2. **Registrazione affiliati (automatica)**: l’utente dal plugin va su **Profilo → Affiliate Program** e clicca **Ottieni il tuo codice affiliato**. Il backend crea una riga in `affiliates` con il suo `user_id` (Figma) e un codice univoco generato automaticamente. Non serve più inserire affiliati a mano. (In casi particolari puoi ancora fare `INSERT INTO affiliates (user_id, affiliate_code) VALUES (...)` da SQL.)
+   Il plugin invia sia `?aff=CODICE` sia `checkout[custom][aff]=CODICE` così il webhook riceve il codice in `meta.custom_data.aff` e incrementa `total_referrals`. Il profilo utente (Production Metrics) mostra **AFFILIATES** = `total_referrals` letti nel callback OAuth.
+
+---
+
+## 5. Redeploy e verifica
 
 1. **Redeploy** del progetto (per caricare tutte le variabili).
 2. Dalla **root del plugin** (non da `auth-deploy`):
@@ -109,6 +135,11 @@ Se non l’hai già messa: genera una stringa segreta (es. `openssl rand -hex 32
 - [ ] Schema **auth-deploy/schema.sql** eseguito in Supabase (SQL Editor)
 - [ ] Redeploy
 - [ ] `npm run check-auth` OK e login dal plugin con credits (es. 25/25)
+
+**Per il sistema affiliate (Lemon Squeezy):**
+- [ ] **LEMON_SQUEEZY_WEBHOOK_SECRET** in Vercel (signing secret del webhook)
+- [ ] Webhook Lemon Squeezy puntato a `https://auth.comtra.dev/api/webhooks/lemonsqueezy`, evento **Order created**
+- [ ] (Opzionale) Inserire affiliati a mano in `affiliates` solo se serve; di default si registrano dal plugin (Affiliate Program → Ottieni il tuo codice).
 
 ---
 
