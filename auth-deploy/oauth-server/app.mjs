@@ -673,4 +673,25 @@ app.post('/api/affiliates/register', async (req, res) => {
   }
 });
 
+// --- Test: simula un referral affiliato (senza webhook Lemon). Solo se TEST_AFFILIATE_SECRET è impostato.
+app.post('/api/test/simulate-referral', async (req, res) => {
+  const secret = req.headers['x-test-secret'];
+  if (!process.env.TEST_AFFILIATE_SECRET || secret !== process.env.TEST_AFFILIATE_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!process.env.POSTGRES_URL) return res.status(503).json({ error: 'Not configured' });
+  const body = req.body || {};
+  const code = (body.affiliate_code || '').trim();
+  if (!code) return res.status(400).json({ error: 'affiliate_code required' });
+  try {
+    const { sql } = await import('@vercel/postgres');
+    const r = await sql`UPDATE affiliates SET total_referrals = total_referrals + 1, updated_at = NOW() WHERE affiliate_code = ${code} RETURNING user_id, total_referrals`;
+    if (r.rowCount === 0) return res.status(404).json({ error: 'Affiliate code not found' });
+    res.json({ ok: true, user_id: r.rows[0].user_id, total_referrals: Number(r.rows[0].total_referrals) });
+  } catch (err) {
+    console.error('simulate-referral', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default app;
