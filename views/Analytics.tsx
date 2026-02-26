@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
-import { UserStats } from '../types';
+import { User, UserStats } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
 import { Confetti } from '../components/Confetti';
 
 interface Props {
+  user?: User | null;
   stats: UserStats;
 }
 
@@ -174,21 +175,23 @@ const Icons = {
   )
 };
 
-export const Analytics: React.FC<Props> = ({ stats }) => {
+export const Analytics: React.FC<Props> = ({ user, stats }) => {
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  // Gamification Logic
-  // XP Formula: (Gen * 10) + (Audit * 5) + (Sync * 20) + (Invites * 50)
-  const xp = 
-    (stats.wireframesGenerated * 10) + 
-    ((stats.analyzedA11y + stats.analyzedUX + stats.analyzedProto) * 5) + 
-    ((stats.syncedStorybook + stats.syncedGithub + stats.syncedBitbucket) * 20) + 
-    (stats.affiliatesCount * 50);
-
-  const level = Math.floor(xp / 500) + 1;
-  const nextLevelXp = level * 500;
-  const progress = Math.min(100, ((xp - ((level - 1) * 500)) / 500) * 100);
+  // Livello e XP: da backend (user) se presenti, altrimenti fallback da stats
+  const level = user?.current_level ?? 1;
+  const xp = user?.total_xp ?? (
+    (stats.wireframesGenerated * 10) +
+    ((stats.analyzedA11y + stats.analyzedUX + stats.analyzedProto) * 5) +
+    ((stats.syncedStorybook + stats.syncedGithub + stats.syncedBitbucket) * 20) +
+    (stats.affiliatesCount * 50)
+  );
+  const nextLevelXp = user?.xp_for_next_level ?? 100;
+  const xpCurrentStart = user?.xp_for_current_level_start ?? 0;
+  const progress = nextLevelXp > xpCurrentStart
+    ? Math.min(100, ((xp - xpCurrentStart) / (nextLevelXp - xpCurrentStart)) * 100)
+    : 100;
 
   // Discount Logic: 5% every 5 levels, max 20%
   const discountPercent = Math.min(20, Math.floor(level / 5) * 5);
@@ -222,7 +225,9 @@ export const Analytics: React.FC<Props> = ({ stats }) => {
   const currentBadge = BADGES.find(b => b.id === selectedBadge);
 
   const handleShareBadge = (badgeName: string) => {
-      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.ai')}&summary=${encodeURIComponent(`I just unlocked the ${badgeName} badge on Comtra! Level ${level} Design Engineer.`)}`, '_blank');
+      // TODO: aggiungere menzione alla pagina LinkedIn di Comtra (URL da definire) nel testo dello share
+      const shareText = `I just unlocked the ${badgeName} badge on Comtra! Level ${level} Design Engineer.`;
+      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.ai')}&summary=${encodeURIComponent(shareText)}`, '_blank');
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2000);
   };
@@ -247,8 +252,8 @@ export const Analytics: React.FC<Props> = ({ stats }) => {
     <div className="p-4 pb-24 flex flex-col gap-6">
       {showConfetti && <Confetti />}
 
-      {/* Header Level Card - Reduced Z-Index to avoid overlapping Navbar */}
-      <div className={`${BRUTAL.card} bg-black text-white relative overflow-hidden`}>
+      {/* Header Level Card - sfondo scuro (non usare BRUTAL.card che include bg-white) */}
+      <div className="border-2 border-black shadow-[4px_4px_0px_0px_#000] p-4 bg-black text-white relative overflow-hidden">
           <div className="flex justify-between items-start mb-4 relative z-[1]">
               <div className="flex flex-col">
                   <span className="text-[10px] font-bold uppercase text-[#ff90e8]">Current Rank</span>

@@ -147,8 +147,8 @@ app.get('/auth/figma/callback', async (req, res) => {
     try {
       const { sql } = await import('@vercel/postgres');
       await sql`
-        INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, updated_at)
-        VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, NOW())
+        INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, updated_at)
+        VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, NOW())
         ON CONFLICT (id) DO UPDATE SET
           email = EXCLUDED.email,
           name = EXCLUDED.name,
@@ -157,6 +157,15 @@ app.get('/auth/figma/callback', async (req, res) => {
       `;
       const aff = await sql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
       if (aff.rows.length > 0) user.stats.affiliatesCount = Number(aff.rows[0].total_referrals) || 0;
+      const xpRow = await sql`SELECT total_xp, current_level FROM users WHERE id = ${user.id} LIMIT 1`;
+      if (xpRow.rows.length > 0) {
+        const txp = Number(xpRow.rows[0].total_xp) || 0;
+        const info = getLevelInfo(txp);
+        user.total_xp = txp;
+        user.current_level = info.level;
+        user.xp_for_next_level = info.xpForNextLevel;
+        user.xp_for_current_level_start = info.xpForCurrentLevelStart;
+      }
     } catch (err) {
       console.error('Postgres upsert user', err);
     }
@@ -282,6 +291,45 @@ function getUserIdFromToken(req) {
   }
 }
 
+// --- Gamification: curva livelli (L1=0, L2=100, L3=250, L4=500, L5=800, poi livello²×20 cumulativo)
+const LEVEL_XP_BASE = [0, 100, 250, 500, 800];
+function xpThresholdForLevel(level) {
+  if (level <= 0) return 0;
+  if (level <= LEVEL_XP_BASE.length) return LEVEL_XP_BASE[level - 1];
+  let sum = LEVEL_XP_BASE[LEVEL_XP_BASE.length - 1];
+  for (let L = LEVEL_XP_BASE.length + 1; L <= level; L++) sum += L * L * 20;
+  return sum;
+}
+function levelFromTotalXp(totalXp) {
+  const xp = Math.max(0, Math.floor(totalXp));
+  let level = 1;
+  while (xp >= xpThresholdForLevel(level + 1)) level++;
+  return level;
+}
+function getLevelInfo(totalXp) {
+  const level = levelFromTotalXp(totalXp);
+  const xpForNext = xpThresholdForLevel(level + 1);
+  const xpForCurrent = xpThresholdForLevel(level);
+  return { level, xpForNextLevel: xpForNext, xpForCurrentLevelStart: xpForCurrent };
+}
+
+const XP_BY_ACTION = {
+  audit: 50,
+  scan: 50,
+  wireframe_gen: 30,
+  generate: 30,
+  wireframe_modified: 20,
+  proto_scan: 40,
+  a11y_check: 35,
+  ux_audit: 45,
+  sync_storybook: 25,
+  sync_github: 25,
+  sync_bitbucket: 25,
+  sync: 25,
+  fix_accepted: 10,
+  bug_report: 5,
+};
+
 function estimateCreditsByAction(actionType, nodeCount) {
   const n = nodeCount ?? 0;
   if (actionType === 'audit' || actionType === 'scan') {
@@ -302,24 +350,50 @@ app.get('/api/credits', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!process.env.POSTGRES_URL) {
-    return res.json({ credits_remaining: FREE_TIER_CREDITS, credits_total: FREE_TIER_CREDITS, credits_used: 0, plan: 'FREE', plan_expires_at: null });
+    return res.json({
+      credits_remaining: FREE_TIER_CREDITS,
+      credits_total: FREE_TIER_CREDITS,
+      credits_used: 0,
+      plan: 'FREE',
+      plan_expires_at: null,
+      current_level: 1,
+      total_xp: 0,
+      xp_for_next_level: 100,
+      xp_for_current_level_start: 0,
+    });
   }
   try {
     const { sql } = await import('@vercel/postgres');
-    const r = await sql`SELECT credits_total, credits_used, plan, plan_expires_at FROM users WHERE id = ${userId}`;
+    const r = await sql`SELECT credits_total, credits_used, plan, plan_expires_at, total_xp, current_level FROM users WHERE id = ${userId}`;
     if (r.rows.length === 0) {
-      return res.json({ credits_remaining: FREE_TIER_CREDITS, credits_total: FREE_TIER_CREDITS, credits_used: 0, plan: 'FREE', plan_expires_at: null });
+      return res.json({
+        credits_remaining: FREE_TIER_CREDITS,
+        credits_total: FREE_TIER_CREDITS,
+        credits_used: 0,
+        plan: 'FREE',
+        plan_expires_at: null,
+        current_level: 1,
+        total_xp: 0,
+        xp_for_next_level: 100,
+        xp_for_current_level_start: 0,
+      });
     }
     const row = r.rows[0];
     const total = Number(row.credits_total) || 0;
     const used = Number(row.credits_used) || 0;
     const remaining = Math.max(0, total - used);
+      const totalXp = Math.max(0, Number(row.total_xp) || 0);
+    const info = getLevelInfo(totalXp);
     res.json({
       credits_remaining: remaining,
       credits_total: total,
       credits_used: used,
       plan: row.plan || 'FREE',
       plan_expires_at: row.plan_expires_at ?? null,
+      current_level: info.level,
+      total_xp: totalXp,
+      xp_for_next_level: info.xpForNextLevel,
+      xp_for_current_level_start: info.xpForCurrentLevelStart ?? 0,
     });
   } catch (err) {
     console.error('GET /api/credits', err);
@@ -360,9 +434,43 @@ app.post('/api/credits/consume', async (req, res) => {
     await sql`UPDATE users SET credits_used = credits_used + ${creditsConsumed}, updated_at = NOW() WHERE id = ${userId}`;
     await sql`INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id) VALUES (${userId}, ${actionType}, ${creditsConsumed}, ${fileId})`;
 
+    let levelUp = false;
+    let currentLevel = 1;
+    let totalXp = 0;
+    let xpForNextLevel = 100;
+    const xpEarned = XP_BY_ACTION[actionType] ?? 0;
+    const u = await sql`SELECT total_xp, current_level FROM users WHERE id = ${userId} LIMIT 1`;
+    if (u.rows.length > 0) {
+      totalXp = Math.max(0, Number(u.rows[0].total_xp) || 0);
+      const oldLevel = Math.max(1, Number(u.rows[0].current_level) || 1);
+      if (xpEarned > 0) {
+        totalXp += xpEarned;
+        const info = getLevelInfo(totalXp);
+        currentLevel = info.level;
+        xpForNextLevel = info.xpForNextLevel;
+        levelUp = currentLevel > oldLevel;
+        await sql`UPDATE users SET total_xp = ${totalXp}, current_level = ${currentLevel}, updated_at = NOW() WHERE id = ${userId}`;
+        await sql`INSERT INTO xp_transactions (user_id, action_type, xp_earned) VALUES (${userId}, ${actionType}, ${xpEarned})`;
+      } else {
+        const info = getLevelInfo(totalXp);
+        currentLevel = info.level;
+        xpForNextLevel = info.xpForNextLevel;
+      }
+    }
+
     const newUsed = used + creditsConsumed;
     const newRemaining = Math.max(0, total - newUsed);
-    res.json({ credits_remaining: newRemaining, credits_total: total, credits_used: newUsed });
+    const infoResp = getLevelInfo(totalXp);
+    res.json({
+      credits_remaining: newRemaining,
+      credits_total: total,
+      credits_used: newUsed,
+      level_up: levelUp,
+      current_level: currentLevel,
+      total_xp: totalXp,
+      xp_for_next_level: xpForNextLevel,
+      xp_for_current_level_start: infoResp.xpForCurrentLevelStart,
+    });
   } catch (err) {
     console.error('POST /api/credits/consume', err);
     res.status(500).json({ error: 'Server error' });

@@ -215,15 +215,15 @@ Si apre quando i crediti sono esauriti oppure dalla view Subscription.
 
 **4 piani selezionabili** (default: 6 Months):
 
-| Piano | Prezzo | Limite prompts |
+| Piano | Prezzo | Crediti / note |
 |---|---|---|
-| 1 Week | €7 | 20 prompts |
-| 1 Month | €25 | 100 prompts/mese |
-| 6 Months *(RECOMMENDED)* | €99 | 800 prompts |
+| 1 Week | €7 | 20 crediti |
+| 1 Month | €25 | 100 crediti/mese |
+| 6 Months *(RECOMMENDED)* | €99 | 800 crediti |
 | 1 Year | €250 | Illimitati |
 
-- **Promo code**: campo input con suggerimento Discord community
-- **"Pay now"**: avvia il checkout via Lemon Squeezy
+- **Codice affiliato (opzionale)**: campo "ENTER CODE" per inserire il codice di un referrer; se presente, il checkout apre l’URL Lemon Squeezy con `?aff=CODICE` e l’attribuzione viene tracciata via webhook.
+- **"Pay now"**: apre il checkout Lemon Squeezy (varianti configurate in `constants.ts`: variant ID per 1w / 1m / 6m / 1y).
 - "Secure checkout via Lemon Squeezy. Cancel anytime."
 
 ---
@@ -241,7 +241,15 @@ Accessibile da Profile Sheet.
 
 ### 10. View AFFILIATE
 
-Programma affiliazione con tracking delle commissioni (transazioni PENDING / CLEARED e codice referral personale).
+Programma affiliazione integrato con **Lemon Squeezy**.
+
+- **Accesso**: Profilo (avatar) → **Affiliate Program**.
+- **Registrazione automatica**: l’utente clicca **"Ottieni il tuo codice affiliato"**; il backend crea una riga in DB con un codice univoco (8 caratteri).
+- **Codice e link**: la view mostra il codice personale e il **link da condividere** (checkout con `?aff=CODICE`); pulsante **Copia** per il link.
+- **Tracking**: quando un acquirente usa quel link e completa l’acquisto, il webhook Lemon Squeezy (Order created) notifica il backend, che incrementa `total_referrals` per quell’affiliato.
+- **Metrica in profilo**: nel profilo utente (Production Metrics / STATS) il contatore **AFFILIATES** mostra il numero di referral attribuiti (letti dal DB al login).
+
+Setup backend e webhook: **[auth-deploy/SETUP.md](auth-deploy/SETUP.md)** (sezione Lemon Squeezy). Documentazione completa affiliazione: **[docs/AFFILIATE.md](docs/AFFILIATE.md)**. Variant ID checkout in **constants.ts** (o env `VITE_LEMON_VARIANT_*`).
 
 ---
 
@@ -249,10 +257,10 @@ Programma affiliazione con tracking delle commissioni (transazioni PENDING / CLE
 
 | Piano | Crediti | Note |
 |---|---|---|
-| FREE | 10 per tool (Audit / Gen / Code) | Max 30 totali per sessione |
-| PRO 1 Week | 20 prompts | — |
-| PRO 1 Month | 100 prompts/mese | — |
-| PRO 6 Months | 800 prompts | Consigliato |
+| FREE | 25 una tantum | Non si resettano; paywall a 0 |
+| PRO 1 Week | 20 | — |
+| PRO 1 Month | 100/mese | — |
+| PRO 6 Months | 800 | Consigliato |
 | PRO 1 Year | Illimitati | Sync senza cooldown |
 
 Costo per operazione:

@@ -39,6 +39,11 @@ export interface User {
   stats: UserStats;
   /** JWT per API credits; presente dopo login OAuth (nuovo flusso) */
   authToken?: string;
+  /** Gamification: da backend (OAuth callback + GET/POST credits) */
+  current_level?: number;
+  total_xp?: number;
+  xp_for_next_level?: number;
+  xp_for_current_level_start?: number;
 }
 
 export interface AuditCategory {

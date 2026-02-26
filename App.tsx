@@ -11,6 +11,7 @@ import { Terms } from './views/Terms';
 import { Affiliate } from './views/Affiliate';
 import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
+import { LevelUpModal } from './components/LevelUpModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ViewState, User } from './types';
@@ -22,7 +23,11 @@ export interface CreditsState {
   used: number;
 }
 
-function normalizeOAuthUser(raw: { id?: string; name?: string; email?: string; img_url?: string | null; plan?: string; stats?: User['stats']; authToken?: string }): User {
+function normalizeOAuthUser(raw: {
+  id?: string; name?: string; email?: string; img_url?: string | null; plan?: string;
+  stats?: User['stats']; authToken?: string;
+  total_xp?: number; current_level?: number; xp_for_next_level?: number; xp_for_current_level_start?: number;
+}): User {
   const name = raw.name || 'User';
   const firstInitial = name.trim().charAt(0).toUpperCase() || 'U';
   return {
@@ -45,6 +50,10 @@ function normalizeOAuthUser(raw: { id?: string; name?: string; email?: string; i
       affiliatesCount: 0,
     },
     authToken: raw.authToken,
+    total_xp: raw.total_xp,
+    current_level: raw.current_level,
+    xp_for_next_level: raw.xp_for_next_level,
+    xp_for_current_level_start: raw.xp_for_current_level_start,
   };
 }
 
@@ -58,6 +67,8 @@ export default function AppTest() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [logoutToast, setLogoutToast] = useState<string | null>(null);
   const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number } | null>(null);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [credits, setCredits] = useState<CreditsState | null>(null);
@@ -104,6 +115,9 @@ export default function AppTest() {
         total: data.credits_total ?? 0,
         used: data.credits_used ?? 0,
       });
+      setUser(prev => prev && (data.current_level != null || data.total_xp != null)
+        ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
+        : prev);
     } catch (_) {}
   }, [user?.authToken]);
 
@@ -234,8 +248,17 @@ export default function AppTest() {
     if (r.status === 402) return { error: 'Insufficient credits' as const, credits_remaining: data.credits_remaining };
     if (!r.ok) return { error: 'Server error' as const };
     setCredits({ remaining: data.credits_remaining, total: data.credits_total, used: data.credits_used });
-    return { credits_remaining: data.credits_remaining };
-  }, [user?.authToken, user?.email, isTestUser, simulateFreeTier, credits, simulatedCredits]);
+    setUser(prev => prev && (data.current_level != null || data.total_xp != null)
+      ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
+      : prev);
+    if (data.level_up && data.current_level != null) {
+      const oldLevel = Math.max(1, (user?.current_level ?? 1));
+      const discount = Math.min(20, Math.floor((data.current_level ?? 1) / 5) * 5);
+      setLevelUpData({ oldLevel, newLevel: data.current_level, discount });
+      setShowLevelUpModal(true);
+    }
+    return { credits_remaining: data.credits_remaining, level_up: data.level_up };
+  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits]);
 
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
@@ -325,7 +348,7 @@ export default function AppTest() {
           />
         )}
         
-        {view === ViewState.ANALYTICS && user && <Analytics stats={user.stats} />}
+        {view === ViewState.ANALYTICS && user && <Analytics user={user} stats={user.stats} />}
 
         {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={effectiveCredits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
         {view === ViewState.DOCUMENTATION && <Documentation />}
@@ -338,6 +361,15 @@ export default function AppTest() {
             onClose={() => !hasZeroCredits && setShowUpgrade(false)}
             onUpgrade={handleUpgrade}
             forceOpen={hasZeroCredits}
+          />
+        )}
+
+        {showLevelUpModal && levelUpData && (
+          <LevelUpModal
+            oldLevel={levelUpData.oldLevel}
+            newLevel={levelUpData.newLevel}
+            discount={levelUpData.discount}
+            onClose={() => { setShowLevelUpModal(false); setLevelUpData(null); }}
           />
         )}
 

@@ -101,6 +101,8 @@ Se non l’hai già messa: genera una stringa segreta (es. `openssl rand -hex 32
 
 ## 4. Lemon Squeezy (affiliate)
 
+Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFFILIATE.md)**.
+
 1. **Webhook in Lemon Squeezy**: Dashboard Lemon Squeezy → **Settings** → **Webhooks** → Add endpoint:
    - **URL**: `https://auth.comtra.dev/api/webhooks/lemonsqueezy`
    - **Eventi**: seleziona almeno **Order created**
