@@ -79,3 +79,13 @@ export interface AffiliateTransaction {
   commission: string;
   status: 'PENDING' | 'CLEARED';
 }
+
+export interface Trophy {
+  id: string;
+  name: string;
+  description: string;
+  icon_id: string;
+  sort_order: number;
+  unlocked: boolean;
+  unlocked_at: string | null;
+}

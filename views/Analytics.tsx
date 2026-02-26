@@ -1,13 +1,15 @@
 
 import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
-import { User, UserStats } from '../types';
+import { User, UserStats, Trophy } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
 import { Confetti } from '../components/Confetti';
 
 interface Props {
   user?: User | null;
   stats: UserStats;
+  trophies?: Trophy[] | null;
+  onLinkedInShare?: () => Promise<void>;
 }
 
 // Icons for Badges (Unique Pixel Art Style)
@@ -175,7 +177,30 @@ const Icons = {
   )
 };
 
-export const Analytics: React.FC<Props> = ({ user, stats }) => {
+const ICON_ID_TO_COMPONENT: Record<string, React.ReactNode> = {
+  SPROUT: <Icons.Sprout />,
+  ROCK: <Icons.Rock />,
+  IRON: <Icons.IronIngot />,
+  BRONZE: <Icons.BronzeMedal />,
+  DIAMOND: <Icons.Diamond />,
+  SILVER: <Icons.Surfboard />,
+  GOLD: <Icons.GoldBar />,
+  PLATINUM: <Icons.PlatinumDisc />,
+  OBSIDIAN: <Icons.ObsidianBlock />,
+  PIXEL: <Icons.PixelGrid />,
+  TOKEN: <Icons.TokenCoin />,
+  SYSTEM: <Icons.Crown />,
+  BUG: <Icons.Beetle />,
+  FIXER: <Icons.Wrench />,
+  SPEED: <Icons.Lightning />,
+  HARMONY: <Icons.YinYang />,
+  SOCIAL: <Icons.Chat />,
+  INFLUENCER: <Icons.Megaphone />,
+  LEGEND: <Icons.Trophy />,
+  GOD: <Icons.Eye />,
+};
+
+export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFromApi, onLinkedInShare }) => {
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -196,31 +221,38 @@ export const Analytics: React.FC<Props> = ({ user, stats }) => {
   // Discount Logic: 5% every 5 levels, max 20%
   const discountPercent = Math.min(20, Math.floor(level / 5) * 5);
 
-  const BADGES = [
+  const BADGES_FALLBACK = [
     { id: 'LEAF', name: 'Novice Sprout', icon: <Icons.Sprout />, unlocked: xp > 0, desc: "Began the journey." },
     { id: 'ROCK', name: 'Solid Rock', icon: <Icons.Rock />, unlocked: xp > 500, desc: "Built a solid foundation (500 XP)." },
     { id: 'IRON', name: 'Iron Frame', icon: <Icons.IronIngot />, unlocked: stats.syncedStorybook > 10, desc: "Synced > 10 components." },
     { id: 'BRONZE', name: 'Bronze Auditor', icon: <Icons.BronzeMedal />, unlocked: (stats.analyzedA11y + stats.analyzedUX) > 50, desc: "Performed > 50 Audits." },
     { id: 'DIAMOND', name: 'Diamond Partner', icon: <Icons.Diamond />, unlocked: stats.affiliatesCount >= 5, desc: "Invited 5+ users." },
-    
     { id: 'SILVER', name: 'Silver Surfer', icon: <Icons.Surfboard />, unlocked: xp > 1000, desc: "Crossed 1000 XP threshold." },
     { id: 'GOLD', name: 'Golden Standard', icon: <Icons.GoldBar />, unlocked: xp > 2500, desc: "Aesthetic perfection (2500 XP)." },
     { id: 'PLATINUM', name: 'Platinum Prod', icon: <Icons.PlatinumDisc />, unlocked: xp > 5000, desc: "Elite status achieved (5000 XP)." },
     { id: 'OBSIDIAN', name: 'Obsidian Mode', icon: <Icons.ObsidianBlock />, unlocked: stats.maxHealthScore === 100, desc: "Achieved 100% Health Score." },
     { id: 'PIXEL', name: 'Pixel Perfect', icon: <Icons.PixelGrid />, unlocked: stats.wireframesModified > 100, desc: "Refined 100+ wireframes." },
-    
     { id: 'TOKEN', name: 'Token Master', icon: <Icons.TokenCoin />, unlocked: stats.syncedStorybook > 50, desc: "Synced 50+ tokens." },
     { id: 'SYSTEM', name: 'System Lord', icon: <Icons.Crown />, unlocked: xp > 7500, desc: "You rule the design system." },
     { id: 'BUG', name: 'Bug Hunter', icon: <Icons.Beetle />, unlocked: stats.analyzedA11y > 200, desc: "Fixed 200+ A11y issues." },
     { id: 'FIXER', name: 'The Fixer', icon: <Icons.Wrench />, unlocked: stats.wireframesGenerated > 500, desc: "Generated 500+ wireframes." },
     { id: 'SPEED', name: 'Speed Demon', icon: <Icons.Lightning />, unlocked: stats.syncedGithub > 50, desc: "50+ GitHub pushes." },
-    
     { id: 'HARMONY', name: 'Harmonizer', icon: <Icons.YinYang />, unlocked: stats.maxHealthScore > 90, desc: "Maintained >90% Health." },
     { id: 'SOCIAL', name: 'Socialite', icon: <Icons.Chat />, unlocked: stats.affiliatesCount >= 10, desc: "Invited 10+ users." },
     { id: 'INFLUENCER', name: 'Influencer', icon: <Icons.Megaphone />, unlocked: stats.affiliatesCount >= 25, desc: "Invited 25+ users." },
     { id: 'LEGEND', name: 'Design Legend', icon: <Icons.Trophy />, unlocked: xp > 10000, desc: "10,000 XP. Legendary status." },
     { id: 'GOD', name: 'God Mode', icon: <Icons.Eye />, unlocked: xp > 20000, desc: "System singularity achieved." },
   ];
+
+  const BADGES = trophiesFromApi && trophiesFromApi.length > 0
+    ? trophiesFromApi.map(t => ({
+        id: t.id,
+        name: t.name,
+        icon: ICON_ID_TO_COMPONENT[t.icon_id] ?? <Icons.Sprout />,
+        unlocked: t.unlocked,
+        desc: t.description,
+      }))
+    : BADGES_FALLBACK;
 
   const currentBadge = BADGES.find(b => b.id === selectedBadge);
 
@@ -232,17 +264,17 @@ export const Analytics: React.FC<Props> = ({ user, stats }) => {
       setTimeout(() => setShowConfetti(false), 2000);
   };
 
-  const handleAddToLinkedIn = () => {
+  const handleAddToLinkedIn = async () => {
+      if (onLinkedInShare) await onLinkedInShare();
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
       const certId = `COMTRA-LVL${level}-${xp}`;
       const name = `Level ${level} Design Engineer`;
       const orgName = 'Comtra AI';
-      const url = `https://comtra.ai/verify/user`; // Mock URL
+      const url = `https://comtra.ai/verify/user`;
 
       const linkedinUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(name)}&organizationName=${encodeURIComponent(orgName)}&issueYear=${year}&issueMonth=${month}&certId=${certId}&certUrl=${encodeURIComponent(url)}`;
-      
       window.open(linkedinUrl, '_blank');
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2000);

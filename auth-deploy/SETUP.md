@@ -46,7 +46,7 @@ Dopo ogni modifica alle variabili: **Redeploy**.
 
 1. **Connect**: nella modale "Connect Project" seleziona il **progetto Vercel** che serve auth.comtra.dev (quello con Root Directory = `auth-deploy`). Tieni spuntati gli ambienti che usi (es. Production, Preview). Nel campo **Custom Prefix** imposta **`POSTGRES`** così Vercel creerà una variabile tipo **`POSTGRES_URL`** (il nostro backend la usa con questo nome). Clicca **Connect**.
 2. **POSTGRES_URL**: dopo il connect, in Vercel → **Settings** → **Environment Variables** dovresti vedere **`POSTGRES_URL`** (o simile). Se il nome è diverso, aggiungi manualmente **`POSTGRES_URL`** con lo stesso valore (Connection string da Supabase → Project Settings → Database).
-3. **Schema** (una tantum): Supabase Dashboard → **SQL Editor** → **New query** → incolla **l’intero** contenuto di **`auth-deploy/schema.sql`** (include `users`, `credit_transactions`, `affiliates`) → **Run**.
+3. **Schema** (una tantum): Supabase Dashboard → **SQL Editor** → **New query** → incolla **l’intero** contenuto di **`auth-deploy/schema.sql`** (include `users`, `credit_transactions`, `affiliates`, `xp_transactions`, `trophies`, `user_trophies` e colonne gamification) → **Run**.
 
 Contenuto minimo (è in `auth-deploy/schema.sql`):
 

@@ -25,7 +25,7 @@ interface Props {
   creditsRemaining: number | null;
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
-  consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
+  consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string; max_health_score?: number }) => Promise<{ credits_remaining?: number; error?: string }>;
   onNavigateToGenerate?: (prompt: string) => void;
 }
 
@@ -247,7 +247,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const handleConfirmScan = async () => {
       const cost = scanStats.cost;
       if (!useInfiniteCreditsForTest && !isPro && cost > 0) {
-        const result = await consumeCredits({ action_type: 'audit', credits_consumed: cost });
+        const result = await consumeCredits({ action_type: 'audit', credits_consumed: cost, max_health_score: score });
         if (result.error === 'Insufficient credits') {
           onUnlockRequest();
           return;

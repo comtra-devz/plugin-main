@@ -14,7 +14,7 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { LevelUpModal } from './components/LevelUpModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
-import { ViewState, User } from './types';
+import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 
 export interface CreditsState {
@@ -69,6 +69,8 @@ export default function AppTest() {
   const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
   const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number } | null>(null);
+  const [trophies, setTrophies] = useState<Trophy[] | null>(null);
+  const [newTrophiesToast, setNewTrophiesToast] = useState<Array<{ id: string; name: string }>>([]);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [credits, setCredits] = useState<CreditsState | null>(null);
@@ -125,6 +127,29 @@ export default function AppTest() {
     if (user?.authToken) fetchCredits();
     else setCredits(null);
   }, [user?.authToken, user?.id, fetchCredits]);
+
+  const fetchTrophies = React.useCallback(async () => {
+    if (!user?.authToken) return;
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      setTrophies(data.trophies ?? []);
+    } catch (_) {}
+  }, [user?.authToken]);
+
+  useEffect(() => {
+    if (user?.authToken) fetchTrophies();
+    else setTrophies(null);
+  }, [user?.authToken, user?.id, fetchTrophies]);
+
+  useEffect(() => {
+    if (newTrophiesToast.length === 0) return;
+    const t = setTimeout(() => setNewTrophiesToast([]), 4000);
+    return () => clearTimeout(t);
+  }, [newTrophiesToast]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -227,7 +252,7 @@ export default function AppTest() {
     return { estimated_credits: data.estimated_credits ?? 5 };
   }, []);
 
-  const consumeCredits = React.useCallback(async (payload: { action_type: string; credits_consumed: number; file_id?: string }) => {
+  const consumeCredits = React.useCallback(async (payload: { action_type: string; credits_consumed: number; file_id?: string; max_health_score?: number; reset_consecutive_fixes?: boolean; token_fixes_delta?: number }) => {
     const cost = Math.max(0, payload.credits_consumed);
     const isSimulated = isTestUser && simulateFreeTier && credits === null && user;
     if (isSimulated) {
@@ -257,8 +282,12 @@ export default function AppTest() {
       setLevelUpData({ oldLevel, newLevel: data.current_level, discount });
       setShowLevelUpModal(true);
     }
+    if (data.new_trophies?.length) {
+      setNewTrophiesToast(data.new_trophies);
+      fetchTrophies();
+    }
     return { credits_remaining: data.credits_remaining, level_up: data.level_up };
-  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits]);
+  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies]);
 
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
@@ -295,6 +324,13 @@ export default function AppTest() {
 
   return (
     <>
+      {newTrophiesToast.length > 0 && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-[#ffc900] border-2 border-black shadow-[4px_4px_0_0_#000] px-4 py-2 max-w-[90%] animate-in fade-in slide-in-from-top-2">
+          <p className="text-[10px] font-bold uppercase text-black">
+            🏆 Trofei sbloccati: {newTrophiesToast.map(t => t.name).join(', ')}
+          </p>
+        </div>
+      )}
       <Layout 
         current={view} 
         setView={(v) => {
@@ -348,7 +384,29 @@ export default function AppTest() {
           />
         )}
         
-        {view === ViewState.ANALYTICS && user && <Analytics user={user} stats={user.stats} />}
+        {view === ViewState.ANALYTICS && user && (
+          <Analytics
+            user={user}
+            stats={user.stats}
+            trophies={trophies}
+            onLinkedInShare={async () => {
+              if (!user?.authToken) return;
+              try {
+                const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies/linkedin-shared`, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${user.authToken}` },
+                });
+                if (r.ok) {
+                  const data = await r.json();
+                  if (data.new_trophies?.length) {
+                    setNewTrophiesToast(data.new_trophies);
+                    fetchTrophies();
+                  }
+                }
+              } catch (_) {}
+            }}
+          />
+        )}
 
         {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={effectiveCredits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
         {view === ViewState.DOCUMENTATION && <Documentation />}

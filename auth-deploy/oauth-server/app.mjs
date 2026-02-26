@@ -434,6 +434,22 @@ app.post('/api/credits/consume', async (req, res) => {
     await sql`UPDATE users SET credits_used = credits_used + ${creditsConsumed}, updated_at = NOW() WHERE id = ${userId}`;
     await sql`INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id) VALUES (${userId}, ${actionType}, ${creditsConsumed}, ${fileId})`;
 
+    const maxHealthFromBody = body.max_health_score != null ? Math.max(0, Math.min(100, Number(body.max_health_score))) : null;
+    if (maxHealthFromBody != null) {
+      await sql`UPDATE users SET max_health_score = GREATEST(COALESCE(max_health_score, 0), ${maxHealthFromBody}), updated_at = NOW() WHERE id = ${userId}`;
+    }
+    if (actionType === 'fix_accepted') {
+      await sql`UPDATE users SET fixes_accepted_total = COALESCE(fixes_accepted_total, 0) + 1, consecutive_fixes = COALESCE(consecutive_fixes, 0) + 1, updated_at = NOW() WHERE id = ${userId}`;
+    } else if (actionType === 'bug_report') {
+      await sql`UPDATE users SET bug_reports_total = COALESCE(bug_reports_total, 0) + 1, updated_at = NOW() WHERE id = ${userId}`;
+    }
+    if (body.reset_consecutive_fixes) {
+      await sql`UPDATE users SET consecutive_fixes = 0, updated_at = NOW() WHERE id = ${userId}`;
+    }
+    if (body.token_fixes_delta != null && body.token_fixes_delta > 0) {
+      await sql`UPDATE users SET token_fixes_total = COALESCE(token_fixes_total, 0) + ${Math.floor(body.token_fixes_delta)}, updated_at = NOW() WHERE id = ${userId}`;
+    }
+
     let levelUp = false;
     let currentLevel = 1;
     let totalXp = 0;
@@ -461,6 +477,12 @@ app.post('/api/credits/consume', async (req, res) => {
     const newUsed = used + creditsConsumed;
     const newRemaining = Math.max(0, total - newUsed);
     const infoResp = getLevelInfo(totalXp);
+    let newTrophies = [];
+    try {
+      newTrophies = await checkTrophies(sql, userId);
+    } catch (e) {
+      console.error('checkTrophies', e);
+    }
     res.json({
       credits_remaining: newRemaining,
       credits_total: total,
@@ -470,9 +492,134 @@ app.post('/api/credits/consume', async (req, res) => {
       total_xp: totalXp,
       xp_for_next_level: xpForNextLevel,
       xp_for_current_level_start: infoResp.xpForCurrentLevelStart,
+      new_trophies: newTrophies,
     });
   } catch (err) {
     console.error('POST /api/credits/consume', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Trofei: contesto utente e check sblocco
+async function getTrophyContext(sql, userId) {
+  const u = await sql`SELECT total_xp, max_health_score, fixes_accepted_total, consecutive_fixes, token_fixes_total, bug_reports_total, linkedin_shared
+    FROM users WHERE id = ${userId} LIMIT 1`;
+  const userRow = u.rows[0] || {};
+  const totalXp = Math.max(0, Number(userRow.total_xp) || 0);
+  const maxHealth = Math.max(0, Number(userRow.max_health_score) || 0);
+  const fixesAccepted = Math.max(0, Number(userRow.fixes_accepted_total) || 0);
+  const consecutiveFixes = Math.max(0, Number(userRow.consecutive_fixes) || 0);
+  const tokenFixes = Math.max(0, Number(userRow.token_fixes_total) || 0);
+  const bugReports = Math.max(0, Number(userRow.bug_reports_total) || 0);
+  const linkedinShared = !!userRow.linkedin_shared;
+
+  const ct = await sql`SELECT action_type, COUNT(*) as c FROM credit_transactions WHERE user_id = ${userId} GROUP BY action_type`;
+  const counts = {};
+  for (const r of ct.rows) counts[r.action_type] = Number(r.c) || 0;
+  const audits = (counts.audit || 0) + (counts.scan || 0);
+  const wireframesGen = (counts.wireframe_gen || 0) + (counts.generate || 0);
+  const protoScans = counts.proto_scan || 0;
+  const a11y = counts.a11y_check || 0;
+  const ux = counts.ux_audit || 0;
+  const syncStorybook = counts.sync_storybook || 0;
+  const syncGithub = counts.sync_github || 0;
+  const syncBitbucket = counts.sync_bitbucket || 0;
+
+  const today = await sql`SELECT COUNT(*) as c FROM credit_transactions WHERE user_id = ${userId} AND action_type IN ('audit','scan') AND created_at::date = CURRENT_DATE`;
+  const auditsToday = Number(today.rows[0]?.c) || 0;
+
+  let affiliateReferrals = 0;
+  const aff = await sql`SELECT total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
+  if (aff.rows.length > 0) affiliateReferrals = Number(aff.rows[0].total_referrals) || 0;
+
+  return {
+    totalXp, maxHealth, fixesAccepted, consecutiveFixes, tokenFixes, bugReports, linkedinShared,
+    audits, wireframesGen, protoScans, a11y, ux, syncStorybook, syncGithub, syncBitbucket,
+    auditsToday, affiliateReferrals,
+  };
+}
+
+function evaluateTrophyCondition(condition, ctx, unlockedIds) {
+  if (!condition || !condition.type) return false;
+  const t = condition.type;
+  const v = condition.value;
+  if (t === 'xp_min') return ctx.totalXp >= (v || 0);
+  if (t === 'audits_min') return ctx.audits >= (v || 0);
+  if (t === 'wireframes_gen_min') return ctx.wireframesGen >= (v || 0);
+  if (t === 'health_min') return ctx.maxHealth >= (v || 0);
+  if (t === 'consecutive_fixes_min') return ctx.consecutiveFixes >= (v || 0);
+  if (t === 'proto_scans_min') return ctx.protoScans >= (v || 0);
+  if (t === 'token_fixes_min') return ctx.tokenFixes >= (v || 0);
+  if (t === 'bug_reports_min') return ctx.bugReports >= (v || 0);
+  if (t === 'fixes_accepted_min') return ctx.fixesAccepted >= (v || 0);
+  if (t === 'audits_today_min') return ctx.auditsToday >= (v || 0);
+  if (t === 'all_syncs_used') return ctx.syncStorybook > 0 && ctx.syncGithub > 0 && ctx.syncBitbucket > 0;
+  if (t === 'linkedin_shared') return ctx.linkedinShared;
+  if (t === 'affiliate_referrals_min') return ctx.affiliateReferrals >= (v || 0);
+  if (t === 'all_other_trophies') {
+    const other = ['NOVICE_SPROUT','SOLID_ROCK','IRON_FRAME','BRONZE_AUDITOR','DIAMOND_PARSER','SILVER_SURFER','GOLDEN_STANDARD','PLATINUM_PRODUCER','OBSIDIAN_MODE','PIXEL_PERFECT','TOKEN_MASTER','SYSTEM_LORD','BUG_HUNTER','THE_FIXER','SPEED_DEMON','HARMONIZER','SOCIALITE','INFLUENCER','DESIGN_LEGEND'];
+    return other.every(id => unlockedIds.includes(id));
+  }
+  return false;
+}
+
+async function checkTrophies(sql, userId) {
+  const ctx = await getTrophyContext(sql, userId);
+  const unlocked = await sql`SELECT trophy_id FROM user_trophies WHERE user_id = ${userId}`;
+  const unlockedIds = (unlocked.rows || []).map(r => r.trophy_id);
+  const all = await sql`SELECT id, name, unlock_condition FROM trophies ORDER BY sort_order`;
+  const newlyUnlocked = [];
+  for (const row of all.rows || []) {
+    if (unlockedIds.includes(row.id)) continue;
+    const cond = row.unlock_condition && (typeof row.unlock_condition === 'object' ? row.unlock_condition : JSON.parse(row.unlock_condition || '{}'));
+    if (evaluateTrophyCondition(cond, ctx, unlockedIds)) {
+      await sql`INSERT INTO user_trophies (user_id, trophy_id) VALUES (${userId}, ${row.id}) ON CONFLICT (user_id, trophy_id) DO NOTHING`;
+      newlyUnlocked.push({ id: row.id, name: row.name });
+      unlockedIds.push(row.id);
+    }
+  }
+  return newlyUnlocked;
+}
+
+app.get('/api/trophies', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!process.env.POSTGRES_URL) return res.json({ trophies: [], unlocked_ids: [] });
+  try {
+    const { sql } = await import('@vercel/postgres');
+    const all = await sql`SELECT id, name, description, icon_id, sort_order FROM trophies ORDER BY sort_order`;
+    const ut = await sql`SELECT trophy_id, unlocked_at FROM user_trophies WHERE user_id = ${userId}`;
+    const unlockedSet = new Set((ut.rows || []).map(r => r.trophy_id));
+    const unlockedAt = {};
+    for (const r of ut.rows || []) unlockedAt[r.trophy_id] = r.unlocked_at;
+    const trophies = (all.rows || []).map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      icon_id: row.icon_id,
+      sort_order: row.sort_order,
+      unlocked: unlockedSet.has(row.id),
+      unlocked_at: unlockedAt[row.id] || null,
+    }));
+    const unlocked_ids = Array.from(unlockedSet);
+    res.json({ trophies, unlocked_ids });
+  } catch (err) {
+    console.error('GET /api/trophies', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/trophies/linkedin-shared', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!process.env.POSTGRES_URL) return res.json({ linkedin_shared: true, new_trophies: [] });
+  try {
+    const { sql } = await import('@vercel/postgres');
+    await sql`UPDATE users SET linkedin_shared = true, updated_at = NOW() WHERE id = ${userId}`;
+    const newTrophies = await checkTrophies(sql, userId);
+    res.json({ linkedin_shared: true, new_trophies: newTrophies });
+  } catch (err) {
+    console.error('POST /api/trophies/linkedin-shared', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
