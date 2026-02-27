@@ -118,9 +118,19 @@ export default function AppTest() {
         total: data.credits_total ?? 0,
         used: data.credits_used ?? 0,
       });
-      setUser(prev => prev && (data.current_level != null || data.total_xp != null)
-        ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
-        : prev);
+      setUser(prev => {
+        if (!prev) return prev;
+        const updates: Partial<User> = {};
+        if (data.current_level != null || data.total_xp != null) {
+          updates.current_level = data.current_level ?? prev.current_level;
+          updates.total_xp = data.total_xp ?? prev.total_xp;
+          updates.xp_for_next_level = data.xp_for_next_level ?? prev.xp_for_next_level;
+          updates.xp_for_current_level_start = data.xp_for_current_level_start ?? prev.xp_for_current_level_start;
+        }
+        if (data.plan != null) updates.plan = data.plan as User['plan'];
+        if (Object.keys(updates).length === 0) return prev;
+        return { ...prev, ...updates };
+      });
     } catch (_) {}
   }, [user?.authToken]);
 
@@ -227,10 +237,10 @@ export default function AppTest() {
   };
 
   const handleUpgrade = (tier: string, affiliateCode?: string) => {
-    const url = buildCheckoutUrl(tier, affiliateCode);
+    const url = buildCheckoutUrl(tier, affiliateCode, user?.email ?? undefined);
     window.open(url, '_blank');
-    if (user) setUser({ ...user, plan: 'PRO', tier });
     setShowUpgrade(false);
+    // Dopo il pagamento Lemon invia il webhook: aggiorniamo plan/credits. L'utente torna qui e fa refresh (o riapre il plugin) per vedere PRO.
   };
 
   const handleUnlockRequest = () => {

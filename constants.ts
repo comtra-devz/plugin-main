@@ -107,14 +107,24 @@ export const LEMON_SQUEEZY_VARIANT_IDS: Record<string, string> = {
   '1y': (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_VARIANT_1Y) || '1345319',
 };
 
-export function buildCheckoutUrl(tier: string, affiliateCode?: string): string {
+/**
+ * Costruisce l'URL di checkout Lemon Squeezy.
+ * @param tier - 1w | 1m | 6m | 1y
+ * @param affiliateCode - codice affiliato (opzionale)
+ * @param userEmail - email utente loggato: passata in custom_data così il webhook può aggiornare l'acquirente (plan PRO)
+ */
+export function buildCheckoutUrl(tier: string, affiliateCode?: string, userEmail?: string): string {
   const variantId = LEMON_SQUEEZY_VARIANT_IDS[tier] || LEMON_SQUEEZY_VARIANT_IDS['6m'];
   const base = `${LEMON_SQUEEZY_CHECKOUT_BASE}/${variantId}`;
   const code = affiliateCode?.trim();
-  if (!code) return base;
+  const email = userEmail?.trim();
+  if (!code && !email) return base;
   const params = new URLSearchParams();
-  params.set('aff', code);
-  params.set('checkout[custom][aff]', code); // ripassa il codice nel webhook come meta.custom_data.aff
+  if (code) {
+    params.set('aff', code);
+    params.set('checkout[custom][aff]', code);
+  }
+  if (email) params.set('checkout[custom][email]', email);
   return `${base}?${params.toString()}`;
 }
 

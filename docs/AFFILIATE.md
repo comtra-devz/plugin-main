@@ -16,6 +16,20 @@ L’acquirente può anche inserire il codice manualmente nella **modal di upgrad
 
 ---
 
+## Flusso acquirente (upgrade a PRO)
+
+L’utente che finisce i crediti va su **Pay** / **Passa a PRO**, sceglie il piano (1w / 1m / 6m / 1y) e viene portato al checkout Lemon Squeezy. **Non** c’è nessuna license key da incollare: l’upgrade avviene via webhook.
+
+1. L’utente clicca **Pay now** → si apre il checkout Lemon (con `checkout[custom][email]` = email utente loggato, per il match lato backend).
+2. Completa il pagamento su Lemon (carta, ecc.).
+3. Lemon invia il webhook **Order created** a `https://auth.comtra.dev/api/webhooks/lemonsqueezy`.
+4. Il webhook: verifica la firma, se `status === 'paid'` aggiorna l’**acquirente** (cerca utente per email in `meta.custom_data.email` o `data.attributes.user_email`, imposta `plan = 'PRO'`, `credits_total` e `plan_expires_at` in base al variant) e, se presente, l’**affiliato** (`total_referrals`).
+5. L’utente **torna nel plugin e aggiorna** (refresh o riapre): la successiva chiamata GET `/api/credits` restituisce `plan: 'PRO'` e i nuovi crediti; l’UI si aggiorna.
+
+**UX:** nessun passo extra; dopo il pagamento basta tornare e aggiornare il plugin per vedere PRO. Il match acquirente è per **email**: se al checkout Lemon viene usata un’email diversa da quella del login Figma, l’upgrade non si applica (passando `checkout[custom][email]` dall’app riduciamo il rischio).
+
+---
+
 ## Setup backend (auth.comtra.dev)
 
 - **Webhook Lemon Squeezy**: URL `https://auth.comtra.dev/api/webhooks/lemonsqueezy`, evento **Order created**; variabile **`LEMON_SQUEEZY_WEBHOOK_SECRET`** in Vercel (signing secret).
@@ -30,8 +44,8 @@ Dettagli completi: **[auth-deploy/SETUP.md](../auth-deploy/SETUP.md)** (sezione 
 | Cosa | Dove |
 |------|------|
 | Variant ID checkout (1w, 1m, 6m, 1y) | `constants.ts` → `LEMON_SQUEEZY_VARIANT_IDS` (o env `VITE_LEMON_VARIANT_*`) |
-| Costruzione URL con `?aff=` | `constants.ts` → `buildCheckoutUrl(tier, affiliateCode)` |
+| Costruzione URL con `?aff=` e `checkout[custom][email]` | `constants.ts` → `buildCheckoutUrl(tier, affiliateCode, userEmail?)` |
 | Vista affiliato (codice + link) | `views/Affiliate.tsx` |
 | API "mio codice" / "registrami" | Backend: `GET /api/affiliates/me`, `POST /api/affiliates/register` |
-| Webhook Order created | `auth-deploy/api/webhooks/lemonsqueezy.mjs` |
+| Webhook Order created (acquirente + affiliato) | `auth-deploy/api/webhooks/lemonsqueezy.mjs` |
 | Lettura `affiliatesCount` al login | `auth-deploy/oauth-server/app.mjs` (callback OAuth) |

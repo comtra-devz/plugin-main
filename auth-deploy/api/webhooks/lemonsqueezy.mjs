@@ -1,6 +1,7 @@
 /**
- * Lemon Squeezy webhook: order_created → incrementa total_referrals per l'affiliato
- * (codice in meta.custom_data.aff, passato da checkout con checkout[custom][aff] e ?aff=)
+ * Lemon Squeezy webhook: order_created
+ * 1) Aggiorna l'acquirente: plan=PRO, credits_total, plan_expires_at (match per email da custom_data o attributes.user_email)
+ * 2) Incrementa total_referrals per l'affiliato se meta.custom_data.aff è presente
  *
  * Variabili: LEMON_SQUEEZY_WEBHOOK_SECRET (signing secret del webhook in LS)
  */
@@ -8,6 +9,14 @@ import crypto from 'node:crypto';
 import { sql } from '@vercel/postgres';
 
 export const config = { api: { bodyParser: false } };
+
+// variant_id (Lemon) -> { credits_total, days } per plan_expires_at
+const VARIANT_TO_PRO = {
+  '1345293': { credits_total: 20, days: 7 },   // 1w
+  '1345303': { credits_total: 100, days: 30 }, // 1m
+  '1345310': { credits_total: 800, days: 180 }, // 6m
+  '1345319': { credits_total: 2000, days: 365 }, // 1y
+};
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -72,33 +81,56 @@ export default async function handler(req, res) {
     return;
   }
 
-  const affCode = payload?.meta?.custom_data?.aff;
-  if (!affCode || typeof affCode !== 'string') {
-    res.status(200).json({ ok: true, no_affiliate: true });
+  const attrs = payload?.data?.attributes || {};
+  if (attrs.status !== 'paid') {
+    res.status(200).json({ ok: true, status: attrs.status });
     return;
   }
 
-  const code = affCode.trim();
-  if (!code) {
-    res.status(200).json({ ok: true });
-    return;
-  }
+  const customData = payload?.meta?.custom_data || {};
+  const affCode = typeof customData.aff === 'string' ? customData.aff.trim() : null;
+  const buyerEmail = (typeof customData.email === 'string' ? customData.email.trim() : null) || (typeof attrs.user_email === 'string' ? attrs.user_email.trim() : null) || null;
+
+  const firstItem = attrs.first_order_item;
+  const variantId = firstItem?.variant_id != null ? String(firstItem.variant_id) : null;
+  const proConfig = variantId ? VARIANT_TO_PRO[variantId] : null;
+
+  const result = { ok: true, buyer_updated: false, affiliate_updated: false };
 
   try {
-    const r = await sql`
-      UPDATE affiliates
-      SET total_referrals = total_referrals + 1,
-          updated_at = NOW()
-      WHERE affiliate_code = ${code}
-      RETURNING user_id, total_referrals
-    `;
-    if (r.rowCount > 0) {
-      res.status(200).json({ ok: true, affiliate_user_id: r.rows[0].user_id, total_referrals: r.rows[0].total_referrals });
-    } else {
-      res.status(200).json({ ok: true, no_match: true });
+    // 1) Aggiorna acquirente (plan PRO + crediti + scadenza) se abbiamo email e variant riconosciuto
+    if (buyerEmail && proConfig) {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + proConfig.days);
+      const expiresIso = expiresAt.toISOString();
+      const r = await sql`
+        UPDATE users
+        SET plan = 'PRO',
+            credits_total = ${proConfig.credits_total},
+            credits_used = 0,
+            plan_expires_at = ${expiresIso},
+            updated_at = NOW()
+        WHERE LOWER(TRIM(email)) = LOWER(TRIM(${buyerEmail}))
+        RETURNING id
+      `;
+      if (r.rowCount > 0) result.buyer_updated = true;
     }
+
+    // 2) Incrementa referral affiliato se presente
+    if (affCode) {
+      const r = await sql`
+        UPDATE affiliates
+        SET total_referrals = total_referrals + 1,
+            updated_at = NOW()
+        WHERE affiliate_code = ${affCode}
+        RETURNING user_id, total_referrals
+      `;
+      if (r.rowCount > 0) result.affiliate_updated = true;
+    }
+
+    res.status(200).json(result);
   } catch (err) {
-    console.error('Webhook affiliates update', err);
+    console.error('Webhook lemonsqueezy', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

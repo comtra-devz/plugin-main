@@ -99,16 +99,16 @@ Se non l’hai già messa: genera una stringa segreta (es. `openssl rand -hex 32
 
 ---
 
-## 4. Lemon Squeezy (affiliate)
+## 4. Lemon Squeezy (affiliate + upgrade acquirente)
 
-Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFFILIATE.md)**.
+Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFFILIATE.md)**. In particolare, la sezione **Flusso acquirente (upgrade a PRO)** descrive: checkout → webhook → refresh per vedere PRO (nessuna license key).
 
 1. **Webhook in Lemon Squeezy**: Dashboard Lemon Squeezy → **Settings** → **Webhooks** → Add endpoint:
    - **URL**: `https://auth.comtra.dev/api/webhooks/lemonsqueezy`
    - **Eventi**: seleziona almeno **Order created**
    - **Signing secret**: genera/copia il secret (6–40 caratteri) e mettilo in Vercel come **`LEMON_SQUEEZY_WEBHOOK_SECRET`**.
-2. **Registrazione affiliati (automatica)**: l’utente dal plugin va su **Profilo → Affiliate Program** e clicca **Ottieni il tuo codice affiliato**. Il backend crea una riga in `affiliates` con il suo `user_id` (Figma) e un codice univoco generato automaticamente. Non serve più inserire affiliati a mano. (In casi particolari puoi ancora fare `INSERT INTO affiliates (user_id, affiliate_code) VALUES (...)` da SQL.)
-   Il plugin invia sia `?aff=CODICE` sia `checkout[custom][aff]=CODICE` così il webhook riceve il codice in `meta.custom_data.aff` e incrementa `total_referrals`. Il profilo utente (Production Metrics) mostra **AFFILIATES** = `total_referrals` letti nel callback OAuth.
+2. **Cosa fa il webhook** (a ogni Order created con `status = paid`): aggiorna l’**acquirente** (cerca utente per email in custom_data o in `user_email` dell’ordine, imposta `plan = 'PRO'`, `credits_total` e `plan_expires_at` in base al variant) e, se presente il codice in `meta.custom_data.aff`, incrementa **affiliato** (`total_referrals`). L’utente dopo il pagamento torna nel plugin e fa refresh per vedere PRO.
+3. **Registrazione affiliati (automatica)**: l’utente dal plugin va su **Profilo → Affiliate Program** e clicca **Ottieni il tuo codice affiliato**. Il backend crea una riga in `affiliates` con il suo `user_id` (Figma) e un codice univoco. Il plugin invia `?aff=CODICE` e `checkout[custom][aff]=CODICE`; il webhook riceve il codice e incrementa `total_referrals`. Il profilo (Production Metrics) mostra **AFFILIATES** = `total_referrals` letti nel callback OAuth.
 
 ---
 

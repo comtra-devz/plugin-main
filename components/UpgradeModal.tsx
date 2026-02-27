@@ -63,6 +63,7 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: str
           <span className="text-xs">→</span>
         </button>
         <p className="text-[10px] text-center mt-3 text-gray-500">Secure checkout via Lemon Squeezy. Cancel anytime.</p>
+        <p className="text-[10px] text-center mt-1 text-gray-500">Dopo il pagamento, torna qui e aggiorna il plugin per vedere i crediti PRO.</p>
       </div>
     </div>
   );
