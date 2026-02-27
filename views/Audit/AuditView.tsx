@@ -18,6 +18,14 @@ import {
   PROTO_ISSUES 
 } from './data';
 
+export interface FetchFigmaFileBody {
+  file_key: string;
+  scope?: string;
+  depth?: number;
+  page_id?: string | null;
+  node_ids?: string[] | null;
+}
+
 interface Props { 
   plan: UserPlan; 
   userTier?: string;
@@ -27,11 +35,13 @@ interface Props {
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string; max_health_score?: number }) => Promise<{ credits_remaining?: number; error?: string }>;
   onNavigateToGenerate?: (prompt: string) => void;
+  /** Pipeline to agents: fetch file JSON from backend (Figma REST). Called after confirm scan when fileKey is available. */
+  fetchFigmaFile?: (body: FetchFigmaFileBody) => Promise<unknown>;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -79,6 +89,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
+
+  // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
+  const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' } | null>(null);
 
   // Timestamps
   const [lastAuditDate, setLastAuditDate] = useState<Date | null>(null);
@@ -215,10 +228,49 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
+      if (msg.type === 'file-context-result') {
+        const payload = confirmPayloadRef.current;
+        if (!payload) return;
+        confirmPayloadRef.current = null;
+        (async () => {
+          if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
+            const result = await consumeCredits({ action_type: 'audit', credits_consumed: payload.cost, max_health_score: payload.score });
+            if (result.error === 'Insufficient credits') {
+              onUnlockRequest();
+              return;
+            }
+            if (result.error) return;
+          }
+          setShowReceipt(false);
+          if (msg.fileKey && fetchFigmaFile) {
+            try {
+              await fetchFigmaFile({
+                file_key: msg.fileKey,
+                scope: msg.scope ?? 'all',
+                depth: 2,
+                page_id: msg.pageId ?? undefined,
+                node_ids: msg.nodeIds ?? undefined,
+              });
+            } catch (_) {
+              // Pipeline validation: optional; UI continues with mock data
+            }
+          }
+          if (payload.pendingScanType === 'MAIN') setIsScanning(true);
+          else if (payload.pendingScanType === 'DEEP') {
+            setIsDeepScanning(true);
+            setTimeout(() => {
+              setIsDeepScanning(false);
+              setHasDeepScanned(true);
+              setLastDeepScanDate(new Date());
+            }, 1500);
+          }
+          setPendingScanType(null);
+        })();
+      }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [consumeCredits, fetchFigmaFile, onUnlockRequest, useInfiniteCreditsForTest, plan]);
 
   const handleStartScan = useCallback(() => {
     if (knownZeroCredits) {
@@ -244,29 +296,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     setShowReceipt(true);
   };
 
-  const handleConfirmScan = async () => {
-      const cost = scanStats.cost;
-      if (!useInfiniteCreditsForTest && !isPro && cost > 0) {
-        const result = await consumeCredits({ action_type: 'audit', credits_consumed: cost, max_health_score: score });
-        if (result.error === 'Insufficient credits') {
-          onUnlockRequest();
-          return;
-        }
-        if (result.error) return;
-      }
-      setShowReceipt(false);
-
-      if (pendingScanType === 'MAIN') {
-          setIsScanning(true);
-      } else if (pendingScanType === 'DEEP') {
-          setIsDeepScanning(true);
-          setTimeout(() => {
-              setIsDeepScanning(false);
-              setHasDeepScanned(true);
-              setLastDeepScanDate(new Date());
-          }, 1500);
-      }
-      setPendingScanType(null);
+  const handleConfirmScan = () => {
+    const cost = scanStats.cost;
+    const scanType = pendingScanType;
+    if (!scanType) return;
+    // Defer consume + fetch to file-context-result so we can send file_key to backend (pipeline to agents)
+    confirmPayloadRef.current = { cost, score, pendingScanType: scanType };
+    window.parent.postMessage(
+      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
+      '*'
+    );
   };
 
   const handleFix = (e: React.MouseEvent, id: string) => {

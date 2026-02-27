@@ -86,7 +86,7 @@ app.get('/auth/figma/start', (req, res) => {
     path: '/',
   });
   const redirectUri = `${BASE_URL}/auth/figma/callback`;
-  const scope = 'current_user:read';
+  const scope = 'current_user:read file_content:read';
   const figmaAuthUrl = `https://www.figma.com/oauth?client_id=${FIGMA_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${flowId}&response_type=code`;
   res.redirect(figmaAuthUrl);
 });
@@ -166,6 +166,18 @@ app.get('/auth/figma/callback', async (req, res) => {
         user.xp_for_next_level = info.xpForNextLevel;
         user.xp_for_current_level_start = info.xpForCurrentLevelStart;
       }
+      // Persist Figma OAuth tokens for REST API (GET /v1/files/:key) — pipeline to agents
+      const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
+      const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+      await sql`
+        INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
+        VALUES (${user.id}, ${tokenData.access_token}, ${tokenData.refresh_token || tokenData.access_token}, ${expiresAt.toISOString()}, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = NOW()
+      `;
     } catch (err) {
       console.error('Postgres upsert user', err);
     }
@@ -289,6 +301,39 @@ function getUserIdFromToken(req) {
   } catch {
     return null;
   }
+}
+
+/** Get valid Figma access token for user; refresh if expired (within 5 min buffer). Returns null if no tokens or refresh fails. */
+async function getFigmaAccessToken(sql, userId) {
+  const r = await sql`SELECT access_token, refresh_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+  if (r.rows.length === 0) return null;
+  const row = r.rows[0];
+  const expiresAt = row.expires_at ? new Date(row.expires_at) : null;
+  const now = new Date();
+  const bufferMs = 5 * 60 * 1000;
+  if (expiresAt && expiresAt.getTime() > now.getTime() + bufferMs) {
+    return row.access_token;
+  }
+  if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return row.access_token;
+  const refreshRes = await fetch('https://api.figma.com/v1/oauth/refresh', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: 'Basic ' + Buffer.from(`${FIGMA_CLIENT_ID}:${FIGMA_CLIENT_SECRET}`).toString('base64'),
+    },
+    body: new URLSearchParams({ refresh_token: row.refresh_token }),
+  });
+  if (!refreshRes.ok) {
+    console.error('Figma refresh token failed', await refreshRes.text());
+    return expiresAt && expiresAt.getTime() > now.getTime() ? row.access_token : null;
+  }
+  const data = await refreshRes.json();
+  const newExpiresIn = Math.max(60, Number(data.expires_in) || 90 * 24 * 3600);
+  const newExpiresAt = new Date(Date.now() + newExpiresIn * 1000);
+  await sql`
+    UPDATE figma_tokens SET access_token = ${data.access_token}, expires_at = ${newExpiresAt.toISOString()}, updated_at = NOW() WHERE user_id = ${userId}
+  `;
+  return data.access_token;
 }
 
 // --- Gamification: curva livelli (L1=0, L2=100, L3=250, L4=500, L5=800, poi livello²×20 cumulativo)
@@ -496,6 +541,52 @@ app.post('/api/credits/consume', async (req, res) => {
     });
   } catch (err) {
     console.error('POST /api/credits/consume', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Figma file (pipeline to agents): fetch file JSON with user's token
+app.post('/api/figma/file', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const fileKey = (body.file_key || body.fileKey || '').trim();
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : undefined;
+  const nodeIds = body.node_ids || body.nodeIds;
+  const idsParam = Array.isArray(nodeIds) ? nodeIds.join(',') : (typeof nodeIds === 'string' ? nodeIds : undefined);
+
+  if (!process.env.POSTGRES_URL) {
+    return res.status(503).json({ error: 'Figma file API requires database' });
+  }
+  try {
+    const { sql } = await import('@vercel/postgres');
+    const accessToken = await getFigmaAccessToken(sql, userId);
+    if (!accessToken) {
+      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+    }
+    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+    if (depth != null) url.searchParams.set('depth', String(depth));
+    if (idsParam) url.searchParams.set('ids', idsParam);
+    const figmaRes = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (figmaRes.status === 403) {
+      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+    }
+    if (figmaRes.status === 404) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (!figmaRes.ok) {
+      const text = await figmaRes.text();
+      console.error('Figma file API error', figmaRes.status, text);
+      return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error', details: text.slice(0, 200) });
+    }
+    const fileJson = await figmaRes.json();
+    res.setHeader('Content-Type', 'application/json');
+    res.json(fileJson);
+  } catch (err) {
+    console.error('POST /api/figma/file', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

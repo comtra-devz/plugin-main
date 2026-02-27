@@ -51,6 +51,15 @@ CREATE INDEX IF NOT EXISTS idx_affiliates_user_id ON affiliates(user_id);
 CREATE INDEX IF NOT EXISTS idx_affiliates_affiliate_code ON affiliates(affiliate_code);
 CREATE INDEX IF NOT EXISTS idx_affiliates_lemon_id ON affiliates(lemon_affiliate_id);
 
+-- Figma OAuth tokens (for REST API: GET /v1/files/:key). Required for pipeline to agents.
+CREATE TABLE IF NOT EXISTS figma_tokens (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- XP e livelli (gamification)
 CREATE TABLE IF NOT EXISTS xp_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

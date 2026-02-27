@@ -16,6 +16,7 @@ import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
+import type { FetchFigmaFileBody } from './views/Audit/AuditView';
 
 export interface CreditsState {
   remaining: number;
@@ -289,6 +290,17 @@ export default function AppTest() {
     return { credits_remaining: data.credits_remaining, level_up: data.level_up };
   }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies]);
 
+  const fetchFigmaFile = React.useCallback(async (body: FetchFigmaFileBody) => {
+    if (!user?.authToken) return;
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/figma/file`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }, [user?.authToken]);
+
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
@@ -352,6 +364,7 @@ export default function AppTest() {
               useInfiniteCreditsForTest={useInfiniteCreditsForTest}
               estimateCredits={estimateCredits}
               consumeCredits={consumeCredits}
+              fetchFigmaFile={fetchFigmaFile}
               onNavigateToGenerate={(prompt) => {
                   setGenPrompt(prompt);
                   setView(ViewState.GENERATE);

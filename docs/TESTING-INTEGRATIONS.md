@@ -1,14 +1,14 @@
 # Strategia test integrazioni (Auth, Credits, XP, Trofei, Affiliazione)
 
-Come testare in modo puntuale le integrazioni con il backend (auth.comtra.dev) e Supabase, incluso l’affiliazione senza acquisti reali.
+Come testare le integrazioni con il backend (auth.comtra.dev) e Supabase. **Approccio consigliato:** account di test nel plugin + **Lemon Squeezy in Test Mode** per acquisti e affiliazione finti (carte di test, webhook reali). In alternativa, endpoint di simulazione o replay webhook quando non puoi usare il Test Mode (es. CI).
 
 ---
 
 ## Account di test e Supabase
 
-**Gli account di test (es. ben.bugli@gmail.com, foscacordidonne@gmail.com) finiscono già in Supabase** come tutti gli altri: al primo **Login with Figma** il callback OAuth fa `INSERT INTO users ... ON CONFLICT DO UPDATE`, quindi viene creata/aggiornata la riga in `users` (id = Figma user id, email, name, crediti, total_xp, current_level, ecc.). Non c’è nessun bypass per gli account di test: stessi flusso e stesse tabelle.
+**Gli account di test** (es. `ben.bugli@gmail.com`, `foscacordidonne@gmail.com` — vedi `constants.ts` → `TEST_USER_EMAILS`) **finiscono già in Supabase** come tutti gli altri: al primo **Login with Figma** il callback OAuth crea/aggiorna la riga in `users`. Nessuna configurazione speciale: stessi flusso e stesse tabelle.
 
-La sola differenza è **nel frontend** (`constants.ts` → `TEST_USER_EMAILS`): per quelle email il plugin può dare crediti “infiniti” e la voce “Simula Free Tier”. Il backend non conosce il concetto di “test user” e tratta tutti allo stesso modo. Quindi sì, gli account di test risultano nelle tabelle Supabase non appena fai login con uno di quegli account.
+Nel **frontend** le email in `TEST_USER_EMAILS` abilitano crediti “infiniti” e la voce “Simula Free Tier”; il backend non distingue i test user e li tratta come gli altri.
 
 ---
 
@@ -46,29 +46,48 @@ La sola differenza è **nel frontend** (`constants.ts` → `TEST_USER_EMAILS`): 
 
 ---
 
-## 5. Affiliazione (senza acquisti reali)
+## 5. Affiliazione
 
-Non potendo fare acquisti veri su Lemon Squeezy, puoi testare così:
+### Percorso consigliato: Lemon Squeezy Test Mode + account di test
 
-### A) Registrazione affiliato e link
+Lemon Squeezy ha una **Test Mode** (attiva di default per store nuove): acquisti finti con carte di test, **webhook reali** (Order created, ecc.). Puoi testare l’intero flusso affiliazione senza soldi veri.
 
-- Login con un account (anche di test).
-- Profilo → Affiliate Program → “Ottieni il tuo codice affiliato”. Il backend crea una riga in `affiliates` (user_id, affiliate_code).
-- Verifica in Supabase: tabella `affiliates` con una riga per quell’utente, `total_referrals = 0`.
-- Copia il link con `?aff=CODICE` e verifica che apra il checkout Lemon (non serve completare l’acquisto).
+1. **Lemon Squeezy Dashboard**  
+   - Attiva **Test Mode** (toggle in dashboard).  
+   - Crea un prodotto “published” in test mode (visibile solo a te).  
+   - Configura il webhook per **Order created** su `https://auth.comtra.dev/api/webhooks/lemonsqueezy` (usa il **signing secret di test** in Vercel se Lemon distingue test/live per i webhook).
 
-### B) Simulazione referral (endpoint di test)
+2. **Plugin con account di test**  
+   - Login con un account di test (es. email in `TEST_USER_EMAILS`).  
+   - Profilo → Affiliate Program → “Ottieni il tuo codice affiliato”. Verifica in Supabase: tabella `affiliates` con una riga, `total_referrals = 0`.  
+   - Copia il link con `?aff=CODICE` (o costruiscilo: checkout Lemon + `?aff=CODICE`).
 
-Per simulare “qualcuno ha comprato con il tuo codice” senza usare il webhook reale di Lemon:
+3. **Acquisto finto**  
+   - Apri il link di checkout (Share/Preview dal prodotto in test mode) **con** `?aff=CODICE` nell’URL.  
+   - Completa il checkout con **carta di test** (es. Visa: `4242 4242 4242 4242`, scadenza futura, CVC qualsiasi).  
+   - Lemon invia il webhook Order created; il backend incrementa `affiliates.total_referrals` per quel codice.
 
-1. **Variabile in Vercel**: aggiungi `TEST_AFFILIATE_SECRET` (es. una stringa casuale tipo `openssl rand -hex 16`). Se **non** la imposti, l’endpoint risponde 401 e non fa nulla (puoi lasciarlo disattivato in produzione).
-2. **Endpoint**: `POST https://auth.comtra.dev/api/test/simulate-referral`
-3. **Header**: `X-Test-Secret: <valore di TEST_AFFILIATE_SECRET>`
-4. **Body**: `{ "affiliate_code": "IL_CODICE_AFFILIATO" }` (il codice che vedi in Affiliate Program).
-5. **Effetto**: il backend incrementa `total_referrals` per quella riga in `affiliates`, come farebbe il webhook Lemon.
-6. **Verifica**: in Supabase `affiliates.total_referrals` aumentato; al prossimo login (o refresh profilo) il contatore AFFILIATES in profilo/STATS aggiornato.
+4. **Verifica**  
+   - Supabase: `affiliates.total_referrals` aumentato.  
+   - Nel plugin: profilo / STATS → contatore AFFILIATES aggiornato.
 
-Esempio con curl (sostituisci SECRET e CODICE):
+Così usi **finti acquisti e finte affiliazioni** direttamente su Lemon, senza endpoint custom.
+
+---
+
+### Alternativa: simulazione referral (senza checkout Lemon)
+
+Quando non puoi usare Test Mode (es. CI, automazione), puoi simulare un referral via API:
+
+1. **Vercel**: imposta `TEST_AFFILIATE_SECRET` (es. `openssl rand -hex 16`). Se non è impostata, l’endpoint risponde 401.
+2. **Chiamata**:  
+   `POST https://auth.comtra.dev/api/test/simulate-referral`  
+   Header: `X-Test-Secret: <TEST_AFFILIATE_SECRET>`  
+   Body: `{ "affiliate_code": "IL_CODICE_AFFILIATO" }`
+3. **Effetto**: il backend incrementa `total_referrals` per quell’affiliato (come farebbe il webhook Lemon).
+4. **Verifica**: Supabase `affiliates.total_referrals`; contatore in profilo/STATS.
+
+Esempio:
 
 ```bash
 curl -X POST https://auth.comtra.dev/api/test/simulate-referral \
@@ -77,18 +96,14 @@ curl -X POST https://auth.comtra.dev/api/test/simulate-referral \
   -d '{"affiliate_code":"IL_CODICE_AFFILIATO"}'
 ```
 
-Così puoi testare il flusso “codice → referral accreditato → contatore in profilo” senza acquisti.
+### Alternativa: replay del webhook Lemon
 
-### C) Replay del webhook Lemon (opzionale)
+Per testare firma e formato del webhook (es. integrazione custom):
 
-Se vuoi testare anche la firma e il formato del webhook:
-
-1. Costruisci un JSON simile a quello che invia Lemon per `order_created`, con `meta.custom_data.aff = "CODICE"`.
-2. Calcola l’HMAC-SHA256 del body con `LEMON_SQUEEZY_WEBHOOK_SECRET` e mettilo in header `X-Signature`.
-3. Invia POST a `https://auth.comtra.dev/api/webhooks/lemonsqueezy` con quel body e header.
-4. Verifica in DB che `affiliates.total_referrals` sia incrementato.
-
-Uno script (Node o curl) può fare i punti 1–3; in repo si può aggiungere uno script `scripts/replay-affiliate-webhook.js` che legge codice e secret e fa la chiamata.
+1. Costruisci un JSON come quello di Lemon per `order_created`, con `meta.custom_data.aff = "CODICE"`.  
+2. Calcola HMAC-SHA256 del body con `LEMON_SQUEEZY_WEBHOOK_SECRET`, header `X-Signature`.  
+3. POST a `https://auth.comtra.dev/api/webhooks/lemonsqueezy`.  
+4. Verifica in DB `affiliates.total_referrals`.
 
 ---
 
@@ -100,12 +115,8 @@ Uno script (Node o curl) può fare i punti 1–3; in repo si può aggiungere uno
 | Crediti    | Consumo da plugin → `credits_used` e `credit_transactions` aggiornati. |
 | XP/Livelli | Consumo → `total_xp`, `current_level`, `xp_transactions`; UI livello e barra; level up modal. |
 | Trofei     | Azioni che soddisfano condizioni → `user_trophies`; GET `/api/trophies`; toast e Trophy Case. |
-| Affiliazione | Registrazione affiliato → riga in `affiliates`; simulazione referral (endpoint test o replay webhook) → `total_referrals` e contatore in profilo. |
+| Affiliazione | **Consigliato:** Lemon Test Mode + account di test + link `?aff=CODICE` + acquisto con carta di test → webhook reale → `total_referrals`. **Alternativa:** endpoint `simulate-referral` o replay webhook. |
 
 ---
 
-## Account di test in Supabase
-
-Non serve nessuna configurazione speciale: **fai login con un account di test (es. ben.bugli@gmail.com)** e la sua riga viene creata/aggiornata in `users` come per qualsiasi altro account. Per vederla in Supabase basta controllare la tabella `users` dopo il login (cercando per email o per Figma user id). Il fatto che nel frontend siano in `TEST_USER_EMAILS` non cambia il comportamento del backend né l’inserimento in Supabase.
-
-Implementando l’endpoint **POST /api/test/simulate-referral** (protetto da `X-Test-Secret`) si completa la strategia per testare l’affiliazione in modo puntuale senza acquisti.
+Riferimenti Lemon Squeezy: [Test Mode](https://docs.lemonsqueezy.com/help/getting-started/test-mode), [Simulate Webhook Events](https://docs.lemonsqueezy.com/help/webhooks/simulate-webhook-events).

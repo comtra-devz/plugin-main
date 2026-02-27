@@ -50,6 +50,26 @@ figma.ui.onmessage = async (msg: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
+  // File context for backend pipeline (GET /v1/files/:key). Required for scan → agents.
+  if (msg.type === 'get-file-context') {
+    const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
+    let pageId: string | undefined;
+    let nodeIds: string[] | undefined;
+    if (scope === 'page' && msg.pageId) {
+      pageId = msg.pageId;
+    } else if (scope === 'current') {
+      const sel = figma.currentPage.selection;
+      nodeIds = sel.map((n: BaseNode) => n.id);
+    }
+    figma.ui.postMessage({
+      type: 'file-context-result',
+      fileKey: (figma as any).fileKey ?? null,
+      scope: scope ?? 'all',
+      pageId: pageId ?? null,
+      nodeIds: nodeIds ?? null,
+    });
+  }
+
   // Count nodes: batch traversal with yield between batches only. Fast; UI stays responsive.
   // No library needed — Figma API is the only way to read the tree; we optimize by batching.
   if (msg.type === 'count-nodes') {
