@@ -36,7 +36,6 @@ export const UserStatsWidget: React.FC<Props> = ({ stats, compact = false }) => 
         
         <StatBox label="A11y Checks" value={stats.analyzedA11y} />
         <StatBox label="UX Audits" value={stats.analyzedUX} />
-        <StatBox label="Affiliates" value={stats.affiliatesCount} color="bg-[#ffc900]" />
         
         <div className="col-span-2 md:col-span-3 border-t-2 border-dashed border-black/20 my-1"></div>
         

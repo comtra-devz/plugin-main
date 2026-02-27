@@ -226,7 +226,7 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
     { id: 'ROCK', name: 'Solid Rock', icon: <Icons.Rock />, unlocked: xp > 500, desc: "Built a solid foundation (500 XP)." },
     { id: 'IRON', name: 'Iron Frame', icon: <Icons.IronIngot />, unlocked: stats.syncedStorybook > 10, desc: "Synced > 10 components." },
     { id: 'BRONZE', name: 'Bronze Auditor', icon: <Icons.BronzeMedal />, unlocked: (stats.analyzedA11y + stats.analyzedUX) > 50, desc: "Performed > 50 Audits." },
-    { id: 'DIAMOND', name: 'Diamond Partner', icon: <Icons.Diamond />, unlocked: stats.affiliatesCount >= 5, desc: "Invited 5+ users." },
+    // Affiliate-related badges postponed for post-MVP; keep core progression only
     { id: 'SILVER', name: 'Silver Surfer', icon: <Icons.Surfboard />, unlocked: xp > 1000, desc: "Crossed 1000 XP threshold." },
     { id: 'GOLD', name: 'Golden Standard', icon: <Icons.GoldBar />, unlocked: xp > 2500, desc: "Aesthetic perfection (2500 XP)." },
     { id: 'PLATINUM', name: 'Platinum Prod', icon: <Icons.PlatinumDisc />, unlocked: xp > 5000, desc: "Elite status achieved (5000 XP)." },
@@ -238,8 +238,6 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
     { id: 'FIXER', name: 'The Fixer', icon: <Icons.Wrench />, unlocked: stats.wireframesGenerated > 500, desc: "Generated 500+ wireframes." },
     { id: 'SPEED', name: 'Speed Demon', icon: <Icons.Lightning />, unlocked: stats.syncedGithub > 50, desc: "50+ GitHub pushes." },
     { id: 'HARMONY', name: 'Harmonizer', icon: <Icons.YinYang />, unlocked: stats.maxHealthScore > 90, desc: "Maintained >90% Health." },
-    { id: 'SOCIAL', name: 'Socialite', icon: <Icons.Chat />, unlocked: stats.affiliatesCount >= 10, desc: "Invited 10+ users." },
-    { id: 'INFLUENCER', name: 'Influencer', icon: <Icons.Megaphone />, unlocked: stats.affiliatesCount >= 25, desc: "Invited 25+ users." },
     { id: 'LEGEND', name: 'Design Legend', icon: <Icons.Trophy />, unlocked: xp > 10000, desc: "10,000 XP. Legendary status." },
     { id: 'GOD', name: 'God Mode', icon: <Icons.Eye />, unlocked: xp > 20000, desc: "System singularity achieved." },
   ];
