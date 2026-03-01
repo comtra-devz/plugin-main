@@ -2,6 +2,9 @@
 
 Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi nel progetto Comtra. Include materiali necessari per ogni funzionalità.
 
+- **Guida pratica “for dummies”** (setup, test su kimi.com, replicare per altri agenti, allenare i prompt): **docs/KIMI-FOR-DUMMIES.md**
+- **Come modificare le regole e passare il lavoro ad altri:** **audit-specs/MAINTAINING-RULES.md**
+
 ---
 
 ## Fase 0 — Prerequisiti e setup
@@ -17,11 +20,27 @@ Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi n
 
 ### 0.2 Verificare la pipeline dati esistente
 
+**Cosa significa “pipeline dati”:** per far analizzare un file dall’agente Kimi, il backend deve (1) avere i **token Figma** dell’utente (access + refresh) per chiamare l’API Figma, (2) poter chiedere a Figma il **JSON del file** (endpoint `GET /v1/files/:key`). Lo step 0.2 serve a verificare che questa catena funzioni **prima** di collegare Kimi: file aperto nel plugin → plugin invia `file_key` al backend → backend usa i token per scaricare il JSON → (in seguito) quel JSON verrà inviato a Kimi. Se 0.2 fallisce, anche l’agente non potrà ricevere il file.
+
 | Step | Azione | Verifica |
 |------|--------|----------|
 | 0.2.1 | Eseguire migrazione DB | Supabase SQL Editor → `CREATE TABLE IF NOT EXISTS figma_tokens ...` | Tabella `figma_tokens` presente |
 | 0.2.2 | Re-login Figma | Plugin → Logout → Login with Figma | Nuovo scope `file_content:read` concesso |
 | 0.2.3 | Test `POST /api/figma/file` | Plugin → Scan su file salvato → Network tab | Risposta 200 con JSON del file |
+
+**Dettaglio dei passi:**
+
+- **0.2.1 — Migrazione DB**  
+  La tabella `figma_tokens` salva, per ogni utente, `access_token`, `refresh_token` e `expires_at` restituiti da Figma OAuth. Senza questa tabella il backend non può chiamare l’API Figma al posto dell’utente.  
+  **Come fare:** apri il progetto Supabase (o il DB usato da auth-deploy) → **SQL Editor**. Esegui lo script che crea `figma_tokens` (in `auth-deploy/schema.sql` è il blocco `CREATE TABLE IF NOT EXISTS figma_tokens ...`). Controlla in **Table Editor** che la tabella `figma_tokens` esista (può essere vuota).
+
+- **0.2.2 — Re-login Figma**  
+  Per scaricare il contenuto del file (nodi, stili, ecc.) l’API Figma richiede lo scope **`file_content:read`**. Se hai fatto il login Figma **prima** che questo scope fosse aggiunto alla richiesta OAuth, il tuo token non ha il permesso e `GET /v1/files/:key` può restituire 403 o dati limitati.  
+  **Come fare:** nel plugin Comtra fai **Logout** (o “Disconnetti”), poi di nuovo **Login with Figma**. Durante l’autorizzazione controlla che venga richiesto l’accesso ai file (o accetta la schermata di permessi Figma). Dopo il login il backend salverà i nuovi token (con `file_content:read`) in `figma_tokens`.
+
+- **0.2.3 — Test `POST /api/figma/file`**  
+  È l’endpoint che il backend usa per ottenere il JSON del file: il plugin invia il `file_key` (e opzionalmente parametri), il backend legge i token da `figma_tokens`, eventualmente fa refresh se scaduti, chiama Figma `GET /v1/files/:key` e restituisce il JSON al plugin.  
+  **Come fare:** nel plugin apri un **file Figma salvato** (non “untitled”, deve essere un file reale con un ID). Avvia uno **Scan** (o il flusso che chiama il backend con quel file). Apri gli **strumenti sviluppatore** del browser (F12) → tab **Network**. Cerca la richiesta a `POST .../api/figma/file` (o il path configurato). Controlla: **Status 200**; in **Response** vedi un JSON che rappresenta il file (es. oggetto con `name`, `document`, `components`, ecc.). Se vedi 401/403/500 o un messaggio di errore, controlla token, scope e log del backend (vedi `auth-deploy/SETUP.md` e `docs/OAUTH-FIGMA.md`).
 
 ---
 

@@ -8,10 +8,13 @@ Usata per costruire i prompt, validare le risposte e mantenere uno standard di q
 ```
 audit-specs/
 ├── README.md                 (questo file)
+├── MAINTAINING-RULES.md      Guida: come modificare le regole e handoff ad altre persone
 └── ds-audit/                 Design System Audit
     ├── README.md
     ├── DS-AUDIT-RULES.md      Regole complete, mappatura JSON del file, severity, fix
-    └── OUTPUT-SCHEMA.md      Formato JSON di risposta dell’agente
+    ├── OUTPUT-SCHEMA.md       Formato JSON di risposta dell'agente
+    ├── SOURCES.md             Fonti autorevoli e mappatura alle regole
+    └── RECURRING-PROBLEMS.md  Problematiche ricorrenti (community), severity, mappatura
 ```
 
 In futuro, stessa struttura per altri agenti:
@@ -26,6 +29,7 @@ In futuro, stessa struttura per altri agenti:
 
 - **Backend:** legge regole e schema dalla cartella corrispondente per costruire il system prompt e validare l’output.
 - **Documentazione:** i file `.md` servono come riferimento per estendere le regole e per il QA.
+- **Manutenzione regole e handoff:** vedi **MAINTAINING-RULES.md**. **Test Kimi (senza backend):** vedi `docs/KIMI-FOR-DUMMIES.md`.
 - **Piano d’azione:** vedi `docs/ACTION-PLAN-KIMI-AGENTS.md` per i passi di integrazione.
 
 Non spostare questa cartella fuori dalla repo: è parte del codice e della definizione del prodotto.

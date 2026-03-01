@@ -9,6 +9,18 @@ Riferimenti concettuali: token-first design, component API, naming (BEM/atomic),
 
 ---
 
+## Riferimento: library su cui si fa l’audit
+
+L’audit va eseguito **rispetto alla library che l’utente sta controllando**. La library può essere:
+- **nel file stesso** (componenti, variabili e stili definiti nel documento),
+- **esterna al file** (library pubblicata/linkata, i cui componenti e stili sono referenziati nel file).
+
+Scale, token, variabili e componenti da usare come **riferimento** (cosa è “corretto”, cosa è “fuori scale”, cosa è “hardcoded”) sono quelli **definiti in quella library**. Dove il JSON espone variabili/stili/componenti della library (o del file), usare quelli come fonte di verità; dove non è possibile inferire la scale, le regole forniscono criteri euristici.
+
+**Scale e valori nelle regole:** tutti i numeri e le scale citate (es. 4, 8, 16, 24, 12px, 14px, type scale, spacing scale) sono **solo esempi**. Non vanno applicati come unici valori validi: l’implementazione deve preferire le scale e i token effettivamente presenti nel file o nella library collegata, quando rilevabili.
+
+---
+
 ## Categorie di issue (categoryId)
 
 | categoryId   | Descrizione breve |
@@ -328,14 +340,14 @@ Riferimenti concettuali: token-first design, component API, naming (BEM/atomic),
 
 ### 5.1 Allineamento fuori griglia (es. 4px o 8px)
 
-**Descrizione:** Posizione (x, y) o dimensioni (width, height) non multiple della base di griglia (4 o 8).
+**Descrizione:** Posizione (x, y) del nodo non multipla della base di griglia (4 o 8). Si considerano solo le coordinate, non width/height (le dimensioni possono essere variabili e dipendere dal contenuto).
 
 **Dove nel JSON del file:**
-- `absoluteBoundingBox`: `x`, `y`, `width`, `height`. Calcolare resto modulo 4 (o 8). Se non multiplo → fuori griglia.
+- `absoluteBoundingBox`: `x`, `y`. Calcolare resto modulo 4 (o 8). Se non multiplo → fuori griglia. Non controllare `width` né `height`.
 
 **Severity:** MED per layout; LOW per illustrazioni/icone.
 
-**Esempio fix:** "Snap to 8px grid: adjust x from 13 to 16, width from 97 to 96."
+**Esempio fix:** "Snap to 8px grid: adjust x from 13 to 16, y from 7 to 8."
 
 ---
 
@@ -489,6 +501,7 @@ Riferimenti concettuali: token-first design, component API, naming (BEM/atomic),
 
 ## Note per l’implementazione
 
-- L’ordine di esecuzione consigliato è: prima raccogliere tutti i nodi e le mappe (`components`, `componentSets`, `styles`), poi applicare le regole in batch dove possibile.
+- **Riferimento library:** l'audit è relativo alla library su cui l'utente sta lavorando (library nel file o esterna/linkata). Usare come riferimento componenti, variabili, stili e scale definiti in quel contesto; le scale/valori nelle regole sono esempi—preferire quanto è nel file/library quando rilevabile.
+- L'ordine di esecuzione consigliato è: prima raccogliere tutti i nodi e le mappe (`components`, `componentSets`, `styles`, variabili), poi applicare le regole in batch dove possibile.
 - Per file molto grandi, considerare `depth` limitato o analisi per pagina/selection; segnalare nel report se l’audit è parziale.
 - Severity può essere aggiustata in base al contesto (es. file “design system” vs “marketing one-off”): in dubbio usare MED.

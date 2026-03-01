@@ -19,6 +19,10 @@ Questa cartella contiene le specifiche per l’agente di **Design System Audit**
 3. **Output:** l’agente risponde con un JSON `{ "issues": [ ... ] }` conforme a `OUTPUT-SCHEMA.md`.
 4. **Integrazione:** il backend mappa le `issues` al tipo `AuditIssue` del frontend e le restituisce al plugin per il tab Design System.
 
+## Riferimento: library e scale
+
+L’audit è fatto **rispetto alla library che l’utente sta controllando** (library nel file o library esterna/linkata). Scale, token e valori citati nelle regole (es. 4, 8, 16, type scale) sono **solo esempi**; la fonte di verità sono le definizioni presenti nel file o nella library quando rilevabili. Vedi la sezione “Riferimento: library su cui si fa l’audit” in **DS-AUDIT-RULES.md**.
+
 ## Categorie (categoryId)
 
 - `adoption` — Uso componenti, istanze staccate, orfani, duplicati.
