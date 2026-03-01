@@ -74,6 +74,8 @@ Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi n
 
 ### 1.3 Testare il prompt su kimi.com
 
+**Guida operativa:** **docs/DS-AUDIT-FIRST-TEST.md** (passo-passo: copia prompt, JSON di test, incolla su kimi.com, verifica output).
+
 | Step | Azione | Dove | Verifica |
 |------|--------|------|----------|
 | 1.3.1 | Esportare un file Figma di test | Figma → qualsiasi file con componenti, colori, testo | JSON scaricabile (o via `/api/figma/file`) |
