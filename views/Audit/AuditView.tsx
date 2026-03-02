@@ -92,6 +92,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' } | null>(null);
+  const exportJsonRef = useRef(false);
+  const [exportJsonFeedback, setExportJsonFeedback] = useState<string | null>(null);
 
   // Timestamps
   const [lastAuditDate, setLastAuditDate] = useState<Date | null>(null);
@@ -229,6 +231,29 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
       if (msg.type === 'file-context-result') {
+        // Export JSON per Kimi (senza consumare crediti)
+        if (exportJsonRef.current && msg.fileKey && fetchFigmaFile) {
+          exportJsonRef.current = false;
+          (async () => {
+            try {
+              const json = await fetchFigmaFile({
+                file_key: msg.fileKey,
+                scope: msg.scope ?? 'all',
+                depth: 2,
+                page_id: msg.pageId ?? undefined,
+                node_ids: msg.nodeIds ?? undefined,
+              });
+              const str = typeof json === 'string' ? json : JSON.stringify(json);
+              await navigator.clipboard.writeText(str);
+              setExportJsonFeedback('Copied! Paste in Kimi.');
+              setTimeout(() => setExportJsonFeedback(null), 3000);
+            } catch (err) {
+              setExportJsonFeedback('Error: ' + (err instanceof Error ? err.message : 'Failed'));
+              setTimeout(() => setExportJsonFeedback(null), 4000);
+            }
+          })();
+          return;
+        }
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
@@ -307,6 +332,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       '*'
     );
   };
+
+  const handleExportJson = useCallback(() => {
+    if (!fetchFigmaFile) return;
+    exportJsonRef.current = true;
+    window.parent.postMessage(
+      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
+      '*'
+    );
+  }, [fetchFigmaFile, scanScope, selectedPageId]);
 
   const handleFix = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -619,6 +653,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             activeIssues={activeIssues}
             onStartScan={handleStartScan}
             onShare={handleShare}
+            onExportJson={fetchFigmaFile ? handleExportJson : undefined}
+            exportJsonFeedback={exportJsonFeedback}
             isCalculating={isCalculating}
             scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
             issueListProps={issueListProps}

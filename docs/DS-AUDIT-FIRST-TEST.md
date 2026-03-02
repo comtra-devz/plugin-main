@@ -35,6 +35,8 @@ Questo testo è quello che invii come **primo messaggio** nella chat.
 
 Devi avere un blocco di testo JSON da dare a Kimi. Due modi:
 
+**Export dal plugin (consigliato):** Apri Figma con un file salvato → plugin Comtra → tab Design System → clicca **"Export file JSON for Kimi"** (sotto Scan) o **"Export JSON"** (dopo lo scan). Il JSON viene copiato negli appunti. Per file molto complessi, se Kimi dà timeout, apri il JSON in un editor e tieni solo `name`, `document` e 1–2 pagine con i loro `children`.
+
 ### Opzione A: JSON di un file Figma reale (se hai plugin + backend attivi)
 
 In questo caso il “JSON del file” lo **ottieni dalla risposta del backend** quando il plugin chiede il contenuto del file:
