@@ -6,12 +6,32 @@ declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
 
-// Restore saved user on load. Session is stored in clientStorage with no expiry (indefinite until logout).
-(async () => {
+const SESSION_DAYS = 30; // Durata sessione in giorni; 0 = nessuna scadenza (solo logout manuale)
+
+async function getStoredUser(): Promise<any> {
   try {
-    const user = await figma.clientStorage.getAsync('figmaOAuthUser');
-    if (user) figma.ui.postMessage({ type: 'restore-user', user });
-  } catch (_) {}
+    const raw = await figma.clientStorage.getAsync('figmaOAuthUser');
+    if (!raw) return null;
+    const payload = raw as { user?: any; savedAt?: number };
+    const user = payload?.user ?? (typeof raw === 'object' && (raw as any).authToken ? raw : null);
+    if (!user) return null;
+    if (SESSION_DAYS > 0 && typeof payload?.savedAt === 'number') {
+      const maxAge = SESSION_DAYS * 24 * 60 * 60 * 1000;
+      if (Date.now() - payload.savedAt > maxAge) {
+        await figma.clientStorage.deleteAsync('figmaOAuthUser');
+        return null;
+      }
+    }
+    return user;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Invia sessione salvata quando l'UI è pronta (risposta a get-saved-user) e all'avvio (per compatibilità)
+(async () => {
+  const user = await getStoredUser();
+  figma.ui.postMessage({ type: 'restore-user', user });
 })();
 
 figma.ui.onmessage = async (msg: any) => {
@@ -26,9 +46,14 @@ figma.ui.onmessage = async (msg: any) => {
   if (msg.type === 'oauth-complete') {
     const user = msg.user;
     if (user) {
-      await figma.clientStorage.setAsync('figmaOAuthUser', user);
+      await figma.clientStorage.setAsync('figmaOAuthUser', { user, savedAt: Date.now() });
       figma.ui.postMessage({ type: 'login-success', user });
     }
+  }
+
+  if (msg.type === 'get-saved-user') {
+    const user = await getStoredUser();
+    figma.ui.postMessage({ type: 'restore-user', user });
   }
 
   if (msg.type === 'logout') {

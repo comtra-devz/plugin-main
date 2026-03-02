@@ -173,15 +173,19 @@ app.get('/auth/figma/callback', async (req, res) => {
       // Persist Figma OAuth tokens for REST API (GET /v1/files/:key) — pipeline to agents
       const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
       const expiresAt = new Date(Date.now() + expiresInSec * 1000);
-      await dbSql`
-        INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
-        VALUES (${user.id}, ${tokenData.access_token}, ${tokenData.refresh_token || tokenData.access_token}, ${expiresAt.toISOString()}, NOW())
-        ON CONFLICT (user_id) DO UPDATE SET
-          access_token = EXCLUDED.access_token,
-          refresh_token = EXCLUDED.refresh_token,
-          expires_at = EXCLUDED.expires_at,
-          updated_at = NOW()
-      `;
+      try {
+        await dbSql`
+          INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
+          VALUES (${user.id}, ${tokenData.access_token}, ${tokenData.refresh_token || tokenData.access_token}, ${expiresAt.toISOString()}, NOW())
+          ON CONFLICT (user_id) DO UPDATE SET
+            access_token = EXCLUDED.access_token,
+            refresh_token = EXCLUDED.refresh_token,
+            expires_at = EXCLUDED.expires_at,
+            updated_at = NOW()
+        `;
+      } catch (tokenErr) {
+        console.error('figma_tokens save failed (user_id=', user.id, ')', tokenErr);
+      }
     } catch (err) {
       console.error('Postgres upsert user', err);
     }
@@ -564,7 +568,10 @@ app.post('/api/figma/file', async (req, res) => {
   try {
     const accessToken = await getFigmaAccessToken(dbSql, userId);
     if (!accessToken) {
-      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      return res.status(403).json({
+        error: 'No Figma token; re-login to grant file access',
+        hint: 'In the plugin: Logout, then Login with Figma. Complete the flow until the "Login completato" page and the window closes. Then try Export again. If it still fails, check Vercel logs for "figma_tokens save failed" after login.',
+      });
     }
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     if (depth != null) url.searchParams.set('depth', String(depth));

@@ -164,11 +164,13 @@ export default function AppTest() {
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      const msg = e.data?.pluginMessage;
-      if (!msg) return;
-      if (msg.type === 'restore-user' && msg.user) {
-        setUser(normalizeOAuthUser(msg.user));
-        setShowLogin(false);
+      const msg = e.data?.pluginMessage ?? e.data;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'restore-user') {
+        if (msg.user) {
+          setUser(normalizeOAuthUser(msg.user));
+          setShowLogin(false);
+        }
       }
       if (msg.type === 'login-success' && msg.user) {
         setUser(normalizeOAuthUser(msg.user));
@@ -179,6 +181,11 @@ export default function AppTest() {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  // Chiedi al controller la sessione salvata al mount (così non perdiamo restore-user se arriva prima che l'UI sia pronta)
+  useEffect(() => {
+    window.parent.postMessage({ pluginMessage: { type: 'get-saved-user' } }, '*');
   }, []);
 
   /** Apre OAuth nel browser esterno e fa polling dall'UI: l'utente resta sulla login e poi va in home senza "chiudi e riapri". */
@@ -307,7 +314,17 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        msg = j.hint ? `${j.error} — ${j.hint}` : (j.error || text);
+      } catch {
+        // keep text as-is
+      }
+      throw new Error(msg);
+    }
     return r.json();
   }, [user?.authToken]);
 
