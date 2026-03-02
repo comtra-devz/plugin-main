@@ -75,23 +75,37 @@ figma.ui.onmessage = async (msg: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
-  // File context for backend pipeline (GET /v1/files/:key). Required for scan → agents.
-  if (msg.type === 'get-file-context') {
-    const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
-    let pageId: string | undefined;
+  // Helper: build file context payload (fileKey, scope, pageId, nodeIds)
+  const buildFileContext = (scope: string | undefined, pageId: string | undefined) => {
+    let pageIdOut: string | undefined;
     let nodeIds: string[] | undefined;
-    if (scope === 'page' && msg.pageId) {
-      pageId = msg.pageId;
-    } else if (scope === 'current') {
+    if (scope === 'page' && pageId) pageIdOut = pageId;
+    else if (scope === 'current') {
       const sel = figma.currentPage.selection;
       nodeIds = sel.map((n: BaseNode) => n.id);
     }
-    figma.ui.postMessage({
-      type: 'file-context-result',
+    return {
       fileKey: (figma as any).fileKey ?? null,
       scope: scope ?? 'all',
-      pageId: pageId ?? null,
+      pageId: pageIdOut ?? null,
       nodeIds: nodeIds ?? null,
+    };
+  };
+
+  // Export JSON: canale dedicato (nessun ref, nessuna race con scan)
+  if (msg.type === 'get-export-json') {
+    const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
+    const pageId = msg.pageId;
+    figma.ui.postMessage({ type: 'export-json-result', ...buildFileContext(scope, pageId) });
+  }
+
+  // File context for backend pipeline (GET /v1/files/:key). Required for scan → agents.
+  if (msg.type === 'get-file-context') {
+    const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
+    const pageId = msg.pageId;
+    figma.ui.postMessage({
+      type: 'file-context-result',
+      ...buildFileContext(scope, pageId),
     });
   }
 

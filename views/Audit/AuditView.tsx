@@ -92,7 +92,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' } | null>(null);
-  const exportJsonRef = useRef(false);
   const [exportJsonFeedback, setExportJsonFeedback] = useState<string | null>(null);
 
   // Timestamps
@@ -230,61 +229,61 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
-      if (msg.type === 'file-context-result') {
-        // Export JSON per Kimi (senza consumare crediti)
-        if (exportJsonRef.current) {
-          exportJsonRef.current = false;
-          if (!msg.fileKey) {
-            setExportJsonFeedback('File is Untitled — use File → Save as to create a copy with an ID.');
-            setTimeout(() => setExportJsonFeedback(null), 3000);
-            return;
-          }
-          if (!fetchFigmaFile) {
-            setExportJsonFeedback('Export not available.');
-            setTimeout(() => setExportJsonFeedback(null), 3000);
-            return;
-          }
-          (async () => {
-            try {
-              const json = await fetchFigmaFile({
-                file_key: msg.fileKey,
-                scope: msg.scope ?? 'all',
-                depth: 2,
-                page_id: msg.pageId ?? undefined,
-                node_ids: msg.nodeIds ?? undefined,
-              });
-              if (json === undefined) {
-                setExportJsonFeedback('Not logged in — log in and retry.');
-                setTimeout(() => setExportJsonFeedback(null), 4000);
-                return;
-              }
-              const str = typeof json === 'string' ? json : JSON.stringify(json);
-              try {
-                await navigator.clipboard.writeText(str);
-                setExportJsonFeedback('Copied! Paste in Kimi.');
-              } catch (_clipErr) {
-                const textarea = document.createElement('textarea');
-                textarea.value = str;
-                textarea.style.position = 'fixed';
-                textarea.style.opacity = '0';
-                document.body.appendChild(textarea);
-                textarea.select();
-                try {
-                  document.execCommand('copy');
-                  setExportJsonFeedback('Copied! Paste in Kimi.');
-                } catch {
-                  setExportJsonFeedback('Copy failed — try Network tab.');
-                }
-                document.body.removeChild(textarea);
-              }
-              setTimeout(() => setExportJsonFeedback(null), 3000);
-            } catch (err) {
-              setExportJsonFeedback('Error: ' + (err instanceof Error ? err.message : 'Failed'));
-              setTimeout(() => setExportJsonFeedback(null), 5000);
-            }
-          })();
+      // Export JSON: canale dedicato (get-export-json → export-json-result)
+      if (msg.type === 'export-json-result') {
+        if (!msg.fileKey) {
+          setExportJsonFeedback('File is Untitled — use File → Save as to create a copy with an ID.');
+          setTimeout(() => setExportJsonFeedback(null), 3000);
           return;
         }
+        if (!fetchFigmaFile) {
+          setExportJsonFeedback('Export not available.');
+          setTimeout(() => setExportJsonFeedback(null), 3000);
+          return;
+        }
+        (async () => {
+          try {
+            const json = await fetchFigmaFile({
+              file_key: msg.fileKey,
+              scope: msg.scope ?? 'all',
+              depth: 2,
+              page_id: msg.pageId ?? undefined,
+              node_ids: msg.nodeIds ?? undefined,
+            });
+            if (json === undefined) {
+              setExportJsonFeedback('Not logged in — log in and retry.');
+              setTimeout(() => setExportJsonFeedback(null), 4000);
+              return;
+            }
+            const str = typeof json === 'string' ? json : JSON.stringify(json);
+            try {
+              await navigator.clipboard.writeText(str);
+              setExportJsonFeedback('Copied! Paste in Kimi.');
+            } catch (_clipErr) {
+              const textarea = document.createElement('textarea');
+              textarea.value = str;
+              textarea.style.position = 'fixed';
+              textarea.style.opacity = '0';
+              document.body.appendChild(textarea);
+              textarea.select();
+              try {
+                document.execCommand('copy');
+                setExportJsonFeedback('Copied! Paste in Kimi.');
+              } catch {
+                setExportJsonFeedback('Copy failed — try Network tab.');
+              }
+              document.body.removeChild(textarea);
+            }
+            setTimeout(() => setExportJsonFeedback(null), 3000);
+          } catch (err) {
+            setExportJsonFeedback('Error: ' + (err instanceof Error ? err.message : 'Failed'));
+            setTimeout(() => setExportJsonFeedback(null), 5000);
+          }
+        })();
+        return;
+      }
+
+      if (msg.type === 'file-context-result') {
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
@@ -366,10 +365,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   const handleExportJson = useCallback(() => {
     if (!fetchFigmaFile) return;
-    exportJsonRef.current = true;
     setExportJsonFeedback('Exporting...');
     window.parent.postMessage(
-      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
+      { pluginMessage: { type: 'get-export-json', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
       '*'
     );
     setTimeout(() => setExportJsonFeedback((f) => (f === 'Exporting...' ? null : f)), 8000);
