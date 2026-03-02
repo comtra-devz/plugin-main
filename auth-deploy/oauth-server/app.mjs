@@ -2,6 +2,8 @@
  * Express app per Figma OAuth. Usato da Vercel (api/figma-oauth).
  * Store: REDIS_URL o memoria. Credits: DATABASE_URL o POSTGRES_URL + JWT_SECRET.
  */
+// @vercel/postgres legge process.env.POSTGRES_URL; se DATABASE_URL è corretta, la usiamo al suo posto
+if (process.env.DATABASE_URL) process.env.POSTGRES_URL = process.env.DATABASE_URL;
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
