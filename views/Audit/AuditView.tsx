@@ -202,8 +202,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   // Listen for plugin messages
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      const msg = e.data?.pluginMessage;
-      if (!msg) return;
+      const msg = e.data?.pluginMessage ?? e.data;
+      if (!msg || typeof msg !== 'object') return;
       if (msg.type === 'pages-result' && msg.pages) {
         setDocumentPages(msg.pages);
         setSelectedPageId((prev) => (prev ? prev : msg.pages[0]?.id ?? null));
@@ -232,8 +232,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       }
       if (msg.type === 'file-context-result') {
         // Export JSON per Kimi (senza consumare crediti)
-        if (exportJsonRef.current && msg.fileKey && fetchFigmaFile) {
+        if (exportJsonRef.current) {
           exportJsonRef.current = false;
+          if (!msg.fileKey) {
+            setExportJsonFeedback('File not saved — save the file first.');
+            setTimeout(() => setExportJsonFeedback(null), 3000);
+            return;
+          }
+          if (!fetchFigmaFile) {
+            setExportJsonFeedback('Export not available.');
+            setTimeout(() => setExportJsonFeedback(null), 3000);
+            return;
+          }
           (async () => {
             try {
               const json = await fetchFigmaFile({
@@ -243,13 +253,34 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
                 page_id: msg.pageId ?? undefined,
                 node_ids: msg.nodeIds ?? undefined,
               });
+              if (json === undefined) {
+                setExportJsonFeedback('Not logged in — log in and retry.');
+                setTimeout(() => setExportJsonFeedback(null), 4000);
+                return;
+              }
               const str = typeof json === 'string' ? json : JSON.stringify(json);
-              await navigator.clipboard.writeText(str);
-              setExportJsonFeedback('Copied! Paste in Kimi.');
+              try {
+                await navigator.clipboard.writeText(str);
+                setExportJsonFeedback('Copied! Paste in Kimi.');
+              } catch (_clipErr) {
+                const textarea = document.createElement('textarea');
+                textarea.value = str;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                  document.execCommand('copy');
+                  setExportJsonFeedback('Copied! Paste in Kimi.');
+                } catch {
+                  setExportJsonFeedback('Copy failed — try Network tab.');
+                }
+                document.body.removeChild(textarea);
+              }
               setTimeout(() => setExportJsonFeedback(null), 3000);
             } catch (err) {
               setExportJsonFeedback('Error: ' + (err instanceof Error ? err.message : 'Failed'));
-              setTimeout(() => setExportJsonFeedback(null), 4000);
+              setTimeout(() => setExportJsonFeedback(null), 5000);
             }
           })();
           return;
@@ -336,10 +367,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const handleExportJson = useCallback(() => {
     if (!fetchFigmaFile) return;
     exportJsonRef.current = true;
+    setExportJsonFeedback('Exporting...');
     window.parent.postMessage(
       { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
       '*'
     );
+    setTimeout(() => setExportJsonFeedback((f) => (f === 'Exporting...' ? null : f)), 8000);
   }, [fetchFigmaFile, scanScope, selectedPageId]);
 
   const handleFix = (e: React.MouseEvent, id: string) => {
