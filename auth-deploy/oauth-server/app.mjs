@@ -1,6 +1,6 @@
 /**
  * Express app per Figma OAuth. Usato da Vercel (api/figma-oauth).
- * Store: REDIS_URL o memoria. Credits: POSTGRES_URL + JWT_SECRET.
+ * Store: REDIS_URL o memoria. Credits: DATABASE_URL o POSTGRES_URL + JWT_SECRET.
  */
 import express from 'express';
 import cors from 'cors';
@@ -12,6 +12,8 @@ const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:3456').replace(/\/$/, '');
 const JWT_SECRET = process.env.JWT_SECRET || 'comtra-dev-secret-change-in-prod';
+/** DB URL: DATABASE_URL ha priorità (utile se POSTGRES_URL è bloccata dall'integrazione Vercel). */
+const POSTGRES_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 const FREE_TIER_CREDITS = 25;
 
 async function createFlowStore() {
@@ -143,7 +145,7 @@ app.get('/auth/figma/callback', async (req, res) => {
     },
   };
 
-  if (process.env.POSTGRES_URL) {
+  if (POSTGRES_URL) {
     try {
       const { sql } = await import('@vercel/postgres');
       await sql`
@@ -394,7 +396,7 @@ function estimateCreditsByAction(actionType, nodeCount) {
 app.get('/api/credits', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  if (!process.env.POSTGRES_URL) {
+  if (!POSTGRES_URL) {
     return res.json({
       credits_remaining: FREE_TIER_CREDITS,
       credits_total: FREE_TIER_CREDITS,
@@ -463,7 +465,7 @@ app.post('/api/credits/consume', async (req, res) => {
   const fileId = body.file_id || null;
   if (creditsConsumed <= 0) return res.status(400).json({ error: 'credits_consumed must be positive' });
 
-  if (!process.env.POSTGRES_URL) {
+  if (!POSTGRES_URL) {
     return res.json({ credits_remaining: Math.max(0, FREE_TIER_CREDITS - creditsConsumed), credits_total: FREE_TIER_CREDITS, credits_used: creditsConsumed });
   }
   try {
@@ -556,7 +558,7 @@ app.post('/api/figma/file', async (req, res) => {
   const nodeIds = body.node_ids || body.nodeIds;
   const idsParam = Array.isArray(nodeIds) ? nodeIds.join(',') : (typeof nodeIds === 'string' ? nodeIds : undefined);
 
-  if (!process.env.POSTGRES_URL) {
+  if (!POSTGRES_URL) {
     return res.status(503).json({ error: 'Figma file API requires database' });
   }
   try {
@@ -675,7 +677,7 @@ async function checkTrophies(sql, userId) {
 app.get('/api/trophies', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  if (!process.env.POSTGRES_URL) return res.json({ trophies: [], unlocked_ids: [] });
+  if (!POSTGRES_URL) return res.json({ trophies: [], unlocked_ids: [] });
   try {
     const { sql } = await import('@vercel/postgres');
     const all = await sql`SELECT id, name, description, icon_id, sort_order FROM trophies ORDER BY sort_order`;
@@ -703,7 +705,7 @@ app.get('/api/trophies', async (req, res) => {
 app.post('/api/trophies/linkedin-shared', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  if (!process.env.POSTGRES_URL) return res.json({ linkedin_shared: true, new_trophies: [] });
+  if (!POSTGRES_URL) return res.json({ linkedin_shared: true, new_trophies: [] });
   try {
     const { sql } = await import('@vercel/postgres');
     await sql`UPDATE users SET linkedin_shared = true, updated_at = NOW() WHERE id = ${userId}`;
@@ -726,7 +728,7 @@ function randomAffiliateCode() {
 app.get('/api/affiliates/me', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  if (!process.env.POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
   try {
     const { sql } = await import('@vercel/postgres');
     const r = await sql`SELECT affiliate_code, total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
@@ -741,7 +743,7 @@ app.get('/api/affiliates/me', async (req, res) => {
 app.post('/api/affiliates/register', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  if (!process.env.POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
   try {
     const { sql } = await import('@vercel/postgres');
     let r = await sql`SELECT affiliate_code FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
@@ -770,7 +772,7 @@ app.post('/api/test/simulate-referral', async (req, res) => {
   if (!process.env.TEST_AFFILIATE_SECRET || secret !== process.env.TEST_AFFILIATE_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  if (!process.env.POSTGRES_URL) return res.status(503).json({ error: 'Not configured' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Not configured' });
   const body = req.body || {};
   const code = (body.affiliate_code || '').trim();
   if (!code) return res.status(400).json({ error: 'affiliate_code required' });
