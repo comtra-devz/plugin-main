@@ -6,7 +6,7 @@
  * Variabili: LEMON_SQUEEZY_WEBHOOK_SECRET (signing secret del webhook in LS)
  */
 import crypto from 'node:crypto';
-import { sql } from '@vercel/postgres';
+import { sql } from '../../oauth-server/db.mjs';
 
 export const config = { api: { bodyParser: false } };
 
@@ -96,6 +96,11 @@ export default async function handler(req, res) {
   const proConfig = variantId ? VARIANT_TO_PRO[variantId] : null;
 
   const result = { ok: true, buyer_updated: false, affiliate_updated: false };
+
+  if (!sql) {
+    res.status(503).json({ error: 'Database not configured' });
+    return;
+  }
 
   try {
     // 1) Aggiorna acquirente (plan PRO + crediti + scadenza) se abbiamo email e variant riconosciuto

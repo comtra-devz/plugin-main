@@ -2,13 +2,14 @@
  * Express app per Figma OAuth. Usato da Vercel (api/figma-oauth).
  * Store: REDIS_URL o memoria. Credits: DATABASE_URL o POSTGRES_URL + JWT_SECRET.
  */
-// @vercel/postgres legge process.env.POSTGRES_URL; se DATABASE_URL è corretta, la usiamo al suo posto
+// DB: usiamo postgres.js (compatibile con Supabase pooler); DATABASE_URL ha priorità
 if (process.env.DATABASE_URL) process.env.POSTGRES_URL = process.env.DATABASE_URL;
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
+import { sql as dbSql } from './db.mjs';
 
 const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
@@ -149,8 +150,7 @@ app.get('/auth/figma/callback', async (req, res) => {
 
   if (POSTGRES_URL) {
     try {
-      const { sql } = await import('@vercel/postgres');
-      await sql`
+      await dbSql`
         INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, updated_at)
         VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, NOW())
         ON CONFLICT (id) DO UPDATE SET
@@ -159,9 +159,9 @@ app.get('/auth/figma/callback', async (req, res) => {
           img_url = EXCLUDED.img_url,
           updated_at = NOW()
       `;
-      const aff = await sql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
+      const aff = await dbSql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
       if (aff.rows.length > 0) user.stats.affiliatesCount = Number(aff.rows[0].total_referrals) || 0;
-      const xpRow = await sql`SELECT total_xp, current_level FROM users WHERE id = ${user.id} LIMIT 1`;
+      const xpRow = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${user.id} LIMIT 1`;
       if (xpRow.rows.length > 0) {
         const txp = Number(xpRow.rows[0].total_xp) || 0;
         const info = getLevelInfo(txp);
@@ -173,7 +173,7 @@ app.get('/auth/figma/callback', async (req, res) => {
       // Persist Figma OAuth tokens for REST API (GET /v1/files/:key) — pipeline to agents
       const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
       const expiresAt = new Date(Date.now() + expiresInSec * 1000);
-      await sql`
+      await dbSql`
         INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
         VALUES (${user.id}, ${tokenData.access_token}, ${tokenData.refresh_token || tokenData.access_token}, ${expiresAt.toISOString()}, NOW())
         ON CONFLICT (user_id) DO UPDATE SET
@@ -309,7 +309,7 @@ function getUserIdFromToken(req) {
 
 /** Get valid Figma access token for user; refresh if expired (within 5 min buffer). Returns null if no tokens or refresh fails. */
 async function getFigmaAccessToken(sql, userId) {
-  const r = await sql`SELECT access_token, refresh_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+  const r = await dbSql`SELECT access_token, refresh_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
   if (r.rows.length === 0) return null;
   const row = r.rows[0];
   const expiresAt = row.expires_at ? new Date(row.expires_at) : null;
@@ -334,7 +334,7 @@ async function getFigmaAccessToken(sql, userId) {
   const data = await refreshRes.json();
   const newExpiresIn = Math.max(60, Number(data.expires_in) || 90 * 24 * 3600);
   const newExpiresAt = new Date(Date.now() + newExpiresIn * 1000);
-  await sql`
+  await dbSql`
     UPDATE figma_tokens SET access_token = ${data.access_token}, expires_at = ${newExpiresAt.toISOString()}, updated_at = NOW() WHERE user_id = ${userId}
   `;
   return data.access_token;
@@ -412,8 +412,7 @@ app.get('/api/credits', async (req, res) => {
     });
   }
   try {
-    const { sql } = await import('@vercel/postgres');
-    const r = await sql`SELECT credits_total, credits_used, plan, plan_expires_at, total_xp, current_level FROM users WHERE id = ${userId}`;
+    const r = await dbSql`SELECT credits_total, credits_used, plan, plan_expires_at, total_xp, current_level FROM users WHERE id = ${userId}`;
     if (r.rows.length === 0) {
       return res.json({
         credits_remaining: FREE_TIER_CREDITS,
@@ -471,8 +470,7 @@ app.post('/api/credits/consume', async (req, res) => {
     return res.json({ credits_remaining: Math.max(0, FREE_TIER_CREDITS - creditsConsumed), credits_total: FREE_TIER_CREDITS, credits_used: creditsConsumed });
   }
   try {
-    const { sql } = await import('@vercel/postgres');
-    const r = await sql`SELECT credits_total, credits_used FROM users WHERE id = ${userId}`;
+    const r = await dbSql`SELECT credits_total, credits_used FROM users WHERE id = ${userId}`;
     if (r.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const row = r.rows[0];
     const total = Number(row.credits_total) || 0;
@@ -480,23 +478,23 @@ app.post('/api/credits/consume', async (req, res) => {
     const remaining = Math.max(0, total - used);
     if (remaining < creditsConsumed) return res.status(402).json({ error: 'Insufficient credits', credits_remaining: remaining });
 
-    await sql`UPDATE users SET credits_used = credits_used + ${creditsConsumed}, updated_at = NOW() WHERE id = ${userId}`;
-    await sql`INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id) VALUES (${userId}, ${actionType}, ${creditsConsumed}, ${fileId})`;
+    await dbSql`UPDATE users SET credits_used = credits_used + ${creditsConsumed}, updated_at = NOW() WHERE id = ${userId}`;
+    await dbSql`INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id) VALUES (${userId}, ${actionType}, ${creditsConsumed}, ${fileId})`;
 
     const maxHealthFromBody = body.max_health_score != null ? Math.max(0, Math.min(100, Number(body.max_health_score))) : null;
     if (maxHealthFromBody != null) {
-      await sql`UPDATE users SET max_health_score = GREATEST(COALESCE(max_health_score, 0), ${maxHealthFromBody}), updated_at = NOW() WHERE id = ${userId}`;
+      await dbSql`UPDATE users SET max_health_score = GREATEST(COALESCE(max_health_score, 0), ${maxHealthFromBody}), updated_at = NOW() WHERE id = ${userId}`;
     }
     if (actionType === 'fix_accepted') {
-      await sql`UPDATE users SET fixes_accepted_total = COALESCE(fixes_accepted_total, 0) + 1, consecutive_fixes = COALESCE(consecutive_fixes, 0) + 1, updated_at = NOW() WHERE id = ${userId}`;
+      await dbSql`UPDATE users SET fixes_accepted_total = COALESCE(fixes_accepted_total, 0) + 1, consecutive_fixes = COALESCE(consecutive_fixes, 0) + 1, updated_at = NOW() WHERE id = ${userId}`;
     } else if (actionType === 'bug_report') {
-      await sql`UPDATE users SET bug_reports_total = COALESCE(bug_reports_total, 0) + 1, updated_at = NOW() WHERE id = ${userId}`;
+      await dbSql`UPDATE users SET bug_reports_total = COALESCE(bug_reports_total, 0) + 1, updated_at = NOW() WHERE id = ${userId}`;
     }
     if (body.reset_consecutive_fixes) {
-      await sql`UPDATE users SET consecutive_fixes = 0, updated_at = NOW() WHERE id = ${userId}`;
+      await dbSql`UPDATE users SET consecutive_fixes = 0, updated_at = NOW() WHERE id = ${userId}`;
     }
     if (body.token_fixes_delta != null && body.token_fixes_delta > 0) {
-      await sql`UPDATE users SET token_fixes_total = COALESCE(token_fixes_total, 0) + ${Math.floor(body.token_fixes_delta)}, updated_at = NOW() WHERE id = ${userId}`;
+      await dbSql`UPDATE users SET token_fixes_total = COALESCE(token_fixes_total, 0) + ${Math.floor(body.token_fixes_delta)}, updated_at = NOW() WHERE id = ${userId}`;
     }
 
     let levelUp = false;
@@ -504,7 +502,7 @@ app.post('/api/credits/consume', async (req, res) => {
     let totalXp = 0;
     let xpForNextLevel = 100;
     const xpEarned = XP_BY_ACTION[actionType] ?? 0;
-    const u = await sql`SELECT total_xp, current_level FROM users WHERE id = ${userId} LIMIT 1`;
+    const u = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${userId} LIMIT 1`;
     if (u.rows.length > 0) {
       totalXp = Math.max(0, Number(u.rows[0].total_xp) || 0);
       const oldLevel = Math.max(1, Number(u.rows[0].current_level) || 1);
@@ -514,8 +512,8 @@ app.post('/api/credits/consume', async (req, res) => {
         currentLevel = info.level;
         xpForNextLevel = info.xpForNextLevel;
         levelUp = currentLevel > oldLevel;
-        await sql`UPDATE users SET total_xp = ${totalXp}, current_level = ${currentLevel}, updated_at = NOW() WHERE id = ${userId}`;
-        await sql`INSERT INTO xp_transactions (user_id, action_type, xp_earned) VALUES (${userId}, ${actionType}, ${xpEarned})`;
+        await dbSql`UPDATE users SET total_xp = ${totalXp}, current_level = ${currentLevel}, updated_at = NOW() WHERE id = ${userId}`;
+        await dbSql`INSERT INTO xp_transactions (user_id, action_type, xp_earned) VALUES (${userId}, ${actionType}, ${xpEarned})`;
       } else {
         const info = getLevelInfo(totalXp);
         currentLevel = info.level;
@@ -528,7 +526,7 @@ app.post('/api/credits/consume', async (req, res) => {
     const infoResp = getLevelInfo(totalXp);
     let newTrophies = [];
     try {
-      newTrophies = await checkTrophies(sql, userId);
+      newTrophies = await checkTrophies(dbSql, userId);
     } catch (e) {
       console.error('checkTrophies', e);
     }
@@ -564,8 +562,7 @@ app.post('/api/figma/file', async (req, res) => {
     return res.status(503).json({ error: 'Figma file API requires database' });
   }
   try {
-    const { sql } = await import('@vercel/postgres');
-    const accessToken = await getFigmaAccessToken(sql, userId);
+    const accessToken = await getFigmaAccessToken(dbSql, userId);
     if (!accessToken) {
       return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
     }
@@ -597,7 +594,7 @@ app.post('/api/figma/file', async (req, res) => {
 
 // --- Trofei: contesto utente e check sblocco
 async function getTrophyContext(sql, userId) {
-  const u = await sql`SELECT total_xp, max_health_score, fixes_accepted_total, consecutive_fixes, token_fixes_total, bug_reports_total, linkedin_shared
+  const u = await dbSql`SELECT total_xp, max_health_score, fixes_accepted_total, consecutive_fixes, token_fixes_total, bug_reports_total, linkedin_shared
     FROM users WHERE id = ${userId} LIMIT 1`;
   const userRow = u.rows[0] || {};
   const totalXp = Math.max(0, Number(userRow.total_xp) || 0);
@@ -608,7 +605,7 @@ async function getTrophyContext(sql, userId) {
   const bugReports = Math.max(0, Number(userRow.bug_reports_total) || 0);
   const linkedinShared = !!userRow.linkedin_shared;
 
-  const ct = await sql`SELECT action_type, COUNT(*) as c FROM credit_transactions WHERE user_id = ${userId} GROUP BY action_type`;
+  const ct = await dbSql`SELECT action_type, COUNT(*) as c FROM credit_transactions WHERE user_id = ${userId} GROUP BY action_type`;
   const counts = {};
   for (const r of ct.rows) counts[r.action_type] = Number(r.c) || 0;
   const audits = (counts.audit || 0) + (counts.scan || 0);
@@ -620,11 +617,11 @@ async function getTrophyContext(sql, userId) {
   const syncGithub = counts.sync_github || 0;
   const syncBitbucket = counts.sync_bitbucket || 0;
 
-  const today = await sql`SELECT COUNT(*) as c FROM credit_transactions WHERE user_id = ${userId} AND action_type IN ('audit','scan') AND created_at::date = CURRENT_DATE`;
+  const today = await dbSql`SELECT COUNT(*) as c FROM credit_transactions WHERE user_id = ${userId} AND action_type IN ('audit','scan') AND created_at::date = CURRENT_DATE`;
   const auditsToday = Number(today.rows[0]?.c) || 0;
 
   let affiliateReferrals = 0;
-  const aff = await sql`SELECT total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
+  const aff = await dbSql`SELECT total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
   if (aff.rows.length > 0) affiliateReferrals = Number(aff.rows[0].total_referrals) || 0;
 
   return {
@@ -658,17 +655,17 @@ function evaluateTrophyCondition(condition, ctx, unlockedIds) {
   return false;
 }
 
-async function checkTrophies(sql, userId) {
+async function checkTrophies(dbSql, userId) {
   const ctx = await getTrophyContext(sql, userId);
-  const unlocked = await sql`SELECT trophy_id FROM user_trophies WHERE user_id = ${userId}`;
+  const unlocked = await dbSql`SELECT trophy_id FROM user_trophies WHERE user_id = ${userId}`;
   const unlockedIds = (unlocked.rows || []).map(r => r.trophy_id);
-  const all = await sql`SELECT id, name, unlock_condition FROM trophies ORDER BY sort_order`;
+  const all = await dbSql`SELECT id, name, unlock_condition FROM trophies ORDER BY sort_order`;
   const newlyUnlocked = [];
   for (const row of all.rows || []) {
     if (unlockedIds.includes(row.id)) continue;
     const cond = row.unlock_condition && (typeof row.unlock_condition === 'object' ? row.unlock_condition : JSON.parse(row.unlock_condition || '{}'));
     if (evaluateTrophyCondition(cond, ctx, unlockedIds)) {
-      await sql`INSERT INTO user_trophies (user_id, trophy_id) VALUES (${userId}, ${row.id}) ON CONFLICT (user_id, trophy_id) DO NOTHING`;
+      await dbSql`INSERT INTO user_trophies (user_id, trophy_id) VALUES (${userId}, ${row.id}) ON CONFLICT (user_id, trophy_id) DO NOTHING`;
       newlyUnlocked.push({ id: row.id, name: row.name });
       unlockedIds.push(row.id);
     }
@@ -681,9 +678,8 @@ app.get('/api/trophies', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!POSTGRES_URL) return res.json({ trophies: [], unlocked_ids: [] });
   try {
-    const { sql } = await import('@vercel/postgres');
-    const all = await sql`SELECT id, name, description, icon_id, sort_order FROM trophies ORDER BY sort_order`;
-    const ut = await sql`SELECT trophy_id, unlocked_at FROM user_trophies WHERE user_id = ${userId}`;
+    const all = await dbSql`SELECT id, name, description, icon_id, sort_order FROM trophies ORDER BY sort_order`;
+    const ut = await dbSql`SELECT trophy_id, unlocked_at FROM user_trophies WHERE user_id = ${userId}`;
     const unlockedSet = new Set((ut.rows || []).map(r => r.trophy_id));
     const unlockedAt = {};
     for (const r of ut.rows || []) unlockedAt[r.trophy_id] = r.unlocked_at;
@@ -709,9 +705,8 @@ app.post('/api/trophies/linkedin-shared', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!POSTGRES_URL) return res.json({ linkedin_shared: true, new_trophies: [] });
   try {
-    const { sql } = await import('@vercel/postgres');
-    await sql`UPDATE users SET linkedin_shared = true, updated_at = NOW() WHERE id = ${userId}`;
-    const newTrophies = await checkTrophies(sql, userId);
+    await dbSql`UPDATE users SET linkedin_shared = true, updated_at = NOW() WHERE id = ${userId}`;
+    const newTrophies = await checkTrophies(dbSql, userId);
     res.json({ linkedin_shared: true, new_trophies: newTrophies });
   } catch (err) {
     console.error('POST /api/trophies/linkedin-shared', err);
@@ -732,8 +727,7 @@ app.get('/api/affiliates/me', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
   try {
-    const { sql } = await import('@vercel/postgres');
-    const r = await sql`SELECT affiliate_code, total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
+    const r = await dbSql`SELECT affiliate_code, total_referrals FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
     if (r.rows.length === 0) return res.status(404).json({ error: 'Not an affiliate', affiliate_code: null });
     res.json({ affiliate_code: r.rows[0].affiliate_code, total_referrals: Number(r.rows[0].total_referrals) || 0 });
   } catch (err) {
@@ -747,15 +741,14 @@ app.post('/api/affiliates/register', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!POSTGRES_URL) return res.status(503).json({ error: 'Affiliates not configured' });
   try {
-    const { sql } = await import('@vercel/postgres');
-    let r = await sql`SELECT affiliate_code FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
+    let r = await dbSql`SELECT affiliate_code FROM affiliates WHERE user_id = ${userId} LIMIT 1`;
     if (r.rows.length > 0) {
       return res.json({ affiliate_code: r.rows[0].affiliate_code, already_registered: true });
     }
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = randomAffiliateCode();
       try {
-        await sql`INSERT INTO affiliates (user_id, affiliate_code) VALUES (${userId}, ${code})`;
+        await dbSql`INSERT INTO affiliates (user_id, affiliate_code) VALUES (${userId}, ${code})`;
         return res.status(201).json({ affiliate_code: code });
       } catch (e) {
         if (e.code !== '23505') throw e; // unique violation = retry with new code
@@ -779,8 +772,7 @@ app.post('/api/test/simulate-referral', async (req, res) => {
   const code = (body.affiliate_code || '').trim();
   if (!code) return res.status(400).json({ error: 'affiliate_code required' });
   try {
-    const { sql } = await import('@vercel/postgres');
-    const r = await sql`UPDATE affiliates SET total_referrals = total_referrals + 1, updated_at = NOW() WHERE affiliate_code = ${code} RETURNING user_id, total_referrals`;
+    const r = await dbSql`UPDATE affiliates SET total_referrals = total_referrals + 1, updated_at = NOW() WHERE affiliate_code = ${code} RETURNING user_id, total_referrals`;
     if (r.rowCount === 0) return res.status(404).json({ error: 'Affiliate code not found' });
     res.json({ ok: true, user_id: r.rows[0].user_id, total_referrals: Number(r.rows[0].total_referrals) });
   } catch (err) {
