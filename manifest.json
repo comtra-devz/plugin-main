@@ -2,6 +2,7 @@
   "name": "Comtra - AI Design System",
   "id": "COMTRA_PLUGIN_DEV_ID",
   "api": "1.0.0",
+  "enablePrivatePluginApi": true,
   "main": "dist/code.js",
   "ui": "dist/ui.html",
   "editorType": ["figma"],
