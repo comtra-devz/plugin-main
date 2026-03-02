@@ -235,7 +235,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         if (exportJsonRef.current) {
           exportJsonRef.current = false;
           if (!msg.fileKey) {
-            setExportJsonFeedback('File not saved — save the file first.');
+            setExportJsonFeedback('File is Untitled — use File → Save as to create a copy with an ID.');
             setTimeout(() => setExportJsonFeedback(null), 3000);
             return;
           }
