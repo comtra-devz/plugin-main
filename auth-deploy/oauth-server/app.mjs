@@ -888,6 +888,30 @@ app.post('/api/affiliates/register', async (req, res) => {
   }
 });
 
+// --- Checkout redirect: reindirizza al checkout Lemon Squeezy (evita 404 se il plugin apre auth.comtra.dev per sbaglio).
+const LEMON_CHECKOUT_BASE = process.env.LEMON_SQUEEZY_CHECKOUT_BASE || 'https://comtra.lemonsqueezy.com/checkout/buy';
+const LEMON_VARIANT_IDS = {
+  '1w': process.env.LEMON_VARIANT_1W || '1345293',
+  '1m': process.env.LEMON_VARIANT_1M || '1345303',
+  '6m': process.env.LEMON_VARIANT_6M || '1345310',
+  '1y': process.env.LEMON_VARIANT_1Y || '1345319',
+};
+app.get('/api/checkout/redirect', (req, res) => {
+  const tier = (req.query.tier || '6m').toLowerCase();
+  const variantId = LEMON_VARIANT_IDS[tier] || LEMON_VARIANT_IDS['6m'];
+  const base = `${LEMON_CHECKOUT_BASE}/${variantId}`;
+  const params = new URLSearchParams();
+  const aff = (req.query.aff || '').trim();
+  const email = (req.query.email || '').trim();
+  if (aff) {
+    params.set('aff', aff);
+    params.set('checkout[custom][aff]', aff);
+  }
+  if (email) params.set('checkout[custom][email]', email);
+  const url = params.toString() ? `${base}?${params.toString()}` : base;
+  res.redirect(302, url);
+});
+
 // --- Test: simula un referral affiliato (senza webhook Lemon). Solo se TEST_AFFILIATE_SECRET è impostato.
 app.post('/api/test/simulate-referral', async (req, res) => {
   const secret = req.headers['x-test-secret'];

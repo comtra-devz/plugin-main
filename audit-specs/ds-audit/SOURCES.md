@@ -58,7 +58,7 @@ Le regole in `DS-AUDIT-RULES.md` sono allineate alle best practice e ai criteri 
 
 **Criteri usati nelle regole:** Componenti riutilizzabili e standard chiari (→ adoption, coverage); naming e struttura (→ naming, structure); “living product” e manutenzione (→ adoption, orfani/duplicati).
 
----
+da non modificare//---
 
 ## Uso nelle regole
 

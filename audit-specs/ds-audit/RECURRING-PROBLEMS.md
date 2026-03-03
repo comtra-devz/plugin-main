@@ -136,3 +136,5 @@ Per ogni problema ricorrente si indica se è **rilevabile dall’audit sul file 
 - **System prompt (agente DS):** includere un breve riassunto delle problematiche ricorrenti (o il link a questo file) per dare priorità: issue che segnalano “rischio breakage” (1.1, 1.5) e “drift” (1.3, 7.3) hanno impatto diretto sulla percezione utente (severity 4–5 in scala community).
 - **Severity:** dove l’audit usa HIGH/MED/LOW, considerare HIGH per problemi che in community sono 4–5 (componenti rotti, drift, layout), MED per 3 (struttura, doc), LOW per 1–2.
 - **Messaggi di fix:** possono richiamare il contesto community (es. “Molti override su questa istanza: agli update della library rischi breakage di layout come segnalato spesso nei forum di utenti”).
+
+

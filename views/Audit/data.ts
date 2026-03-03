@@ -1,10 +1,70 @@
-
 import { AuditIssue, AuditCategory } from '../../types';
 
 // Extended interface for local UI needs
 export interface ExtendedAuditCategory extends AuditCategory {
   desc: string;
   locked?: boolean;
+}
+
+/** DS-only category config (no Accessibility — that lives in A11Y tab). See audit-specs/ds-audit/TYPES-AND-CATEGORIES.md */
+export const DS_CATEGORIES_CONFIG: { id: string; label: string; desc: string; icon: string; color: string }[] = [
+  { id: 'adoption', label: 'Adoption Rate', desc: 'DS Components vs. Detached Layers', icon: '❖', color: 'bg-[#ff90e8]' },
+  { id: 'coverage', label: 'Token Coverage', desc: 'Linked Variables vs. Hardcoded Values', icon: '🎨', color: 'bg-blue-300' },
+  { id: 'naming', label: 'Naming Accuracy', desc: 'Layer Naming Conventions', icon: '✎', color: 'bg-yellow-300' },
+  { id: 'structure', label: 'Structure', desc: 'Hierarchy, Auto-layout & Constraints', icon: '▣', color: 'bg-purple-200' },
+  { id: 'consistency', label: 'Consistency', desc: 'Grid, Spacing & Type Scale', icon: '◫', color: 'bg-teal-200' },
+  { id: 'copy', label: 'Copywriting', desc: 'Tone, Localization & Microcopy', icon: '¶', color: 'bg-orange-300' },
+];
+
+/** Build DS categories from issues (dynamic). Only categories that appear in config and in issues are included. */
+export function buildDsCategoriesFromIssues(issues: AuditIssue[]): ExtendedAuditCategory[] {
+  const ids = DS_CATEGORIES_CONFIG.map(c => c.id);
+  return DS_CATEGORIES_CONFIG.map(config => {
+    const catIssues = issues.filter(i => i.categoryId === config.id);
+    const count = catIssues.length;
+    const high = catIssues.filter(i => i.severity === 'HIGH').length;
+    const med = catIssues.filter(i => i.severity === 'MED').length;
+    const low = catIssues.filter(i => i.severity === 'LOW').length;
+    const score = count === 0 ? 100 : Math.max(0, 100 - (high * 12 + med * 6 + low * 2));
+    return {
+      id: config.id,
+      label: config.label,
+      desc: config.desc,
+      icon: config.icon,
+      color: config.color,
+      score: count === 0 ? -1 : score,
+      issuesCount: count,
+    };
+  }).filter(c => c.issuesCount > 0);
+}
+
+/** Score → status copy and target (same ToV). Used for dynamic DS score. */
+export interface DsScoreCopy {
+  status: string;
+  target: string;
+}
+
+export const DS_SCORE_MATRIX: { min: number; max: number; status: string; target: string }[] = [
+  { min: 0, max: 29, status: 'Your system needs urgent care. The garden is overgrown.', target: 'Reach 30% to start pruning.' },
+  { min: 30, max: 49, status: 'A few weeds are blocking the light. Time to tidy up.', target: 'Reach 50% to let it breathe.' },
+  { min: 50, max: 69, status: 'Growing stronger, but some branches are still crooked.', target: 'Reach 70% to straighten the path.' },
+  { min: 70, max: 89, status: 'Your system is blooming, but a few petals are out of place.', target: 'Reach 90% to harmonize.' },
+  { min: 90, max: 99, status: 'Almost there. One last polish and the stars will align.', target: 'Reach 100% to become legend.' },
+  { min: 100, max: 100, status: 'Absolute perfection! The stars align with your grid.', target: 'You are a design legend.' },
+];
+
+export function getDsScoreCopy(score: number): DsScoreCopy {
+  const row = DS_SCORE_MATRIX.find(r => score >= r.min && score <= r.max);
+  return row ? { status: row.status, target: row.target } : DS_SCORE_MATRIX[0];
+}
+
+/** Compute 0–100 health score from issue list (HIGH/MED/LOW penalties). */
+export function computeDsScoreFromIssues(issues: AuditIssue[]): number {
+  if (issues.length === 0) return 100;
+  const high = issues.filter(i => i.severity === 'HIGH').length;
+  const med = issues.filter(i => i.severity === 'MED').length;
+  const low = issues.filter(i => i.severity === 'LOW').length;
+  return Math.max(0, Math.min(100, 100 - (high * 12 + med * 6 + low * 2)));
 }
 
 export const LOADING_MSGS = [
@@ -15,52 +75,13 @@ export const LOADING_MSGS = [
   "Whispering to the pixels..."
 ];
 
+/** Legacy list (includes a11y for any non-DS use). For DS tab use buildDsCategoriesFromIssues instead. */
 export const CATEGORIES: ExtendedAuditCategory[] = [
-  { 
-    id: 'adoption', 
-    label: 'Adoption Rate', 
-    desc: 'DS Components vs. Detached Layers', 
-    score: 92, 
-    icon: '❖', 
-    color: 'bg-[#ff90e8]', 
-    issuesCount: 3 
-  },
-  { 
-    id: 'coverage', 
-    label: 'Token Coverage', 
-    desc: 'Linked Variables vs. Hardcoded Values', 
-    score: 85, 
-    icon: '🎨', 
-    color: 'bg-blue-300', 
-    issuesCount: 4 
-  },
-  { 
-    id: 'a11y', 
-    label: 'Accessibility Pass', 
-    desc: 'WCAG Contrast & Touch Targets', 
-    score: 100, 
-    icon: '♿', 
-    color: 'bg-green-300', 
-    issuesCount: 0 
-  },
-  { 
-    id: 'naming', 
-    label: 'Naming Accuracy', 
-    desc: 'Layer Naming Conventions', 
-    score: 60, 
-    icon: '✎', 
-    color: 'bg-yellow-300', 
-    issuesCount: 5 
-  },
-  { 
-    id: 'copy', 
-    label: 'Copywriting', 
-    desc: 'Tone, Localization & Microcopy', 
-    score: -1, // Insufficient Data for Demo
-    icon: '¶', 
-    color: 'bg-orange-300', 
-    issuesCount: 0 
-  },
+  { id: 'adoption', label: 'Adoption Rate', desc: 'DS Components vs. Detached Layers', score: 92, icon: '❖', color: 'bg-[#ff90e8]', issuesCount: 3 },
+  { id: 'coverage', label: 'Token Coverage', desc: 'Linked Variables vs. Hardcoded Values', score: 85, icon: '🎨', color: 'bg-blue-300', issuesCount: 4 },
+  { id: 'a11y', label: 'Accessibility Pass', desc: 'WCAG Contrast & Touch Targets', score: 100, icon: '♿', color: 'bg-green-300', issuesCount: 0 },
+  { id: 'naming', label: 'Naming Accuracy', desc: 'Layer Naming Conventions', score: 60, icon: '✎', color: 'bg-yellow-300', issuesCount: 5 },
+  { id: 'copy', label: 'Copywriting', desc: 'Tone, Localization & Microcopy', score: -1, icon: '¶', color: 'bg-orange-300', issuesCount: 0 },
 ];
 
 export const MOCK_PAGES = ["Home V2", "Design System", "Archive 2023", "Playground", "Checkout Flow", "Auth Screens"];

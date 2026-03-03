@@ -15,7 +15,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ViewState, User, Trophy } from './types';
-import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
+import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import type { FetchFigmaFileBody } from './views/Audit/AuditView';
 
 export interface CreditsState {
@@ -274,10 +274,10 @@ export default function AppTest() {
   };
 
   const handleUpgrade = (tier: string, affiliateCode?: string) => {
-    const url = buildCheckoutUrl(tier, affiliateCode, user?.email ?? undefined);
+    const url = buildCheckoutRedirectUrl(tier, affiliateCode, user?.email ?? undefined);
     window.open(url, '_blank');
     setShowUpgrade(false);
-    // Dopo il pagamento Lemon invia il webhook: aggiorniamo plan/credits. L'utente torna qui e fa refresh (o riapre il plugin) per vedere PRO.
+    // Backend reindirizza a Lemon Squeezy; dopo il pagamento webhook aggiorna plan/credits. L'utente torna qui e fa refresh per vedere PRO.
   };
 
   const handleUnlockRequest = () => {

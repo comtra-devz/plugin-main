@@ -112,6 +112,8 @@ Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFF
 2. **Cosa fa il webhook** (a ogni Order created con `status = paid`): aggiorna l’**acquirente** (cerca utente per email in custom_data o in `user_email` dell’ordine, imposta `plan = 'PRO'`, `credits_total` e `plan_expires_at` in base al variant) e, se presente il codice in `meta.custom_data.aff`, incrementa **affiliato** (`total_referrals`). L’utente dopo il pagamento torna nel plugin e fa refresh per vedere PRO.
 3. **Registrazione affiliati (automatica)**: l’utente dal plugin va su **Profilo → Affiliate Program** e clicca **Ottieni il tuo codice affiliato**. Il backend crea una riga in `affiliates` con il suo `user_id` (Figma) e un codice univoco. Il plugin invia `?aff=CODICE` e `checkout[custom][aff]=CODICE`; il webhook riceve il codice e incrementa `total_referrals`. Il profilo (Production Metrics) mostra **AFFILIATES** = `total_referrals` letti nel callback OAuth.
 
+4. **Redirect checkout (Pay now)**: il plugin apre `GET /api/checkout/redirect?tier=6m&aff=...&email=...` su auth.comtra.dev, che fa un redirect 302 al checkout Lemon Squeezy. Opzionale in Vercel: **`LEMON_SQUEEZY_CHECKOUT_BASE`** (default `https://comtra.lemonsqueezy.com/checkout/buy`), **`LEMON_VARIANT_1W`**, **`LEMON_VARIANT_1M`**, **`LEMON_VARIANT_6M`**, **`LEMON_VARIANT_1Y`** se i variant ID differiscono dallo store.
+
 ---
 
 ## 5. Redeploy e verifica

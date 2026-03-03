@@ -18,6 +18,11 @@ interface Props {
   score: number;
   lastAuditDate: Date | null;
   categories: ExtendedAuditCategory[];
+  /** Dynamic status/target copy from score matrix (same ToV) */
+  statusCopy?: string;
+  targetCopy?: string;
+  /** Count of HIGH severity issues; badge shown only if > 0 */
+  highSeverityCount?: number;
   activeCat: string | null;
   setActiveCat: (id: string | null) => void;
   documentPages: DocumentPage[];
@@ -37,7 +42,6 @@ interface Props {
   isCalculating: boolean;
   scanProgress: { percent: number; count: number };
   issueListProps: any;
-  /** DS Audit agent: loading / error state */
   dsAuditLoading?: boolean;
   dsAuditError?: string | null;
 }
@@ -53,6 +57,9 @@ export const DesignSystemTab: React.FC<Props> = ({
   score,
   lastAuditDate,
   categories,
+  statusCopy,
+  targetCopy,
+  highSeverityCount = 0,
   activeCat,
   setActiveCat,
   documentPages,
@@ -100,34 +107,32 @@ export const DesignSystemTab: React.FC<Props> = ({
                   <span>{isScopeDropdownOpen ? '▲' : '▼'}</span>
               </div>
               {isScopeDropdownOpen && (
-                  <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] p-2 text-left z-30">
+                  <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
                       <div 
                           onClick={(e) => { e.stopPropagation(); setScanScope('all'); setIsScopeDropdownOpen(false); }}
                           className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
                       >
-                          <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
+                          <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
                           <span className="text-xs font-bold">All Pages</span>
                       </div>
                       <div 
                           onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
                           className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
                       >
-                          <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'current' ? 'bg-black' : 'bg-white'}`}></div>
+                          <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' ? 'bg-black' : 'bg-white'}`}></div>
                           <span className="text-xs font-bold">Current Selection</span>
                       </div>
-                      <div className="border-t border-gray-200 my-1"></div>
-                      <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                          {documentPages.map(page => (
-                              <div 
-                                  key={page.id} 
-                                  onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
-                                  className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1"
-                              >
-                                  <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`}></div>
-                                  <span className="text-xs">{page.name}</span>
-                              </div>
-                          ))}
-                      </div>
+                      <div className="border-t border-gray-200 my-0" aria-hidden />
+                      {documentPages.map(page => (
+                          <div 
+                              key={page.id} 
+                              onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
+                              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                          >
+                              <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`}></div>
+                              <span className="text-xs">{page.name}</span>
+                          </div>
+                      ))}
                   </div>
               )}
           </div>
@@ -187,12 +192,12 @@ export const DesignSystemTab: React.FC<Props> = ({
             <div>
               <span className="text-[10px] font-bold uppercase text-gray-400 mb-1">Current Status</span>
               <h2 className="text-sm font-black leading-tight max-w-[95%] mb-1">
-                {score < 100 ? "Your system is blooming, but a few petals are out of place." : "Absolute Perfection! The stars align with your grid."}
+                {statusCopy ?? (score < 100 ? "Your system is blooming, but a few petals are out of place." : "Absolute Perfection! The stars align with your grid.")}
               </h2>
             </div>
           </div>
           <p className="text-[10px] text-gray-500 font-medium mb-8">
-             {score < 100 ? `Reach ${Math.ceil((score + 10)/10)*10}% to harmonize.` : 'You are a design legend.'}
+             {targetCopy ?? (score < 100 ? `Reach ${Math.ceil((score + 10) / 10) * 10}% to harmonize.` : 'You are a design legend.')}
           </p>
           {lastAuditDate && (
               <span className="absolute bottom-3 left-3 text-[9px] font-mono text-gray-400">
@@ -235,34 +240,32 @@ export const DesignSystemTab: React.FC<Props> = ({
               <span>{isScopeDropdownOpen ? '▲' : '▼'}</span>
           </div>
           {isScopeDropdownOpen && (
-              <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] p-2">
+              <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] max-h-48 overflow-y-auto custom-scrollbar">
                   <div 
                       onClick={(e) => { e.stopPropagation(); setScanScope('all'); setIsScopeDropdownOpen(false); }}
                       className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
                   >
-                      <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
+                      <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
                       <span className="text-xs font-bold">All Pages</span>
                   </div>
                   <div 
                       onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
                       className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
                   >
-                      <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'current' ? 'bg-black' : 'bg-white'}`}></div>
+                      <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' ? 'bg-black' : 'bg-white'}`}></div>
                       <span className="text-xs font-bold">Current Selection</span>
                   </div>
-                  <div className="border-t border-gray-200 my-1"></div>
-                  <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                      {documentPages.map(page => (
-                          <div 
-                              key={page.id} 
-                              onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
-                              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1"
-                          >
-                              <div className={`w-3 h-3 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`}></div>
-                              <span className="text-xs">{page.name}</span>
-                          </div>
-                      ))}
-                  </div>
+                  <div className="border-t border-gray-200 my-0" aria-hidden />
+                  {documentPages.map(page => (
+                      <div 
+                          key={page.id} 
+                          onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+                      >
+                          <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`}></div>
+                          <span className="text-xs">{page.name}</span>
+                      </div>
+                  ))}
               </div>
           )}
       </div>
@@ -333,7 +336,9 @@ export const DesignSystemTab: React.FC<Props> = ({
       <div className="flex flex-col">
         <div className="flex justify-between items-center mb-2 px-1 py-2 border-b-2 border-black/10">
             <h3 className="font-black uppercase text-xs">{activeCat ? `${activeCat} Issues` : 'All Issues'}</h3>
-            <span className="text-[10px] font-bold bg-[#ffc900] text-black px-1.5 py-0.5 rounded-sm border border-black">{activeIssues.length} Violations</span>
+            {highSeverityCount > 0 && (
+              <span className="text-[10px] font-bold bg-[#ffc900] text-black px-1.5 py-0.5 rounded-sm border border-black">{highSeverityCount} High</span>
+            )}
         </div>
         
         <IssueList 

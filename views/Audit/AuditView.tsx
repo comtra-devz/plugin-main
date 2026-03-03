@@ -11,11 +11,13 @@ import { DesignSystemTab, ScanScope } from './tabs/DesignSystemTab';
 import { DeepAnalysisTab } from './tabs/DeepAnalysisTab';
 import { 
   LOADING_MSGS, 
-  CATEGORIES, 
   DS_ISSUES, 
   A11Y_ISSUES, 
   UX_ISSUES, 
-  PROTO_ISSUES 
+  PROTO_ISSUES,
+  buildDsCategoriesFromIssues,
+  computeDsScoreFromIssues,
+  getDsScoreCopy,
 } from './data';
 
 export interface FetchFigmaFileBody {
@@ -133,8 +135,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   // Filter out excluded pages
   const filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
   const activeIssues = activeCat ? filteredIssues.filter(i => i.categoryId === activeCat) : filteredIssues;
-  const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 2);
-  const totalHiddenCount = currentIssues.length - 2; 
+  // Free: first 6 issues (any severity); Pro: all. No "hidden" when ≤6 (e.g. single Kimi call returns 6).
+  const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
+  const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
+
+  // DS tab: dynamic categories (no Accessibility Pass), score from issues, HIGH count for badge
+  const dsCategories = activeTab === 'DS' ? buildDsCategoriesFromIssues(filteredIssues) : [];
+  const remainingForScore = filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
+  const dsScore = activeTab === 'DS' ? computeDsScoreFromIssues(remainingForScore) : score;
+  const dsScoreCopy = activeTab === 'DS' ? getDsScoreCopy(dsScore) : { status: '', target: '' };
+  const highSeverityCount = activeIssues.filter(i => i.severity === 'HIGH').length; 
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -686,9 +696,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       {activeTab === 'DS' && (
         <DesignSystemTab 
             hasAudited={hasAudited}
-            score={score}
+            score={dsScore}
             lastAuditDate={lastAuditDate}
-            categories={CATEGORIES}
+            categories={dsCategories}
+            statusCopy={dsScoreCopy.status}
+            targetCopy={dsScoreCopy.target}
+            highSeverityCount={highSeverityCount}
             activeCat={activeCat}
             setActiveCat={setActiveCat}
             documentPages={documentPages}

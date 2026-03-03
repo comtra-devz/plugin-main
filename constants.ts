@@ -128,6 +128,27 @@ export function buildCheckoutUrl(tier: string, affiliateCode?: string, userEmail
   return `${base}?${params.toString()}`;
 }
 
+/**
+ * URL del backend che reindirizza al checkout Lemon Squeezy.
+ * Usare questo per "Pay now" nel plugin per evitare 404 (config centralizzata lato server).
+ */
+export function buildCheckoutRedirectUrl(
+  tier: string,
+  affiliateCode?: string,
+  userEmail?: string
+): string {
+  const base =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_AUTH_BACKEND_URL) ||
+    'https://auth.comtra.dev';
+  const params = new URLSearchParams();
+  params.set('tier', tier);
+  const code = affiliateCode?.trim();
+  const email = userEmail?.trim();
+  if (code) params.set('aff', code);
+  if (email) params.set('email', email);
+  return `${base}/api/checkout/redirect?${params.toString()}`;
+}
+
 export const PRIVACY_CONTENT = [
   {
     title: "1. Data Collection",
