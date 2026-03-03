@@ -4,6 +4,7 @@ Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi n
 
 - **Chi fa cosa (in ordine)** per l’agente DS Audit: **docs/DS-AUDIT-WHO-DOES-WHAT.md**
 - **Guida pratica “for dummies”** (setup, test su kimi.com, replicare per altri agenti, allenare i prompt): **docs/KIMI-FOR-DUMMIES.md**
+- **Pipeline analisi (export JSON vs analisi reale) e dove gestire la knowledge:** **docs/AUDIT-PIPELINE-AND-KNOWLEDGE.md**
 - **Come modificare le regole e passare il lavoro ad altri:** **audit-specs/MAINTAINING-RULES.md**
 
 ---
