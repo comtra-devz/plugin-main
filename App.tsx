@@ -58,11 +58,38 @@ function normalizeOAuthUser(raw: {
   };
 }
 
+/** Loader minimale in stile brutalist (dot/quadrati) mentre si ripristina la sessione al primo avvio. */
+function SessionLoader() {
+  return (
+    <div className="min-h-screen w-full bg-[#ff90e8] flex items-center justify-center" aria-hidden="true">
+      <div className="flex gap-1.5" role="presentation">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="w-2 h-2 bg-black"
+            style={{
+              animation: 'sessionLoaderPulse 0.6s ease-in-out infinite',
+              animationDelay: `${i * 0.12}s`,
+            }}
+          />
+        ))}
+      </div>
+      <style>{`
+        @keyframes sessionLoaderPulse {
+          0%, 100% { opacity: 0.35; transform: scale(0.95); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function AppTest() {
   const [view, setView] = useState<ViewState>(ViewState.AUDIT);
   const [user, setUser] = useState<User | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showLogin, setShowLogin] = useState(true);
+  const [sessionRestoring, setSessionRestoring] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [oauthInProgress, setOauthInProgress] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -167,6 +194,7 @@ export default function AppTest() {
       const msg = e.data?.pluginMessage ?? e.data;
       if (!msg || typeof msg !== 'object') return;
       if (msg.type === 'restore-user') {
+        setSessionRestoring(false);
         if (msg.user) {
           setUser(normalizeOAuthUser(msg.user));
           setShowLogin(false);
@@ -183,9 +211,11 @@ export default function AppTest() {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  // Chiedi al controller la sessione salvata al mount (così non perdiamo restore-user se arriva prima che l'UI sia pronta)
+  // Chiedi al controller la sessione salvata al mount; timeout per non bloccare se il messaggio non arriva
   useEffect(() => {
     window.parent.postMessage({ pluginMessage: { type: 'get-saved-user' } }, '*');
+    const t = setTimeout(() => setSessionRestoring(false), 800);
+    return () => clearTimeout(t);
   }, []);
 
   /** Apre OAuth nel browser esterno e fa polling dall'UI: l'utente resta sulla login e poi va in home senza "chiudi e riapri". */
@@ -328,6 +358,27 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken]);
 
+  const fetchDsAudit = React.useCallback(async (body: { file_key: string; depth?: number }) => {
+    if (!user?.authToken) return { issues: [] };
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/ds-audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify({ file_key: body.file_key, depth: body.depth ?? 2 }),
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        msg = j.error || text;
+      } catch {
+        // keep as-is
+      }
+      throw new Error(msg);
+    }
+    return r.json();
+  }, [user?.authToken]);
+
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
@@ -347,6 +398,8 @@ export default function AppTest() {
       setSimulatedCredits(stored ?? { remaining: FREE_TIER_CREDITS, total: FREE_TIER_CREDITS, used: 0 });
     }
   };
+
+  if (sessionRestoring) return <SessionLoader />;
 
   if (showLogin && view !== ViewState.PRIVACY) {
       return (
@@ -392,6 +445,7 @@ export default function AppTest() {
               estimateCredits={estimateCredits}
               consumeCredits={consumeCredits}
               fetchFigmaFile={fetchFigmaFile}
+              fetchDsAudit={fetchDsAudit}
               onNavigateToGenerate={(prompt) => {
                   setGenPrompt(prompt);
                   setView(ViewState.GENERATE);

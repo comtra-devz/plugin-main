@@ -35,6 +35,8 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `POSTGRES_URL` | URL connessione Postgres (Supabase) | **da aggiungere** — vedi sotto |
 | `JWT_SECRET` | Stringa segreta lunga (es. `openssl rand -hex 32`) | **da aggiungere** |
 | `LEMON_SQUEEZY_WEBHOOK_SECRET` | Signing secret del webhook Lemon Squeezy (6–40 caratteri) | **da aggiungere** per affiliate |
+| `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
+| `KIMI_MODEL` | Nome modello (opzionale) | Default: `kimi-k2-turbo-preview`. Per **testing a basso costo** usa `kimi-k2-0905-preview` (input ~$0.40/M token, contesto 131K). |
 
 Dopo ogni modifica alle variabili: **Redeploy**.
 

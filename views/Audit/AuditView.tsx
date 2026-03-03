@@ -37,11 +37,13 @@ interface Props {
   onNavigateToGenerate?: (prompt: string) => void;
   /** Pipeline to agents: fetch file JSON from backend (Figma REST). Called after confirm scan when fileKey is available. */
   fetchFigmaFile?: (body: FetchFigmaFileBody) => Promise<unknown>;
+  /** DS Audit agent: fetch issues from backend (Kimi). Called after confirm scan when fileKey is available. */
+  fetchDsAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -93,6 +95,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' } | null>(null);
   const [exportJsonFeedback, setExportJsonFeedback] = useState<string | null>(null);
+  // DS Audit agent: real issues from backend (Kimi)
+  const [dsAuditIssues, setDsAuditIssues] = useState<AuditIssue[] | null>(null);
+  const [dsAuditLoading, setDsAuditLoading] = useState(false);
+  const [dsAuditError, setDsAuditError] = useState<string | null>(null);
 
   // Timestamps
   const [lastAuditDate, setLastAuditDate] = useState<Date | null>(null);
@@ -118,8 +124,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
-  // Determine which issue set to use
-  let currentIssues = DS_ISSUES;
+  // Determine which issue set to use (DS tab uses real issues from agent when available)
+  let currentIssues = activeTab === 'DS' && dsAuditIssues != null ? dsAuditIssues : DS_ISSUES;
   if (activeTab === 'A11Y') currentIssues = A11Y_ISSUES;
   if (activeTab === 'UX') currentIssues = UX_ISSUES;
   if (activeTab === 'PROTOTYPE') currentIssues = PROTO_ISSUES;
@@ -310,6 +316,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
               // Pipeline validation: optional; UI continues with mock data
             }
           }
+          if (msg.fileKey && fetchDsAudit) {
+            setDsAuditError(null);
+            setDsAuditLoading(true);
+            fetchDsAudit({ file_key: msg.fileKey, depth: 2 })
+              .then((data) => {
+                setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+              })
+              .catch((err) => {
+                setDsAuditError(err instanceof Error ? err.message : 'Audit failed');
+                setDsAuditIssues(null);
+              })
+              .finally(() => setDsAuditLoading(false));
+          }
           if (payload.pendingScanType === 'MAIN') setIsScanning(true);
           else if (payload.pendingScanType === 'DEEP') {
             setIsDeepScanning(true);
@@ -325,7 +344,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [consumeCredits, fetchFigmaFile, onUnlockRequest, useInfiniteCreditsForTest, plan]);
+  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, onUnlockRequest, useInfiniteCreditsForTest, plan]);
 
   const handleStartScan = useCallback(() => {
     if (knownZeroCredits) {
@@ -689,6 +708,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             isCalculating={isCalculating}
             scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
             issueListProps={issueListProps}
+            dsAuditLoading={dsAuditLoading}
+            dsAuditError={dsAuditError}
         />
       )}
 

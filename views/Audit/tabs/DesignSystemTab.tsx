@@ -37,6 +37,9 @@ interface Props {
   isCalculating: boolean;
   scanProgress: { percent: number; count: number };
   issueListProps: any;
+  /** DS Audit agent: loading / error state */
+  dsAuditLoading?: boolean;
+  dsAuditError?: string | null;
 }
 
 function getScopeLabel(scope: ScanScope, selectedPage: DocumentPage | null): string {
@@ -68,7 +71,9 @@ export const DesignSystemTab: React.FC<Props> = ({
   exportJsonFeedback,
   isCalculating,
   scanProgress,
-  issueListProps
+  issueListProps,
+  dsAuditLoading,
+  dsAuditError,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
@@ -163,6 +168,17 @@ export const DesignSystemTab: React.FC<Props> = ({
 
   return (
     <div className="flex flex-col gap-4 animate-in slide-in-from-left-2 mt-4">
+      {dsAuditLoading && (
+        <div className="flex items-center gap-2 py-2 px-3 bg-[#ffc900] border-2 border-black text-[10px] font-bold uppercase">
+          <span className="w-2 h-2 bg-black animate-pulse" />
+          Analysing design system…
+        </div>
+      )}
+      {dsAuditError && !dsAuditLoading && (
+        <div className="py-2 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800">
+          {dsAuditError}
+        </div>
+      )}
       {/* Header Stat Card */}
       <div className={`${BRUTAL.card} bg-white p-3 flex items-start gap-3 relative min-h-[140px]`}>
         <div className="shrink-0 mt-1"><CircularScore score={score} size="sm" /></div>

@@ -9,7 +9,12 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 import { sql as dbSql } from './db.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
@@ -595,6 +600,121 @@ app.post('/api/figma/file', async (req, res) => {
     res.json(fileJson);
   } catch (err) {
     console.error('POST /api/figma/file', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- DS Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
+const KIMI_API_KEY = process.env.KIMI_API_KEY;
+const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
+const DS_AUDIT_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'ds-audit-system.md');
+
+function extractJsonFromContent(text) {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  const jsonBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const toParse = jsonBlock ? jsonBlock[1].trim() : trimmed;
+  try {
+    return JSON.parse(toParse);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDsAuditIssue(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = raw.id != null ? String(raw.id) : `ds-${Math.random().toString(36).slice(2, 9)}`;
+  const categoryId = raw.categoryId != null ? String(raw.categoryId) : 'coverage';
+  const msg = raw.msg != null ? String(raw.msg) : 'Issue';
+  const severity = raw.severity === 'HIGH' || raw.severity === 'MED' || raw.severity === 'LOW' ? raw.severity : 'MED';
+  const layerId = raw.layerId != null ? String(raw.layerId) : '';
+  const fix = raw.fix != null ? String(raw.fix) : '';
+  return {
+    id,
+    categoryId,
+    msg,
+    severity,
+    layerId,
+    fix,
+    layerIds: Array.isArray(raw.layerIds) ? raw.layerIds.map(String) : undefined,
+    tokenPath: raw.tokenPath != null ? String(raw.tokenPath) : undefined,
+    pageName: raw.pageName != null ? String(raw.pageName) : undefined,
+  };
+}
+
+app.post('/api/agents/ds-audit', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const fileKey = (body.file_key || body.fileKey || '').trim();
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'DS Audit requires database' });
+  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+
+  let systemPrompt;
+  const pathsToTry = [DS_AUDIT_PROMPT_PATH, path.join(process.cwd(), 'prompts', 'ds-audit-system.md')];
+  for (const p of pathsToTry) {
+    try {
+      systemPrompt = readFileSync(p, 'utf8');
+      if (systemPrompt && systemPrompt.length > 0) break;
+    } catch (_) {}
+  }
+  if (!systemPrompt) {
+    console.error('DS Audit: failed to read prompt', pathsToTry);
+    return res.status(500).json({ error: 'System prompt not found' });
+  }
+
+  try {
+    const accessToken = await getFigmaAccessToken(dbSql, userId);
+    if (!accessToken) {
+      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+    }
+    const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : 2;
+    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+    url.searchParams.set('depth', String(depth));
+    const figmaRes = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!figmaRes.ok) {
+      if (figmaRes.status === 403) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      if (figmaRes.status === 404) return res.status(404).json({ error: 'File not found' });
+      const t = await figmaRes.text();
+      console.error('DS Audit: Figma API', figmaRes.status, t.slice(0, 200));
+      return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error' });
+    }
+    const fileJson = await figmaRes.json();
+    const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.\n\n${JSON.stringify(fileJson)}`;
+
+    const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${KIMI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: KIMI_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_completion_tokens: 4096,
+      }),
+    });
+    if (!kimiRes.ok) {
+      const t = await kimiRes.text();
+      console.error('DS Audit: Kimi API', kimiRes.status, t.slice(0, 300));
+      return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
+    }
+    const kimiData = await kimiRes.json();
+    const content = kimiData?.choices?.[0]?.message?.content;
+    const parsed = extractJsonFromContent(content);
+    const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
+    const issues = rawIssues.map(normalizeDsAuditIssue).filter(Boolean);
+    res.json({ issues });
+  } catch (err) {
+    console.error('POST /api/agents/ds-audit', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
