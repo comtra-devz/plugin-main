@@ -5,6 +5,8 @@ Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi n
 - **Chi fa cosa (in ordine)** per l’agente DS Audit: **docs/DS-AUDIT-WHO-DOES-WHAT.md**
 - **Guida pratica “for dummies”** (setup, test su kimi.com, replicare per altri agenti, allenare i prompt): **docs/KIMI-FOR-DUMMIES.md**
 - **Pipeline analisi (export JSON vs analisi reale) e dove gestire la knowledge:** **docs/AUDIT-PIPELINE-AND-KNOWLEDGE.md**
+- **Piano agente Accessibilità (Kimi + API gratuite):** **docs/A11Y-AUDIT-PLAN.md**
+- **Indice documentazione .md:** **docs/README.md**
 - **Come modificare le regole e passare il lavoro ad altri:** **audit-specs/MAINTAINING-RULES.md**
 
 ---
@@ -122,37 +124,40 @@ Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi n
 
 ---
 
-## Fase 2 — Agente Accessibility Audit
+## Fase 2 — Agente Accessibility Audit (Kimi + API gratuite)
+
+Piano dettagliato: **docs/A11Y-AUDIT-PLAN.md** (ruolo di Kimi vs backend, contrast/touch senza API esterne, simulazione daltonismo opzionale).
 
 ### 2.1 Definire le regole A11Y
 
 | Step | Azione | Output |
 |------|--------|--------|
-| 2.1.1 | Elencare controlli A11Y | Documento | Contrast ratio, touch target, heading, alt text, color blindness |
-| 2.1.2 | Per ogni controllo: come ricavarlo dal JSON | Es. contrast da `fills` + bounds, touch da `absoluteBoundingBox` | Specifica |
-| 2.1.3 | Definire categorie | `contrast`, `touch`, `focus`, `alt`, ecc. | Mappatura |
-| 2.1.4 | Definire formato output | Stesso `AuditIssue` | Coerenza con DS |
+| 2.1.1 | Elencare controlli A11Y | Documento | Contrast ratio, touch target, heading, alt text, focus, color/daltonismo |
+| 2.1.2 | Per ogni controllo: come ricavarlo dal JSON | Es. contrast da `fills`, touch da `absoluteBoundingBox` | Specifica |
+| 2.1.3 | Definire categorie | `contrast`, `touch`, `focus`, `alt`, `semantics`, `color` | Mappatura |
+| 2.1.4 | Definire formato output | Stesso `AuditIssue` (OUTPUT-SCHEMA) | Coerenza con DS |
 
-**Materiale da produrre:** `docs/A11Y-AUDIT-RULES.md`
+**Materiale da produrre:** `audit-specs/a11y-audit/A11Y-AUDIT-RULES.md`, `audit-specs/a11y-audit/OUTPUT-SCHEMA.md` (già presenti; vedi audit-specs/a11y-audit/README.md).
 
 ### 2.2 Creare il prompt A11Y
 
 | Step | Azione | File |
 |------|--------|------|
-| 2.2.1 | Scrivere system prompt | Ruolo + regole + formato output |
+| 2.2.1 | Scrivere system prompt | Ruolo + regole (da A11Y-AUDIT-RULES.md) + formato (OUTPUT-SCHEMA.md) |
 | 2.2.2 | Salvare | `auth-deploy/prompts/a11y-audit-system.md` |
-| 2.2.3 | Testare su kimi.com | Come 1.3 |
+| 2.2.3 | Testare su kimi.com | Come 1.3 (prompt + JSON file) |
 
 ### 2.3 Implementare e integrare
 
 | Step | Azione |
 |------|--------|
-| 2.3.1 | Endpoint `POST /api/agents/a11y-audit` |
-| 2.3.2 | `fetchA11yAudit` in App, prop ad Audit |
-| 2.3.3 | Chiamare dopo/con DS audit, salvare issue A11Y |
-| 2.3.4 | Mostrare nel tab A11Y |
+| 2.3.1 | Endpoint `POST /api/agents/a11y-audit` (come ds-audit: file_key, JWT, Figma JSON → Kimi → issues) |
+| 2.3.2 | (Opzionale) Backend: pre-calcolo contrast/touch; passare a Kimi come contesto o generare issue e unire |
+| 2.3.3 | `fetchA11yAudit` in App, prop ad Audit |
+| 2.3.4 | Chiamare dopo/con DS audit, salvare issue A11Y |
+| 2.3.5 | Mostrare nel tab A11Y |
 
-**Materiale necessario:** `A11Y-AUDIT-RULES.md`, `a11y-audit-system.md`
+**Materiale necessario:** `audit-specs/a11y-audit/` (regole + schema), `auth-deploy/prompts/a11y-audit-system.md`
 
 ---
 
@@ -243,11 +248,11 @@ Piano dettagliato punto-punto per creare, istruire e integrare gli agenti Kimi n
 | Funzionalità | Documenti regole | Prompt | Endpoint | Note |
 |--------------|------------------|--------|----------|------|
 | DS Audit | `audit-specs/ds-audit/DS-AUDIT-RULES.md` | `ds-audit-system.md` | `/api/agents/ds-audit` | Priorità 1 |
-| A11Y Audit | `A11Y-AUDIT-RULES.md` | `a11y-audit-system.md` | `/api/agents/a11y-audit` | Priorità 2 |
-| UX Audit | `UX-AUDIT-RULES.md` | `ux-audit-system.md` | `/api/agents/ux-audit` | Priorità 3 |
-| Prototype Audit | `PROTO-AUDIT-RULES.md` | `proto-audit-system.md` | `/api/agents/proto-audit` | Priorità 4 |
-| Code Gen | `CODE-AGENT-SPEC.md` | `code-gen-system.md` | `/api/agents/code-gen` | Priorità 5 |
-| Generate | `GENERATE-AGENT-SPEC.md` | `generate-system.md` | `/api/agents/generate` | Priorità 6 |
+| A11Y Audit | `audit-specs/a11y-audit/A11Y-AUDIT-RULES.md` | `a11y-audit-system.md` | `/api/agents/a11y-audit` | Priorità 2 (Kimi + API gratuite: docs/A11Y-AUDIT-PLAN.md) |
+| UX Audit | `audit-specs/ux-audit/` (da creare) | `ux-audit-system.md` | `/api/agents/ux-audit` | Priorità 3 |
+| Prototype Audit | `audit-specs/proto-audit/` (da creare) | `proto-audit-system.md` | `/api/agents/proto-audit` | Priorità 4 |
+| Code Gen | `audit-specs/code-gen/` o `docs/CODE-AGENT-SPEC.md` | `code-gen-system.md` | `/api/agents/code-gen` | Priorità 5 |
+| Generate | `audit-specs/generate/` o `docs/GENERATE-AGENT-SPEC.md` | `generate-system.md` | `/api/agents/generate` | Priorità 6 |
 
 ---
 

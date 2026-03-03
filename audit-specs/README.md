@@ -9,17 +9,20 @@ Usata per costruire i prompt, validare le risposte e mantenere uno standard di q
 audit-specs/
 ├── README.md                 (questo file)
 ├── MAINTAINING-RULES.md      Guida: come modificare le regole e handoff ad altre persone
-└── ds-audit/                 Design System Audit
+├── ds-audit/                 Design System Audit
+│   ├── README.md
+│   ├── DS-AUDIT-RULES.md      Regole complete, mappatura JSON del file, severity, fix
+│   ├── OUTPUT-SCHEMA.md      Formato JSON di risposta dell'agente
+│   ├── SOURCES.md            Fonti autorevoli e mappatura alle regole
+│   └── RECURRING-PROBLEMS.md Problematiche ricorrenti (community), severity, mappatura
+└── a11y-audit/               Accessibility Audit (Kimi + API gratuite)
     ├── README.md
-    ├── DS-AUDIT-RULES.md      Regole complete, mappatura JSON del file, severity, fix
-    ├── OUTPUT-SCHEMA.md       Formato JSON di risposta dell'agente
-    ├── SOURCES.md             Fonti autorevoli e mappatura alle regole
-    └── RECURRING-PROBLEMS.md  Problematiche ricorrenti (community), severity, mappatura
+    ├── A11Y-AUDIT-RULES.md   Regole: contrast, touch, focus, alt, semantics, color
+    └── OUTPUT-SCHEMA.md      Formato JSON di risposta (stesso schema AuditIssue)
 ```
 
 In futuro, stessa struttura per altri agenti:
 
-- `a11y-audit/` — Accessibility audit
 - `ux-audit/` — UX audit
 - `proto-audit/` — Prototype audit
 - `code-gen/` — Code generation

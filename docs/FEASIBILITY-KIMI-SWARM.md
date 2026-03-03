@@ -78,7 +78,7 @@
 | **axe-core / API open-source** | ⚠️ Parziale | axe-core lavora su **DOM** (HTML renderizzato). Sul **file Figma** (JSON) non si può usare axe direttamente. Due strade: (1) **Audit su design:** regole custom che leggono colori/dimensioni/testo dal JSON (come sopra); (2) **Audit su codice generato (Fase 3):** dopo il Code Agent si può far girare axe sul markup generato. Per “integrazione axe” in Fase 2 va inteso come ispirazione regole o uso downstream sul codice, non lettura diretta del file Figma. |
 | **Localization stress testing** | ✅ | Euristiche su lunghezza testo, caratteri speciali, layout (es. overflow) da bounds e testo nel JSON. |
 
-**Conclusione Fase 2:** fattibile; differenziatore forte. Chiarire in fase di design se “integrazione axe” è solo regole WCAG-like su design o anche step post-export su HTML.
+**Conclusione Fase 2:** fattibile; differenziatore forte. Stack Comtra su codice: axe-core + HTML_CodeSniffer + Lighthouse + OKLCH (tutti open source). Dettaglio: docs/A11Y-AUDIT-PLAN.md. Chiarire in fase di design se “integrazione axe” è solo regole WCAG-like su design o anche step post-export su HTML.
 
 ---
 
