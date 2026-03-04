@@ -1,13 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { fetchUsers, type AdminUser, type AdminUsersResponse } from '../api';
 
 const PAGE_SIZE = 50;
+
+function toDateOnly(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function exportUsersToCsv(users: AdminUser[]) {
+  const headers = ['Email', 'Nome', 'Piano', 'Scadenza', 'Crediti rimanenti', 'Crediti totali', 'Iscrizione'];
+  const rows = users.map((u) => [
+    u.email_masked,
+    u.name,
+    u.plan,
+    u.plan_expires_at ? toDateOnly(u.plan_expires_at) : '',
+    String(u.credits_remaining),
+    String(u.credits_total),
+    toDateOnly(u.created_at),
+  ]);
+  const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `utenti-${toDateOnly(new Date().toISOString())}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function Users() {
   const [res, setRes] = useState<AdminUsersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
+  const [search, setSearch] = useState('');
+  const [planFilter, setPlanFilter] = useState<string>('ALL');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -19,16 +48,102 @@ export default function Users() {
     return () => { cancelled = true; };
   }, [offset]);
 
+  const filteredUsers = useMemo(() => {
+    if (!res?.users) return [];
+    let list = res.users;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (u) =>
+          u.email_masked.toLowerCase().includes(q) ||
+          (u.name && u.name.toLowerCase().includes(q))
+      );
+    }
+    if (planFilter !== 'ALL') {
+      list = list.filter((u) => u.plan === planFilter);
+    }
+    if (dateFrom) {
+      list = list.filter((u) => toDateOnly(u.created_at) >= dateFrom);
+    }
+    if (dateTo) {
+      list = list.filter((u) => toDateOnly(u.created_at) <= dateTo);
+    }
+    return list;
+  }, [res?.users, search, planFilter, dateFrom, dateTo]);
+
   const total = res?.total ?? 0;
   const hasMore = offset + PAGE_SIZE < total;
   const hasPrev = offset > 0;
+  const hasActiveFilters = search.trim() || planFilter !== 'ALL' || dateFrom || dateTo;
 
   return (
     <>
       <h1 className="page-title">Utenti</h1>
       <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
-        Email offuscate. Totale: <strong>{total}</strong>
+        Email offuscate. Totale in DB: <strong>{total}</strong>
+        {hasActiveFilters && <> · Visibili (filtri su questa pagina): <strong>{filteredUsers.length}</strong></>}
       </p>
+
+      {/* Filtri e search */}
+      <div className="brutal-card" style={{ marginBottom: '1rem' }}>
+        <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Filtri e ricerca</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+          <div>
+            <label className="brutal-label">Cerca (email / nome)</label>
+            <input
+              type="text"
+              className="brutal-input"
+              placeholder="Testo..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="brutal-label">Piano</label>
+            <select
+              className="brutal-input"
+              value={planFilter}
+              onChange={(e) => setPlanFilter(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="ALL">Tutti</option>
+              <option value="FREE">FREE</option>
+              <option value="PRO">PRO</option>
+            </select>
+          </div>
+          <div>
+            <label className="brutal-label">Iscrizione da (data)</label>
+            <input
+              type="date"
+              className="brutal-input"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="brutal-label">Iscrizione a (data)</label>
+            <input
+              type="date"
+              className="brutal-input"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </div>
+          <div>
+            <button
+              type="button"
+              className="brutal-btn primary"
+              onClick={() => exportUsersToCsv(filteredUsers)}
+              disabled={filteredUsers.length === 0}
+            >
+              Esporta CSV (visibili)
+            </button>
+          </div>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+          I filtri si applicano ai {res?.users?.length ?? 0} utenti caricati in questa pagina. Esporta: solo gli utenti visibili (filtrati).
+        </p>
+      </div>
 
       {loading && <p className="loading">Caricamento…</p>}
       {error && <p className="error">{error}</p>}
@@ -48,37 +163,45 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody>
-                {res.users.map((u: AdminUser) => (
-                  <tr key={u.id}>
-                    <td className="mono">{u.email_masked}</td>
-                    <td>{u.name}</td>
-                    <td>
-                      <span className={`badge ${u.plan === 'PRO' ? 'pro' : 'free'}`}>{u.plan}</span>
-                    </td>
-                    <td>
-                      {u.plan_expires_at
-                        ? new Date(u.plan_expires_at).toLocaleDateString('it-IT', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                          })
-                        : '—'}
-                    </td>
-                    <td>{u.credits_remaining} / {u.credits_total}</td>
-                    <td>
-                      {new Date(u.created_at).toLocaleDateString('it-IT', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                      })}
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                      Nessun utente corrisponde ai filtri.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredUsers.map((u: AdminUser) => (
+                    <tr key={u.id}>
+                      <td className="mono">{u.email_masked}</td>
+                      <td>{u.name}</td>
+                      <td>
+                        <span className={`badge ${u.plan === 'PRO' ? 'pro' : 'free'}`}>{u.plan}</span>
+                      </td>
+                      <td>
+                        {u.plan_expires_at
+                          ? new Date(u.plan_expires_at).toLocaleDateString('it-IT', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            })
+                          : '—'}
+                      </td>
+                      <td>{u.credits_remaining} / {u.credits_total}</td>
+                      <td>
+                        {new Date(u.created_at).toLocaleDateString('it-IT', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                        })}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               type="button"
               className="brutal-btn"

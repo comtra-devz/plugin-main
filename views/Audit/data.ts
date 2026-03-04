@@ -67,6 +67,37 @@ export function computeDsScoreFromIssues(issues: AuditIssue[]): number {
   return Math.max(0, Math.min(100, 100 - (high * 12 + med * 6 + low * 2)));
 }
 
+/** A11Y tab: category config (same model as DS). See audit-specs/a11y-audit/TYPES-AND-CATEGORIES.md, ISSUE-TYPES.md */
+export const A11Y_CATEGORIES_CONFIG: { id: string; label: string; desc: string; icon: string; color: string }[] = [
+  { id: 'contrast', label: 'Contrast', desc: 'Text/background WCAG ratio (AA 4.5:1)', icon: '◐', color: 'bg-red-200' },
+  { id: 'touch', label: 'Touch target', desc: 'Min 44×44 pt interactive area', icon: '☝', color: 'bg-amber-200' },
+  { id: 'focus', label: 'Focus state', desc: 'Visible focus for keyboard nav', icon: '⌘', color: 'bg-blue-200' },
+  { id: 'alt', label: 'Alt text', desc: 'Descriptions for icons/images', icon: '🖼', color: 'bg-cyan-200' },
+  { id: 'semantics', label: 'Semantics', desc: 'Heading hierarchy & structure', icon: '▤', color: 'bg-violet-200' },
+  { id: 'color', label: 'Color & OKLCH', desc: 'Not color-only; OKLCH tokens', icon: '🎨', color: 'bg-emerald-200' },
+];
+
+/** Build A11Y categories from issues (dynamic). Only categories that appear in config and in issues are included. */
+export function buildA11yCategoriesFromIssues(issues: AuditIssue[]): ExtendedAuditCategory[] {
+  return A11Y_CATEGORIES_CONFIG.map(config => {
+    const catIssues = issues.filter(i => i.categoryId === config.id);
+    const count = catIssues.length;
+    const high = catIssues.filter(i => i.severity === 'HIGH').length;
+    const med = catIssues.filter(i => i.severity === 'MED').length;
+    const low = catIssues.filter(i => i.severity === 'LOW').length;
+    const score = count === 0 ? 100 : Math.max(0, 100 - (high * 12 + med * 6 + low * 2));
+    return {
+      id: config.id,
+      label: config.label,
+      desc: config.desc,
+      icon: config.icon,
+      color: config.color,
+      score: count === 0 ? -1 : score,
+      issuesCount: count,
+    };
+  }).filter(c => c.issuesCount > 0);
+}
+
 export const LOADING_MSGS = [
   "Admiring the magnificent colors...",
   "Reading the beautiful story...",

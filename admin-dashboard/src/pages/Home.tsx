@@ -204,7 +204,10 @@ export default function Home() {
           <div className="brutal-card" style={{ marginTop: '1rem' }}>
             <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Timeline scan (30 gg)</h3>
             <LineChart timeline={timeline.timeline} valueKey="scans" color="var(--black)" label="Scan per giorno" />
-            <Link to="/credits" style={{ display: 'inline-block', marginTop: '0.75rem' }}>Timeline e dettagli →</Link>
+            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <Link to="/credits">Timeline e dettagli →</Link>
+            <Link to="/charts">Visione a grafico (dual-line e KPI) →</Link>
+          </div>
           </div>
         ) : null}
         {credits.by_action_type.length > 0 && (

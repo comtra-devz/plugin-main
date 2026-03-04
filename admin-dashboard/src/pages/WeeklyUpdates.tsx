@@ -1,0 +1,95 @@
+import { useState } from 'react';
+import {
+  PLACEHOLDER_WEEKLY_UPDATES,
+  UPDATE_CATEGORY_LABELS,
+  type WeeklyUpdate,
+  type UpdateCategory,
+} from '../data/weeklyUpdates';
+
+const CATEGORY_STYLE: Record<UpdateCategory, { bg: string; border: string }> = {
+  FEAT: { bg: 'var(--yellow)', border: 'var(--black)' },
+  FIX: { bg: 'var(--pink)', border: 'var(--black)' },
+  DOCS: { bg: 'var(--white)', border: 'var(--black)' },
+  CHORE: { bg: 'var(--muted)', border: 'var(--black)' },
+  REFACTOR: { bg: 'var(--yellow)', border: 'var(--black)' },
+  SECURITY: { bg: 'var(--alert)', border: 'var(--black)' },
+  STYLE: { bg: 'var(--white)', border: 'var(--black)' },
+};
+
+export default function WeeklyUpdates() {
+  const [categoryFilter, setCategoryFilter] = useState<UpdateCategory | 'ALL'>('ALL');
+  const updates =
+    categoryFilter === 'ALL'
+      ? PLACEHOLDER_WEEKLY_UPDATES
+      : PLACEHOLDER_WEEKLY_UPDATES.filter((u) => u.category === categoryFilter);
+
+  const categories: (UpdateCategory | 'ALL')[] = ['ALL', ...(Object.keys(UPDATE_CATEGORY_LABELS) as UpdateCategory[])];
+
+  return (
+    <>
+      <h1 className="page-title">Weekly Updates</h1>
+      <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+        Aggiornamenti in linguaggio semplice (derivati dai commit). In futuro: sincronizzazione con repository e categorizzazione automatica.
+      </p>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <label className="brutal-label" style={{ width: '100%' }}>Categoria</label>
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            className={`brutal-btn ${categoryFilter === cat ? 'primary' : ''}`}
+            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            onClick={() => setCategoryFilter(cat)}
+          >
+            {cat === 'ALL' ? 'Tutte' : UPDATE_CATEGORY_LABELS[cat as UpdateCategory]}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {updates.map((u) => (
+          <WeeklyUpdateCard key={u.id} update={u} />
+        ))}
+      </div>
+
+      {updates.length === 0 && (
+        <div className="brutal-card">
+          <p className="loading">Nessun update per la categoria selezionata.</p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function WeeklyUpdateCard({ update }: { update: WeeklyUpdate }) {
+  const style = CATEGORY_STYLE[update.category];
+  return (
+    <div className="brutal-card" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          padding: '0.25rem 0.5rem',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          background: style.bg,
+          border: `2px solid ${style.border}`,
+          minWidth: 80,
+          textAlign: 'center',
+        }}
+      >
+        {update.category}
+      </div>
+      <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>{update.title}</div>
+        <div style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>{update.description}</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 6 }}>
+          {new Date(update.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+          {update.commitHash && update.commitHash !== 'placeholder' && (
+            <> · <code>{update.commitHash.slice(0, 7)}</code></>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

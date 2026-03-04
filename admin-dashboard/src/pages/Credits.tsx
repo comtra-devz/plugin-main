@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { fetchStats, fetchCreditsTimeline, type AdminStats, type CreditsTimeline } from '../api';
 
 const COST_PER_SCAN = 0.013;
 
 export default function Credits() {
+  const location = useLocation();
+  const highlightDate = (location.state as { highlightDate?: string } | null)?.highlightDate;
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
   const [period, setPeriod] = useState(30);
@@ -36,6 +39,11 @@ export default function Credits() {
   return (
     <>
       <h1 className="page-title">Crediti e costi</h1>
+      {highlightDate && (
+        <p style={{ marginBottom: '1rem', padding: '0.5rem', background: 'var(--yellow)', border: '2px solid var(--black)', fontSize: '0.9rem' }}>
+          Collegamento da Grafici: dati del <strong>{new Date(highlightDate).toLocaleDateString('it-IT')}</strong>.
+        </p>
+      )}
 
       {stats && (
         <section style={{ marginBottom: '2rem' }}>
@@ -80,7 +88,15 @@ export default function Credits() {
           <div className="brutal-card">
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {[...timeline.timeline].reverse().map((d) => (
-                <div key={d.date} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div
+                  key={d.date}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    ...(highlightDate && d.date === highlightDate ? { background: 'rgba(255, 201, 0, 0.25)', border: '2px solid var(--black)', margin: -2, padding: 4 } : {}),
+                  }}
+                >
                   <span className="mono" style={{ width: '100px', fontSize: '0.85rem' }}>
                     {new Date(d.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                   </span>

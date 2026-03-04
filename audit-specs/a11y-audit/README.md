@@ -6,8 +6,10 @@ Questa cartella contiene le specifiche per l’agente di **Accessibility Audit (
 
 | File | Uso |
 |------|-----|
-| **A11Y-AUDIT-RULES.md** | Regole complete: cosa controllare (contrasto, touch target, heading/alt, focus, colore), dove cercare nel JSON Figma, severity, fix. Riferimento per il system prompt e per l’endpoint. |
+| **A11Y-AUDIT-RULES.md** | Regole complete: cosa controllare (contrasto, touch target, heading/alt, focus, colore), dove cercare nel JSON Figma, severity, fix. Riferimento per l’endpoint e l’engine. |
 | **OUTPUT-SCHEMA.md** | Schema JSON di risposta (`issues[]` compatibile con `AuditIssue`). Stessa struttura del DS Audit; `categoryId` specifici A11Y. |
+| **TYPES-AND-CATEGORIES.md** | Riferimento unico: severity, categoryId, label (modello DS). Vedi **audit-specs/ds-audit/TYPES-AND-CATEGORIES.md**. |
+| **ISSUE-TYPES.md** | Lista completa delle tipologie di issue (per categoria: messaggio, severity, quando, fix). |
 | **README.md** | Questa guida. |
 
 ## Come si usa
@@ -25,12 +27,14 @@ Questa cartella contiene le specifiche per l’agente di **Accessibility Audit (
 
 ## Categorie (categoryId)
 
+Vedi **TYPES-AND-CATEGORIES.md** e **ISSUE-TYPES.md** per la lista completa e le tipologie di issue.
+
 - `contrast` — Rapporto di contrasto testo/sfondo (WCAG AA/AAA).
-- `touch` — Dimensione area cliccabile (es. ≥ 44×44 px).
+- `touch` — Dimensione area cliccabile (es. ≥ 44×44 pt).
 - `focus` — Indicazione stati focus (design).
 - `alt` — Testo alternativo / descrizione per immagini/icone.
 - `semantics` — Struttura heading, landmark, ordine lettura.
-- `color` — Uso del solo colore per informazione; simulazione daltonismo.
+- `color` — Uso del solo colore per informazione; OKLCH / token.
 
 ## Riferimenti
 
