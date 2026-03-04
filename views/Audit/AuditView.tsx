@@ -300,6 +300,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
           return;
         }
         const isA11yScan = payload.pendingScanType === 'A11Y';
+        if (isA11yScan) setActiveTab('A11Y');
         const auditBody = hasFileJson
           ? { file_json: msg.fileJson as object }
           : { file_key: msg.fileKey, depth: 2 };
@@ -580,7 +581,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const wordCount = feedbackText.trim().split(/\s+/).filter(w => w.length > 0).length;
   const canSubmitFeedback = wordCount >= 2;
 
-  if (isScanning) return (
+  // Full-page loader: same as DS audit (calculating nodes, preparing document, or running A11Y audit)
+  const showFullPageLoader = isScanning || isCalculating || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading);
+  const fullPageLoaderMsg = waitingForFileContext
+    ? 'Preparing document…'
+    : activeTab === 'A11Y' && a11yAuditLoading
+      ? 'Analysing accessibility…'
+      : loadingMsg;
+
+  if (showFullPageLoader) return (
     <div className="p-8 h-[70vh] flex flex-col items-center justify-center text-center overflow-hidden">
       <style>{`
         @keyframes fill-bar {
@@ -589,7 +598,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         }
       `}</style>
       <div className="text-4xl mb-6 animate-bounce">✨</div>
-      <h3 className="text-xl font-black uppercase mb-4 leading-tight">{loadingMsg}</h3>
+      <h3 className="text-xl font-black uppercase mb-4 leading-tight">{fullPageLoaderMsg}</h3>
       <div className="w-full h-4 border-2 border-black p-0.5 rounded-full bg-white">
          <div 
            className="h-full bg-[#ff90e8]" 
@@ -622,13 +631,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             confirmLabel={confirmConfig.confirmLabel}
             isWarning={confirmConfig.isWarning}
           />
-      )}
-
-      {waitingForFileContext && (
-        <div className="flex items-center gap-2 py-2 px-3 bg-[#ffc900] border-2 border-black text-[10px] font-bold uppercase">
-          <span className="w-2 h-2 bg-black animate-pulse" />
-          Preparing document…
-        </div>
       )}
 
       {/* FEEDBACK MODAL OVERLAY */}
