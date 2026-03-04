@@ -3,7 +3,6 @@ import { Routes, Route } from 'react-router-dom';
 import AdminLogin, { isAdminLoggedIn } from './AdminLogin';
 import Sidebar from './Sidebar';
 import Home from './pages/Home';
-import Charts from './pages/Charts';
 import Users from './pages/Users';
 import Credits from './pages/Credits';
 import Affiliates from './pages/Affiliates';
@@ -32,7 +31,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/charts" element={<Charts />} />
+          <Route path="/charts" element={<Home />} />
           <Route path="/users" element={<Users />} />
           <Route path="/credits" element={<Credits />} />
           <Route path="/token-usage" element={<TokenUsage />} />

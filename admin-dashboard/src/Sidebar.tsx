@@ -9,9 +9,6 @@ export default function Sidebar() {
         <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
           Home
         </NavLink>
-        <NavLink to="/charts" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Grafici
-        </NavLink>
         <NavLink to="/users" className={({ isActive }) => (isActive ? 'active' : '')}>
           Utenti
         </NavLink>
@@ -23,15 +20,6 @@ export default function Sidebar() {
         </NavLink>
         <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Affiliati
-        </NavLink>
-        <NavLink to="/weekly-updates" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Weekly Updates
-        </NavLink>
-        <NavLink to="/support" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Support
-        </NavLink>
-        <NavLink to="/security" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Security & Logs
         </NavLink>
       </nav>
       <div style={{ marginTop: 'auto', padding: '1rem' }}>

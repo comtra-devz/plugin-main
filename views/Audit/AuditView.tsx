@@ -8,6 +8,7 @@ import { SuccessModal } from '../../components/SuccessModal';
 import { ScanReceiptModal } from '../../components/ScanReceiptModal';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
 import { DesignSystemTab, ScanScope } from './tabs/DesignSystemTab';
+import { AccessibilityTab } from './tabs/AccessibilityTab';
 import { DeepAnalysisTab } from './tabs/DeepAnalysisTab';
 import { 
   LOADING_MSGS, 
@@ -16,6 +17,7 @@ import {
   UX_ISSUES, 
   PROTO_ISSUES,
   buildDsCategoriesFromIssues,
+  buildA11yCategoriesFromIssues,
   computeDsScoreFromIssues,
   getDsScoreCopy,
 } from './data';
@@ -107,6 +109,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const [a11yAuditIssues, setA11yAuditIssues] = useState<AuditIssue[] | null>(null);
   const [a11yAuditLoading, setA11yAuditLoading] = useState(false);
   const [a11yAuditError, setA11yAuditError] = useState<string | null>(null);
+  const [lastA11yAuditDate, setLastA11yAuditDate] = useState<Date | null>(null);
   const pendingAuditKindRef = useRef<'DS' | 'A11Y' | null>(null);
 
   // Timestamps
@@ -133,24 +136,35 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
+  // A11Y: filter by scope (all vs page) when we have results
+  const a11yIssuesRaw = a11yAuditIssues != null ? a11yAuditIssues : A11Y_ISSUES;
+  const selectedPageName = scanScope === 'page' && selectedPageId ? documentPages.find(p => p.id === selectedPageId)?.name : null;
+  const a11yIssuesScoped = activeTab === 'A11Y' && a11yAuditIssues != null && selectedPageName
+    ? a11yAuditIssues.filter(i => i.pageName === selectedPageName)
+    : activeTab === 'A11Y' ? a11yIssuesRaw : [];
+
   // Determine which issue set to use (DS / A11Y use real issues from agent when available)
   let currentIssues = activeTab === 'DS' && dsAuditIssues != null ? dsAuditIssues : DS_ISSUES;
-  if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? a11yAuditIssues : A11Y_ISSUES;
+  if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? (selectedPageName ? a11yIssuesScoped : a11yAuditIssues) : A11Y_ISSUES;
   if (activeTab === 'UX') currentIssues = UX_ISSUES;
   if (activeTab === 'PROTOTYPE') currentIssues = PROTO_ISSUES;
 
   // Filter out excluded pages
   const filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
   const activeIssues = activeCat ? filteredIssues.filter(i => i.categoryId === activeCat) : filteredIssues;
-  // Free: first 6 issues (any severity); Pro: all. No "hidden" when ≤6 (e.g. single Kimi call returns 6).
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
   const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
 
-  // DS tab: dynamic categories (no Accessibility Pass), score from issues, HIGH count for badge
+  // DS tab: dynamic categories, score from issues
   const dsCategories = activeTab === 'DS' ? buildDsCategoriesFromIssues(filteredIssues) : [];
   const remainingForScore = filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
   const dsScore = activeTab === 'DS' ? computeDsScoreFromIssues(remainingForScore) : score;
   const dsScoreCopy = activeTab === 'DS' ? getDsScoreCopy(dsScore) : { status: '', target: '' };
+
+  // A11Y tab: categories and score from filtered (scoped) issues
+  const a11yScore = activeTab === 'A11Y' ? computeDsScoreFromIssues(remainingForScore) : 100;
+  const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(filteredIssues) : [];
+  const a11yScoreCopy = activeTab === 'A11Y' ? getDsScoreCopy(a11yScore) : { status: '', target: '' };
   const highSeverityCount = activeIssues.filter(i => i.severity === 'HIGH').length; 
 
   useEffect(() => {
@@ -346,6 +360,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             fetchA11yAudit({ file_key: msg.fileKey, depth: 2 })
               .then((data) => {
                 setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+                setLastA11yAuditDate(new Date());
               })
               .catch((err) => {
                 setA11yAuditError(err instanceof Error ? err.message : 'Audit failed');
@@ -394,16 +409,23 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId, countCap: COUNT_CAP } }, '*');
   }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
 
-  const handleDeepScan = () => {
+  const handleRunA11yAudit = useCallback(() => {
     if (knownZeroCredits) {
       onUnlockRequest();
       return;
     }
-    if (activeTab === 'A11Y') {
-      pendingAuditKindRef.current = 'A11Y';
-      setIsCalculating(true);
-      setScanProgress({ percent: 0, count: 0 });
-      window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope: 'all', pageId: undefined, countCap: COUNT_CAP } }, '*');
+    pendingAuditKindRef.current = 'A11Y';
+    setIsCalculating(true);
+    setScanProgress({ percent: 0, count: 0 });
+    window.parent.postMessage(
+      { pluginMessage: { type: 'count-nodes', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId ?? undefined : undefined, countCap: COUNT_CAP } },
+      '*'
+    );
+  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
+
+  const handleDeepScan = () => {
+    if (knownZeroCredits) {
+      onUnlockRequest();
       return;
     }
     const mockNodes = Math.floor(Math.random() * 1000) + 50;
@@ -759,7 +781,37 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         />
       )}
 
-      {activeTab !== 'DS' && (
+      {activeTab === 'A11Y' && (
+        <AccessibilityTab
+            hasA11yResult={a11yAuditIssues !== null}
+            score={a11yScore}
+            lastAuditDate={lastA11yAuditDate}
+            categories={a11yCategories}
+            statusCopy={a11yScoreCopy.status}
+            targetCopy={a11yScoreCopy.target}
+            highSeverityCount={highSeverityCount}
+            activeCat={activeCat}
+            setActiveCat={setActiveCat}
+            documentPages={documentPages}
+            scanScope={scanScope}
+            setScanScope={setScanScope}
+            selectedPageId={selectedPageId}
+            setSelectedPageId={setSelectedPageId}
+            isScopeDropdownOpen={isScopeDropdownOpen}
+            setIsScopeDropdownOpen={setIsScopeDropdownOpen}
+            isPro={isPro}
+            displayIssues={displayIssues}
+            activeIssues={activeIssues}
+            onRunA11yAudit={handleRunA11yAudit}
+            isCalculating={isCalculating}
+            scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
+            issueListProps={issueListProps}
+            a11yAuditLoading={a11yAuditLoading}
+            a11yAuditError={a11yAuditError}
+        />
+      )}
+
+      {(activeTab === 'UX' || activeTab === 'PROTOTYPE') && (
         <DeepAnalysisTab 
             activeTab={activeTab}
             selectedLayer={selectedLayer}
@@ -767,11 +819,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             hasDeepScanned={hasDeepScanned}
             setHasDeepScanned={setHasDeepScanned}
             lastDeepScanDate={lastDeepScanDate}
-            isDeepScanning={isDeepScanning || (activeTab === 'A11Y' && a11yAuditLoading)}
+            isDeepScanning={isDeepScanning}
             activeIssues={activeIssues}
             onDeepScan={handleDeepScan}
             issueListProps={issueListProps}
-            deepScanError={activeTab === 'A11Y' ? a11yAuditError : null}
+            deepScanError={null}
         />
       )}
     </div>

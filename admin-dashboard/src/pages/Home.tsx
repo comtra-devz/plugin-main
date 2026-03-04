@@ -1,157 +1,65 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchStats, fetchCreditsTimeline, type AdminStats, type CreditsTimeline } from '../api';
+import DualLineChart from '../components/DualLineChart';
+import { PLACEHOLDER_WEEKLY_UPDATES, type UpdateCategory } from '../data/weeklyUpdates';
 
-function LineChart({
-  timeline,
-  valueKey,
-  color,
-  label,
-}: {
-  timeline: { date: string; scans: number; credits: number }[];
-  valueKey: 'scans' | 'credits';
-  color: string;
-  label: string;
-}) {
-  const data = [...timeline].reverse();
-  const values = data.map((d) => d[valueKey]);
-  const max = Math.max(...values, 1);
-  const w = 600;
-  const h = 160;
-  const pad = { top: 20, right: 20, bottom: 28, left: 40 };
-  const innerW = w - pad.left - pad.right;
-  const innerH = h - pad.top - pad.bottom;
-
-  const points = values.map((v, i) => {
-    const x = pad.left + (i / (data.length - 1 || 1)) * innerW;
-    const y = pad.top + innerH - (v / max) * innerH;
-    return `${x},${y}`;
-  });
-  const pathD = points.length ? `M ${points.join(' L ')}` : '';
-
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const hover = hoverIdx != null ? data[hoverIdx] : null;
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ maxWidth: '100%', height: 'auto' }}>
-        <rect x={pad.left} y={pad.top} width={innerW} height={innerH} fill="transparent" />
-        <path
-          d={pathD}
-          fill="none"
-          stroke={color}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ vectorEffect: 'non-scaling-stroke' }}
-        />
-        {data.map((d, i) => {
-          const x = pad.left + (i / (data.length - 1 || 1)) * innerW;
-          const y = pad.top + innerH - (d[valueKey] / max) * innerH;
-          return (
-            <rect
-              key={d.date}
-              x={x - 8}
-              y={pad.top}
-              width={16}
-              height={innerH}
-              fill="transparent"
-              onMouseEnter={() => setHoverIdx(i)}
-              onMouseLeave={() => setHoverIdx(null)}
-            />
-          );
-        })}
-        {data.map((d, i) => {
-          const x = pad.left + (i / (data.length - 1 || 1)) * innerW;
-          const y = pad.top + innerH - (d[valueKey] / max) * innerH;
-          return (
-            <circle
-              key={d.date}
-              cx={x}
-              cy={y}
-              r={4}
-              fill={color}
-              stroke="var(--black)"
-              strokeWidth={2}
-            />
-          );
-        })}
-        {data.map((d, i) => (
-          <text
-            key={d.date}
-            x={pad.left + (i / (data.length - 1 || 1)) * innerW}
-            y={h - 6}
-            textAnchor="middle"
-            fontSize="9"
-            fill="var(--black)"
-            fontFamily="var(--font-mono)"
-          >
-            {new Date(d.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
-          </text>
-        ))}
-      </svg>
-      {hover && (
-        <div
-          className="brutal-card"
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: '100%',
-            transform: 'translateX(-50%) translateY(-8px)',
-            marginBottom: 4,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.8rem',
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ fontWeight: 700 }}>{new Date(hover.date).toLocaleDateString('it-IT')}</div>
-          <div>Scan: {hover.scans} · Crediti: {hover.credits}</div>
-        </div>
-      )}
-      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)', marginTop: 4 }}>{label}</div>
-    </div>
-  );
-}
+const WEEKLY_UPDATES_PREVIEW = 3;
+const CATEGORY_BADGE_STYLE: Record<UpdateCategory, { bg: string }> = {
+  FEAT: { bg: 'var(--yellow)' },
+  FIX: { bg: 'var(--pink)' },
+  DOCS: { bg: 'var(--white)' },
+  CHORE: { bg: 'var(--muted)' },
+  REFACTOR: { bg: 'var(--yellow)' },
+  SECURITY: { bg: 'var(--alert)' },
+  STYLE: { bg: 'var(--white)' },
+};
 
 export default function Home() {
   const [data, setData] = useState<AdminStats | null>(null);
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
+  const [chartPeriod, setChartPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchStats(), fetchCreditsTimeline(30)])
-      .then(([d, t]) => {
-        if (!cancelled) {
-          setData(d);
-          setTimeline(t);
-        }
-      })
+    fetchStats()
+      .then((d) => { if (!cancelled) setData(d); })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return <p className="loading">Caricamento…</p>;
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    fetchCreditsTimeline(chartPeriod)
+      .then((t) => { if (!cancelled) setTimeline(t); })
+      .catch((e) => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [chartPeriod, data]);
+
+  if (loading && !data) return <p className="loading">Caricamento…</p>;
   if (error) return <p className="error">{error}</p>;
   if (!data) return null;
 
   const { users, credits, kimi, affiliates, funnel } = data;
+  const recentUpdates = PLACEHOLDER_WEEKLY_UPDATES.slice(0, WEEKLY_UPDATES_PREVIEW);
 
   return (
     <>
       <h1 className="page-title">Dashboard</h1>
 
+      {/* Utenti e piani — KPI con link */}
       <section style={{ marginBottom: '2rem' }}>
         <h2 className="section-title">Utenti e piani</h2>
         <div className="grid grid-4">
-          <div className="brutal-card accent-pink">
+          <Link to="/users" className="brutal-card accent-pink" style={{ textDecoration: 'none', color: 'inherit' }}>
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Utenti totali</h3>
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{users.total}</div>
-            <Link to="/users">Vedi lista →</Link>
-          </div>
+            <span style={{ fontSize: '0.85rem' }}>Vedi lista →</span>
+          </Link>
           <div className="brutal-card">
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>FREE</h3>
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{users.by_plan.FREE ?? 0}</div>
@@ -180,6 +88,7 @@ export default function Home() {
         )}
       </section>
 
+      {/* Crediti e scan — un solo blocco: KPI + grafico dual-line + consumo per tipo + link */}
       <section style={{ marginBottom: '2rem' }}>
         <h2 className="section-title">Crediti e scan (DS Audit)</h2>
         <div className="grid grid-4">
@@ -200,16 +109,21 @@ export default function Home() {
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{credits.credits_consumed_30d}</div>
           </div>
         </div>
+
         {timeline?.timeline?.length ? (
-          <div className="brutal-card" style={{ marginTop: '1rem' }}>
-            <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Timeline scan (30 gg)</h3>
-            <LineChart timeline={timeline.timeline} valueKey="scans" color="var(--black)" label="Scan per giorno" />
-            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link to="/credits">Timeline e dettagli →</Link>
-            <Link to="/charts">Visione a grafico (dual-line e KPI) →</Link>
-          </div>
+          <div style={{ marginTop: '1rem' }}>
+            <DualLineChart
+              timeline={timeline.timeline}
+              period={chartPeriod}
+              onPeriodChange={setChartPeriod}
+            />
+            <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+              Passa il mouse su un punto per il dettaglio; il link porta alla pagina Crediti e costi.
+            </p>
+            <Link to="/credits" style={{ display: 'inline-block', marginTop: '0.5rem' }}>Timeline e dettagli →</Link>
           </div>
         ) : null}
+
         {credits.by_action_type.length > 0 && (
           <div className="brutal-card" style={{ marginTop: '1rem' }}>
             <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Consumo per tipo azione (30d)</h3>
@@ -225,6 +139,7 @@ export default function Home() {
         )}
       </section>
 
+      {/* Costi Kimi */}
       <section style={{ marginBottom: '2rem' }}>
         <h2 className="section-title">Costi Kimi (stima DS Audit)</h2>
         <div className="grid grid-3">
@@ -252,6 +167,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Funnel + Affiliati */}
       <div className="grid grid-2" style={{ marginBottom: '2rem' }}>
         <section>
           <h2 className="section-title">Funnel (30d)</h2>
@@ -262,6 +178,7 @@ export default function Home() {
             <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem', color: 'var(--muted)' }}>
               Conversione FREE→PRO: {funnel.conversion_free_to_pro_pct}%
             </p>
+            <Link to="/users">Vedi utenti →</Link>
           </div>
         </section>
         <section>
@@ -273,6 +190,51 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      {/* Weekly Updates — richiamo come concept originale, con CTA */}
+      <section style={{ marginBottom: '2rem' }}>
+        <h2 className="section-title">Weekly Updates</h2>
+        <div className="brutal-card">
+          <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+            Ultimi aggiornamenti in linguaggio semplice (derivati dai commit).
+          </p>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {recentUpdates.map((u) => (
+              <li
+                key={u.id}
+                style={{
+                  padding: '0.5rem 0',
+                  borderBottom: '2px solid var(--black)',
+                }}
+              >
+                <span
+                  className="badge"
+                  style={{
+                    marginRight: '0.5rem',
+                    background: CATEGORY_BADGE_STYLE[u.category].bg,
+                    border: '2px solid var(--black)',
+                    fontSize: '0.65rem',
+                  }}
+                >
+                  {u.category}
+                </span>
+                <strong>{u.title}</strong>
+                <span style={{ color: 'var(--muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                  {new Date(u.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Link to="/weekly-updates" className="brutal-btn primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
+            Tutti gli aggiornamenti →
+          </Link>
+          <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--muted)' }}>
+            <Link to="/support">Support</Link>
+            {' · '}
+            <Link to="/security">Security & Logs</Link>
+          </p>
+        </div>
+      </section>
     </>
   );
 }
