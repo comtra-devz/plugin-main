@@ -50,6 +50,8 @@ I **prompt** (system prompt per Kimi) stanno in **auth-deploy/prompts/** (vedi `
 | **docs/TESTING-INTEGRATIONS.md** | Test e integrazioni (affiliate, referral, simulazioni). |
 | **docs/AFFILIATE.md** | Sistema affiliati e API. |
 | **docs/GAMIFICATION.md** | XP, livelli, trofei, formula. |
+| **docs/COST-ESTIMATE-DS-AUDIT.md** | Stima costi e crediti DS Audit (Kimi, piani, cassa). |
+| **docs/COST-ESTIMATE-A11Y.md** | Matrice crediti A11Y Audit v1.0 (senza Kimi, bande complessità). |
 
 ---
 

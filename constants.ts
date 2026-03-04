@@ -94,6 +94,22 @@ export function getScanCostAndSize(nodeCount: number): { cost: number; sizeLabel
   return { cost: last.cost, sizeLabel: last.label };
 }
 
+/** A11Y Audit cost by document size (node count). Same complexity bands as DS Audit; lower cost (no Kimi, backend-only). */
+export const A11Y_SCAN_SIZE_TIERS: { maxNodes: number; label: string; cost: number }[] = [
+  { maxNodes: 500, label: 'Small', cost: 1 },
+  { maxNodes: 5_000, label: 'Medium', cost: 2 },
+  { maxNodes: 50_000, label: 'Large', cost: 4 },
+  { maxNodes: Infinity, label: '200k+', cost: 6 }
+];
+
+export function getA11yCostAndSize(nodeCount: number): { cost: number; sizeLabel: string } {
+  for (const tier of A11Y_SCAN_SIZE_TIERS) {
+    if (nodeCount <= tier.maxNodes) return { cost: tier.cost, sizeLabel: tier.label };
+  }
+  const last = A11Y_SCAN_SIZE_TIERS[A11Y_SCAN_SIZE_TIERS.length - 1];
+  return { cost: last.cost, sizeLabel: last.label };
+}
+
 /** Lemon Squeezy: base checkout URL (store custom domain). Aggiungere ?aff=CODICE per attribuzione affiliato. */
 export const LEMON_SQUEEZY_CHECKOUT_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_SQUEEZY_CHECKOUT_BASE) || 'https://comtra.lemonsqueezy.com/checkout/buy';
 

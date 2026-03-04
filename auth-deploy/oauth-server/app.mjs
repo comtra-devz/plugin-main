@@ -379,6 +379,7 @@ const XP_BY_ACTION = {
   wireframe_modified: 20,
   proto_scan: 40,
   a11y_check: 35,
+  a11y_audit: 35,
   ux_audit: 45,
   sync_storybook: 25,
   sync_github: 25,
@@ -396,9 +397,15 @@ function estimateCreditsByAction(actionType, nodeCount) {
     if (n <= 50000) return 8;
     return 11;
   }
+  // A11Y Audit v1.0: same complexity bands as DS, no Kimi (backend-only: contrast, touch, OKLCH, heuristics)
+  if (actionType === 'a11y_audit' || actionType === 'a11y_check') {
+    if (n <= 500) return 1;
+    if (n <= 5000) return 2;
+    if (n <= 50000) return 4;
+    return 6;
+  }
   if (actionType === 'wireframe_gen' || actionType === 'generate') return 3;
   if (actionType === 'proto_scan') return 2;
-  if (actionType === 'a11y_check') return 2;
   if (actionType === 'ux_audit') return 4;
   if (actionType === 'sync') return 1;
   return 5;

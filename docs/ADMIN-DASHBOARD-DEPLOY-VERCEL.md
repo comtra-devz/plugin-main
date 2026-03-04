@@ -4,6 +4,12 @@ Guida passo-passo per pubblicare la **admin dashboard** come **secondo progetto*
 
 ---
 
+## Parti da qui: creare il progetto su Vercel
+
+Se **non hai ancora** il progetto della dashboard su Vercel, inizia dal **punto 1** qui sotto. Segui l’ordine: 1 → 2 → 3 → 4 → 5, poi dominio (6) e verifica (7).
+
+---
+
 ## Limite serverless function (12 su piano Hobby) — auth-deploy
 
 Le **API admin** (stats, credits-timeline, users, affiliates) **non** sono su auth-deploy: girano sul **progetto Vercel della dashboard**. Così auth-deploy resta sotto le 12 function.
@@ -13,18 +19,20 @@ Le **API admin** (stats, credits-timeline, users, affiliates) **non** sono su au
 
 ---
 
-## Prerequisiti
+## Prerequisiti (prima di creare il progetto)
 
-- [ ] Il progetto **auth-deploy** è già deployato su Vercel (auth.comtra.dev) e hai l’URL del DB (**POSTGRES_URL**) da riusare per la dashboard.
-- [ ] Hai accesso al team/account Vercel dove vuoi creare il secondo progetto (dashboard).
+- [ ] Hai un account Vercel e accesso al **repository Git** del plugin (GitHub/GitLab/Bitbucket collegato a Vercel).
+- [ ] Hai a portata di mano **POSTGRES_URL**: è l’URL di connessione al DB usato da auth-deploy (lo trovi in Vercel → progetto auth-deploy → Settings → Environment Variables). Lo userai al passo 3.
+- [ ] Genera un **secret** per le API admin (es. nel terminale: `openssl rand -hex 32`). Lo userai per `ADMIN_SECRET` e `VITE_ADMIN_SECRET` al passo 3.
 
 ---
 
 ## 1. Crea il progetto Vercel per la dashboard
 
-- [ ] Vai su [vercel.com](https://vercel.com) → Dashboard → **Add New…** → **Project**.
-- [ ] **Import Git Repository:** scegli lo stesso repository del plugin (es. `plugin-main-1` o il nome reale del repo). Clicca **Import**.
-- [ ] **Configure Project:** nella schermata di configurazione non fare ancora Deploy; procedi con i passi sotto.
+- [ ] Apri **[vercel.com](https://vercel.com)** e fai login.
+- [ ] In alto a destra clicca **Add New…** (o **Create**) → **Project**.
+- [ ] Nella lista **Import Git Repository** scegli il repository dove si trova il plugin (lo stesso usato per auth-deploy). Se non lo vedi, clicca **Import** sotto “Import Third-Party Git Repository” e collega GitHub/GitLab/Bitbucket se non ancora connesso.
+- [ ] Dopo aver selezionato il repo, Vercel mostra la schermata **Configure Project** (nome progetto, framework, root, env). **Non cliccare ancora Deploy**: prima imposta Root Directory (passo 2) e le variabili (passo 3).
 
 ---
 

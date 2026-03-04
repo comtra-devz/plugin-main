@@ -79,9 +79,10 @@ Se si sceglie **Opzione B** (backend genera issue contrast/touch): il backend do
 |------|------|
 | Regole A11Y | **audit-specs/a11y-audit/A11Y-AUDIT-RULES.md** (già creato) |
 | Schema output | **audit-specs/a11y-audit/OUTPUT-SCHEMA.md** (già creato) |
-| System prompt | **auth-deploy/prompts/a11y-audit-system.md** (da scrivere: ruolo + regole + formato) |
-| Endpoint | **POST /api/agents/a11y-audit** (come ds-audit: file_key, JWT, Figma JSON → Kimi → issues) |
-| Plugin | `fetchA11yAudit`, tab A11Y con issue reali |
+| **Matrice crediti (v1.0 senza Kimi)** | **docs/COST-ESTIMATE-A11Y.md** — bande complessità come DS, 1/2/4/6 crediti |
+| System prompt | **auth-deploy/prompts/a11y-audit-system.md** (solo se si aggiunge Kimi in seguito) |
+| Endpoint | **POST /api/agents/a11y-audit** (file_key, JWT, Figma JSON → backend deterministico → issues) |
+| Plugin | `fetchA11yAudit`, tab A11Y con issue reali, stima crediti con `getA11yCostAndSize(nodeCount)` |
 
 ---
 
