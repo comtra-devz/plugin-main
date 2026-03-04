@@ -40,6 +40,21 @@ export async function fetchAffiliates(): Promise<AdminAffiliatesResponse> {
   return r.json();
 }
 
+export async function fetchTokenUsage(period = 30): Promise<TokenUsageResponse> {
+  const r = await fetch(apiUrl('token-usage', { period }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export interface TokenUsageResponse {
+  period_days: number;
+  since: string;
+  totals: { count: number; input_tokens: number; output_tokens: number; cost_usd: number };
+  by_action: { action_type: string; count: number; input_tokens: number; output_tokens: number; cost_usd: number }[];
+  by_size_band: { size_band: string; count: number; input_tokens: number; output_tokens: number; cost_usd: number }[];
+  by_day: { date: string; count: number; input_tokens: number; output_tokens: number; cost_usd: number }[];
+}
+
 export interface AdminStats {
   users: {
     total: number;
@@ -63,6 +78,7 @@ export interface AdminStats {
     suggested_buffer_30d_usd: number;
     alert_threshold_usd: number;
     cost_alert: boolean;
+    token_usage_30d: { calls: number; cost_usd: number } | null;
   };
   affiliates: { total: number; referrals_total: number };
   funnel: {

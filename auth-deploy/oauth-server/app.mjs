@@ -642,6 +642,21 @@ function normalizeDsAuditIssue(raw) {
   };
 }
 
+/** Count nodes in Figma file JSON (document tree) for size_band telemetry. */
+function countFigmaNodes(obj) {
+  if (!obj || typeof obj !== 'object') return 0;
+  let n = 1;
+  if (Array.isArray(obj.children)) for (const c of obj.children) n += countFigmaNodes(c);
+  return n;
+}
+
+function sizeBandFromNodeCount(n) {
+  if (n <= 500) return 'small';
+  if (n <= 5000) return 'medium';
+  if (n <= 50000) return 'large';
+  return '200k+';
+}
+
 app.post('/api/agents/ds-audit', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -712,6 +727,20 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     const parsed = extractJsonFromContent(content);
     const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
     const issues = rawIssues.map(normalizeDsAuditIssue).filter(Boolean);
+
+    // Telemetria uso token (anonima): log per dashboard. Vedi docs/TOKEN-USAGE-TELEMETRY.md
+    const usage = kimiData?.usage;
+    const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
+    const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+    if (dbSql && (inputTokens > 0 || outputTokens > 0)) {
+      const nodeCount = countFigmaNodes(fileJson?.document);
+      const sizeBand = nodeCount > 0 ? sizeBandFromNodeCount(nodeCount) : null;
+      dbSql`
+        INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+        VALUES ('ds_audit', ${inputTokens}, ${outputTokens}, ${sizeBand}, ${KIMI_MODEL})
+      `.catch((err) => console.error('Kimi usage log insert failed', err.message));
+    }
+
     res.json({ issues });
   } catch (err) {
     console.error('POST /api/agents/ds-audit', err);

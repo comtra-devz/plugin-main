@@ -130,6 +130,19 @@ INSERT INTO trophies (id, name, description, unlock_condition, icon_id, sort_ord
   ('GOD_MODE', 'God Mode', 'Tutti gli altri 19 trofei sbloccati.', '{"type":"all_other_trophies"}', 'GOD', 20)
 ON CONFLICT (id) DO NOTHING;
 
+-- Telemetria uso token Kimi (anonima: nessun user_id/file_key). Vedi docs/TOKEN-USAGE-TELEMETRY.md
+CREATE TABLE IF NOT EXISTS kimi_usage_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action_type TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  size_band TEXT,
+  model TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_kimi_usage_log_action_created ON kimi_usage_log(action_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_kimi_usage_log_created_at ON kimi_usage_log(created_at);
+
 -- Migrazione: se la tabella users esiste già senza colonne XP, esegui (PostgreSQL 9.5+):
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;

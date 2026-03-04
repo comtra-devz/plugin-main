@@ -1,7 +1,7 @@
-# Stima costi e ricavi — Kimi (DS Audit e piani)
+# Stima costi e ricavi — consumo crediti e piani
 
-Documento di **analisi finanziaria**: sistema piani, consumo token, costo per utente, cassa minima per non bloccare Kimi, margine piano ↔ consumo.  
-**Scope attuale:** DS Audit (unica funzione con stima token). Altre funzioni (A11Y, Generate, ecc.) si aggiungeranno qui quando disponibili.
+Documento di **analisi finanziaria** in ottica **consumo crediti**: i crediti sono l’unità di valore (erogati dai piani, consumati dalle azioni). Qui si modellano costo Kimi, ricavo e netto **per credito consumato**; **quanti crediti consuma ogni azione** (Scan DS, Generate, Sync, A11Y, ecc.) è definito altrove (constants, product).  
+**Oggi** l’unica stima costo/credito disponibile è per il flusso DS Audit; quando ci saranno altre funzioni si aggiungeranno stime per credito (o per azione) e si ricalcolano cassa e margini.
 
 ---
 
@@ -21,16 +21,18 @@ I crediti effettivamente assegnati al pagamento sono definiti in **`auth-deploy/
 
 **Nota:** `constants.ts` ha `TIER_LIMITS['6m'] = 600` e `TIER_LIMITS['1y'] = 3000`; il webhook usa 800 e 2000. Allineare se si vuole coerenza UI/backend.
 
-### 1.2 Crediti addebitati per azione (DS Audit)
+### 1.2 Crediti consumati per azione (riferimento)
 
-Da **`constants.ts`** (`SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`):
+Ogni azione nel plugin **consuma** un certo numero di crediti (definito in **`constants.ts`** e in product: Scan DS, Generate, Code/Sync, future A11Y, ecc.). In questo documento non si decide *come* si consumano; si usa il **flusso di crediti** (erogati dal piano, consumati dall’uso) per costi e ricavi.
 
-| Dimensione file (nodi) | Label | Crediti addebitati |
-|------------------------|--------|---------------------|
-| ≤ 500 | Small | 2 |
-| ≤ 5 000 | Medium | 5 |
-| ≤ 50 000 | Large | 8 |
-| > 50 000 (cap 200k) | 200k+ | 11 |
+Esempio — **Scan DS** (da `SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`): ad ogni scan vengono addebitati 2–11 crediti in base alla dimensione del file. Altre azioni hanno il loro mapping credito/azione (es. Generate 3, Sync 1).
+
+| Azione (es. Scan DS) | Dimensione file (nodi) | Crediti consumati |
+|----------------------|------------------------|-------------------|
+| Scan DS | ≤500 (Small) | 2 |
+| Scan DS | ≤5k (Medium) | 5 |
+| Scan DS | ≤50k (Large) | 8 |
+| Scan DS | >50k (200k+) | 11 |
 
 ---
 
@@ -43,7 +45,24 @@ Da **`constants.ts`** (`SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`):
 
 ---
 
-## 3. Consumo token per richiesta (solo DS Audit)
+## 2.1 Matrice token ↔ crediti e profittabilità
+
+**Punto importante:** Sappiamo quanto il modello fa pagare **per singolo token**; ogni azione nel plugin fa cose diverse su **file diversi e di dimensioni diverse**, quindi i token per chiamata variano. Per **guadagnarci** serve che la **matrice e la conversione token ↔ crediti** siano tarate in modo che:
+
+**(crediti addebitati all’utente) × (prezzo per credito che incassiamo) > (token effettivamente usati) × (costo per token Kimi)**
+
+In altre parole:
+- **Crediti per azione** (es. Scan DS: 2–11 in base a dimensione) devono essere sufficienti a coprire il costo Kimi (token × $/token) e lasciare margine.
+- Se un’azione su file grandi consuma molti token ma addebitiamo pochi crediti, andiamo in perdita; se addebitiamo troppi crediti per file piccoli, l’utente paga “di più” del costo reale (accettabile per margine, ma da bilanciare con UX).
+
+**Cosa fare in pratica:**
+- Tenere aggiornata la **matrice** azione × dimensione (o band) → crediti addebitati (già in constants/product).
+- Verificare che, per ogni band, **costo Kimi (token × prezzo)** < **crediti × prezzo_minimo_break_even** (vedi § 5).
+- Per avere **dati reali** sui token usati (e non solo stime), serve una **telemetria uso token** lato backend → dashboard: vedi **docs/TOKEN-USAGE-TELEMETRY.md**. Con quei dati si può ricalcolare la matrice e la conversione in modo che si guadagni su ogni azione/dimensione.
+
+---
+
+## 3. Consumo token per richiesta (fonte attuale per costo per credito: DS Audit)
 
 | Componente | Token stimati |
 |------------|----------------|
@@ -64,7 +83,7 @@ Da **`constants.ts`** (`SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`):
 
 ---
 
-## 4. Costo Kimi per singola audit (DS Audit)
+## 4. Costo Kimi per singola richiesta DS Audit (usato per derivare costo per credito)
 
 | Dimensione | Costo input | Costo output | **Costo totale/scan** |
 |------------|-------------|--------------|------------------------|
@@ -77,24 +96,27 @@ Da **`constants.ts`** (`SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`):
 
 ---
 
-## 5. Stima costo per singolo utente (solo DS Audit)
+## 5. Stima costo per credito e per utente (in ottica consumo crediti)
 
-Costo utente = (numero di scan) × (costo medio per scan).
+In ottica **consumo crediti**: **costo Kimi per utente** = (crediti consumati dall’utente) × (costo medio per credito).  
+Il **costo per credito** (lato Kimi) oggi è stimato solo dal flusso DS Audit; quando altre azioni useranno Kimi si potrà definire un costo medio per credito per tipo di azione o un mix.
 
-Esempi (costo medio **$0.013**/scan):
-
-| Utente tipo | Scan/mese (stima) | Costo Kimi/mese |
-|-------------|--------------------|------------------|
-| Free, uso leggero | 5 | ~$0.07 |
-| Free, uso intenso | 12 (tutti i 25 crediti in ~2 mesi) | ~$0.16 in 2 mesi |
-| PRO 1m (100 crediti) | 20 (mix dimensioni) | ~$0.26 |
-| PRO 6m (800 crediti) | 160/mese se consuma tutto in 6m | ~$2.08/mese |
-| PRO 1y (2000 crediti) | 167/mese se consuma tutto in 1 anno | ~$2.17/mese |
-
-**Costo per credito (lato Kimi, solo DS Audit):**  
-- Small 2 crediti → $0.008 → **$0.004/credito**  
+**Costo per credito (lato Kimi, oggi da DS Audit):**  
+- Small 2 crediti → $0.008 → **~$0.004/credito**  
 - Large 8 crediti → $0.022 → **~$0.00275/credito**  
-Break-even prezzo/credito (per non andare in perdita su costo Kimi): **≥ ~$0.003–0.004 per credito** (~0,3–0,4 cent USD).
+→ Break-even prezzo/credito (per non andare in perdita su costo Kimi): **≥ ~$0.003–0.004 per credito** (~0,3–0,4 cent USD).
+
+**Costo per utente** = crediti consumati × costo per credito (es. €0,0026/credito medio). Esempi assumendo **solo consumo tipo DS Audit** (mix ~5 crediti per “azione equivalente”):
+
+| Utente tipo | Crediti consumati (stima) | Costo Kimi (stima) |
+|-------------|---------------------------|---------------------|
+| Free, uso leggero | ~10/mese | ~$0.07 |
+| Free, uso intenso | 25 (tutti i bonus) in ~2 mesi | ~$0.16 in 2 mesi |
+| PRO 1m (100 crediti) | 100 nel periodo | ~$0.26 |
+| PRO 6m (800 crediti) | 800 nel periodo | ~$2.08 |
+| PRO 1y (2000 crediti) | 2000 nell’anno | ~$5.20 |
+
+Quando il consumo è misto (Scan + Generate + altro), il costo per credito può variare per tipo di azione; la logica resta: **crediti consumati × costo per credito** (medio o per tipo).
 
 ---
 
@@ -102,37 +124,57 @@ Break-even prezzo/credito (per non andare in perdita su costo Kimi): **≥ ~$0.0
 
 Obiettivo: **nessun blocco del servizio** per mancanza di credito API Kimi. Si consiglia un **buffer** in USD sul conto/platform Kimi (o equivalente pre-pagato).
 
-### 6.1 Formula suggerita
+### 6.1 Formula suggerita (in ottica consumo crediti)
 
 - **Cassa minima =** (consumo medio giornaliero USD) × (giorni di buffer).  
-- **Consumo medio giornaliero** = (numero utenti attivi stimati) × (scan/utente/giorno) × (costo medio per scan).
+- **Consumo medio giornaliero** = **(crediti consumati/giorno)** × (costo medio per credito).  
+  Equivalente: (utenti attivi × crediti/utente/giorno) × costo per credito.
 
-Esempio:
-- 50 utenti attivi (free + PRO), 0,5 scan/utente/giorno in media → 25 scan/giorno.
-- 25 × $0.013 ≈ **$0.33/giorno**.
-- Buffer 30 giorni → **~$10 in cassa**.
-- Buffer 60 giorni → **~$20 in cassa**.
+Esempio (oggi con stima da DS Audit: ~5 crediti per “azione” media, costo ~$0,0026/credito):
+- 50 utenti attivi, ~125 crediti consumati/giorno in totale (es. 2,5 crediti/utente/giorno) → 125 × $0,0026 ≈ **$0,33/giorno**.
+- Buffer 30 giorni → **~$10 in cassa**; per sicurezza in beta si usano **$10–20** (30 gg) / **$20–40** (60 gg).
 
 ### 6.2 Raccomandazioni operative
 
-| Scenario | Utenti attivi (stima) | Scan/giorno (stima) | Buffer 30 gg | Buffer 60 gg |
-|----------|------------------------|----------------------|--------------|--------------|
-| Lancio / beta | 20–50 | 10–25 | **$10–20** | **$20–40** |
-| Crescita | 100–200 | 50–100 | **$20–40** | **$40–80** |
-| Consolidato | 500+ | 200+ | **$80+** | **$160+** |
+| Scenario | Utenti attivi (stima) | Crediti/giorno (stima) | Buffer 30 gg | Buffer 60 gg |
+|----------|------------------------|-------------------------|--------------|--------------|
+| Lancio / beta | 20–50 | ~50–125 | **$10–20** | **$20–40** |
+| Crescita | 100–200 | ~250–500 | **$20–40** | **$40–80** |
+| Consolidato | 500+ | ~1 250+ | **$80+** | **$160+** |
+
+*(Crediti/giorno convertiti in USD con costo per credito ~$0,0026; quando il consumo include altre azioni il costo per credito può variare.)*
 
 ### 6.3 Fondo cassa per numero di utenti
 
-Il fondo cassa **cambia al variare del numero di utenti** (e dell’uso reale). Tabella indicativa allineata agli scenari § 7.8 (solo DS Audit; costo medio ~$0,013/scan; uso stimato ~0,2 scan/utente/giorno sulla base attiva):
+Il fondo cassa **cambia al variare del numero di utenti** e del **consumo di crediti** (non della singola azione: DS Audit, Generate, ecc.). Tabella indicativa: stesso numero di utenti degli scenari § 7.8; uso stimato ~0,2× crediti equivalenti/utente/giorno sulla base attiva (oggi allineato a un mix tipo DS Audit).
 
-| Utenti totali (stima) | Utenti attivi/giorno (~20%) | Scan/giorno (stima) | Fondo cassa 30 gg | Fondo cassa 60 gg |
-|------------------------|-----------------------------|----------------------|-------------------|-------------------|
-| 100 | ~20 | ~10–25 | **$10–15** | **$20–30** |
-| 500 | ~100 | ~50–100 | **$20–40** | **$40–80** |
-| 2 500 | ~500 | ~250–500 | **$100–200** | **$200–400** |
-| 12 500 | ~2 500 | ~1 250–2 500 | **$500–1 000** | **$1 000–2 000** |
+| Utenti totali (stima) | Utenti attivi/giorno (~20%) | Crediti/giorno (stima) | Fondo cassa 30 gg | Fondo cassa 60 gg |
+|------------------------|-----------------------------|-------------------------|-------------------|-------------------|
+| 100 | ~20 | ~50–125 | **$10–15** | **$20–30** |
+| 500 | ~100 | ~250–500 | **$20–40** | **$40–80** |
+| 2 500 | ~500 | ~1 250–2 500 | **$100–200** | **$200–400** |
+| 12 500 | ~2 500 | ~6 250–12 500 | **$500–1 000** | **$1 000–2 000** |
 
-**Nota:** Se il numero di utenti (o gli scan per utente) aumenta, il fondo va **rialzato** in proporzione; se cala l’uso, si può ridurre. Aggiornare la stima quando si aggiungono altre funzioni che usano Kimi (A11Y, Generate, ecc.).
+**Nota:** Se il numero di utenti o i **crediti consumati per utente** aumentano, il fondo va **rialzato** in proporzione. Quando si aggiungono altre funzioni che consumano crediti (e Kimi), aggiornare costo per credito e/o crediti/giorno.
+
+### 6.4 Closed beta senza cassa e senza incassi: quante persone possiamo sostenere?
+
+**Domanda:** Abbiamo già il calcolo di quante persone possiamo sostenere in una **closed beta** nel caso **non ci sia ancora cassa** (nessun ricavo accumulato) e **nessuno abbia ancora pagato**?
+
+**Scenario:** Beta chiusa, tutto il costo Kimi è a nostro carico (out of pocket). Nessun incasso PRO → il tetto è dato solo da quanto decidiamo di mettere in Kimi per la beta.
+
+**Costo per utente FREE (in ottica consumo crediti):** 25 crediti in dotazione, uso medio stimato ~40% → **~10 crediti consumati** per utente in beta. Con costo per credito ~€0,005 (da DS Audit): 10 × 0,005 ≈ **€0,05** per utente (costo una tantum per i crediti bonus consumati). *Come l’utente consuma quei 10 crediti (solo Scan, mix Scan+Generate, ecc.) è indifferente per questo calcolo.*
+
+Da qui: **numero massimo di utenti FREE sostenibili** ≈ **budget iniziale (€) / 0,05**.
+
+| Budget iniziale (out of pocket per Kimi) | Max utenti FREE in closed beta (stima) |
+|-----------------------------------------|----------------------------------------|
+| €20 | ~400 |
+| €50 | ~1 000 |
+| €100 | ~2 000 |
+| €200 | ~4 000 |
+
+**Nota:** La stima assume **~10 crediti consumati** per utente (40% dei 25). Se in beta il consumo è più alto (es. 80% → ~20 crediti), il costo per utente raddoppia e con €50 si sostengono ~500 persone invece di ~1 000. Quando arrivano i primi pagamenti PRO, il ricavo può finanziare nuovo credito Kimi e alzare il tetto.
 
 - Impostare **alert** (email/Slack) quando il saldo Kimi scende sotto la cassa minima (es. sotto $15 in fase beta).
 - Prevedere **ricarica automatica** o rinnovo prepagato se la piattaforma Kimi lo consente, così da non bloccare mai le chiamate.
@@ -152,21 +194,19 @@ I prezzi mostrati nel plugin sono in **`components/UpgradeModal.tsx`** e README,
 | 6m | **€99** | 800 | €0,124 | UpgradeModal, README |
 | 1y | **€250** | 2 000 | €0,125 | UpgradeModal, README (crediti da webhook) |
 
-### 7.2 Costo Kimi per piano (solo DS Audit)
+### 7.2 Costo Kimi per piano (in ottica consumo crediti)
 
-Assumendo che l’utente usi **tutti** i crediti in scan DS Audit con **costo medio $0.013/scan** e **crediti medi 5/scan** (mix dimensioni):
+**Costo totale Kimi per piano** = (crediti erogati e consumati dal piano) × (costo medio per credito).  
+Oggi il **costo per credito** è stimato da DS Audit (medio ≈ **$0,0026** per credito); se il consumo è misto (Scan + Generate + altro) il costo per credito può variare per tipo di azione.
 
-- Costo Kimi per credito (medio) ≈ **$0.0026** (conservativo).
-- Costo totale Kimi per piano = (crediti inclusi) × (costo per credito medio).
+| Piano | Crediti (erogati/consumabili) | Costo Kimi (max, costo/credito da DS Audit) |
+|-------|------------------------------|--------------------------------------------|
+| 1w | 20 | ~$0,05 |
+| 1m | 100 | ~$0,26 |
+| 6m | 800 | ~$2,08 |
+| 1y | 2 000 | ~$5,20 |
 
-| Piano | Crediti | Costo Kimi (max, solo DS Audit) | Nota |
-|-------|---------|----------------------------------|------|
-| 1w | 20 | ~$0.05 | 20/5 = 4 scan × $0.013 |
-| 1m | 100 | ~$0.26 | 100/5 = 20 scan |
-| 6m | 800 | ~$2.08 | 800/5 = 160 scan |
-| 1y | 2 000 | ~$5.20 | 2000/5 = 400 scan |
-
-(Se l’utente usa crediti anche per Generate/altro, il costo Kimi per quel piano può aumentare; qui si considera solo DS Audit.)
+*Come l’utente consuma quei crediti (solo Scan, mix di azioni, ecc.) è definito dal product; qui conta il flusso crediti e il costo medio per credito.*
 
 ### 7.3 Margine lordo per piano (prezzi store attuali)
 
@@ -253,7 +293,7 @@ Esempio: **€500/mese** di fissi. Con 80% FREE e 20% PRO e mix piani come sopra
 Sotto questa soglia (es. pochi PRO e molti FREE) il netto non copre i fissi: i FREE “pesano” in senso di sostenibilità, non di costo marginale Kimi. Sopra, ogni nuovo utente (con quella mix) aggiunge margine.
 
 **Riepilogo break-even**
-- **Costo FREE vs PRO:** anche con molti FREE per PRO (es. 10:1), il costo Kimi sui free è <1% del netto PRO; il vincolo non è il rapporto FREE/PRO.
+- **Costo FREE vs PRO:** anche con molti FREE per PRO (es. 10:1), il costo Kimi sui free (crediti consumati × costo/credito) è <1% del netto PRO; il vincolo non è il rapporto FREE/PRO.
 - **Vincolo reale:** **costi fissi**. Stima conservativa: **~7 PRO (o ~34 utenti totali con 20% PRO)** per coprire **€500/mese** di fissi. Con il funnel § 7.6 (15% FREE→PRO), per avere 7 PRO servono ~47 FREE attivi → ~78 signup → ~310 install; numeri da sostituire con i tassi reali.
 
 ---
@@ -267,7 +307,7 @@ Sotto questa soglia (es. pochi PRO e molti FREE) il netto non copre i fissi: i F
   - 2 500 utenti: 70% FREE, 30% PRO
   - 12 500 utenti: 65% FREE, 35% PRO
 - **Mix tra piani PRO** (sul totale PRO): 10% 1w, 25% 1m, 35% 6m, 30% 1y (6m consigliato in UI).
-- **Costo Kimi per utente FREE:** 25 crediti, uso medio stimato ~40% → ~5 scan × €0,012 ≈ **€0,05** per free user (costo una tantum sui crediti bonus).
+- **Costo Kimi per utente FREE (consumo crediti):** 25 crediti in dotazione, uso medio ~40% → **~10 crediti consumati** per free user; 10 × €0,005 ≈ **€0,05** (costo una tantum sui crediti bonus). *Indipendente da come sono consumati (Scan, Generate, ecc.).*
 
 **Netto per singola vendita** (da § 7.4): 1w **€4,27** | 1m **€16,11** | 6m **€64,13** | 1y **€162,53**.
 
@@ -342,12 +382,15 @@ Il netto è circa **65% del ricavo** (il costo Kimi sui FREE è piccolo rispetto
 
 ## 8. Riepilogo numeri chiave
 
-| Voce | Valore (DS Audit only) |
-|------|-------------------------|
-| Costo medio per scan Kimi | ~$0.012–0.015 |
-| Break-even prezzo/credito | ~$0.003–0.004 |
+| Voce | Valore |
+|------|--------|
+| **Unità di conto** | **Crediti consumati** (come si consumano per azione = product/constants) |
+| Costo medio per credito Kimi (oggi da DS Audit) | ~$0,0026 (~$0,003–0,004/credito per break-even) |
+| Equivalente “per scan” (solo DS Audit, ~5 cred/scan) | ~$0,012–0,015/scan |
+| Break-even prezzo/credito | ~$0,003–0,004 |
 | Cassa minima consigliata (beta, 30 gg) | **$10–20** |
 | **Fondo cassa per numero utenti** | Vedi **§ 6.3** (100 → ~\$10–15, 12.5k → ~\$500–1k, 30 gg; cambia con utenti e uso) |
+| **Closed beta senza cassa/incassi** | **§ 6.4** — quante persone sostenere: budget €50 → ~1 000 FREE, ecc. |
 | Margine lordo vs. Kimi (prezzi store) | ~98–99% (solo costo API) |
 | **Netto per vendita (LS + 30% tasse Italia)** | **~61–65%** del ricavo → vedi § 7.4 |
 
@@ -365,16 +408,20 @@ Il netto è circa **65% del ricavo** (il costo Kimi sui FREE è piccolo rispetto
 
 ## 10. Aggiornamenti futuri (altre funzioni)
 
-Quando saranno disponibili:
-- **A11Y Audit** (Kimi + API gratuite): stimare token/costo solo per la parte Kimi e aggiungere una sezione “Costo per richiesta A11Y”.
-- **Generate / altre azioni**: stimare token (o costo fisso) per azione e inserire in una tabella “Costo per azione per tipo”.
-- **Ricalcolo cassa minima**: includere tutte le chiamate Kimi (DS + A11Y + Generate + …) nel consumo medio giornaliero e aggiornare la formula del § 6.
-- **Ricalcolo margine per piano**: sommare costo Kimi (e eventuali altri provider) per tutte le azioni consumate con i crediti del piano.
+- **Telemetria token:** per avere **conteggi reali** (e non solo stime) e tarare la matrice token ↔ crediti, è prevista una **telemetria uso token** anonima: il backend legge `usage` dalla risposta Kimi, persiste in DB (o invia alla dashboard) senza PII; la dashboard mostra aggregati. Vedi **docs/TOKEN-USAGE-TELEMETRY.md**. Invisibile in UI nel plugin.
+
+Il documento resta in ottica **consumo crediti**: i crediti sono l’unità di conto; come ogni azione li consuma è definito altrove. Quando saranno disponibili altre funzioni:
+
+- **Crediti per azione:** aggiornare (in constants/product) quanti crediti consumano A11Y, Generate, Sync, ecc.; questo doc non decide il mapping.
+- **Costo per credito:** aggiungere stime costo Kimi per le nuove azioni che usano Kimi (es. A11Y, Generate); eventuale “costo medio per credito” pesato per mix di consumo.
+- **Cassa (§ 6):** esprimere sempre come (crediti consumati/giorno) × (costo per credito); aggiornare il costo per credito (e/o crediti/giorno) quando il mix di azioni cambia.
+- **Margine per piano:** invariato nella logica (crediti erogati × prezzo/credito vs crediti consumati × costo/credito); aggiornare il costo per credito se il mix di consumo include azioni con costo Kimi diverso.
 
 ---
 
 ## Riferimenti
 
+- **Matrice token ↔ crediti e telemetria:** § 2.1 (profittabilità), **docs/TOKEN-USAGE-TELEMETRY.md** (contatore anonimo token → dashboard).
 - Crediti e variant: **auth-deploy/api/webhooks/lemonsqueezy.mjs** (`VARIANT_TO_PRO`), **constants.ts** (`TIER_LIMITS`, `SCAN_SIZE_TIERS`, `FREE_TIER_CREDITS`).
 - Modello e env: **auth-deploy/SETUP.md** (KIMI_API_KEY, KIMI_MODEL).
 - Prompt DS Audit: **auth-deploy/prompts/ds-audit-system.md**.

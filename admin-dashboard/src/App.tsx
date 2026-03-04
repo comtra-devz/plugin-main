@@ -3,6 +3,7 @@ import Home from './pages/Home';
 import Users from './pages/Users';
 import Credits from './pages/Credits';
 import Affiliates from './pages/Affiliates';
+import TokenUsage from './pages/TokenUsage';
 
 function Nav() {
   return (
@@ -15,6 +16,9 @@ function Nav() {
       </NavLink>
       <NavLink to="/credits" className={({ isActive }) => (isActive ? 'active' : '')}>
         Crediti e costi
+      </NavLink>
+      <NavLink to="/token-usage" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Token Kimi
       </NavLink>
       <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
         Affiliati
@@ -32,6 +36,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/users" element={<Users />} />
           <Route path="/credits" element={<Credits />} />
+          <Route path="/token-usage" element={<TokenUsage />} />
           <Route path="/affiliates" element={<Affiliates />} />
         </Routes>
       </main>

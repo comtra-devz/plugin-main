@@ -10,6 +10,9 @@ import { requireAdmin } from '../lib/admin-auth.mjs';
 const COST_PER_SCAN_USD = 0.013;
 const BUFFER_DAYS = 30;
 const ALERT_THRESHOLD_USD = 15;
+// Kimi prezzi per token (docs COST-ESTIMATE)
+const KIMI_COST_INPUT_PER_1M = 0.4;
+const KIMI_COST_OUTPUT_PER_1M = 2.0;
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -38,13 +41,14 @@ export default async function handler(req, res) {
   if (!sql) return res.status(503).json({ error: 'Database not configured' });
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage' });
 
   try {
     if (route === 'stats') return await handleStats(req, res);
     if (route === 'credits-timeline') return await handleCreditsTimeline(req, res);
     if (route === 'users') return await handleUsers(req, res);
     if (route === 'affiliates') return await handleAffiliates(req, res);
+    if (route === 'token-usage') return await handleTokenUsage(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -92,7 +96,23 @@ async function handleStats(req, res) {
 
   const scanCount30 = (scans30d.rows[0]?.c ?? 0);
   const avgScansPerDay = scanCount30 / 30 || 0;
-  const cost30dUsd = Math.round(scanCount30 * COST_PER_SCAN_USD * 1000) / 1000;
+  let cost30dUsd = Math.round(scanCount30 * COST_PER_SCAN_USD * 1000) / 1000;
+  let token_usage_30d = null;
+  try {
+    const thirtyDaysAgoIso = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const tokenTotals = await sql`
+      SELECT COUNT(*)::int AS count, COALESCE(SUM(input_tokens), 0)::bigint AS in_tok, COALESCE(SUM(output_tokens), 0)::bigint AS out_tok
+      FROM kimi_usage_log WHERE created_at >= ${thirtyDaysAgoIso}
+    `;
+    const tt = tokenTotals.rows?.[0];
+    if (tt && (tt.count ?? 0) > 0) {
+      const inTok = Number(tt.in_tok) || 0;
+      const outTok = Number(tt.out_tok) || 0;
+      const realCost = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+      token_usage_30d = { calls: tt.count ?? 0, cost_usd: Math.round(realCost * 1000) / 1000 };
+      cost30dUsd = token_usage_30d.cost_usd;
+    }
+  } catch (_) {}
   const suggestedBufferUsd = Math.round(avgScansPerDay * BUFFER_DAYS * COST_PER_SCAN_USD * 1000) / 1000;
   const costAlert = suggestedBufferUsd < ALERT_THRESHOLD_USD || cost30dUsd > ALERT_THRESHOLD_USD;
 
@@ -138,6 +158,7 @@ async function handleStats(req, res) {
       suggested_buffer_30d_usd: suggestedBufferUsd,
       alert_threshold_usd: ALERT_THRESHOLD_USD,
       cost_alert: costAlert,
+      token_usage_30d: token_usage_30d,
     },
     affiliates: {
       total: affiliatesTotal.rows[0]?.c ?? 0,
@@ -221,4 +242,109 @@ async function handleAffiliates(req, res) {
     created_at: r.created_at,
   }));
   res.status(200).json({ total: affiliates.length, affiliates });
+}
+
+async function handleTokenUsage(req, res) {
+  const period = Math.min(365, Math.max(1, parseInt(req.query?.period, 10) || 30));
+  const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
+
+  let totals = { count: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 };
+  let byAction = [];
+  let bySizeBand = [];
+  let byDay = [];
+
+  try {
+    const totalsRow = await sql`
+      SELECT COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+      FROM kimi_usage_log WHERE created_at >= ${since}
+    `;
+    const t = totalsRow.rows?.[0];
+    if (t) {
+      const inTok = Number(t.input_tokens) || 0;
+      const outTok = Number(t.output_tokens) || 0;
+      const costUsd = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+      totals = { count: t.count ?? 0, input_tokens: inTok, output_tokens: outTok, cost_usd: Math.round(costUsd * 1000) / 1000 };
+    }
+  } catch (_) {
+    // Tabella kimi_usage_log può non esistere ancora
+  }
+
+  try {
+    const byActionRows = await sql`
+      SELECT action_type, COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+      FROM kimi_usage_log WHERE created_at >= ${since}
+      GROUP BY action_type ORDER BY count DESC
+    `;
+    byAction = (byActionRows.rows || []).map(r => {
+      const inTok = Number(r.input_tokens) || 0;
+      const outTok = Number(r.output_tokens) || 0;
+      const costUsd = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+      return {
+        action_type: r.action_type,
+        count: r.count ?? 0,
+        input_tokens: inTok,
+        output_tokens: outTok,
+        cost_usd: Math.round(costUsd * 1000) / 1000,
+      };
+    });
+  } catch (_) {}
+
+  try {
+    const byBandRows = await sql`
+      SELECT COALESCE(size_band, 'unknown') AS size_band, COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+      FROM kimi_usage_log WHERE created_at >= ${since} AND action_type = 'ds_audit'
+      GROUP BY size_band ORDER BY count DESC
+    `;
+    bySizeBand = (byBandRows.rows || []).map(r => {
+      const inTok = Number(r.input_tokens) || 0;
+      const outTok = Number(r.output_tokens) || 0;
+      const costUsd = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+      return {
+        size_band: r.size_band,
+        count: r.count ?? 0,
+        input_tokens: inTok,
+        output_tokens: outTok,
+        cost_usd: Math.round(costUsd * 1000) / 1000,
+      };
+    });
+  } catch (_) {}
+
+  try {
+    const byDayRows = await sql`
+      SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
+             COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+      FROM kimi_usage_log WHERE created_at >= ${since}
+      GROUP BY 1 ORDER BY 1
+    `;
+    const toDateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : (d ? String(d).slice(0, 10) : ''));
+    byDay = (byDayRows.rows || []).map(r => {
+      const inTok = Number(r.input_tokens) || 0;
+      const outTok = Number(r.output_tokens) || 0;
+      const costUsd = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+      return {
+        date: toDateStr(r.day),
+        count: r.count ?? 0,
+        input_tokens: inTok,
+        output_tokens: outTok,
+        cost_usd: Math.round(costUsd * 1000) / 1000,
+      };
+    });
+  } catch (_) {}
+
+  res.status(200).json({
+    period_days: period,
+    since,
+    totals,
+    by_action: byAction,
+    by_size_band: bySizeBand,
+    by_day: byDay,
+  });
 }

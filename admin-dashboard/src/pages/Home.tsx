@@ -104,11 +104,14 @@ export default function Home() {
         <h2 className="section-title">Costi Kimi (stima DS Audit)</h2>
         <div className="grid grid-3">
           <div className={`card ${kimi.cost_alert ? 'alert' : ''}`}>
-            <h3>Costo stimato (30d)</h3>
+            <h3>Costo (30d)</h3>
             <div className="value">${kimi.cost_30d_usd.toFixed(2)}</div>
             <p style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-              ~${kimi.cost_per_scan_usd}/scan
+              {kimi.token_usage_30d
+                ? `Reale da token: ${kimi.token_usage_30d.calls} chiamate`
+                : `~${kimi.cost_per_scan_usd}/scan (stima)`}
             </p>
+            <Link to="/token-usage">Dettaglio token →</Link>
           </div>
           <div className="card">
             <h3>Cassa minima suggerita (30 gg)</h3>

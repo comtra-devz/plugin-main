@@ -34,7 +34,7 @@ Il doc costi usa **costo medio ~$0.012–0.015/scan**. Non avendo oggi log dei t
 - **Opzione A (subito):** stimare costo da `credit_transactions`:  
   `SUM(credits_consumed)` per azione audit/scan → numero scan → moltiplicare per costo medio (es. $0.013).  
   Utile per “costo stimato oggi / questo mese”.
-- **Opzione B (futuro):** salvare in una tabella `kimi_usage` (o campi extra in una tabella log) `prompt_tokens`, `completion_tokens` per ogni chiamata DS Audit; la dashboard mostrerebbe costo reale.
+- **Opzione B (futuro):** salvare in una tabella `kimi_usage` (o simile) `input_tokens`, `output_tokens` per ogni chiamata a Kimi (DS Audit e altre azioni); la dashboard mostrerebbe costo reale. Specifica dettagliata: **[TOKEN-USAGE-TELEMETRY.md](./TOKEN-USAGE-TELEMETRY.md)** (contatore anonimo, backend → DB/dashboard, invisibile in UI plugin).
 
 Formule dal doc:
 
