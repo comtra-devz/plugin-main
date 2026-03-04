@@ -26,7 +26,7 @@ Regole per l’agente A11Y: cosa controllare sul **JSON del file Figma**, come r
 
 ## 2. Touch target (area cliccabile)
 
-**Obiettivo:** elementi interattivi (bottoni, link, icone cliccabili) con area minima tipica **44×44 px** (Apple HIG, Material).
+**Obiettivo:** solo elementi **interattivi**. AA: **24×24 px** (WCAG 2.2 SC 2.5.8); AAA: 44×44 px. Eccezione spaziatura: target &lt; 24×24 può passare se cerchio 24px centrato non interseca altri target.
 
 **Dove nel JSON:**
 - `absoluteBoundingBox`: `{ x, y, width, height }` per ogni nodo. Confrontare con soglia (es. `min(width, height) >= 44`).

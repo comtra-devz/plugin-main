@@ -65,6 +65,14 @@ export interface AuditIssue {
   fix: string;
   tokenPath?: string;
   pageName?: string;
+  /** Rule ID from Comtra Accessibility Ruleset (e.g. CTR-001, TGT-001) */
+  rule_id?: string;
+  /** WCAG Success Criterion (e.g. 1.4.3, 2.5.8) */
+  wcag_sc?: string;
+  wcag_level?: 'A' | 'AA' | 'AAA';
+  measured_value?: number;
+  required_value?: number;
+  passes?: boolean;
 }
 
 export interface NavProps {

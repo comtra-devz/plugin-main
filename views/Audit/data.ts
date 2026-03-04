@@ -70,7 +70,7 @@ export function computeDsScoreFromIssues(issues: AuditIssue[]): number {
 /** A11Y tab: category config (same model as DS). See audit-specs/a11y-audit/TYPES-AND-CATEGORIES.md, ISSUE-TYPES.md */
 export const A11Y_CATEGORIES_CONFIG: { id: string; label: string; desc: string; icon: string; color: string }[] = [
   { id: 'contrast', label: 'Contrast', desc: 'Text/background WCAG ratio (AA 4.5:1)', icon: '◐', color: 'bg-red-200' },
-  { id: 'touch', label: 'Touch target', desc: 'Min 44×44 pt interactive area', icon: '☝', color: 'bg-amber-200' },
+  { id: 'touch', label: 'Touch target', desc: 'Min 24×24 px (AA) / 44×44 px (AAA) interactive area', icon: '☝', color: 'bg-amber-200' },
   { id: 'focus', label: 'Focus state', desc: 'Visible focus for keyboard nav', icon: '⌘', color: 'bg-blue-200' },
   { id: 'alt', label: 'Alt text', desc: 'Descriptions for icons/images', icon: '🖼', color: 'bg-cyan-200' },
   { id: 'semantics', label: 'Semantics', desc: 'Heading hierarchy & structure', icon: '▤', color: 'bg-violet-200' },

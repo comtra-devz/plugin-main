@@ -267,20 +267,20 @@ export const DesignSystemTab: React.FC<Props> = ({
 
       {/* Categories */}
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
-         <div className="p-3 border-b-2 border-black bg-gray-50 flex justify-between items-center">
-             <h3 className="font-bold uppercase text-xs">Categories ⚠️</h3>
+         <div className="border-b-2 border-black bg-gray-50 flex justify-between items-center px-2 py-1.5">
+             <h3 className="font-bold uppercase text-xs">Categories</h3>
              <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
                 {categories.reduce((acc, c) => acc + c.issuesCount, 0)} Issues
              </span>
          </div>
-         <div className="max-h-[160px] overflow-y-auto custom-scrollbar p-0">
+         <div>
              {categories.map(cat => {
                const isActive = activeCat === cat.id;
                return (
                  <div 
                    key={cat.id}
                    onClick={() => setActiveCat(isActive ? null : cat.id)}
-                   className={`flex items-center justify-between p-3 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
+                   className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
                  >
                     <div className="flex items-center gap-3">
                        <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>

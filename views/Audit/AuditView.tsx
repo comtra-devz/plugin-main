@@ -115,6 +115,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const [a11yAuditError, setA11yAuditError] = useState<string | null>(null);
   const [lastA11yAuditDate, setLastA11yAuditDate] = useState<Date | null>(null);
   const pendingAuditKindRef = useRef<'DS' | 'A11Y' | null>(null);
+  /** Scope label for issue list (Page, Frame, Component, Instance, Group) from last file-context-result */
+  const [auditScopeLabel, setAuditScopeLabel] = useState<string>('Page');
 
   // Timestamps
   const [lastAuditDate, setLastAuditDate] = useState<Date | null>(null);
@@ -316,6 +318,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         }
         const isA11yScan = payload.pendingScanType === 'A11Y';
         if (isA11yScan) setActiveTab('A11Y');
+        if (msg.selectionType) setAuditScopeLabel(String(msg.selectionType));
+        else setAuditScopeLabel('Page');
         const auditBody = hasFileJson
           ? { file_json: msg.fileJson as object }
           : { file_key: msg.fileKey, depth: 2 };
@@ -572,10 +576,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       setFeedbackOpen(false);
   };
 
-  const handleSelectLayer = (e: React.MouseEvent, id: string) => {
+  const handleSelectLayer = (e: React.MouseEvent, layerId: string) => {
     e.stopPropagation();
-    setLayerSelectionFeedback(id);
+    setLayerSelectionFeedback(layerId);
     setTimeout(() => setLayerSelectionFeedback(null), 2000);
+    window.parent.postMessage({ pluginMessage: { type: 'select-layer', layerId } }, '*');
   };
 
   const handleShare = () => {
@@ -605,6 +610,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     layerSelectionFeedback,
     isPro,
     activeTab,
+    scopeLabel: auditScopeLabel,
     onFix: handleFix,
     onUndo: handleUndo,
     onDiscard: handleDiscard,

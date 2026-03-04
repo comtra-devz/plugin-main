@@ -6,7 +6,7 @@ import { AuditIssue } from '../../../types';
 
 interface IssueListProps {
   displayIssues: AuditIssue[];
-  activeIssues: AuditIssue[]; // Needed for calculating fixAllCost on remaining
+  activeIssues: AuditIssue[];
   expandedIssue: string | null;
   setExpandedIssue: (id: string | null) => void;
   fixedIds: Set<string>;
@@ -16,12 +16,14 @@ interface IssueListProps {
   layerSelectionFeedback: string | null;
   isPro: boolean;
   activeTab: string;
+  /** Label for scope (e.g. "Page", "Frame", "Component", "Instance", "Group"). Shown as "{scopeLabel}: {pageName}". */
+  scopeLabel?: string;
   onFix: (e: React.MouseEvent, id: string) => void;
   onUndo: (e: React.MouseEvent, id: string) => void;
   onDiscard: (e: React.MouseEvent, id: string) => void;
   onUndoDiscard: (e: React.MouseEvent, id: string) => void;
   onOpenFeedback: (e: React.MouseEvent, id: string, type: 'DISCARD' | 'BAD_FIX') => void;
-  onSelectLayer: (e: React.MouseEvent, id: string) => void;
+  onSelectLayer: (e: React.MouseEvent, layerId: string) => void;
   onNavDeviation: (e: React.MouseEvent, issueId: string, layerIds: string[], direction: 'prev' | 'next') => void;
   onFixAll: () => void;
   onUnlockRequest: () => void;
@@ -49,7 +51,8 @@ export const IssueList: React.FC<IssueListProps> = ({
   onNavDeviation,
   onFixAll,
   onUnlockRequest,
-  totalHiddenCount
+  totalHiddenCount,
+  scopeLabel = 'Page',
 }) => {
   const remainingIssues = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id));
   const fixAllCost = remainingIssues.length * 2;
@@ -66,7 +69,7 @@ export const IssueList: React.FC<IssueListProps> = ({
       {Object.entries(groupedIssues).map(([pageName, issues]) => (
         <div key={pageName}>
             <div className="mb-2 border-b border-black/10 pb-1">
-                <span className="text-[10px] font-black uppercase bg-gray-100 px-2 py-0.5 text-gray-600">Page: {pageName}</span>
+                <span className="text-[10px] font-black uppercase bg-gray-100 px-2 py-0.5 text-gray-600">{scopeLabel}: {pageName}</span>
             </div>
             
             <div className="space-y-2">
@@ -109,7 +112,6 @@ export const IssueList: React.FC<IssueListProps> = ({
                                         {isDeviationGroup ? `Component Deviation x ${i.layerIds!.length} elements` : i.msg}
                                     </span>
                                 </div>
-                                <p className="text-[10px] text-gray-500 font-mono">ID: {i.layerId}</p>
                             </div>
                         </div>
                         
@@ -140,7 +142,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                         Discard
                                     </button>
                                 )}
-                                <span className="text-[10px] font-bold underline hover:text-[#ff90e8]">{expanded ? 'CLOSE' : 'VIEW'}</span>
+                                <span className="text-[10px] font-bold underline hover:text-[#ff90e8]" onClick={(e) => { e.stopPropagation(); onSelectLayer(e, i.layerId); }}>{expanded ? 'CLOSE' : 'VIEW'}</span>
                             </div>
                         )}
                         </div>
@@ -171,10 +173,10 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 </div>
                             ) : (
                                 <button 
-                                    onClick={(e) => onSelectLayer(e, i.id)}
+                                    onClick={(e) => onSelectLayer(e, i.layerId)}
                                     className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === i.id ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'}`}
                                 >
-                                    {layerSelectionFeedback === i.id ? 'SELECTED!' : 'Select Layer'}
+                                    {layerSelectionFeedback === i.layerId ? 'SELECTED!' : 'Select Layer'}
                                 </button>
                             )}
                             

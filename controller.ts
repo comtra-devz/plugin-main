@@ -101,8 +101,11 @@ figma.ui.onmessage = async (raw: any) => {
       })).filter((p: any) => p.color);
       if (out.fills.length === 0) delete out.fills;
     }
-    if (node.type === 'TEXT' && 'fontSize' in node && typeof (node as any).fontSize === 'number') {
-      out.style = { fontSize: (node as any).fontSize };
+    if (node.type === 'TEXT') {
+      const tn = node as any;
+      out.style = {};
+      if (typeof tn.fontSize === 'number') out.style.fontSize = tn.fontSize;
+      if (typeof tn.fontWeight === 'number') out.style.fontWeight = tn.fontWeight;
     }
     return out;
   }
@@ -195,10 +198,22 @@ figma.ui.onmessage = async (raw: any) => {
       try {
         const base = buildFileContextSync(scope, pageId);
         const fileJson = await buildDocumentJsonAsync({ scope: scope ?? 'all', nodeIds: base.nodeIds, pageId: base.pageId ?? undefined });
+        let selectionType: string = 'Page';
+        let selectionName: string = '';
+        if (scope === 'current' && base.nodeIds?.length) {
+          const first = await figma.getNodeByIdAsync(base.nodeIds[0]);
+          if (first) {
+            selectionName = first.name || 'Selection';
+            const t = first.type;
+            selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'PAGE' ? 'Page' : 'Selection';
+          }
+        }
         figma.ui.postMessage({
           type: 'file-context-result',
           ...base,
           fileJson,
+          selectionType,
+          selectionName,
         });
       } catch (e) {
         console.error('[get-file-context]', e);
@@ -344,6 +359,17 @@ figma.ui.onmessage = async (raw: any) => {
         });
       }
     })();
+  }
+
+  if (msg.type === 'select-layer') {
+    const layerId = msg.layerId;
+    if (layerId) {
+      const node = await figma.getNodeByIdAsync(layerId);
+      if (node && 'id' in node) {
+        figma.currentPage.selection = [node as SceneNode];
+        figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
+      }
+    }
   }
 
   if (msg.type === 'apply-fix') {
