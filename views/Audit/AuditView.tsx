@@ -437,16 +437,21 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   const handleConfirmScan = () => {
     const cost = scanStats.cost;
-    const scanType = pendingScanTypeRef.current ?? pendingScanType;
+    const scanType = pendingScanTypeRef.current ?? pendingScanType ?? (activeTab === 'A11Y' ? 'A11Y' : 'MAIN');
     if (!scanType) return;
     pendingScanTypeRef.current = null;
     confirmPayloadRef.current = { cost, score, pendingScanType: scanType };
     setShowReceipt(false);
     setWaitingForFileContext(true);
-    window.parent.postMessage(
-      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
-      '*'
-    );
+    // Defer postMessage so React commits the loader state and the full-page loader is visible before we request file context
+    const scope = scanScope;
+    const pageId = scanScope === 'page' ? selectedPageId : undefined;
+    requestAnimationFrame(() => {
+      window.parent.postMessage(
+        { pluginMessage: { type: 'get-file-context', scope, pageId } },
+        '*'
+      );
+    });
   };
 
   const handleFix = (e: React.MouseEvent, id: string) => {
