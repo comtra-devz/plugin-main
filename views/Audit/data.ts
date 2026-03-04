@@ -106,6 +106,15 @@ export const LOADING_MSGS = [
   "Whispering to the pixels..."
 ];
 
+/** Loader messages for A11Y audit flow (same ToV: playful, design‑centric). Shown after Authorize. */
+export const A11Y_LOADING_MSGS = [
+  "Checking contrast and touch targets...",
+  "Reading the layers for accessibility...",
+  "Gathering focus and semantics...",
+  "Whispering to the pixels (a11y pass)...",
+  "Observing contrast ratios and labels..."
+];
+
 /** Legacy list (includes a11y for any non-DS use). For DS tab use buildDsCategoriesFromIssues instead. */
 export const CATEGORIES: ExtendedAuditCategory[] = [
   { id: 'adoption', label: 'Adoption Rate', desc: 'DS Components vs. Detached Layers', score: 92, icon: '❖', color: 'bg-[#ff90e8]', issuesCount: 3 },

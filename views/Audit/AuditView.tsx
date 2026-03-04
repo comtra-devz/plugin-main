@@ -11,7 +11,8 @@ import { DesignSystemTab, ScanScope } from './tabs/DesignSystemTab';
 import { AccessibilityTab } from './tabs/AccessibilityTab';
 import { DeepAnalysisTab } from './tabs/DeepAnalysisTab';
 import { 
-  LOADING_MSGS, 
+  LOADING_MSGS,
+  A11Y_LOADING_MSGS,
   DS_ISSUES, 
   A11Y_ISSUES, 
   UX_ISSUES, 
@@ -54,6 +55,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
+  const [a11yLoaderMsg, setA11yLoaderMsg] = useState(A11Y_LOADING_MSGS[0]);
   
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
@@ -187,6 +189,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     return () => clearInterval(interval);
   }, [isScanning]);
 
+  // Rotate A11Y loader messages (after Authorize only)
+  const isA11yLoader = waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading);
+  useEffect(() => {
+    if (!isA11yLoader) return;
+    let i = 0;
+    setA11yLoaderMsg(A11Y_LOADING_MSGS[0]);
+    const interval = setInterval(() => {
+      i = (i + 1) % A11Y_LOADING_MSGS.length;
+      setA11yLoaderMsg(A11Y_LOADING_MSGS[i]);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [isA11yLoader]);
+
   // Fetch document pages after first paint so mount stays snappy (get-pages is light; no traversal).
   useEffect(() => {
     const t = requestAnimationFrame(() => {
@@ -315,11 +330,23 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
               onUnlockRequest();
               return;
             }
-            if (result.error) return;
+            if (result.error) {
+              if (isA11yScan) {
+                setA11yAuditError(result.error);
+                setA11yAuditIssues(null);
+              }
+              setPendingScanType(null);
+              setWaitingForFileContext(false);
+              return;
+            }
           }
           setShowReceipt(false);
-          // Backend fetches file by file_key when we pass it; no need to pre-fetch with fetchFigmaFile (saves a full round trip and speeds up authorize charge).
-          if (isA11yScan && fetchA11yAudit) {
+          if (isA11yScan) {
+            if (!fetchA11yAudit) {
+              setA11yAuditError('Audit not available');
+              setPendingScanType(null);
+              return;
+            }
             setA11yAuditError(null);
             setA11yAuditLoading(true);
             fetchA11yAudit(auditBody)
@@ -581,13 +608,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const wordCount = feedbackText.trim().split(/\s+/).filter(w => w.length > 0).length;
   const canSubmitFeedback = wordCount >= 2;
 
-  // Full-page loader: same as DS audit (calculating nodes, preparing document, or running A11Y audit)
-  const showFullPageLoader = isScanning || isCalculating || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading);
-  const fullPageLoaderMsg = waitingForFileContext
-    ? 'Preparing document…'
-    : activeTab === 'A11Y' && a11yAuditLoading
-      ? 'Analysing accessibility…'
-      : loadingMsg;
+  // Full-page loader only after Authorize (not during first scan / count nodes). DS: isScanning. A11Y: waitingForFileContext + a11yAuditLoading.
+  const showFullPageLoader = isScanning || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading);
+  const fullPageLoaderMsg = isA11yLoader ? a11yLoaderMsg : loadingMsg;
 
   if (showFullPageLoader) return (
     <div className="p-8 h-[70vh] flex flex-col items-center justify-center text-center overflow-hidden">
