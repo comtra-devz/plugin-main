@@ -103,7 +103,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' } | null>(null);
   // Ref so "Authorize" always sees the scan type that was set when the receipt was shown (avoids stale closure)
   const pendingScanTypeRef = useRef<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
-  const [exportJsonFeedback, setExportJsonFeedback] = useState<string | null>(null);
   // DS Audit agent: real issues from backend (Kimi)
   const [dsAuditIssues, setDsAuditIssues] = useState<AuditIssue[] | null>(null);
   const [dsAuditLoading, setDsAuditLoading] = useState(false);
@@ -188,25 +187,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     return () => clearInterval(interval);
   }, [isScanning]);
 
-  // Fetch document pages on mount
+  // Fetch document pages after first paint so mount stays snappy (get-pages is light; no traversal).
   useEffect(() => {
-    window.parent.postMessage({ pluginMessage: { type: 'get-pages' } }, '*');
-  }, []);
-
-  // Pre-warm node count in background after login so first "Run audit" is instant (cache hit). Silent: no loader, no receipt.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      window.parent.postMessage({
-        pluginMessage: {
-          type: 'count-nodes',
-          scope: 'all',
-          pageId: undefined,
-          countCap: COUNT_CAP,
-          background: true,
-        },
-      }, '*');
-    }, 400);
-    return () => clearTimeout(t);
+    const t = requestAnimationFrame(() => {
+      window.parent.postMessage({ pluginMessage: { type: 'get-pages' } }, '*');
+    });
+    return () => cancelAnimationFrame(t);
   }, []);
 
   // Fake progress: random steps and delays so the bar feels real in fast (non-problematic) cases
@@ -290,60 +276,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
-      // Export JSON: canale dedicato (get-export-json → export-json-result)
-      if (msg.type === 'export-json-result') {
-        if (!msg.fileKey) {
-          setExportJsonFeedback('File is Untitled — use File → Save as to create a copy with an ID.');
-          setTimeout(() => setExportJsonFeedback(null), 3000);
-          return;
-        }
-        if (!fetchFigmaFile) {
-          setExportJsonFeedback('Export not available.');
-          setTimeout(() => setExportJsonFeedback(null), 3000);
-          return;
-        }
-        (async () => {
-          try {
-            const json = await fetchFigmaFile({
-              file_key: msg.fileKey,
-              scope: msg.scope ?? 'all',
-              depth: 2,
-              page_id: msg.pageId ?? undefined,
-              node_ids: msg.nodeIds ?? undefined,
-            });
-            if (json === undefined) {
-              setExportJsonFeedback('Not logged in — log in and retry.');
-              setTimeout(() => setExportJsonFeedback(null), 4000);
-              return;
-            }
-            const str = typeof json === 'string' ? json : JSON.stringify(json);
-            try {
-              await navigator.clipboard.writeText(str);
-              setExportJsonFeedback('Copied! Paste in Kimi.');
-            } catch (_clipErr) {
-              const textarea = document.createElement('textarea');
-              textarea.value = str;
-              textarea.style.position = 'fixed';
-              textarea.style.opacity = '0';
-              document.body.appendChild(textarea);
-              textarea.select();
-              try {
-                document.execCommand('copy');
-                setExportJsonFeedback('Copied! Paste in Kimi.');
-              } catch {
-                setExportJsonFeedback('Copy failed — try Network tab.');
-              }
-              document.body.removeChild(textarea);
-            }
-            setTimeout(() => setExportJsonFeedback(null), 3000);
-          } catch (err) {
-            setExportJsonFeedback('Error: ' + (err instanceof Error ? err.message : 'Failed'));
-            setTimeout(() => setExportJsonFeedback(null), 5000);
-          }
-        })();
-        return;
-      }
-
       if (msg.type === 'file-context-result') {
         setWaitingForFileContext(false);
         const payload = confirmPayloadRef.current;
@@ -481,16 +413,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       '*'
     );
   };
-
-  const handleExportJson = useCallback(() => {
-    if (!fetchFigmaFile) return;
-    setExportJsonFeedback('Exporting...');
-    window.parent.postMessage(
-      { pluginMessage: { type: 'get-export-json', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
-      '*'
-    );
-    setTimeout(() => setExportJsonFeedback((f) => (f === 'Exporting...' ? null : f)), 8000);
-  }, [fetchFigmaFile, scanScope, selectedPageId]);
 
   const handleFix = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -813,8 +735,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             activeIssues={activeIssues}
             onStartScan={handleStartScan}
             onShare={handleShare}
-            onExportJson={fetchFigmaFile ? handleExportJson : undefined}
-            exportJsonFeedback={exportJsonFeedback}
             isCalculating={isCalculating}
             scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
             issueListProps={issueListProps}

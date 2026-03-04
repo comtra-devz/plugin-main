@@ -37,8 +37,6 @@ interface Props {
   activeIssues: AuditIssue[];
   onStartScan: () => void;
   onShare: () => void;
-  onExportJson?: () => void;
-  exportJsonFeedback?: string | null;
   isCalculating: boolean;
   scanProgress: { percent: number; count: number };
   issueListProps: any;
@@ -74,8 +72,6 @@ export const DesignSystemTab: React.FC<Props> = ({
   activeIssues,
   onStartScan,
   onShare,
-  onExportJson,
-  exportJsonFeedback,
   isCalculating,
   scanProgress,
   issueListProps,
@@ -156,15 +152,6 @@ export const DesignSystemTab: React.FC<Props> = ({
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
               No credits will be deducted at this point yet.
             </p>
-            {onExportJson && (
-              <button
-                type="button"
-                onClick={onExportJson}
-                className="mt-3 text-[10px] font-medium text-gray-600 hover:text-black underline"
-              >
-                {exportJsonFeedback ?? 'Export file JSON for Kimi'}
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -206,15 +193,6 @@ export const DesignSystemTab: React.FC<Props> = ({
           )}
 
           <div className="absolute bottom-3 right-3 flex items-center gap-2">
-            {onExportJson && (
-              <button
-                type="button"
-                onClick={onExportJson}
-                className="text-[9px] font-medium text-gray-500 hover:text-black underline"
-              >
-                {exportJsonFeedback ?? 'Export JSON'}
-              </button>
-            )}
             <button 
                onClick={onShare} 
                className="bg-black text-white px-3 py-1.5 text-[10px] font-bold uppercase hover:bg-gray-800 transition-colors flex items-center gap-1 shadow-[2px_2px_0_0_rgba(0,0,0,0.2)]"

@@ -173,13 +173,6 @@ figma.ui.onmessage = async (raw: any) => {
     };
   }
 
-  // Export JSON: canale dedicato (nessun ref, nessuna race con scan)
-  if (msg.type === 'get-export-json') {
-    const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
-    const pageId = msg.pageId;
-    figma.ui.postMessage({ type: 'export-json-result', ...buildFileContextSync(scope, pageId) });
-  }
-
   // File context for backend pipeline. light: true = instant (fileKey/scope/pageId only; backend fetches file). No light = full serialization (slow).
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
