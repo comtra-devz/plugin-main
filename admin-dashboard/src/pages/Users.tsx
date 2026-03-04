@@ -25,7 +25,7 @@ export default function Users() {
 
   return (
     <>
-      <h1 style={{ marginTop: 0, marginBottom: '1rem' }}>Utenti</h1>
+      <h1 className="page-title">Utenti</h1>
       <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
         Email offuscate. Totale: <strong>{total}</strong>
       </p>
@@ -35,8 +35,8 @@ export default function Users() {
 
       {res && !loading && (
         <>
-          <div className="table-wrap">
-            <table>
+          <div className="brutal-table-wrap">
+            <table className="brutal-table">
               <thead>
                 <tr>
                   <th>Email</th>
@@ -81,7 +81,7 @@ export default function Users() {
           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button
               type="button"
-              className="btn"
+              className="brutal-btn"
               disabled={!hasPrev || loading}
               onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
             >
@@ -92,7 +92,7 @@ export default function Users() {
             </span>
             <button
               type="button"
-              className="btn"
+              className="brutal-btn"
               disabled={!hasMore || loading}
               onClick={() => setOffset((o) => o + PAGE_SIZE)}
             >

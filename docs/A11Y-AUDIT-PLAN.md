@@ -94,7 +94,7 @@ Se si sceglie **Opzione B** (backend genera issue contrast/touch): il backend do
 4. Implementare **POST /api/agents/a11y-audit**: stesso schema di ds-audit (getFigmaAccessToken, GET file, chiamata Kimi, parsing JSON).
 5. (Opzionale) Aggiungere in backend il pre-calcolo contrast/touch e passarli a Kimi come contesto (o generare issue contrast/touch lato backend e unire a quelle Kimi).
 6. Integrare nel plugin: `fetchA11yAudit(fileKey)`, salvare issue A11Y in stato, mostrare nel tab A11Y.
-7. (Dopo MVP) Integrare **tre layer su codice** (axe-core, HTML_CodeSniffer, Lighthouse) e **verifica OKLCH** (vedi § 7 e § 8).
+7. **(Fatto v1.0 design)** Backend deterministico: **oauth-server/a11y-audit-engine.mjs** (contrast, touch, focus, alt, semantics, color, OKLCH). Endpoint **POST /api/agents/a11y-audit**; plugin tab A11Y con stima crediti (getA11yCostAndSize) e consume `a11y_audit`. (Dopo MVP) Integrare **tre layer su codice** (axe-core, HTML_CodeSniffer, Lighthouse) e **verifica OKLCH su HTML** (vedi § 7 e § 8): endpoint es. **POST /api/agents/a11y-audit-code** (input: html o url).
 
 ---
 

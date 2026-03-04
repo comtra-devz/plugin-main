@@ -35,27 +35,27 @@ export default function Credits() {
 
   return (
     <>
-      <h1 style={{ marginTop: 0, marginBottom: '1rem' }}>Crediti e costi</h1>
+      <h1 className="page-title">Crediti e costi</h1>
 
       {stats && (
         <section style={{ marginBottom: '2rem' }}>
           <h2 className="section-title">Riepilogo</h2>
           <div className="grid grid-4">
-            <div className="card">
-              <h3>Scan (30d)</h3>
-              <div className="value">{stats.credits.scans_30d}</div>
+            <div className="brutal-card">
+              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Scan (30d)</h3>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{stats.credits.scans_30d}</div>
             </div>
-            <div className="card">
-              <h3>Crediti consumati (30d)</h3>
-              <div className="value">{stats.credits.credits_consumed_30d}</div>
+            <div className="brutal-card">
+              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Crediti consumati (30d)</h3>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{stats.credits.credits_consumed_30d}</div>
             </div>
-            <div className="card">
-              <h3>Costo Kimi stimato (30d)</h3>
-              <div className="value">${stats.kimi.cost_30d_usd.toFixed(2)}</div>
+            <div className="brutal-card">
+              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo Kimi stimato (30d)</h3>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${stats.kimi.cost_30d_usd.toFixed(2)}</div>
             </div>
-            <div className="card">
-              <h3>Cassa minima suggerita</h3>
-              <div className="value">${stats.kimi.suggested_buffer_30d_usd.toFixed(2)}</div>
+            <div className="brutal-card">
+              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Cassa minima suggerita</h3>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${stats.kimi.suggested_buffer_30d_usd.toFixed(2)}</div>
             </div>
           </div>
         </section>
@@ -67,8 +67,8 @@ export default function Credits() {
           <select
             value={period}
             onChange={(e) => setPeriod(Number(e.target.value))}
-            className="btn"
-            style={{ padding: '0.4rem 0.75rem' }}
+            className="brutal-input"
+            style={{ width: 'auto', minWidth: 140 }}
           >
             <option value={7}>7 giorni</option>
             <option value={30}>30 giorni</option>
@@ -77,7 +77,7 @@ export default function Credits() {
         </div>
 
         {timeline?.timeline?.length ? (
-          <div className="card">
+          <div className="brutal-card">
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {[...timeline.timeline].reverse().map((d) => (
                 <div key={d.date} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -86,12 +86,8 @@ export default function Credits() {
                   </span>
                   <div className="chart-bar" style={{ flex: 1, maxWidth: 300 }}>
                     <div
-                      style={{
-                        width: `${(d.scans / maxScans) * 100}%`,
-                        height: '100%',
-                        background: 'var(--accent)',
-                        borderRadius: 4,
-                      }}
+                      className="chart-bar-inner"
+                      style={{ width: `${(d.scans / maxScans) * 100}%` }}
                     />
                   </div>
                   <span className="mono" style={{ fontSize: '0.85rem' }}>

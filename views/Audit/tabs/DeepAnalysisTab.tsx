@@ -13,8 +13,7 @@ interface DeepAnalysisTabProps {
   isDeepScanning: boolean;
   activeIssues: AuditIssue[];
   onDeepScan: () => void;
-  
-  // IssueList Props
+  deepScanError?: string | null;
   issueListProps: any;
 }
 
@@ -28,6 +27,7 @@ export const DeepAnalysisTab: React.FC<DeepAnalysisTabProps> = ({
   isDeepScanning,
   activeIssues,
   onDeepScan,
+  deepScanError,
   issueListProps
 }) => {
   const [isCalculating, setIsCalculating] = useState(false);
@@ -81,6 +81,9 @@ export const DeepAnalysisTab: React.FC<DeepAnalysisTabProps> = ({
             </div>
          ) : (
             <div className="flex flex-col animate-in fade-in">
+                {deepScanError && (
+                  <p className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-1 mb-2">{deepScanError}</p>
+                )}
                 <div className="flex justify-between items-center mb-2 px-1 py-2 border-b-2 border-black/10">
                     <h3 className="font-black uppercase text-xs">
                         {activeTab === 'A11Y' ? 'Accessibility Report' : activeTab === 'UX' ? 'UX Logic Report' : 'Prototype Scan'}

@@ -21,7 +21,7 @@ export default function Affiliates() {
 
   return (
     <>
-      <h1 style={{ marginTop: 0, marginBottom: '1rem' }}>Affiliati</h1>
+      <h1 className="page-title">Affiliati</h1>
       <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
         Totale: <strong>{data.total}</strong> · Referral totali: <strong>{data.affiliates.reduce((s, a) => s + a.total_referrals, 0)}</strong>
       </p>
@@ -29,8 +29,8 @@ export default function Affiliates() {
       {data.affiliates.length === 0 ? (
         <p className="loading">Nessun affiliato.</p>
       ) : (
-        <div className="table-wrap">
-          <table>
+        <div className="brutal-table-wrap">
+          <table className="brutal-table">
             <thead>
               <tr>
                 <th>Codice</th>

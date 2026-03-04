@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, COUNT_CAP } from '../../constants';
+import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, COUNT_CAP } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
 import { CircularScore } from '../../components/widgets/CircularScore';
 import { Confetti } from '../../components/Confetti';
@@ -41,11 +41,13 @@ interface Props {
   fetchFigmaFile?: (body: FetchFigmaFileBody) => Promise<unknown>;
   /** DS Audit agent: fetch issues from backend (Kimi). Called after confirm scan when fileKey is available. */
   fetchDsAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
+  /** A11Y Audit agent: fetch issues from backend (no Kimi). Called after confirm when fileKey is available. */
+  fetchA11yAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -101,6 +103,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const [dsAuditIssues, setDsAuditIssues] = useState<AuditIssue[] | null>(null);
   const [dsAuditLoading, setDsAuditLoading] = useState(false);
   const [dsAuditError, setDsAuditError] = useState<string | null>(null);
+  // A11Y Audit agent: real issues from backend (no Kimi)
+  const [a11yAuditIssues, setA11yAuditIssues] = useState<AuditIssue[] | null>(null);
+  const [a11yAuditLoading, setA11yAuditLoading] = useState(false);
+  const [a11yAuditError, setA11yAuditError] = useState<string | null>(null);
+  const pendingAuditKindRef = useRef<'DS' | 'A11Y' | null>(null);
 
   // Timestamps
   const [lastAuditDate, setLastAuditDate] = useState<Date | null>(null);
@@ -126,9 +133,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
-  // Determine which issue set to use (DS tab uses real issues from agent when available)
+  // Determine which issue set to use (DS / A11Y use real issues from agent when available)
   let currentIssues = activeTab === 'DS' && dsAuditIssues != null ? dsAuditIssues : DS_ISSUES;
-  if (activeTab === 'A11Y') currentIssues = A11Y_ISSUES;
+  if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? a11yAuditIssues : A11Y_ISSUES;
   if (activeTab === 'UX') currentIssues = UX_ISSUES;
   if (activeTab === 'PROTOTYPE') currentIssues = PROTO_ISSUES;
 
@@ -229,9 +236,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       if (msg.type === 'count-nodes-result') {
         const count = msg.count ?? 0;
         const target = msg.target ?? 'All Pages';
-        const { cost, sizeLabel } = getScanCostAndSize(count);
+        const isA11y = pendingAuditKindRef.current === 'A11Y';
+        pendingAuditKindRef.current = null;
+        const { cost, sizeLabel } = isA11y ? getA11yCostAndSize(count) : getScanCostAndSize(count);
         setScanStats({ nodes: count, cost, sizeLabel, target });
-        setPendingScanType('MAIN');
+        setPendingScanType(isA11y ? 'A11Y' : 'MAIN');
         setScanProgress(prev => ({ ...prev, count }));
         const minLoadingMs = 1200 + Math.floor(Math.random() * 1000);
         setTimeout(() => {
@@ -303,9 +312,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
+        const isA11yScan = payload.pendingScanType === 'A11Y';
         (async () => {
           if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
-            const result = await consumeCredits({ action_type: 'audit', credits_consumed: payload.cost, max_health_score: payload.score });
+            const result = await consumeCredits({
+              action_type: isA11yScan ? 'a11y_audit' : 'audit',
+              credits_consumed: payload.cost,
+              max_health_score: payload.score,
+            });
             if (result.error === 'Insufficient credits') {
               onUnlockRequest();
               return;
@@ -313,7 +327,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             if (result.error) return;
           }
           setShowReceipt(false);
-          if (msg.fileKey && fetchFigmaFile) {
+          if (msg.fileKey && fetchFigmaFile && !isA11yScan) {
             try {
               await fetchFigmaFile({
                 file_key: msg.fileKey,
@@ -323,10 +337,22 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
                 node_ids: msg.nodeIds ?? undefined,
               });
             } catch (_) {
-              // Pipeline validation: optional; UI continues with mock data
+              // Pipeline validation: optional
             }
           }
-          if (msg.fileKey && fetchDsAudit) {
+          if (msg.fileKey && isA11yScan && fetchA11yAudit) {
+            setA11yAuditError(null);
+            setA11yAuditLoading(true);
+            fetchA11yAudit({ file_key: msg.fileKey, depth: 2 })
+              .then((data) => {
+                setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+              })
+              .catch((err) => {
+                setA11yAuditError(err instanceof Error ? err.message : 'Audit failed');
+                setA11yAuditIssues(null);
+              })
+              .finally(() => setA11yAuditLoading(false));
+          } else if (msg.fileKey && fetchDsAudit) {
             setDsAuditError(null);
             setDsAuditLoading(true);
             fetchDsAudit({ file_key: msg.fileKey, depth: 2 })
@@ -340,7 +366,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
               .finally(() => setDsAuditLoading(false));
           }
           if (payload.pendingScanType === 'MAIN') setIsScanning(true);
-          else if (payload.pendingScanType === 'DEEP') {
+          else if (payload.pendingScanType === 'DEEP' || payload.pendingScanType === 'A11Y') {
             setIsDeepScanning(true);
             setTimeout(() => {
               setIsDeepScanning(false);
@@ -354,7 +380,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, onUnlockRequest, useInfiniteCreditsForTest, plan]);
+  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, onUnlockRequest, useInfiniteCreditsForTest, plan]);
 
   const handleStartScan = useCallback(() => {
     if (knownZeroCredits) {
@@ -370,8 +396,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   const handleDeepScan = () => {
     if (knownZeroCredits) {
-        onUnlockRequest();
-        return;
+      onUnlockRequest();
+      return;
+    }
+    if (activeTab === 'A11Y') {
+      pendingAuditKindRef.current = 'A11Y';
+      setIsCalculating(true);
+      setScanProgress({ percent: 0, count: 0 });
+      window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope: 'all', pageId: undefined, countCap: COUNT_CAP } }, '*');
+      return;
     }
     const mockNodes = Math.floor(Math.random() * 1000) + 50;
     const { cost, sizeLabel } = getScanCostAndSize(mockNodes);
@@ -734,10 +767,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             hasDeepScanned={hasDeepScanned}
             setHasDeepScanned={setHasDeepScanned}
             lastDeepScanDate={lastDeepScanDate}
-            isDeepScanning={isDeepScanning}
+            isDeepScanning={isDeepScanning || (activeTab === 'A11Y' && a11yAuditLoading)}
             activeIssues={activeIssues}
             onDeepScan={handleDeepScan}
             issueListProps={issueListProps}
+            deepScanError={activeTab === 'A11Y' ? a11yAuditError : null}
         />
       )}
     </div>

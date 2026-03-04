@@ -379,6 +379,27 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken]);
 
+  const fetchA11yAudit = React.useCallback(async (body: { file_key: string; depth?: number }) => {
+    if (!user?.authToken) return { issues: [] };
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/a11y-audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify({ file_key: body.file_key, depth: body.depth ?? 2 }),
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        msg = j.error || text;
+      } catch {
+        // keep as-is
+      }
+      throw new Error(msg);
+    }
+    return r.json();
+  }, [user?.authToken]);
+
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
@@ -446,6 +467,7 @@ export default function AppTest() {
               consumeCredits={consumeCredits}
               fetchFigmaFile={fetchFigmaFile}
               fetchDsAudit={fetchDsAudit}
+              fetchA11yAudit={fetchA11yAudit}
               onNavigateToGenerate={(prompt) => {
                   setGenPrompt(prompt);
                   setView(ViewState.GENERATE);

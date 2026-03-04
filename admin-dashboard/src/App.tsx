@@ -1,36 +1,30 @@
-import { Routes, Route, NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import AdminLogin, { isAdminLoggedIn } from './AdminLogin';
+import Sidebar from './Sidebar';
 import Home from './pages/Home';
 import Users from './pages/Users';
 import Credits from './pages/Credits';
 import Affiliates from './pages/Affiliates';
 import TokenUsage from './pages/TokenUsage';
 
-function Nav() {
-  return (
-    <nav className="nav">
-      <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
-        Home
-      </NavLink>
-      <NavLink to="/users" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Utenti
-      </NavLink>
-      <NavLink to="/credits" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Crediti e costi
-      </NavLink>
-      <NavLink to="/token-usage" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Token Kimi
-      </NavLink>
-      <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Affiliati
-      </NavLink>
-    </nav>
-  );
-}
-
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    setAuthenticated(isAdminLoggedIn());
+    setChecking(false);
+  }, []);
+
+  if (checking) return null;
+  if (!authenticated) {
+    return <AdminLogin onSuccess={() => setAuthenticated(true)} />;
+  }
+
   return (
     <div className="layout">
-      <Nav />
+      <Sidebar />
       <main className="main">
         <Routes>
           <Route path="/" element={<Home />} />

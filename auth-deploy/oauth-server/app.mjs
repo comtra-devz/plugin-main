@@ -755,6 +755,45 @@ app.post('/api/agents/ds-audit', async (req, res) => {
   }
 });
 
+// --- A11Y Audit agent (v1.0: no Kimi — backend only: contrast, touch, focus, alt, semantics, color, OKLCH)
+const { runA11yAudit } = await import('./a11y-audit-engine.mjs');
+
+app.post('/api/agents/a11y-audit', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const fileKey = (body.file_key || body.fileKey || '').trim();
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'A11Y Audit requires database' });
+
+  try {
+    const accessToken = await getFigmaAccessToken(dbSql, userId);
+    if (!accessToken) {
+      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+    }
+    const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : 2;
+    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+    url.searchParams.set('depth', String(depth));
+    const figmaRes = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!figmaRes.ok) {
+      if (figmaRes.status === 403) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      if (figmaRes.status === 404) return res.status(404).json({ error: 'File not found' });
+      const t = await figmaRes.text();
+      console.error('A11Y Audit: Figma API', figmaRes.status, t.slice(0, 200));
+      return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error' });
+    }
+    const fileJson = await figmaRes.json();
+    const { issues } = runA11yAudit(fileJson);
+    res.json({ issues });
+  } catch (err) {
+    console.error('POST /api/agents/a11y-audit', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- Trofei: contesto utente e check sblocco
 async function getTrophyContext(sql, userId) {
   const u = await dbSql`SELECT total_xp, max_health_score, fixes_accepted_total, consecutive_fixes, token_fixes_total, bug_reports_total, linkedin_shared
@@ -774,7 +813,7 @@ async function getTrophyContext(sql, userId) {
   const audits = (counts.audit || 0) + (counts.scan || 0);
   const wireframesGen = (counts.wireframe_gen || 0) + (counts.generate || 0);
   const protoScans = counts.proto_scan || 0;
-  const a11y = counts.a11y_check || 0;
+  const a11y = counts.a11y_check || counts.a11y_audit || 0;
   const ux = counts.ux_audit || 0;
   const syncStorybook = counts.sync_storybook || 0;
   const syncGithub = counts.sync_github || 0;
