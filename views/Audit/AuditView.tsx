@@ -319,69 +319,76 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const auditBody = hasFileJson
           ? { file_json: msg.fileJson as object }
           : { file_key: msg.fileKey, depth: 2 };
-        (async () => {
-          if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
-            const result = await consumeCredits({
-              action_type: isA11yScan ? 'a11y_audit' : 'audit',
-              credits_consumed: payload.cost,
-              max_health_score: payload.score,
-            });
-            if (result.error === 'Insufficient credits') {
-              onUnlockRequest();
-              return;
-            }
-            if (result.error) {
-              if (isA11yScan) {
-                setA11yAuditError(result.error);
-                setA11yAuditIssues(null);
-              }
-              setPendingScanType(null);
-              setWaitingForFileContext(false);
-              return;
-            }
-          }
-          setShowReceipt(false);
+
+        const setAuditError = (message: string) => {
           if (isA11yScan) {
-            if (!fetchA11yAudit) {
-              setA11yAuditError('Audit not available');
-              setPendingScanType(null);
-              return;
-            }
-            setA11yAuditError(null);
-            setA11yAuditLoading(true);
-            fetchA11yAudit(auditBody)
-              .then((data) => {
-                setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
-                setLastA11yAuditDate(new Date());
-              })
-              .catch((err) => {
-                setA11yAuditError(err instanceof Error ? err.message : 'Audit failed');
-                setA11yAuditIssues(null);
-              })
-              .finally(() => setA11yAuditLoading(false));
-          } else if (fetchDsAudit) {
-            setDsAuditError(null);
-            setDsAuditLoading(true);
-            fetchDsAudit(auditBody)
-              .then((data) => {
-                setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
-              })
-              .catch((err) => {
-                setDsAuditError(err instanceof Error ? err.message : 'Audit failed');
-                setDsAuditIssues(null);
-              })
-              .finally(() => setDsAuditLoading(false));
-          }
-          if (payload.pendingScanType === 'MAIN') setIsScanning(true);
-          else if (payload.pendingScanType === 'DEEP' || payload.pendingScanType === 'A11Y') {
-            setIsDeepScanning(true);
-            setTimeout(() => {
-              setIsDeepScanning(false);
-              setHasDeepScanned(true);
-              setLastDeepScanDate(new Date());
-            }, 1500);
+            setA11yAuditError(message);
+            setA11yAuditIssues(null);
+            setA11yAuditLoading(false);
+          } else {
+            setDsAuditError(message);
+            setDsAuditIssues(null);
+            setDsAuditLoading(false);
           }
           setPendingScanType(null);
+          setWaitingForFileContext(false);
+        };
+
+        (async () => {
+          try {
+            if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
+              const result = await consumeCredits({
+                action_type: isA11yScan ? 'a11y_audit' : 'audit',
+                credits_consumed: payload.cost,
+                max_health_score: payload.score,
+              });
+              if (result.error === 'Insufficient credits') {
+                onUnlockRequest();
+                setWaitingForFileContext(false);
+                return;
+              }
+              if (result.error) {
+                setAuditError(result.error);
+                return;
+              }
+            }
+            setShowReceipt(false);
+            if (isA11yScan) {
+              if (!fetchA11yAudit) {
+                setAuditError('Audit not available');
+                return;
+              }
+              setA11yAuditError(null);
+              setA11yAuditLoading(true);
+              const data = await fetchA11yAudit(auditBody);
+              setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+              setLastA11yAuditDate(new Date());
+            } else if (fetchDsAudit) {
+              setDsAuditError(null);
+              setDsAuditLoading(true);
+              const data = await fetchDsAudit(auditBody);
+              setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+            } else {
+              setAuditError('Audit not available');
+              return;
+            }
+            if (payload.pendingScanType === 'MAIN') setIsScanning(true);
+            else if (payload.pendingScanType === 'DEEP' || payload.pendingScanType === 'A11Y') {
+              setIsDeepScanning(true);
+              setTimeout(() => {
+                setIsDeepScanning(false);
+                setHasDeepScanned(true);
+                setLastDeepScanDate(new Date());
+              }, 1500);
+            }
+          } catch (err) {
+            setAuditError(err instanceof Error ? err.message : 'Something went wrong');
+          } finally {
+            setPendingScanType(null);
+            setWaitingForFileContext(false);
+            setA11yAuditLoading((prev) => (isA11yScan ? false : prev));
+            setDsAuditLoading((prev) => (!isA11yScan ? false : prev));
+          }
         })();
       }
     };
@@ -437,7 +444,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     setShowReceipt(false);
     setWaitingForFileContext(true);
     window.parent.postMessage(
-      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined, light: true } },
+      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
       '*'
     );
   };

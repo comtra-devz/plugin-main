@@ -312,14 +312,21 @@ export default function AppTest() {
       return { credits_remaining: next.remaining };
     }
     if (!user?.authToken) return { error: 'Unauthorized' as const };
-    const r = await fetch(`${AUTH_BACKEND_URL}/api/credits/consume`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-      body: JSON.stringify(payload),
-    });
-    const data = await r.json();
+    let r: Response;
+    let data: any;
+    try {
+      r = await fetch(`${AUTH_BACKEND_URL}/api/credits/consume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(payload),
+      });
+      data = await r.json().catch(() => ({}));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Network error';
+      return { error: msg as 'Server error' };
+    }
     if (r.status === 402) return { error: 'Insufficient credits' as const, credits_remaining: data.credits_remaining };
-    if (!r.ok) return { error: 'Server error' as const };
+    if (!r.ok) return { error: (data?.error || 'Server error') as 'Server error' };
     setCredits({ remaining: data.credits_remaining, total: data.credits_total, used: data.credits_used });
     setUser(prev => prev && (data.current_level != null || data.total_xp != null)
       ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
