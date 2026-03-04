@@ -80,8 +80,47 @@ figma.ui.onmessage = async (raw: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
-  // Helper: build file context payload (fileKey, scope, pageId, nodeIds)
-  const buildFileContext = (scope: string | undefined, pageId: string | undefined) => {
+  // Serialize document tree for audit when fileKey is missing (draft/unsaved). Depth limit to keep payload small.
+  const MAX_SERIALIZE_DEPTH = 6;
+  function serializeNode(node: BaseNode, depth: number): any {
+    if (depth <= 0) return null;
+    const out: any = { id: node.id, name: node.name, type: node.type };
+    if ('absoluteBoundingBox' in node && node.absoluteBoundingBox) {
+      const b = node.absoluteBoundingBox;
+      out.absoluteBoundingBox = { x: b.x, y: b.y, width: b.width, height: b.height };
+    }
+    if ('fills' in node && node.fills !== figma.mixed) {
+      const fills = Array.isArray(node.fills) ? node.fills : [];
+      out.fills = fills.filter((p: any) => p.type === 'SOLID').map((p: any) => ({
+        type: 'SOLID',
+        color: p.color ? { r: p.color.r, g: p.color.g, b: p.color.b, a: p.color.a ?? 1 } : undefined,
+        opacity: p.opacity,
+      })).filter((p: any) => p.color);
+      if (out.fills.length === 0) delete out.fills;
+    }
+    if (node.type === 'TEXT' && 'fontSize' in node && typeof (node as any).fontSize === 'number') {
+      out.style = { fontSize: (node as any).fontSize };
+    }
+    if ('children' in node && Array.isArray((node as ChildrenMixin).children)) {
+      const children = (node as ChildrenMixin).children
+        .map((c: BaseNode) => serializeNode(c, depth - 1))
+        .filter(Boolean);
+      if (children.length) out.children = children;
+    }
+    return out;
+  }
+  function buildDocumentJson(): { document: any } {
+    const root = figma.root;
+    const doc: any = { id: root.id, name: root.name, type: root.type, children: [] };
+    for (const page of root.children) {
+      const ser = serializeNode(page, MAX_SERIALIZE_DEPTH);
+      if (ser) doc.children.push(ser);
+    }
+    return { document: doc };
+  }
+
+  // Helper: build file context payload (fileKey, scope, pageId, nodeIds, optional fileJson when no key)
+  const buildFileContext = (scope: string | undefined, pageId: string | undefined, includeFileJsonIfNoKey: boolean) => {
     let pageIdOut: string | undefined;
     let nodeIds: string[] | undefined;
     if (scope === 'page' && pageId) pageIdOut = pageId;
@@ -89,28 +128,31 @@ figma.ui.onmessage = async (raw: any) => {
       const sel = figma.currentPage.selection;
       nodeIds = sel.map((n: BaseNode) => n.id);
     }
-    return {
-      fileKey: (figma as any).fileKey ?? null,
+    const fileKey = (figma as any).fileKey ?? null;
+    const payload: any = {
+      fileKey,
       scope: scope ?? 'all',
       pageId: pageIdOut ?? null,
       nodeIds: nodeIds ?? null,
     };
+    if (includeFileJsonIfNoKey && !fileKey) payload.fileJson = buildDocumentJson();
+    return payload;
   };
 
   // Export JSON: canale dedicato (nessun ref, nessuna race con scan)
   if (msg.type === 'get-export-json') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
-    figma.ui.postMessage({ type: 'export-json-result', ...buildFileContext(scope, pageId) });
+    figma.ui.postMessage({ type: 'export-json-result', ...buildFileContext(scope, pageId, false) });
   }
 
-  // File context for backend pipeline (GET /v1/files/:key). Required for scan → agents.
+  // File context for backend pipeline. If no fileKey (draft), include serialized document so audit can run anyway.
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
     figma.ui.postMessage({
       type: 'file-context-result',
-      ...buildFileContext(scope, pageId),
+      ...buildFileContext(scope, pageId, true),
     });
   }
 

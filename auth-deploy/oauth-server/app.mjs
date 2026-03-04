@@ -669,7 +669,8 @@ app.post('/api/agents/ds-audit', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
   const fileKey = (body.file_key || body.fileKey || '').trim();
-  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  const fileJsonFromBody = body.file_json || body.fileJson;
+  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
 
   if (!POSTGRES_URL) return res.status(503).json({ error: 'DS Audit requires database' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
@@ -688,24 +689,27 @@ app.post('/api/agents/ds-audit', async (req, res) => {
   }
 
   try {
-    const accessToken = await getFigmaAccessToken(dbSql, userId);
-    if (!accessToken) {
-      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+    let fileJson;
+    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
+      fileJson = fileJsonFromBody;
+    } else if (fileKey) {
+      const accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : 2;
+      const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+      url.searchParams.set('depth', String(depth));
+      const figmaRes = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!figmaRes.ok) {
+        if (figmaRes.status === 403) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+        if (figmaRes.status === 404) return res.status(404).json({ error: 'File not found' });
+        const t = await figmaRes.text();
+        console.error('DS Audit: Figma API', figmaRes.status, t.slice(0, 200));
+        return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error' });
+      }
+      fileJson = await figmaRes.json();
+    } else {
+      return res.status(400).json({ error: 'file_json must include document' });
     }
-    const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : 2;
-    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
-    url.searchParams.set('depth', String(depth));
-    const figmaRes = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!figmaRes.ok) {
-      if (figmaRes.status === 403) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
-      if (figmaRes.status === 404) return res.status(404).json({ error: 'File not found' });
-      const t = await figmaRes.text();
-      console.error('DS Audit: Figma API', figmaRes.status, t.slice(0, 200));
-      return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error' });
-    }
-    const fileJson = await figmaRes.json();
     const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.\n\n${JSON.stringify(fileJson)}`;
 
     const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
@@ -763,29 +767,33 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
   const fileKey = (body.file_key || body.fileKey || '').trim();
-  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  const fileJsonFromBody = body.file_json || body.fileJson;
 
+  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
   if (!POSTGRES_URL) return res.status(503).json({ error: 'A11Y Audit requires database' });
 
   try {
-    const accessToken = await getFigmaAccessToken(dbSql, userId);
-    if (!accessToken) {
-      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+    let fileJson;
+    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
+      fileJson = fileJsonFromBody;
+    } else if (fileKey) {
+      const accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : 2;
+      const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+      url.searchParams.set('depth', String(depth));
+      const figmaRes = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!figmaRes.ok) {
+        if (figmaRes.status === 403) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+        if (figmaRes.status === 404) return res.status(404).json({ error: 'File not found' });
+        const t = await figmaRes.text();
+        console.error('A11Y Audit: Figma API', figmaRes.status, t.slice(0, 200));
+        return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error' });
+      }
+      fileJson = await figmaRes.json();
+    } else {
+      return res.status(400).json({ error: 'file_json must include document' });
     }
-    const depth = body.depth != null ? Math.min(10, Math.max(1, Number(body.depth))) : 2;
-    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
-    url.searchParams.set('depth', String(depth));
-    const figmaRes = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!figmaRes.ok) {
-      if (figmaRes.status === 403) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
-      if (figmaRes.status === 404) return res.status(404).json({ error: 'File not found' });
-      const t = await figmaRes.text();
-      console.error('A11Y Audit: Figma API', figmaRes.status, t.slice(0, 200));
-      return res.status(figmaRes.status >= 500 ? 502 : 400).json({ error: 'Figma API error' });
-    }
-    const fileJson = await figmaRes.json();
     const { issues } = runA11yAudit(fileJson);
     res.json({ issues });
   } catch (err) {

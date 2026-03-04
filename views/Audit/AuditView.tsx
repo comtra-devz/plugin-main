@@ -327,15 +327,20 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
-        if (!msg.fileKey) {
+        const hasFileKey = !!msg.fileKey;
+        const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
+        if (!hasFileKey && !hasFileJson) {
           setShowReceipt(false);
-          const saveMsg = 'File must be saved to run the audit. Use File → Save (or Save as) in Figma, then try again.';
+          const saveMsg = 'Could not read document. Save the file or try again.';
           if (payload.pendingScanType === 'A11Y') setA11yAuditError(saveMsg);
           else setDsAuditError(saveMsg);
           setPendingScanType(null);
           return;
         }
         const isA11yScan = payload.pendingScanType === 'A11Y';
+        const auditBody = hasFileJson
+          ? { file_json: msg.fileJson as object }
+          : { file_key: msg.fileKey, depth: 2 };
         (async () => {
           if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
             const result = await consumeCredits({
@@ -350,10 +355,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             if (result.error) return;
           }
           setShowReceipt(false);
-          if (msg.fileKey && fetchFigmaFile && !isA11yScan) {
+          if (hasFileKey && fetchFigmaFile && !isA11yScan) {
             try {
               await fetchFigmaFile({
-                file_key: msg.fileKey,
+                file_key: msg.fileKey!,
                 scope: msg.scope ?? 'all',
                 depth: 2,
                 page_id: msg.pageId ?? undefined,
@@ -363,10 +368,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
               // Pipeline validation: optional
             }
           }
-          if (msg.fileKey && isA11yScan && fetchA11yAudit) {
+          if (isA11yScan && fetchA11yAudit) {
             setA11yAuditError(null);
             setA11yAuditLoading(true);
-            fetchA11yAudit({ file_key: msg.fileKey, depth: 2 })
+            fetchA11yAudit(auditBody)
               .then((data) => {
                 setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
                 setLastA11yAuditDate(new Date());
@@ -376,10 +381,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
                 setA11yAuditIssues(null);
               })
               .finally(() => setA11yAuditLoading(false));
-          } else if (msg.fileKey && fetchDsAudit) {
+          } else if (fetchDsAudit) {
             setDsAuditError(null);
             setDsAuditLoading(true);
-            fetchDsAudit({ file_key: msg.fileKey, depth: 2 })
+            fetchDsAudit(auditBody)
               .then((data) => {
                 setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
               })
