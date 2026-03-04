@@ -69,6 +69,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false);
+  const [waitingForFileContext, setWaitingForFileContext] = useState(false);
   const [scanStats, setScanStats] = useState({ nodes: 0, cost: 0, sizeLabel: '', target: 'All Pages' });
   const [pendingScanType, setPendingScanType] = useState<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
 
@@ -190,6 +191,22 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   // Fetch document pages on mount
   useEffect(() => {
     window.parent.postMessage({ pluginMessage: { type: 'get-pages' } }, '*');
+  }, []);
+
+  // Pre-warm node count in background after login so first "Run audit" is instant (cache hit). Silent: no loader, no receipt.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      window.parent.postMessage({
+        pluginMessage: {
+          type: 'count-nodes',
+          scope: 'all',
+          pageId: undefined,
+          countCap: COUNT_CAP,
+          background: true,
+        },
+      }, '*');
+    }, 400);
+    return () => clearTimeout(t);
   }, []);
 
   // Fake progress: random steps and delays so the bar feels real in fast (non-problematic) cases
@@ -328,9 +345,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       }
 
       if (msg.type === 'file-context-result') {
+        setWaitingForFileContext(false);
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
+        if (msg.error) {
+          setShowReceipt(false);
+          const errMsg = String(msg.error);
+          if (payload.pendingScanType === 'A11Y') setA11yAuditError(errMsg);
+          else setDsAuditError(errMsg);
+          setPendingScanType(null);
+          return;
+        }
         const hasFileKey = !!msg.fileKey;
         const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
         if (!hasFileKey && !hasFileJson) {
@@ -359,19 +385,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             if (result.error) return;
           }
           setShowReceipt(false);
-          if (hasFileKey && fetchFigmaFile && !isA11yScan) {
-            try {
-              await fetchFigmaFile({
-                file_key: msg.fileKey!,
-                scope: msg.scope ?? 'all',
-                depth: 2,
-                page_id: msg.pageId ?? undefined,
-                node_ids: msg.nodeIds ?? undefined,
-              });
-            } catch (_) {
-              // Pipeline validation: optional
-            }
-          }
+          // Backend fetches file by file_key when we pass it; no need to pre-fetch with fetchFigmaFile (saves a full round trip and speeds up authorize charge).
           if (isA11yScan && fetchA11yAudit) {
             setA11yAuditError(null);
             setA11yAuditLoading(true);
@@ -456,14 +470,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   const handleConfirmScan = () => {
     const cost = scanStats.cost;
-    // Use ref so we always have the type that was set when the receipt opened (avoids stale closure in message handler)
     const scanType = pendingScanTypeRef.current ?? pendingScanType;
     if (!scanType) return;
     pendingScanTypeRef.current = null;
-    // Defer consume + fetch to file-context-result so we can send file_key/file_json to backend (pipeline to agents)
     confirmPayloadRef.current = { cost, score, pendingScanType: scanType };
+    setShowReceipt(false);
+    setWaitingForFileContext(true);
     window.parent.postMessage(
-      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
+      { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined, light: true } },
       '*'
     );
   };
@@ -686,6 +700,13 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             confirmLabel={confirmConfig.confirmLabel}
             isWarning={confirmConfig.isWarning}
           />
+      )}
+
+      {waitingForFileContext && (
+        <div className="flex items-center gap-2 py-2 px-3 bg-[#ffc900] border-2 border-black text-[10px] font-bold uppercase">
+          <span className="w-2 h-2 bg-black animate-pulse" />
+          Preparing document…
+        </div>
       )}
 
       {/* FEEDBACK MODAL OVERLAY */}

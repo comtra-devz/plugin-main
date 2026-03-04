@@ -80,11 +80,13 @@ figma.ui.onmessage = async (raw: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
-  // Serialize document tree for audit when fileKey is missing (draft/unsaved). Depth limit to keep payload small.
+  // Serialize document tree for audit. Chunked + yield so the main thread never blocks for long.
   const MAX_SERIALIZE_DEPTH = 6;
-  function serializeNode(node: BaseNode, depth: number): any {
-    if (depth <= 0) return null;
-    const out: any = { id: node.id, name: node.name, type: node.type };
+  const SERIALIZE_CHUNK = 20;
+  const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
+
+  function serializeNodeShallow(node: BaseNode): any {
+    const out: any = { id: node.id, name: node.name, type: node.type, children: [] };
     if ('absoluteBoundingBox' in node && node.absoluteBoundingBox) {
       const b = node.absoluteBoundingBox;
       out.absoluteBoundingBox = { x: b.x, y: b.y, width: b.width, height: b.height };
@@ -101,53 +103,60 @@ figma.ui.onmessage = async (raw: any) => {
     if (node.type === 'TEXT' && 'fontSize' in node && typeof (node as any).fontSize === 'number') {
       out.style = { fontSize: (node as any).fontSize };
     }
-    if ('children' in node && Array.isArray((node as ChildrenMixin).children)) {
-      const children = (node as ChildrenMixin).children
-        .map((c: BaseNode) => serializeNode(c, depth - 1))
-        .filter(Boolean);
-      if (children.length) out.children = children;
-    }
     return out;
   }
-  function buildDocumentJson(opts: { scope?: string; nodeIds?: string[]; pageId?: string }): { document: any } {
-    const root = figma.root;
+
+  type SerializeQueueItem = { node: BaseNode; depth: number; parentArr: any[] };
+  async function buildDocumentJsonAsync(opts: { scope?: string; nodeIds?: string[]; pageId?: string }): Promise<{ document: any }> {
     const scope = opts.scope ?? 'all';
 
-    // Current selection only: serialize only selected nodes to avoid blocking the UI on large files
+    const processQueue = async (queue: SerializeQueueItem[]): Promise<void> => {
+      while (queue.length > 0) {
+        const batch = queue.splice(0, SERIALIZE_CHUNK);
+        for (const { node, depth, parentArr } of batch) {
+          if (depth <= 0) continue;
+          const ser = serializeNodeShallow(node);
+          parentArr.push(ser);
+          if ('children' in node && Array.isArray((node as ChildrenMixin).children) && depth > 1) {
+            const kids = (node as ChildrenMixin).children as BaseNode[];
+            for (const c of kids) queue.push({ node: c, depth: depth - 1, parentArr: ser.children });
+          }
+        }
+        if (queue.length > 0) await yieldToMain();
+      }
+    };
+
     if (scope === 'current' && opts.nodeIds?.length) {
       const children: any[] = [];
+      const queue: SerializeQueueItem[] = [];
       for (const id of opts.nodeIds) {
         const node = figma.getNodeById(id);
-        if (node && 'id' in node) {
-          const ser = serializeNode(node as BaseNode, MAX_SERIALIZE_DEPTH);
-          if (ser) children.push(ser);
-        }
+        if (node && 'id' in node) queue.push({ node: node as BaseNode, depth: MAX_SERIALIZE_DEPTH, parentArr: children });
       }
-      const doc = { id: 'selection', name: 'Current Selection', type: 'CANVAS' as const, children };
-      return { document: doc };
+      await processQueue(queue);
+      return { document: { id: 'selection', name: 'Current Selection', type: 'CANVAS', children } };
     }
 
-    // Single page: serialize only that page
     if (scope === 'page' && opts.pageId) {
       const page = figma.getNodeById(opts.pageId);
       if (page && page.type === 'PAGE') {
-        const ser = serializeNode(page, MAX_SERIALIZE_DEPTH);
-        const doc = ser ? { id: page.id, name: page.name, type: 'CANVAS' as const, children: [ser] } : { id: 'page', name: 'Page', type: 'CANVAS' as const, children: [] };
+        const children: any[] = [];
+        const queue: SerializeQueueItem[] = [{ node: page as BaseNode, depth: MAX_SERIALIZE_DEPTH, parentArr: children }];
+        await processQueue(queue);
+        const doc = { id: page.id, name: page.name, type: 'CANVAS' as const, children };
         return { document: doc };
       }
     }
 
-    // All pages: full document (can be slow on very large files)
-    const doc: any = { id: root.id, name: root.name, type: root.type, children: [] };
-    for (const page of root.children) {
-      const ser = serializeNode(page, MAX_SERIALIZE_DEPTH);
-      if (ser) doc.children.push(ser);
-    }
-    return { document: doc };
+    const root = figma.root;
+    const docChildren: any[] = [];
+    const queue: SerializeQueueItem[] = [];
+    for (const page of root.children) queue.push({ node: page as BaseNode, depth: MAX_SERIALIZE_DEPTH, parentArr: docChildren });
+    await processQueue(queue);
+    return { document: { id: root.id, name: root.name, type: root.type, children: docChildren } };
   }
 
-  // Helper: build file context payload (fileKey, scope, pageId, nodeIds, fileJson when we have doc for audit)
-  const buildFileContext = (scope: string | undefined, pageId: string | undefined, includeFileJson: boolean) => {
+  function buildFileContextSync(scope: string | undefined, pageId: string | undefined): Omit<any, 'fileJson'> {
     let pageIdOut: string | undefined;
     let nodeIds: string[] | undefined;
     if (scope === 'page' && pageId) pageIdOut = pageId;
@@ -156,40 +165,60 @@ figma.ui.onmessage = async (raw: any) => {
       nodeIds = sel.map((n: BaseNode) => n.id);
     }
     const fileKey = (figma as any).fileKey ?? null;
-    const payload: any = {
+    return {
       fileKey,
       scope: scope ?? 'all',
       pageId: pageIdOut ?? null,
       nodeIds: nodeIds ?? null,
     };
-    // Serialize only the needed scope (selection / page / all) so the main thread doesn't block
-    if (includeFileJson) payload.fileJson = buildDocumentJson({ scope: scope ?? 'all', nodeIds, pageId: pageIdOut });
-    return payload;
-  };
+  }
 
   // Export JSON: canale dedicato (nessun ref, nessuna race con scan)
   if (msg.type === 'get-export-json') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
-    figma.ui.postMessage({ type: 'export-json-result', ...buildFileContext(scope, pageId, false) });
+    figma.ui.postMessage({ type: 'export-json-result', ...buildFileContextSync(scope, pageId) });
   }
 
-  // File context for backend pipeline. Always include serialized document so audit runs without Figma API/token.
+  // File context for backend pipeline. light: true = instant (fileKey/scope/pageId only; backend fetches file). No light = full serialization (slow).
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
-    figma.ui.postMessage({
-      type: 'file-context-result',
-      ...buildFileContext(scope, pageId, true),
-    });
+    const light = msg.light === true;
+    if (light) {
+      try {
+        const base = buildFileContextSync(scope, pageId);
+        figma.ui.postMessage({ type: 'file-context-result', ...base });
+      } catch (e) {
+        console.error('[get-file-context]', e);
+        figma.ui.postMessage({ type: 'file-context-result', fileKey: null, scope: scope ?? 'all', pageId: null, nodeIds: null, error: String(e) });
+      }
+      return;
+    }
+    (async () => {
+      try {
+        const base = buildFileContextSync(scope, pageId);
+        const fileJson = await buildDocumentJsonAsync({ scope: scope ?? 'all', nodeIds: base.nodeIds, pageId: base.pageId ?? undefined });
+        figma.ui.postMessage({
+          type: 'file-context-result',
+          ...base,
+          fileJson,
+        });
+      } catch (e) {
+        console.error('[get-file-context]', e);
+        figma.ui.postMessage({ type: 'file-context-result', fileKey: null, scope: scope ?? 'all', pageId: null, nodeIds: null, error: String(e) });
+      }
+    })();
   }
 
   // Count nodes: batch traversal with yield between batches only. Fast; UI stays responsive.
   // Same scope+pageId reuses cached count so DS / A11Y / (future UX, Prototype) don't wait again.
+  // background: true = silent pre-warm after login; fill cache only, no result to UI.
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
     const pageId = scope === 'page' ? msg.pageId : undefined;
-    const useCache = scope !== 'current' && nodeCountCache && nodeCountCache.scope === scope && nodeCountCache.pageId === pageId;
+    const isBackground = msg.background === true;
+    const useCache = !isBackground && scope !== 'current' && nodeCountCache && nodeCountCache.scope === scope && nodeCountCache.pageId === pageId;
     if (useCache && nodeCountCache) {
       figma.ui.postMessage({
         type: 'count-nodes-result',
@@ -221,7 +250,7 @@ figma.ui.onmessage = async (raw: any) => {
       try {
         await yieldTick();
         await figma.loadAllPagesAsync();
-        figma.ui.postMessage({ type: 'count-nodes-progress', count: 0, percent: 1 });
+        if (!isBackground) figma.ui.postMessage({ type: 'count-nodes-progress', count: 0, percent: 1 });
 
         if (scope === 'current') {
           const sel = figma.currentPage.selection;
@@ -278,19 +307,21 @@ figma.ui.onmessage = async (raw: any) => {
               }
             }
             processed++;
-            if (countCap !== Infinity && count - lastSentCount >= PROGRESS_STEP) {
+            if (!isBackground && countCap !== Infinity && count - lastSentCount >= PROGRESS_STEP) {
               lastSentCount = count;
               const pct = Math.min(100, Math.floor((count / countCap) * 100));
               figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
             }
           }
-          if (countCap === Infinity) {
-            const pct = Math.min(95, Math.floor(count / 5000));
-            figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
-          } else if (count - lastSentCount > 0 || stack.length === 0 || count >= countCap) {
-            lastSentCount = count;
-            const pct = count >= countCap ? 100 : Math.min(100, Math.floor((count / countCap) * 100));
-            figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
+          if (!isBackground) {
+            if (countCap === Infinity) {
+              const pct = Math.min(95, Math.floor(count / 5000));
+              figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
+            } else if (count - lastSentCount > 0 || stack.length === 0 || count >= countCap) {
+              lastSentCount = count;
+              const pct = count >= countCap ? 100 : Math.min(100, Math.floor((count / countCap) * 100));
+              figma.ui.postMessage({ type: 'count-nodes-progress', count, percent: pct });
+            }
           }
           if (stack.length > 0 && count < countCap) await yieldTick();
         }
@@ -301,11 +332,15 @@ figma.ui.onmessage = async (raw: any) => {
         if (scope !== 'current') {
           nodeCountCache = { scope, pageId: scope === 'page' ? msg.pageId : undefined, count: resultCount, target: resultTarget };
         }
-        figma.ui.postMessage({ type: 'count-nodes-progress', count: resultCount, percent: 100 });
-        figma.ui.postMessage({ type: 'count-nodes-result', count: resultCount, target: resultTarget, fromCache: false });
+        if (isBackground) {
+          figma.ui.postMessage({ type: 'count-nodes-background-done' });
+        } else {
+          figma.ui.postMessage({ type: 'count-nodes-progress', count: resultCount, percent: 100 });
+          figma.ui.postMessage({ type: 'count-nodes-result', count: resultCount, target: resultTarget, fromCache: false });
+        }
       } catch (e: any) {
         const errMsg = String(e?.message || e);
-        figma.notify(`Count failed at ${count} nodes: ${errMsg}`, { error: true });
+        if (!isBackground) figma.notify(`Count failed at ${count} nodes: ${errMsg}`, { error: true });
         figma.ui.postMessage({
           type: 'count-nodes-error',
           error: errMsg,
