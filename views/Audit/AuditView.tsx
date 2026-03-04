@@ -70,7 +70,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false);
   const [scanStats, setScanStats] = useState({ nodes: 0, cost: 0, sizeLabel: '', target: 'All Pages' });
-  const [pendingScanType, setPendingScanType] = useState<'MAIN' | 'DEEP' | null>(null);
+  const [pendingScanType, setPendingScanType] = useState<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
 
   // Confirmation Modal State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -99,7 +99,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
-  const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' } | null>(null);
+  const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' } | null>(null);
+  // Ref so "Authorize" always sees the scan type that was set when the receipt was shown (avoids stale closure)
+  const pendingScanTypeRef = useRef<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
   const [exportJsonFeedback, setExportJsonFeedback] = useState<string | null>(null);
   // DS Audit agent: real issues from backend (Kimi)
   const [dsAuditIssues, setDsAuditIssues] = useState<AuditIssue[] | null>(null);
@@ -254,9 +256,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const fromCache = msg.fromCache === true;
         const isA11y = pendingAuditKindRef.current === 'A11Y';
         pendingAuditKindRef.current = null;
+        const scanTypeForReceipt: 'MAIN' | 'A11Y' = isA11y ? 'A11Y' : 'MAIN';
         const { cost, sizeLabel } = isA11y ? getA11yCostAndSize(count) : getScanCostAndSize(count);
         setScanStats({ nodes: count, cost, sizeLabel, target });
-        setPendingScanType(isA11y ? 'A11Y' : 'MAIN');
+        setPendingScanType(scanTypeForReceipt);
+        pendingScanTypeRef.current = scanTypeForReceipt;
         setScanProgress({ percent: 100, count });
         const minLoadingMs = fromCache ? 350 : 1200 + Math.floor(Math.random() * 1000);
         setTimeout(() => {
@@ -446,14 +450,17 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     const { cost, sizeLabel } = getScanCostAndSize(mockNodes);
     setScanStats({ nodes: mockNodes, cost, sizeLabel, target: 'Current Selection' });
     setPendingScanType('DEEP');
+    pendingScanTypeRef.current = 'DEEP';
     setShowReceipt(true);
   };
 
   const handleConfirmScan = () => {
     const cost = scanStats.cost;
-    const scanType = pendingScanType;
+    // Use ref so we always have the type that was set when the receipt opened (avoids stale closure in message handler)
+    const scanType = pendingScanTypeRef.current ?? pendingScanType;
     if (!scanType) return;
-    // Defer consume + fetch to file-context-result so we can send file_key to backend (pipeline to agents)
+    pendingScanTypeRef.current = null;
+    // Defer consume + fetch to file-context-result so we can send file_key/file_json to backend (pipeline to agents)
     confirmPayloadRef.current = { cost, score, pendingScanType: scanType };
     window.parent.postMessage(
       { pluginMessage: { type: 'get-file-context', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId : undefined } },
@@ -667,7 +674,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             sizeLabel={scanStats.sizeLabel}
             target={scanStats.target}
             onConfirm={handleConfirmScan} 
-            onCancel={() => setShowReceipt(false)} 
+            onCancel={() => { pendingScanTypeRef.current = null; setShowReceipt(false); }} 
           />
       )}
       {confirmConfig && confirmConfig.isOpen && (
