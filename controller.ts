@@ -76,6 +76,7 @@ figma.ui.onmessage = async (raw: any) => {
   }
 
   if (msg.type === 'get-pages') {
+    await figma.loadAllPagesAsync();
     const pages = figma.root.children.map((p: PageNode) => ({ id: p.id, name: p.name }));
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
@@ -109,6 +110,8 @@ figma.ui.onmessage = async (raw: any) => {
   type SerializeQueueItem = { node: BaseNode; depth: number; parentArr: any[] };
   async function buildDocumentJsonAsync(opts: { scope?: string; nodeIds?: string[]; pageId?: string }): Promise<{ document: any }> {
     const scope = opts.scope ?? 'all';
+    // Required with documentAccess: dynamic-page (Figma 2024+): load pages before accessing nodes
+    await figma.loadAllPagesAsync();
 
     const processQueue = async (queue: SerializeQueueItem[]): Promise<void> => {
       while (queue.length > 0) {
@@ -130,7 +133,7 @@ figma.ui.onmessage = async (raw: any) => {
       const children: any[] = [];
       const queue: SerializeQueueItem[] = [];
       for (const id of opts.nodeIds) {
-        const node = figma.getNodeById(id);
+        const node = await figma.getNodeByIdAsync(id);
         if (node && 'id' in node) queue.push({ node: node as BaseNode, depth: MAX_SERIALIZE_DEPTH, parentArr: children });
       }
       await processQueue(queue);
@@ -138,7 +141,7 @@ figma.ui.onmessage = async (raw: any) => {
     }
 
     if (scope === 'page' && opts.pageId) {
-      const page = figma.getNodeById(opts.pageId);
+      const page = await figma.getNodeByIdAsync(opts.pageId) as PageNode | null;
       if (page && page.type === 'PAGE') {
         const children: any[] = [];
         const queue: SerializeQueueItem[] = [{ node: page as BaseNode, depth: MAX_SERIALIZE_DEPTH, parentArr: children }];
@@ -254,7 +257,7 @@ figma.ui.onmessage = async (raw: any) => {
             if (start > 0) await yieldTick();
           }
         } else if (scope === 'page' && msg.pageId) {
-          const page = figma.getNodeById(msg.pageId) as PageNode | null;
+          const page = (await figma.getNodeByIdAsync(msg.pageId)) as PageNode | null;
           if (page && page.type === 'PAGE') {
             target = page.name;
             await yieldTick();
