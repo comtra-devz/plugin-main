@@ -152,7 +152,12 @@ export const AccessibilityTab: React.FC<Props> = ({
         </div>
       )}
       {a11yAuditError && !a11yAuditLoading && (
-        <div className="py-2 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800">{a11yAuditError}</div>
+        <div className="py-3 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800 space-y-1">
+          <div>{a11yAuditError}</div>
+          {a11yAuditError.toLowerCase().includes('figma token') && (
+            <div className="font-normal text-red-700">Ricollega Figma da Impostazioni, oppure usa un file non ancora salvato (bozza).</div>
+          )}
+        </div>
       )}
 
       <div className={`${BRUTAL.card} bg-white p-3 flex items-start gap-3 relative min-h-[140px]`}>

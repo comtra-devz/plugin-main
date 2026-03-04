@@ -119,8 +119,8 @@ figma.ui.onmessage = async (raw: any) => {
     return { document: doc };
   }
 
-  // Helper: build file context payload (fileKey, scope, pageId, nodeIds, optional fileJson when no key)
-  const buildFileContext = (scope: string | undefined, pageId: string | undefined, includeFileJsonIfNoKey: boolean) => {
+  // Helper: build file context payload (fileKey, scope, pageId, nodeIds, fileJson when we have doc for audit)
+  const buildFileContext = (scope: string | undefined, pageId: string | undefined, includeFileJson: boolean) => {
     let pageIdOut: string | undefined;
     let nodeIds: string[] | undefined;
     if (scope === 'page' && pageId) pageIdOut = pageId;
@@ -135,7 +135,8 @@ figma.ui.onmessage = async (raw: any) => {
       pageId: pageIdOut ?? null,
       nodeIds: nodeIds ?? null,
     };
-    if (includeFileJsonIfNoKey && !fileKey) payload.fileJson = buildDocumentJson();
+    // Always send serialized doc when requested so backend can run audit without Figma API/token
+    if (includeFileJson) payload.fileJson = buildDocumentJson();
     return payload;
   };
 
@@ -146,7 +147,7 @@ figma.ui.onmessage = async (raw: any) => {
     figma.ui.postMessage({ type: 'export-json-result', ...buildFileContext(scope, pageId, false) });
   }
 
-  // File context for backend pipeline. If no fileKey (draft), include serialized document so audit can run anyway.
+  // File context for backend pipeline. Always include serialized document so audit runs without Figma API/token.
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
