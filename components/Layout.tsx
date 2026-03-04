@@ -11,8 +11,8 @@ interface Props {
 }
 
 export const Layout: React.FC<Props> = ({ children, current, setView, user, onOpenProfile }) => (
-  <div className="min-h-screen bg-[#fdfdfd] text-black font-sans pb-24 relative">
-    <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] p-4 sticky top-0 z-10 flex items-center justify-between">
+  <div className="min-h-screen bg-[#fdfdfd] text-black font-sans pb-24 relative overflow-x-hidden">
+    <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] p-4 sticky top-0 z-[100] flex items-center justify-between shrink-0 shadow-[0_2px_0_0_#000]">
       <div className="flex items-center gap-3">
         <h1 data-component="Layout: Brand Name" className="text-2xl font-black uppercase tracking-tighter leading-[0.9]">Comtra</h1>
         <div data-component="Layout: Tagline Badge" className="inline-block bg-black text-white px-2 py-0.5 text-[10px] font-bold uppercase rotate-2 transform">

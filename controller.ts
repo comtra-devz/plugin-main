@@ -205,7 +205,7 @@ figma.ui.onmessage = async (raw: any) => {
           if (first) {
             selectionName = first.name || 'Selection';
             const t = first.type;
-            selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'PAGE' ? 'Page' : 'Selection';
+            selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'SECTION' ? 'Section' : t === 'PAGE' ? 'Page' : 'Selection';
           }
         }
         figma.ui.postMessage({

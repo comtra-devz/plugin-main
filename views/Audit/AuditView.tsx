@@ -22,6 +22,7 @@ import {
   computeDsScoreFromIssues,
   getDsScoreCopy,
 } from './data';
+import { getCreditsForIssue, getCreditsForFixAll, ACTION_AUTO_FIX, ACTION_AUTO_FIX_ALL } from './autoFixConfig';
 
 export interface FetchFigmaFileBody {
   file_key: string;
@@ -117,6 +118,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const pendingAuditKindRef = useRef<'DS' | 'A11Y' | null>(null);
   /** Scope label for issue list (Page, Frame, Component, Instance, Group) from last file-context-result */
   const [auditScopeLabel, setAuditScopeLabel] = useState<string>('Page');
+  /** Selection name when scope is 'current' (so we show "Type: Name" from the plugin) */
+  const [auditScopeName, setAuditScopeName] = useState<string>('');
+  /** True when last audit was run on current selection (so we show one group with plugin label) */
+  const [auditScopeIsCurrent, setAuditScopeIsCurrent] = useState<boolean>(false);
 
   // Timestamps
   const [lastAuditDate, setLastAuditDate] = useState<Date | null>(null);
@@ -135,6 +140,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Privacy Modal State
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  /** Error from last auto-fix credit consumption (e.g. Insufficient credits). Cleared when opening a new confirm or on success. */
+  const [auditFixError, setAuditFixError] = useState<string | null>(null);
 
   const isPro = plan === 'PRO';
   const infiniteForTest = !!useInfiniteCreditsForTest;
@@ -161,14 +168,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
   const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
 
-  // DS tab: dynamic categories, score from issues
+  // DS tab: dynamic categories, score from full issue set (so changing scope doesn't change score until next scan)
   const dsCategories = activeTab === 'DS' ? buildDsCategoriesFromIssues(filteredIssues) : [];
-  const remainingForScore = filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
-  const dsScore = activeTab === 'DS' ? computeDsScoreFromIssues(remainingForScore) : score;
+  const dsFullForScore = activeTab === 'DS' && dsAuditIssues != null
+    ? dsAuditIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
+    : filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
+  const dsScore = activeTab === 'DS' ? computeDsScoreFromIssues(dsFullForScore) : score;
   const dsScoreCopy = activeTab === 'DS' ? getDsScoreCopy(dsScore) : { status: '', target: '' };
 
-  // A11Y tab: categories and score from filtered (scoped) issues
-  const a11yScore = activeTab === 'A11Y' ? computeDsScoreFromIssues(remainingForScore) : 100;
+  // A11Y tab: score from full audit result (not scope-filtered), so changing selection/page doesn't change score until next scan
+  const a11yFullForScore = activeTab === 'A11Y' && a11yAuditIssues != null
+    ? a11yAuditIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
+    : [];
+  const a11yScore = activeTab === 'A11Y' ? (a11yAuditIssues != null ? computeDsScoreFromIssues(a11yFullForScore) : 100) : 100;
   const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(filteredIssues) : [];
   const a11yScoreCopy = activeTab === 'A11Y' ? getDsScoreCopy(a11yScore) : { status: '', target: '' };
   const highSeverityCount = activeIssues.filter(i => i.severity === 'HIGH').length; 
@@ -300,9 +312,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         confirmPayloadRef.current = null;
         if (msg.error) {
           setShowReceipt(false);
+          setWaitingForFileContext(false);
           const errMsg = String(msg.error);
-          if (payload.pendingScanType === 'A11Y') setA11yAuditError(errMsg);
-          else setDsAuditError(errMsg);
+          if (payload.pendingScanType === 'A11Y') {
+            setA11yAuditError(errMsg);
+            setA11yAuditLoading(false);
+            // Keep previous a11yAuditIssues so user stays on results view
+          } else {
+            setDsAuditError(errMsg);
+            setDsAuditIssues(null);
+          }
           setPendingScanType(null);
           return;
         }
@@ -310,9 +329,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
         if (!hasFileKey && !hasFileJson) {
           setShowReceipt(false);
+          setWaitingForFileContext(false);
           const saveMsg = 'Could not read document. Save the file or try again.';
-          if (payload.pendingScanType === 'A11Y') setA11yAuditError(saveMsg);
-          else setDsAuditError(saveMsg);
+          if (payload.pendingScanType === 'A11Y') {
+            setA11yAuditError(saveMsg);
+            setA11yAuditLoading(false);
+            // Keep previous a11yAuditIssues so user stays on results view
+          } else {
+            setDsAuditError(saveMsg);
+            setDsAuditIssues(null);
+          }
           setPendingScanType(null);
           return;
         }
@@ -320,6 +346,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         if (isA11yScan) setActiveTab('A11Y');
         if (msg.selectionType) setAuditScopeLabel(String(msg.selectionType));
         else setAuditScopeLabel('Page');
+        setAuditScopeName(typeof msg.selectionName === 'string' ? msg.selectionName : '');
+        setAuditScopeIsCurrent(msg.scope === 'current');
         const auditBody = hasFileJson
           ? { file_json: msg.fileJson as object }
           : { file_key: msg.fileKey, depth: 2 };
@@ -327,8 +355,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const setAuditError = (message: string) => {
           if (isA11yScan) {
             setA11yAuditError(message);
-            setA11yAuditIssues(null);
             setA11yAuditLoading(false);
+            // Do not clear a11yAuditIssues: keep previous results so the user stays on the results view and can retry or change scope
           } else {
             setDsAuditError(message);
             setDsAuditIssues(null);
@@ -465,47 +493,71 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         return;
     }
 
+    setAuditFixError(null);
+    const issue = activeIssues.find(i => i.id === id);
+    const cost = issue ? getCreditsForIssue(issue) : 2;
     setConfirmConfig({
         isOpen: true,
         title: "Confirm Auto-Fix",
-        message: "This action will apply changes to your layer and consume credits. Are you sure?",
-        confirmLabel: "Apply Fix",
-        onConfirm: () => {
-            const newFixed = new Set(fixedIds);
-            newFixed.add(id);
-            setFixedIds(newFixed);
-            
-            const newScore = Math.min(100, score + 5);
-            setScore(newScore);
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 2000);
-
-            if (newScore > 80 && score <= 80) setShowSuccess(true);
-            if (newScore > 90 && score <= 90) setShowSuccess(true);
-            if (newScore === 100 && score < 100) setShowSuccess(true);
+        message: `This action will apply changes to your layer and consume ${cost} credit${cost !== 1 ? 's' : ''}. Are you sure?`,
+        confirmLabel: `Apply Fix (-${cost} Credits)`,
+        onConfirm: async () => {
+            const result = await consumeCredits({
+              action_type: ACTION_AUTO_FIX,
+              credits_consumed: cost,
+            });
+            if (result.error) {
+              setAuditFixError(result.error === 'Insufficient credits' ? 'Crediti insufficienti. Upgrade o riprova più tardi.' : result.error);
+              return;
+            }
+            applySingleFix(id);
+            setAuditFixError(null);
             setConfirmConfig(null);
         }
     });
   };
 
+  function applySingleFix(id: string) {
+    const newFixed = new Set(fixedIds);
+    newFixed.add(id);
+    setFixedIds(newFixed);
+    const newScore = Math.min(100, score + 5);
+    setScore(newScore);
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 2000);
+    if (newScore > 80 && score <= 80) setShowSuccess(true);
+    if (newScore > 90 && score <= 90) setShowSuccess(true);
+    if (newScore === 100 && score < 100) setShowSuccess(true);
+  }
+
   const handleFixAll = () => {
       const unfixed = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id)); 
       if (unfixed.length === 0) return;
 
+      const totalCredits = getCreditsForFixAll(unfixed);
+      setAuditFixError(null);
       setConfirmConfig({
         isOpen: true,
         title: `Fix All (${unfixed.length})`,
-        message: `You are about to apply ${unfixed.length} fixes. For safety, we recommend duplicating the file or page before proceeding. Confirm?`,
-        confirmLabel: `Apply All (-${unfixed.length * 2} Credits)`,
-        onConfirm: () => {
+        message: `You are about to apply ${unfixed.length} fixes (${totalCredits} credits). For safety, we recommend duplicating the file or page before proceeding. Confirm?`,
+        confirmLabel: `Apply All (-${totalCredits} Credits)`,
+        onConfirm: async () => {
+            const result = await consumeCredits({
+              action_type: ACTION_AUTO_FIX_ALL,
+              credits_consumed: totalCredits,
+            });
+            if (result.error) {
+              setAuditFixError(result.error === 'Insufficient credits' ? 'Crediti insufficienti. Upgrade o riprova più tardi.' : result.error);
+              return;
+            }
             const newFixed = new Set(fixedIds);
             unfixed.forEach(i => newFixed.add(i.id));
             setFixedIds(newFixed);
-            
             const addedScore = unfixed.length * 5;
             setScore(Math.min(100, score + addedScore));
             setShowConfetti(true);
             setTimeout(() => setShowConfetti(false), 2000);
+            setAuditFixError(null);
             setConfirmConfig(null);
         }
       });
@@ -611,6 +663,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     isPro,
     activeTab,
     scopeLabel: auditScopeLabel,
+    scopeName: auditScopeName,
+    scopeIsCurrent: auditScopeIsCurrent,
+    getCreditsForIssue,
     onFix: handleFix,
     onUndo: handleUndo,
     onDiscard: handleDiscard,
@@ -668,10 +723,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             title={confirmConfig.title}
             message={confirmConfig.message}
             onConfirm={confirmConfig.onConfirm}
-            onCancel={() => setConfirmConfig(null)}
+            onCancel={() => { setConfirmConfig(null); setAuditFixError(null); }}
             confirmLabel={confirmConfig.confirmLabel}
             isWarning={confirmConfig.isWarning}
           />
+      )}
+
+      {auditFixError && (
+        <div className="py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase">
+          {auditFixError}
+        </div>
       )}
 
       {/* FEEDBACK MODAL OVERLAY */}

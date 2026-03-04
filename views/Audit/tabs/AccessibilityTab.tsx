@@ -220,8 +220,8 @@ export const AccessibilityTab: React.FC<Props> = ({
         <span className="relative z-10">{isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}</span>
       </button>
 
-      <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
-        <div className="border-b-2 border-black bg-gray-50 flex justify-between items-center px-2 py-1.5">
+      <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white -mx-4`}>
+        <div className="p-3 border-b-2 border-black bg-gray-50 flex justify-between items-center">
           <h3 className="font-bold uppercase text-xs">Categories</h3>
           <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
             {categories.reduce((acc, c) => acc + c.issuesCount, 0)} Issues
@@ -234,7 +234,7 @@ export const AccessibilityTab: React.FC<Props> = ({
               <div
                 key={cat.id}
                 onClick={() => setActiveCat(isActive ? null : cat.id)}
-                className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
+                className={`flex items-center justify-between p-3 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>{cat.icon}</div>

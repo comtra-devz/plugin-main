@@ -18,6 +18,12 @@ interface IssueListProps {
   activeTab: string;
   /** Label for scope (e.g. "Page", "Frame", "Component", "Instance", "Group"). Shown as "{scopeLabel}: {pageName}". */
   scopeLabel?: string;
+  /** When scope is current selection, use this as the selection name (so we show exactly what the plugin sent). */
+  scopeName?: string;
+  /** When true, show a single group with scopeLabel: scopeName and all issues (no grouping by backend pageName). */
+  scopeIsCurrent?: boolean;
+  /** Return credits cost for a single fix (for badge). Defaults to 2. */
+  getCreditsForIssue?: (issue: AuditIssue) => number;
   onFix: (e: React.MouseEvent, id: string) => void;
   onUndo: (e: React.MouseEvent, id: string) => void;
   onDiscard: (e: React.MouseEvent, id: string) => void;
@@ -53,16 +59,24 @@ export const IssueList: React.FC<IssueListProps> = ({
   onUnlockRequest,
   totalHiddenCount,
   scopeLabel = 'Page',
+  scopeName = '',
+  scopeIsCurrent = false,
+  getCreditsForIssue: getCreditsForIssueProp,
 }) => {
   const remainingIssues = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id));
-  const fixAllCost = remainingIssues.length * 2;
+  const getCredits = getCreditsForIssueProp ?? (() => 2);
+  const fixAllCost = remainingIssues.reduce((sum, i) => sum + getCredits(i), 0);
 
-  const groupedIssues: { [page: string]: AuditIssue[] } = {};
-  displayIssues.forEach(issue => {
+  const groupedIssues: { [pageName: string]: AuditIssue[] } = {};
+  if (scopeIsCurrent && scopeName) {
+    groupedIssues[scopeName] = displayIssues;
+  } else {
+    displayIssues.forEach(issue => {
       const page = issue.pageName || 'Unknown Page';
       if (!groupedIssues[page]) groupedIssues[page] = [];
       groupedIssues[page].push(issue);
-  });
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -102,11 +116,11 @@ export const IssueList: React.FC<IssueListProps> = ({
                         onClick={() => !isFixed && !isFeedbackSent && setExpandedIssue(expanded ? null : i.id)}
                         className={`${BRUTAL.card} p-3 transition-all ${isFeedbackSent ? 'bg-gray-200 border-gray-400 opacity-60 cursor-not-allowed' : isFixed ? 'bg-green-100 border-green-500 opacity-80' : 'bg-white hover:shadow-[6px_6px_0_0_#000] cursor-pointer'} ${expanded ? 'shadow-[6px_6px_0_0_#000] border-black' : ''}`}
                     >
-                        <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
+                        <div className="flex justify-between items-center gap-3">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                             {isFixed && !isFeedbackSent && <span className="text-lg">✅</span>}
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                     <Badge label={i.severity} type={i.severity === 'HIGH' ? 'high' : i.severity === 'MED' ? 'medium' : 'low'} />
                                     <span className={`font-bold text-xs ${isFixed || isFeedbackSent ? 'line-through text-gray-500' : ''}`}>
                                         {isDeviationGroup ? `Component Deviation x ${i.layerIds!.length} elements` : i.msg}
@@ -116,9 +130,9 @@ export const IssueList: React.FC<IssueListProps> = ({
                         </div>
                         
                         {isFeedbackSent ? (
-                            <span className="text-[9px] font-black uppercase text-gray-500 border border-gray-500 px-1">Feedback Sent</span>
+                            <span className="text-[9px] font-black uppercase text-gray-500 border border-gray-500 px-1 shrink-0">Feedback Sent</span>
                         ) : isFixed ? (
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 shrink-0 ml-3">
                                 <button 
                                     onClick={(e) => onOpenFeedback(e, i.id, 'BAD_FIX')}
                                     className="text-[9px] font-bold underline text-red-500 hover:text-red-700"
@@ -133,7 +147,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 shrink-0 ml-3">
                                 {expanded && (
                                     <button 
                                         onClick={(e) => onDiscard(e, i.id)}
@@ -185,12 +199,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 className={`${BRUTAL.btn} flex-1 text-[10px] bg-[${COLORS.primary}] text-black hover:bg-white border-black relative h-12`}
                             >
                                 {isWireframeIssue ? 'Create Wireframe' : 'Auto-Fix Layer'}
-                                {!isWireframeIssue && (
-                                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-2 Credits</span>
-                                )}
-                                {isWireframeIssue && (
-                                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-3 Credits</span>
-                                )}
+                                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
                             </button>
                             </div>
                         </div>
