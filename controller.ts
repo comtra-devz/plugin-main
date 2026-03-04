@@ -34,7 +34,12 @@ async function getStoredUser(): Promise<any> {
   figma.ui.postMessage({ type: 'restore-user', user });
 })();
 
-figma.ui.onmessage = async (msg: any) => {
+// Cache for node count by scope+pageId so we don't re-scan when user runs another audit (DS, A11Y, etc.) on same scope.
+// Invalidated when scope or pageId changes; not used for scope 'current' (selection-dependent).
+let nodeCountCache: { scope: string; pageId: string | undefined; count: number; target: string } | null = null;
+
+figma.ui.onmessage = async (raw: any) => {
+  const msg = raw?.pluginMessage ?? raw;
   if (msg.type === 'resize-window') {
     figma.ui.resize(msg.width, msg.height);
   }
@@ -110,9 +115,21 @@ figma.ui.onmessage = async (msg: any) => {
   }
 
   // Count nodes: batch traversal with yield between batches only. Fast; UI stays responsive.
-  // No library needed — Figma API is the only way to read the tree; we optimize by batching.
+  // Same scope+pageId reuses cached count so DS / A11Y / (future UX, Prototype) don't wait again.
   if (msg.type === 'count-nodes') {
     const scope = msg.scope as 'all' | 'current' | 'page';
+    const pageId = scope === 'page' ? msg.pageId : undefined;
+    const useCache = scope !== 'current' && nodeCountCache && nodeCountCache.scope === scope && nodeCountCache.pageId === pageId;
+    if (useCache && nodeCountCache) {
+      figma.ui.postMessage({
+        type: 'count-nodes-result',
+        count: nodeCountCache.count,
+        target: nodeCountCache.target,
+        fromCache: true,
+      });
+      return;
+    }
+
     const rawCap = msg.countCap;
     const countCap = (rawCap === undefined || rawCap === null || Number(rawCap) <= 0 || !Number.isFinite(Number(rawCap)))
       ? Infinity
@@ -211,8 +228,11 @@ figma.ui.onmessage = async (msg: any) => {
         if (countCap !== Infinity && count >= countCap) hitCap = true;
         const resultCount = hitCap ? countCap : count;
         const resultTarget = hitCap ? `${target} (${countCap.toLocaleString()}+ nodes)` : target;
+        if (scope !== 'current') {
+          nodeCountCache = { scope, pageId: scope === 'page' ? msg.pageId : undefined, count: resultCount, target: resultTarget };
+        }
         figma.ui.postMessage({ type: 'count-nodes-progress', count: resultCount, percent: 100 });
-        figma.ui.postMessage({ type: 'count-nodes-result', count: resultCount, target: resultTarget });
+        figma.ui.postMessage({ type: 'count-nodes-result', count: resultCount, target: resultTarget, fromCache: false });
       } catch (e: any) {
         const errMsg = String(e?.message || e);
         figma.notify(`Count failed at ${count} nodes: ${errMsg}`, { error: true });

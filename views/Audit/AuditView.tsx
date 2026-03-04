@@ -247,18 +247,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       if (msg.type === 'count-nodes-progress') {
         setScanProgress({ percent: msg.percent ?? 0, count: msg.count ?? 0 });
       }
+      // Shared node scan across DS / A11Y / (future UX, Prototype): same scope+page reuses cached count; receipt shows credits for current audit type and selection.
       if (msg.type === 'count-nodes-result') {
         const count = msg.count ?? 0;
         const target = msg.target ?? 'All Pages';
+        const fromCache = msg.fromCache === true;
         const isA11y = pendingAuditKindRef.current === 'A11Y';
         pendingAuditKindRef.current = null;
         const { cost, sizeLabel } = isA11y ? getA11yCostAndSize(count) : getScanCostAndSize(count);
         setScanStats({ nodes: count, cost, sizeLabel, target });
         setPendingScanType(isA11y ? 'A11Y' : 'MAIN');
-        setScanProgress(prev => ({ ...prev, count }));
-        const minLoadingMs = 1200 + Math.floor(Math.random() * 1000);
+        setScanProgress({ percent: 100, count });
+        const minLoadingMs = fromCache ? 350 : 1200 + Math.floor(Math.random() * 1000);
         setTimeout(() => {
-          setScanProgress({ percent: 100, count });
           setIsCalculating(false);
           setShowReceipt(true);
         }, minLoadingMs);
@@ -326,6 +327,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
+        if (!msg.fileKey) {
+          setShowReceipt(false);
+          const saveMsg = 'File must be saved to run the audit. Use File → Save (or Save as) in Figma, then try again.';
+          if (payload.pendingScanType === 'A11Y') setA11yAuditError(saveMsg);
+          else setDsAuditError(saveMsg);
+          setPendingScanType(null);
+          return;
+        }
         const isA11yScan = payload.pendingScanType === 'A11Y';
         (async () => {
           if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
