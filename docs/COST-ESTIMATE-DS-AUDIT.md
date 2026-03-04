@@ -121,6 +121,19 @@ Esempio:
 | Crescita | 100–200 | 50–100 | **$20–40** | **$40–80** |
 | Consolidato | 500+ | 200+ | **$80+** | **$160+** |
 
+### 6.3 Fondo cassa per numero di utenti
+
+Il fondo cassa **cambia al variare del numero di utenti** (e dell’uso reale). Tabella indicativa allineata agli scenari § 7.8 (solo DS Audit; costo medio ~$0,013/scan; uso stimato ~0,2 scan/utente/giorno sulla base attiva):
+
+| Utenti totali (stima) | Utenti attivi/giorno (~20%) | Scan/giorno (stima) | Fondo cassa 30 gg | Fondo cassa 60 gg |
+|------------------------|-----------------------------|----------------------|-------------------|-------------------|
+| 100 | ~20 | ~10–25 | **$10–15** | **$20–30** |
+| 500 | ~100 | ~50–100 | **$20–40** | **$40–80** |
+| 2 500 | ~500 | ~250–500 | **$100–200** | **$200–400** |
+| 12 500 | ~2 500 | ~1 250–2 500 | **$500–1 000** | **$1 000–2 000** |
+
+**Nota:** Se il numero di utenti (o gli scan per utente) aumenta, il fondo va **rialzato** in proporzione; se cala l’uso, si può ridurre. Aggiornare la stima quando si aggiungono altre funzioni che usano Kimi (A11Y, Generate, ecc.).
+
 - Impostare **alert** (email/Slack) quando il saldo Kimi scende sotto la cassa minima (es. sotto $15 in fase beta).
 - Prevedere **ricarica automatica** o rinnovo prepagato se la piattaforma Kimi lo consente, così da non bloccare mai le chiamate.
 
@@ -334,6 +347,7 @@ Il netto è circa **65% del ricavo** (il costo Kimi sui FREE è piccolo rispetto
 | Costo medio per scan Kimi | ~$0.012–0.015 |
 | Break-even prezzo/credito | ~$0.003–0.004 |
 | Cassa minima consigliata (beta, 30 gg) | **$10–20** |
+| **Fondo cassa per numero utenti** | Vedi **§ 6.3** (100 → ~\$10–15, 12.5k → ~\$500–1k, 30 gg; cambia con utenti e uso) |
 | Margine lordo vs. Kimi (prezzi store) | ~98–99% (solo costo API) |
 | **Netto per vendita (LS + 30% tasse Italia)** | **~61–65%** del ricavo → vedi § 7.4 |
 

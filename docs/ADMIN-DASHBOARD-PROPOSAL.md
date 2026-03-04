@@ -144,7 +144,7 @@ Implementazione minima consigliata: **ADMIN_SECRET** in Vercel; la dashboard (st
 | Aspetto | Scelta consigliata |
 |---------|--------------------|
 | **Cosa monitorare** | Utenti, piani, crediti, scan, costo Kimi stimato, cassa minima, affiliati, funnel signup→PRO (vedi §1). |
-| **API admin** | Stessa repo, in **auth-deploy** (es. `api/admin/`). |
+| **API admin** | Stessa repo, nel **progetto Vercel della dashboard** (`admin-dashboard/api/admin.mjs`), non in auth-deploy (per non consumare il limite 12 function). |
 | **Frontend dashboard** | Stessa repo in cartella **admin-dashboard/** (deploy separato su dominio privato) oppure repo separata solo UI. |
 | **Sicurezza** | Route `/api/admin/*` protette con **ADMIN_SECRET** (o allowlist Figma ID); nessun link pubblico; dati aggregati/anonymized dove possibile. |
 
@@ -152,13 +152,10 @@ Implementazione minima consigliata: **ADMIN_SECRET** in Vercel; la dashboard (st
 
 ## 5. Implementazione (fatto)
 
-- **API admin (auth-deploy):**
-  - `GET /api/admin/stats` — aggregati: utenti, piani, scan, crediti, costo Kimi stimato, cassa minima, affiliati, funnel. Protette con `ADMIN_SECRET` (header `Authorization: Bearer` o `X-Admin-Key`).
-  - `GET /api/admin/credits-timeline?period=7|30|90` — consumo crediti e scan per giorno.
-  - `GET /api/admin/users?limit=&offset=` — lista utenti con email offuscata, paginata.
-  - `GET /api/admin/affiliates` — lista affiliati con referral.
+- **API admin (progetto dashboard):** una sola serverless function in **admin-dashboard** (`api/admin.mjs`), non su auth-deploy, così auth-deploy resta sotto le 12 function. Endpoint: `GET /api/admin?route=stats|credits-timeline|users|affiliates` (same-origin quando la SPA è deployata sullo stesso progetto).
+  Protette con `ADMIN_SECRET` (header `Authorization: Bearer` o `X-Admin-Key`). Nel progetto dashboard: variabili **POSTGRES_URL** (stesso DB di auth-deploy) e **ADMIN_SECRET**.
 - **SPA (admin-dashboard/):** Home con KPI e link a pagine interne; pagine **Utenti**, **Crediti e costi** (timeline), **Affiliati**. Vedi `admin-dashboard/README.md` per setup e deploy.
-- **Variabile:** in Vercel (progetto auth-deploy) aggiungere `ADMIN_SECRET`; nella dashboard impostare `VITE_ADMIN_API_URL` e `VITE_ADMIN_SECRET`.
+- **Variabili:** nel **progetto Vercel della dashboard** impostare `POSTGRES_URL`, `ADMIN_SECRET`, `VITE_ADMIN_SECRET` (stesso valore). Non serve `VITE_ADMIN_API_URL` in produzione (chiamate same-origin).
 
 Prossimi passi (futuro):
 

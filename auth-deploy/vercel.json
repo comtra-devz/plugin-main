@@ -4,6 +4,9 @@
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },
     { "source": "/auth/figma/start", "destination": "/api/figma-oauth/start" },
     { "source": "/auth/figma/callback", "destination": "/api/figma-oauth/callback" },
-    { "source": "/auth/figma/poll", "destination": "/api/figma-oauth/poll" }
+    { "source": "/auth/figma/poll", "destination": "/api/figma-oauth/poll" },
+    { "source": "/api/credits/estimate", "destination": "/api/credits?sub=estimate" },
+    { "source": "/api/credits/consume", "destination": "/api/credits?sub=consume" },
+    { "source": "/api/trophies/linkedin-shared", "destination": "/api/trophies?sub=linkedin-shared" }
   ]
 }

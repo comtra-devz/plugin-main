@@ -1,5 +1,6 @@
-const API_URL = (import.meta as any).env?.VITE_ADMIN_API_URL || 'https://auth.comtra.dev';
-const SECRET = (import.meta as any).env?.VITE_ADMIN_SECRET || '';
+// Same-origin quando deployata sul suo progetto Vercel (API in /api/admin); opzionale override per dev.
+const BASE = (import.meta as any).env?.VITE_ADMIN_API_URL ?? '';
+const SECRET = (import.meta as any).env?.VITE_ADMIN_SECRET ?? '';
 
 function headers(): HeadersInit {
   const h: HeadersInit = { 'Content-Type': 'application/json' };
@@ -10,26 +11,31 @@ function headers(): HeadersInit {
   return h;
 }
 
+function apiUrl(route: string, params?: Record<string, string | number>) {
+  const q = new URLSearchParams({ route, ...(params && Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)]))) });
+  return `${BASE}/api/admin?${q.toString()}`;
+}
+
 export async function fetchStats(): Promise<AdminStats> {
-  const r = await fetch(`${API_URL}/api/admin/stats`, { headers: headers() });
+  const r = await fetch(apiUrl('stats'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
 export async function fetchCreditsTimeline(period = 30): Promise<CreditsTimeline> {
-  const r = await fetch(`${API_URL}/api/admin/credits-timeline?period=${period}`, { headers: headers() });
+  const r = await fetch(apiUrl('credits-timeline', { period }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
 export async function fetchUsers(limit = 50, offset = 0): Promise<AdminUsersResponse> {
-  const r = await fetch(`${API_URL}/api/admin/users?limit=${limit}&offset=${offset}`, { headers: headers() });
+  const r = await fetch(apiUrl('users', { limit, offset }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
 export async function fetchAffiliates(): Promise<AdminAffiliatesResponse> {
-  const r = await fetch(`${API_URL}/api/admin/affiliates`, { headers: headers() });
+  const r = await fetch(apiUrl('affiliates'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }

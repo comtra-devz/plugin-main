@@ -37,9 +37,10 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `LEMON_SQUEEZY_WEBHOOK_SECRET` | Signing secret del webhook Lemon Squeezy (6–40 caratteri) | **da aggiungere** per affiliate |
 | `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
 | `KIMI_MODEL` | Nome modello (opzionale) | Default: `kimi-k2-turbo-preview`. Per **testing a basso costo** usa `kimi-k2-0905-preview` (input ~$0.40/M token, contesto 131K). |
-| `ADMIN_SECRET` | Stringa segreta per le API admin (dashboard); es. `openssl rand -hex 32` | **Opzionale** — vedi [docs/ADMIN-DASHBOARD-PROPOSAL.md](../docs/ADMIN-DASHBOARD-PROPOSAL.md) |
 
 Dopo ogni modifica alle variabili: **Redeploy**.
+
+*(Le API admin della dashboard girano sul **progetto Vercel della dashboard**, non qui; lì servono `POSTGRES_URL` e `ADMIN_SECRET`.)*
 
 ---
 
