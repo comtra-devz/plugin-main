@@ -268,7 +268,7 @@ export default function AppTest() {
     setSimulatedCredits(null);
     setShowProfile(false);
     setShowLogin(true);
-    setLogoutToast('Sei stato disconnesso.');
+    setLogoutToast('Hai effettuato la disconnessione, torna presto a trovarci!');
     setView(ViewState.AUDIT);
     setGenPrompt('');
   };
