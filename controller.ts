@@ -109,8 +109,35 @@ figma.ui.onmessage = async (raw: any) => {
     }
     return out;
   }
-  function buildDocumentJson(): { document: any } {
+  function buildDocumentJson(opts: { scope?: string; nodeIds?: string[]; pageId?: string }): { document: any } {
     const root = figma.root;
+    const scope = opts.scope ?? 'all';
+
+    // Current selection only: serialize only selected nodes to avoid blocking the UI on large files
+    if (scope === 'current' && opts.nodeIds?.length) {
+      const children: any[] = [];
+      for (const id of opts.nodeIds) {
+        const node = figma.getNodeById(id);
+        if (node && 'id' in node) {
+          const ser = serializeNode(node as BaseNode, MAX_SERIALIZE_DEPTH);
+          if (ser) children.push(ser);
+        }
+      }
+      const doc = { id: 'selection', name: 'Current Selection', type: 'CANVAS' as const, children };
+      return { document: doc };
+    }
+
+    // Single page: serialize only that page
+    if (scope === 'page' && opts.pageId) {
+      const page = figma.getNodeById(opts.pageId);
+      if (page && page.type === 'PAGE') {
+        const ser = serializeNode(page, MAX_SERIALIZE_DEPTH);
+        const doc = ser ? { id: page.id, name: page.name, type: 'CANVAS' as const, children: [ser] } : { id: 'page', name: 'Page', type: 'CANVAS' as const, children: [] };
+        return { document: doc };
+      }
+    }
+
+    // All pages: full document (can be slow on very large files)
     const doc: any = { id: root.id, name: root.name, type: root.type, children: [] };
     for (const page of root.children) {
       const ser = serializeNode(page, MAX_SERIALIZE_DEPTH);
@@ -135,8 +162,8 @@ figma.ui.onmessage = async (raw: any) => {
       pageId: pageIdOut ?? null,
       nodeIds: nodeIds ?? null,
     };
-    // Always send serialized doc when requested so backend can run audit without Figma API/token
-    if (includeFileJson) payload.fileJson = buildDocumentJson();
+    // Serialize only the needed scope (selection / page / all) so the main thread doesn't block
+    if (includeFileJson) payload.fileJson = buildDocumentJson({ scope: scope ?? 'all', nodeIds, pageId: pageIdOut });
     return payload;
   };
 
