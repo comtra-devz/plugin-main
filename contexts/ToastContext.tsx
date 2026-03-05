@@ -12,6 +12,8 @@ export interface ToastOptions {
   actions?: ToastAction[];
   /** Se true, mostra un pulsante Chiudi per chiudere il toast. Default true. */
   dismissible?: boolean;
+  /** 'error' = sfondo rosso come il banner errore (nessun duplicato con banner inline). */
+  variant?: 'default' | 'error';
 }
 
 export interface ToastItem extends ToastOptions {
@@ -35,7 +37,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const showToast = useCallback((options: ToastOptions) => {
     const id = nextId();
-    const item: ToastItem = { ...options, id, dismissible: options.dismissible !== false };
+    const item: ToastItem = {
+      ...options,
+      id,
+      dismissible: options.dismissible !== false,
+      variant: options.variant ?? 'default',
+    };
     setToasts((prev) => [...prev, item]);
     return id;
   }, []);
@@ -52,12 +59,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** 32px sopra la tab bar; nav bar ~3.5rem → bottom = 32px + 56px */
+const TOAST_BOTTOM = 'calc(2rem + 3.5rem)';
+
 function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: string) => void }) {
   if (toasts.length === 0) return null;
   return (
     <div
       className="fixed left-4 right-4 z-[55] flex flex-col gap-2 pointer-events-none"
-      style={{ bottom: '16px' }}
+      style={{ bottom: TOAST_BOTTOM }}
       aria-live="polite"
     >
       <div className="flex flex-col gap-2 pointer-events-auto">
@@ -69,6 +79,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss:
             description={t.description}
             actions={t.actions}
             dismissible={t.dismissible}
+            variant={t.variant}
             onDismiss={() => onDismiss(t.id)}
           />
         ))}

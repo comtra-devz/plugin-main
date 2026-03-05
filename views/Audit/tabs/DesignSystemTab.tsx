@@ -170,25 +170,6 @@ export const DesignSystemTab: React.FC<Props> = ({
           Analysing design system…
         </div>
       )}
-      {dsAuditError && !dsAuditLoading && (
-        <div className="py-2 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800 flex flex-col gap-2">
-          <span>{dsAuditError}</span>
-          {(dsAuditError.includes('No Figma token') || dsAuditError.includes('re-login')) && (
-            <div className="flex flex-wrap gap-2 mt-1">
-              {onLoginWithFigmaRequest && (
-                <button type="button" onClick={onLoginWithFigmaRequest} className="py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
-                  Log in with Figma
-                </button>
-              )}
-              {onCheckTokenStatus && (
-                <button type="button" onClick={onCheckTokenStatus} className="py-1.5 px-3 bg-white text-black text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-100">
-                  Verifica token
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
       {/* Header Stat Card */}
       <div className={`${BRUTAL.card} bg-white p-3 flex items-start gap-3 relative min-h-[140px]`}>
         <div className="shrink-0 mt-1"><CircularScore score={score} size="sm" /></div>

@@ -86,25 +86,6 @@ export const AccessibilityTab: React.FC<Props> = ({
   if (!hasA11yResult) {
     return (
       <div className="p-4 h-[60vh] flex flex-col items-center justify-center">
-        {a11yAuditError && (
-          <div className="w-full mb-3 py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase flex flex-col gap-2 items-center">
-            <span className="text-center">{a11yAuditError}</span>
-            {(a11yAuditError.includes('No Figma token') || a11yAuditError.includes('re-login')) && (
-              <div className="flex flex-wrap gap-2 justify-center mt-1">
-                {onLoginWithFigmaRequest && (
-                  <button type="button" onClick={onLoginWithFigmaRequest} className="py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
-                    Log in with Figma
-                  </button>
-                )}
-                {onCheckTokenStatus && (
-                  <button type="button" onClick={onCheckTokenStatus} className="py-1.5 px-3 bg-white text-black text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-100">
-                    Verifica token
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
         <div className={`${BRUTAL.card} bg-white py-8 w-full text-center`}>
           <CircularScore score={0} label="Ready" size="sm" />
           <p className="text-xs font-medium text-gray-500 mt-4 px-4 mb-4">Check contrast, touch targets, focus and more.</p>
@@ -174,15 +155,6 @@ export const AccessibilityTab: React.FC<Props> = ({
           Analysing accessibility…
         </div>
       )}
-      {a11yAuditError && !a11yAuditLoading && (
-        <div className="py-3 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800 space-y-1">
-          <div>{a11yAuditError}</div>
-          {a11yAuditError.toLowerCase().includes('figma token') && (
-            <div className="font-normal text-red-700">Ricollega Figma da Impostazioni, oppure usa un file non ancora salvato (bozza).</div>
-          )}
-        </div>
-      )}
-
       <div className={`${BRUTAL.card} bg-white p-3 flex items-start gap-3 relative min-h-[140px]`}>
         <div className="shrink-0 mt-1"><CircularScore score={score} size="sm" /></div>
         <div className="flex flex-col flex-1 w-full">

@@ -71,7 +71,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
         if (onLoginWithFigmaRequest) actions.push({ label: 'Log in with Figma', onClick: onLoginWithFigmaRequest });
         if (onCheckTokenStatus) actions.push({ label: 'Verifica token', onClick: onCheckTokenStatus });
       }
-      showToast({ title, description: message, actions, dismissible: true });
+      showToast({ title, description: message, actions, dismissible: true, variant: 'error' });
     },
     [showToast, onLoginWithFigmaRequest, onCheckTokenStatus]
   );
