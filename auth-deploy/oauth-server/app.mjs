@@ -580,6 +580,7 @@ app.post('/api/figma/file', async (req, res) => {
   try {
     const accessToken = await getFigmaAccessToken(dbSql, userId);
     if (!accessToken) {
+      console.warn('POST /api/figma/file: no token for user_id=', userId, '(no row, expired, or refresh failed)');
       return res.status(403).json({
         error: 'No Figma token; re-login to grant file access',
         hint: 'In the plugin: Logout, then Login with Figma. Complete the flow until the "Login completato" page and the window closes. Then try Export again. If it still fails, check Vercel logs for "figma_tokens save failed" after login.',
@@ -592,6 +593,7 @@ app.post('/api/figma/file', async (req, res) => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (figmaRes.status === 403) {
+      console.warn('POST /api/figma/file: Figma API returned 403 for user_id=', userId, '(token rejected by Figma)');
       return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
     }
     if (figmaRes.status === 404) {
@@ -611,7 +613,15 @@ app.post('/api/figma/file', async (req, res) => {
   }
 });
 
-// --- Debug: token status (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md)
+// --- Debug: token status — verifica con Figma API così "presente e valido" = token davvero usabile (vedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md)
+async function figmaTokenValidForApi(accessToken) {
+  if (!accessToken) return false;
+  const meRes = await fetch('https://api.figma.com/v1/me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return meRes.ok;
+}
+
 app.get('/api/figma/token-status', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -621,6 +631,8 @@ app.get('/api/figma/token-status', async (req, res) => {
     if (r.rows.length === 0) return res.json({ ok: false, hasToken: false, reason: 'no_row' });
     const token = await getFigmaAccessToken(dbSql, userId);
     if (!token) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
+    const validWithFigma = await figmaTokenValidForApi(token);
+    if (!validWithFigma) return res.json({ ok: false, hasToken: false, reason: 'figma_rejected' });
     return res.json({ ok: true, hasToken: true });
   } catch (err) {
     console.error('GET /api/figma/token-status', err);
@@ -636,6 +648,8 @@ app.post('/api/figma/token-status', async (req, res) => {
     if (r.rows.length === 0) return res.json({ ok: false, hasToken: false, reason: 'no_row' });
     const token = await getFigmaAccessToken(dbSql, userId);
     if (!token) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
+    const validWithFigma = await figmaTokenValidForApi(token);
+    if (!validWithFigma) return res.json({ ok: false, hasToken: false, reason: 'figma_rejected' });
     return res.json({ ok: true, hasToken: true });
   } catch (err) {
     console.error('POST /api/figma/token-status', err);
@@ -705,7 +719,10 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   const auth = { headers: { Authorization: `Bearer ${accessToken}` } };
 
   const handleFigmaError = (res, t) => {
-    if (res.status === 403) throw new Error('No Figma token; re-login to grant file access');
+    if (res.status === 403) {
+      console.warn('fetchFigmaFileForAudit: Figma API 403 (token rejected by Figma)');
+      throw new Error('No Figma token; re-login to grant file access');
+    }
     if (res.status === 404) throw new Error('File not found');
     throw new Error(t || 'Figma API error');
   };
@@ -797,7 +814,10 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       fileJson = fileJsonFromBody;
     } else if (fileKey) {
       const accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      if (!accessToken) {
+        console.warn('POST /api/agents/ds-audit: no token for user_id=', userId);
+        return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      }
       try {
         fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
       } catch (err) {
@@ -877,7 +897,10 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
       fileJson = fileJsonFromBody;
     } else if (fileKey) {
       const accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      if (!accessToken) {
+        console.warn('POST /api/agents/a11y-audit: no token for user_id=', userId);
+        return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      }
       try {
         fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
       } catch (err) {

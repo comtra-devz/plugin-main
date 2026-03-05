@@ -23,6 +23,7 @@ import {
   getDsScoreCopy,
 } from './data';
 import { getCreditsForIssue, getCreditsForFixAll, ACTION_AUTO_FIX, ACTION_AUTO_FIX_ALL } from './autoFixConfig';
+import { useToast } from '../../contexts/ToastContext';
 
 export interface FetchFigmaFileBody {
   file_key: string;
@@ -61,6 +62,19 @@ const isTokenRelatedError = (msg: string | null) =>
   msg != null && (msg.toLowerCase().includes('no figma token') || msg.toLowerCase().includes('re-login'));
 
 export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
+  const { showToast } = useToast();
+  const showAuditErrorToast = useCallback(
+    (message: string, isA11y: boolean) => {
+      const title = isA11y ? 'Errore A11Y' : 'Errore Design System';
+      const actions: { label: string; onClick: () => void }[] = [];
+      if (isTokenRelatedError(message)) {
+        if (onLoginWithFigmaRequest) actions.push({ label: 'Log in with Figma', onClick: onLoginWithFigmaRequest });
+        if (onCheckTokenStatus) actions.push({ label: 'Verifica token', onClick: onCheckTokenStatus });
+      }
+      showToast({ title, description: message, actions, dismissible: true });
+    },
+    [showToast, onLoginWithFigmaRequest, onCheckTokenStatus]
+  );
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -342,13 +356,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
         } catch {
           setWaitingForFileContext(false);
           const payload = confirmPayloadRef.current;
-          if (payload?.pendingScanType === 'A11Y') {
-            setA11yAuditError('Invalid data received. Try again.');
+          const msg = 'Invalid data received. Try again.';
+          const isA11y = payload?.pendingScanType === 'A11Y';
+          if (isA11y) {
+            setA11yAuditError(msg);
             setA11yAuditLoading(false);
           } else {
-            setDsAuditError('Invalid data received. Try again.');
+            setDsAuditError(msg);
             setDsAuditIssues(null);
           }
+          if (payload) showAuditErrorToast(msg, isA11y);
           setPendingScanType(null);
           return;
         }
@@ -363,13 +380,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
           setShowReceipt(false);
           setWaitingForFileContext(false);
           const errMsg = String(msg.error);
-          if (payload.pendingScanType === 'A11Y') {
+          const isA11y = payload.pendingScanType === 'A11Y';
+          if (isA11y) {
             setA11yAuditError(errMsg);
             setA11yAuditLoading(false);
           } else {
             setDsAuditError(errMsg);
             setDsAuditIssues(null);
           }
+          showAuditErrorToast(errMsg, isA11y);
           setPendingScanType(null);
           return;
         }
@@ -379,13 +398,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
           setShowReceipt(false);
           setWaitingForFileContext(false);
           const saveMsg = msg.error || 'Save the file to run the audit.';
-          if (payload.pendingScanType === 'A11Y') {
+          const isA11y = payload.pendingScanType === 'A11Y';
+          if (isA11y) {
             setA11yAuditError(saveMsg);
             setA11yAuditLoading(false);
           } else {
             setDsAuditError(saveMsg);
             setDsAuditIssues(null);
           }
+          showAuditErrorToast(saveMsg, isA11y);
           setPendingScanType(null);
           return;
         }
@@ -415,6 +436,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
             setDsAuditIssues(null);
             setDsAuditLoading(false);
           }
+          showAuditErrorToast(message, isA11yScan);
           setPendingScanType(null);
           setWaitingForFileContext(false);
         };
@@ -479,7 +501,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, onUnlockRequest, useInfiniteCreditsForTest, plan]);
+  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditErrorToast]);
 
   const handleStartScan = useCallback(() => {
     if (knownZeroCredits) {

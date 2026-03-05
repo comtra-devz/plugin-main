@@ -55,9 +55,10 @@ Anche con la tabella presente, l’INSERT può fallire (rete, timeout, constrain
 
 Risposta possibile:
 
-- `{ "ok": true, "hasToken": true }` — token presente e utilizzabile (o rinfrescabile).  
+- `{ "ok": true, "hasToken": true }` — token presente e **verificato con Figma** (chiamata a `GET /v1/me`): puoi usare audit/file.  
 - `{ "ok": false, "hasToken": false, "reason": "no_row" }` — nessuna riga in `figma_tokens` per il tuo `user_id`.  
-- `{ "ok": false, "hasToken": false, "reason": "expired" }` — token scaduto e refresh fallito.
+- `{ "ok": false, "hasToken": false, "reason": "expired_or_invalid" }` — token scaduto e refresh fallito.  
+- `{ "ok": false, "hasToken": false, "reason": "figma_rejected" }` — il token in DB non è più accettato da Figma (revocato o scaduto lato Figma). Fai Logout e Log in with Figma.
 
 **Come usarlo:**  
 Dopo il login, da browser o da Postman chiama l’endpoint con l’`authToken` che il plugin ha in sessione (se hai un modo per leggerlo, es. da `clientStorage` in sviluppo). In alternativa, possiamo aggiungere nel plugin un pulsante "Verifica token" che chiama questo endpoint e mostra il risultato.

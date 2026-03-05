@@ -40,7 +40,7 @@ export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, sizeLabel, 
         <div className="p-6 text-xs space-y-0">
           <div className="flex gap-3 items-start border-b border-black/10 py-3 first:pt-0">
             <span className="text-gray-500 uppercase shrink-0 pt-0.5">Target</span>
-            <span className="font-bold min-w-0 text-left leading-relaxed break-words">{targetOnly}</span>
+            <span className="font-bold min-w-0 text-right leading-relaxed break-words">{targetOnly}</span>
           </div>
 
           <div className="flex gap-3 items-center border-b border-black/10 py-3">

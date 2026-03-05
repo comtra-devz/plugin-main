@@ -14,6 +14,7 @@ import { UpgradeModal } from './components/UpgradeModal';
 import { LevelUpModal } from './components/LevelUpModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
+import { ToastProvider } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import type { FetchFigmaFileBody } from './views/Audit/AuditView';
@@ -308,11 +309,17 @@ export default function AppTest() {
       const data = await r.json().catch(() => ({}));
       const hasToken = !!data.hasToken;
       if (hasToken) setTokenVerifiedAt(Date.now());
-      const msg = data.reason
-        ? `hasToken: ${data.hasToken}\nreason: ${data.reason}\n\nVedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md`
-        : hasToken
-          ? 'Token Figma: presente e valido.'
-          : `Token Figma: assente o non valido.\n${data.reason || ''}\n\nFai Logout e poi Log in with Figma. Controlla i log del backend per "figma_tokens save failed".`;
+      const reason = data.reason;
+      let msg: string;
+      if (hasToken) {
+        msg = 'Token Figma: presente e valido.';
+      } else if (reason === 'figma_rejected') {
+        msg = 'Il token in DB non è più accettato da Figma (revocato o scaduto).\n\nFai Logout e poi Log in with Figma per ottenere un nuovo token.';
+      } else if (reason) {
+        msg = `Token Figma: assente o non valido.\nreason: ${reason}\n\nFai Logout e poi Log in with Figma. Vedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md`;
+      } else {
+        msg = `Token Figma: assente o non valido.\n\nFai Logout e poi Log in with Figma. Controlla i log del backend per "figma_tokens save failed".`;
+      }
       alert(msg);
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -491,7 +498,7 @@ export default function AppTest() {
   }
 
   return (
-    <>
+    <ToastProvider>
       {newTrophiesToast.length > 0 && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-[#ffc900] border-2 border-black shadow-[4px_4px_0_0_#000] px-4 py-2 max-w-[90%] animate-in fade-in slide-in-from-top-2">
           <p className="text-[10px] font-bold uppercase text-black">
@@ -645,6 +652,6 @@ export default function AppTest() {
           />
         )}
       </Layout>
-    </>
+    </ToastProvider>
   );
 }
