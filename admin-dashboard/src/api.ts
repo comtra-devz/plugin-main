@@ -46,6 +46,49 @@ export async function fetchTokenUsage(period = 30): Promise<TokenUsageResponse> 
   return r.json();
 }
 
+export interface WeeklyUpdateItem {
+  id: string;
+  date: string;
+  category: string;
+  title: string;
+  description: string;
+  commitHash?: string;
+}
+
+export interface WeeklyUpdatesResponse {
+  updates: WeeklyUpdateItem[];
+  source: 'github' | 'none';
+  message?: string;
+}
+
+export async function fetchWeeklyUpdates(perPage = 30): Promise<WeeklyUpdatesResponse> {
+  const r = await fetch(apiUrl('weekly-updates', { per_page: perPage }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export type HealthStatus = 'up' | 'degraded' | 'down' | 'unknown';
+
+export interface HealthCheckItem {
+  id: string;
+  name: string;
+  status: HealthStatus;
+  latencyMs: number | null;
+  message: string | null;
+}
+
+export interface HealthResponse {
+  global: HealthStatus;
+  checks: HealthCheckItem[];
+  cachedAt: string;
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const r = await fetch(apiUrl('health'), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
 export interface TokenUsageResponse {
   period_days: number;
   since: string;

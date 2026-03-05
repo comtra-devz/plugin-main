@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchStats, fetchCreditsTimeline, type AdminStats, type CreditsTimeline } from '../api';
+import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem } from '../api';
 import DualLineChart from '../components/DualLineChart';
+import HealthBadge from '../components/HealthBadge';
 import { PLACEHOLDER_WEEKLY_UPDATES, type UpdateCategory } from '../data/weeklyUpdates';
 
 const WEEKLY_UPDATES_PREVIEW = 3;
-const CATEGORY_BADGE_STYLE: Record<UpdateCategory, { bg: string }> = {
+const CATEGORY_BADGE_STYLE: Record<string, { bg: string }> = {
   FEAT: { bg: 'var(--yellow)' },
   FIX: { bg: 'var(--pink)' },
   DOCS: { bg: 'var(--white)' },
@@ -18,6 +19,7 @@ const CATEGORY_BADGE_STYLE: Record<UpdateCategory, { bg: string }> = {
 export default function Home() {
   const [data, setData] = useState<AdminStats | null>(null);
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
+  const [weeklyUpdates, setWeeklyUpdates] = useState<WeeklyUpdateItem[]>([]);
   const [chartPeriod, setChartPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,16 +42,27 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [chartPeriod, data]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchWeeklyUpdates(20)
+      .then((r) => { if (!cancelled && r.updates?.length) setWeeklyUpdates(r.updates); })
+      .catch(() => { if (!cancelled) setWeeklyUpdates(PLACEHOLDER_WEEKLY_UPDATES); });
+    return () => { cancelled = true; };
+  }, []);
+
   if (loading && !data) return <p className="loading">Caricamento…</p>;
   if (error) return <p className="error">{error}</p>;
   if (!data) return null;
 
   const { users, credits, kimi, affiliates, funnel } = data;
-  const recentUpdates = PLACEHOLDER_WEEKLY_UPDATES.slice(0, WEEKLY_UPDATES_PREVIEW);
+  const recentUpdates = weeklyUpdates.length > 0 ? weeklyUpdates.slice(0, WEEKLY_UPDATES_PREVIEW) : PLACEHOLDER_WEEKLY_UPDATES.slice(0, WEEKLY_UPDATES_PREVIEW);
 
   return (
     <>
-      <h1 className="page-title">Dashboard</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Dashboard</h1>
+        <HealthBadge />
+      </div>
 
       {/* Utenti e piani — KPI con link */}
       <section style={{ marginBottom: '2rem' }}>
@@ -211,7 +224,7 @@ export default function Home() {
                   className="badge"
                   style={{
                     marginRight: '0.5rem',
-                    background: CATEGORY_BADGE_STYLE[u.category].bg,
+                    background: (CATEGORY_BADGE_STYLE[u.category] || CATEGORY_BADGE_STYLE.CHORE).bg,
                     border: '2px solid var(--black)',
                     fontSize: '0.65rem',
                   }}

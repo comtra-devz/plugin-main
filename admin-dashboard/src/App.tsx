@@ -10,6 +10,7 @@ import TokenUsage from './pages/TokenUsage';
 import WeeklyUpdates from './pages/WeeklyUpdates';
 import SupportRequests from './pages/SupportRequests';
 import SecurityLogs from './pages/SecurityLogs';
+import Health from './pages/Health';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/weekly-updates" element={<WeeklyUpdates />} />
           <Route path="/support" element={<SupportRequests />} />
           <Route path="/security" element={<SecurityLogs />} />
+          <Route path="/health" element={<Health />} />
         </Routes>
       </main>
     </div>

@@ -44,6 +44,7 @@ interface Props {
   issueListProps: any;
   a11yAuditLoading?: boolean;
   a11yAuditError?: string | null;
+  onLoginWithFigmaRequest?: () => void;
 }
 
 export const AccessibilityTab: React.FC<Props> = ({
@@ -72,6 +73,7 @@ export const AccessibilityTab: React.FC<Props> = ({
   issueListProps,
   a11yAuditLoading,
   a11yAuditError,
+  onLoginWithFigmaRequest,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
@@ -83,8 +85,13 @@ export const AccessibilityTab: React.FC<Props> = ({
     return (
       <div className="p-4 h-[60vh] flex flex-col items-center justify-center">
         {a11yAuditError && (
-          <div className="w-full mb-3 py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase text-center">
-            {a11yAuditError}
+          <div className="w-full mb-3 py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase flex flex-col gap-2 items-center">
+            <span className="text-center">{a11yAuditError}</span>
+            {(a11yAuditError.includes('No Figma token') || a11yAuditError.includes('re-login')) && onLoginWithFigmaRequest && (
+              <button type="button" onClick={onLoginWithFigmaRequest} className="mt-1 py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
+                Log in with Figma
+              </button>
+            )}
           </div>
         )}
         <div className={`${BRUTAL.card} bg-white py-8 w-full text-center`}>

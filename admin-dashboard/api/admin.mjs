@@ -38,10 +38,27 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!requireAdmin(req, res)) return;
 
-  if (!sql) return res.status(503).json({ error: 'Database not configured' });
-
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health' });
+
+  if (route === 'weekly-updates') {
+    try {
+      return await handleWeeklyUpdates(req, res);
+    } catch (err) {
+      console.error('GET /api/admin weekly-updates', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  }
+  if (route === 'health') {
+    try {
+      return await handleHealth(req, res);
+    } catch (err) {
+      console.error('GET /api/admin health', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  }
+
+  if (!sql) return res.status(503).json({ error: 'Database not configured' });
 
   try {
     if (route === 'stats') return await handleStats(req, res);
@@ -347,4 +364,154 @@ async function handleTokenUsage(req, res) {
     by_size_band: bySizeBand,
     by_day: byDay,
   });
+}
+
+/** Conventional commit type -> category */
+const CONVENTIONAL_TO_CATEGORY = {
+  feat: 'FEAT',
+  fix: 'FIX',
+  docs: 'DOCS',
+  chore: 'CHORE',
+  refactor: 'REFACTOR',
+  style: 'STYLE',
+  security: 'SECURITY',
+  test: 'CHORE',
+  perf: 'FIX',
+  ci: 'CHORE',
+  build: 'CHORE',
+};
+
+function parseConventionalMessage(fullMessage) {
+  if (!fullMessage || typeof fullMessage !== 'string') return { category: 'CHORE', title: 'Update', description: '' };
+  const lines = fullMessage.trim().split(/\r?\n/).filter(Boolean);
+  const subject = lines[0] || 'Update';
+  const body = lines.slice(1).join('\n').trim();
+  let category = 'CHORE';
+  let title = subject;
+  const match = subject.match(/^(\w+)(?:\([^)]*\))?!?:\s*(.+)$/i);
+  if (match) {
+    const type = (match[1] || '').toLowerCase();
+    category = CONVENTIONAL_TO_CATEGORY[type] || 'CHORE';
+    title = (match[2] || subject).trim();
+    if (title.length > 80) title = title.slice(0, 77) + '...';
+  }
+  const description = body || title;
+  return { category, title, description: description.length > 200 ? description.slice(0, 197) + '...' : description };
+}
+
+async function handleWeeklyUpdates(req, res) {
+  const repo = (process.env.GITHUB_REPO || '').trim();
+  if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    return res.status(200).json({ updates: [], source: 'none', message: 'Set GITHUB_REPO (owner/repo) to enable' });
+  }
+  const token = (process.env.GITHUB_TOKEN || '').trim();
+  const perPage = Math.min(50, Math.max(10, parseInt(req.query?.per_page, 10) || 30));
+  const url = `https://api.github.com/repos/${repo}/commits?per_page=${perPage}`;
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const ghRes = await fetch(url, { headers });
+  if (!ghRes.ok) {
+    const text = await ghRes.text();
+    console.error('GitHub API', ghRes.status, text);
+    return res.status(502).json({ error: 'GitHub API error', status: ghRes.status });
+  }
+  const commits = await ghRes.json();
+  if (!Array.isArray(commits)) {
+    return res.status(200).json({ updates: [], source: 'github' });
+  }
+
+  const updates = commits.map((c) => {
+    const sha = c.sha || '';
+    const msg = (c.commit && c.commit.message) || '';
+    const authorDate = (c.commit && c.commit.author && c.commit.author.date) || '';
+    const date = authorDate ? authorDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const { category, title, description } = parseConventionalMessage(msg);
+    return {
+      id: sha || `commit-${date}-${Math.random().toString(36).slice(2, 9)}`,
+      date,
+      category,
+      title,
+      description,
+      commitHash: sha ? sha.slice(0, 7) : undefined,
+    };
+  });
+
+  res.status(200).json({ updates, source: 'github' });
+}
+
+const HEALTH_CACHE_MS = 60_000;
+let healthCache = { data: null, at: 0 };
+
+async function handleHealth(req, res) {
+  if (Date.now() - healthCache.at < HEALTH_CACHE_MS && healthCache.data) {
+    return res.status(200).json(healthCache.data);
+  }
+
+  const authUrl = (process.env.AUTH_PUBLIC_URL || 'https://auth.comtra.dev').replace(/\/$/, '');
+  const checks = [
+    { id: 'dashboard', name: 'Dashboard (Vercel)', url: null },
+    { id: 'database', name: 'Database (Postgres)', url: null },
+    { id: 'auth', name: 'Auth API', url: authUrl },
+    { id: 'vercel', name: 'Vercel', url: 'https://www.vercel.com' },
+  ];
+
+  const results = await Promise.allSettled([
+    Promise.resolve({ id: 'dashboard', status: 'up', latencyMs: 0, message: null }),
+    (async () => {
+      if (!sql) return { id: 'database', status: 'unknown', latencyMs: null, message: 'Non configurato' };
+      const start = Date.now();
+      try {
+        await sql`SELECT 1`;
+        return { id: 'database', status: 'up', latencyMs: Date.now() - start, message: null };
+      } catch (e) {
+        return { id: 'database', status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Errore' };
+      }
+    })(),
+    pingUrl(authUrl, 'auth'),
+    pingUrl('https://www.vercel.com', 'vercel'),
+  ]);
+
+  const checkResults = results.map((r, i) => {
+    if (r.status === 'fulfilled') return r.value;
+    const c = checks[i];
+    return { id: c.id, status: 'down', latencyMs: null, message: (r.reason && r.reason.message) || 'Errore' };
+  });
+
+  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
+  const list = checkResults.map(r => ({
+    id: r.id,
+    name: (byId[r.id] && byId[r.id].name) || r.id,
+    status: r.status,
+    latencyMs: r.latencyMs ?? null,
+    message: r.message ?? null,
+  }));
+
+  const downCount = list.filter(c => c.status === 'down').length;
+  const unknownCount = list.filter(c => c.status === 'unknown').length;
+  let global = 'up';
+  if (downCount > 0) global = downCount === list.length ? 'down' : 'degraded';
+  else if (unknownCount === list.length) global = 'unknown';
+
+  const payload = {
+    global,
+    checks: list,
+    cachedAt: new Date().toISOString(),
+  };
+  healthCache = { data: payload, at: Date.now() };
+  res.status(200).json(payload);
+}
+
+async function pingUrl(url, id) {
+  const start = Date.now();
+  try {
+    const r = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+    const ok = r.ok || r.status < 500;
+    return { id, status: ok ? 'up' : 'degraded', latencyMs: Date.now() - start, message: ok ? null : `HTTP ${r.status}` };
+  } catch (e) {
+    return { id, status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Timeout o errore' };
+  }
 }

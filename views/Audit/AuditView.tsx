@@ -36,6 +36,8 @@ interface Props {
   plan: UserPlan; 
   userTier?: string;
   onUnlockRequest: () => void;
+  /** When audit fails for missing Figma token, call this to open login and start OAuth. */
+  onLoginWithFigmaRequest?: () => void;
   creditsRemaining: number | null;
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
@@ -51,7 +53,7 @@ interface Props {
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -104,6 +106,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' } | null>(null);
+  const chunkedRef = useRef<{ totalChunks: number; meta: Record<string, unknown>; chunks: Record<number, string> } | null>(null);
   // Ref so "Authorize" always sees the scan type that was set when the receipt was shown (avoids stale closure)
   const pendingScanTypeRef = useRef<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
   // DS Audit agent: real issues from backend (Kimi)
@@ -305,6 +308,38 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
+      if (msg.type === 'file-context-chunked-start') {
+        chunkedRef.current = {
+          totalChunks: msg.totalChunks ?? 0,
+          meta: { fileKey: msg.fileKey, scope: msg.scope, pageId: msg.pageId, selectionType: msg.selectionType, selectionName: msg.selectionName },
+          chunks: {},
+        };
+      }
+      if (msg.type === 'file-context-chunk' && chunkedRef.current) {
+        const state = chunkedRef.current;
+        state.chunks[msg.index] = msg.chunk;
+        if (Object.keys(state.chunks).length !== state.totalChunks) return;
+        const parts: string[] = [];
+        for (let i = 0; i < state.totalChunks; i++) parts.push(state.chunks[i]);
+        chunkedRef.current = null;
+        let fileJson: object;
+        try {
+          fileJson = JSON.parse(parts.join('')) as object;
+        } catch {
+          setWaitingForFileContext(false);
+          const payload = confirmPayloadRef.current;
+          if (payload?.pendingScanType === 'A11Y') {
+            setA11yAuditError('Invalid data received. Try again.');
+            setA11yAuditLoading(false);
+          } else {
+            setDsAuditError('Invalid data received. Try again.');
+            setDsAuditIssues(null);
+          }
+          setPendingScanType(null);
+          return;
+        }
+        msg = { type: 'file-context-result', ...state.meta, fileJson };
+      }
       if (msg.type === 'file-context-result') {
         setWaitingForFileContext(false);
         const payload = confirmPayloadRef.current;
@@ -317,7 +352,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
           if (payload.pendingScanType === 'A11Y') {
             setA11yAuditError(errMsg);
             setA11yAuditLoading(false);
-            // Keep previous a11yAuditIssues so user stays on results view
           } else {
             setDsAuditError(errMsg);
             setDsAuditIssues(null);
@@ -326,7 +360,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
           return;
         }
         const hasFileKey = !!msg.fileKey;
-        if (!hasFileKey) {
+        const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
+        if (!hasFileKey && !hasFileJson) {
           setShowReceipt(false);
           setWaitingForFileContext(false);
           const saveMsg = msg.error || 'Save the file to run the audit.';
@@ -346,12 +381,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         else setAuditScopeLabel('Page');
         setAuditScopeName(typeof msg.selectionName === 'string' ? msg.selectionName : '');
         setAuditScopeIsCurrent(msg.scope === 'current');
-        const auditBody = {
-          file_key: msg.fileKey as string,
-          scope: msg.scope ?? 'all',
-          page_id: msg.pageId ?? undefined,
-          node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
-        };
+        const auditBody = hasFileJson
+          ? { file_json: msg.fileJson as object }
+          : {
+              file_key: msg.fileKey as string,
+              scope: msg.scope ?? 'all',
+              page_id: msg.pageId ?? undefined,
+              node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
+              page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
+            };
 
         const setAuditError = (message: string) => {
           if (isA11yScan) {
@@ -853,6 +891,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             issueListProps={issueListProps}
             dsAuditLoading={dsAuditLoading}
             dsAuditError={dsAuditError}
+            onLoginWithFigmaRequest={onLoginWithFigmaRequest}
         />
       )}
 
@@ -883,6 +922,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
             issueListProps={issueListProps}
             a11yAuditLoading={a11yAuditLoading}
             a11yAuditError={a11yAuditError}
+            onLoginWithFigmaRequest={onLoginWithFigmaRequest}
         />
       )}
 

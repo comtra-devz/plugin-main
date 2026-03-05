@@ -61,6 +61,10 @@ Le variabili `VITE_*` vengono **iniettate a build time** da Vite; vanno impostat
   | `ADMIN_SECRET` | **Stesso valore** di `VITE_ADMIN_SECRET` | Runtime: API `/api/admin` verifica l'header. |
   | `POSTGRES_URL` | **Stesso URL** del DB di auth-deploy (Supabase) | Runtime: API legge users, credit_transactions, affiliates. |
 
+- **Opzionale — Weekly Updates da GitHub:** per aggiornare automaticamente i Weekly Updates dai commit del repo, aggiungi:
+  | `GITHUB_REPO` | Repository in formato `owner/repo` (es. `comtra-devz/plugin-main-1`) | Runtime: API `route=weekly-updates` legge gli ultimi commit. |
+  | `GITHUB_TOKEN` | Token GitHub (Personal Access Token) | Opzionale: aumenta il rate limit delle chiamate API (senza token: 60/h). |
+
 - [ ] **Non** impostare `VITE_ADMIN_API_URL` (lascialo vuoto): in produzione la SPA chiama same-origin.
 - [ ] **Non** committare i secret. Dopo modifiche alle env, **Redeploy** (le `VITE_*` sono a build time).
 

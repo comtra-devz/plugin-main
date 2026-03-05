@@ -664,45 +664,73 @@ function sizeBandFromNodeCount(n) {
   return '200k+';
 }
 
-/** Fetch file JSON from Figma REST API using scope/ids/depth (see docs/AUDIT-FIGMA-API-APPROACH.md). Returns { document } for audit engines. */
-async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeIds) {
+/** Fetch file JSON from Figma REST API. Never requests the full file in one go: per-page or per-node only, to avoid 400 on large files. Returns { document } for audit engines. */
+async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeIds, pageIds) {
   const scopeType = scope === 'current' || scope === 'page' || scope === 'all' ? scope : 'all';
   const idsArr = Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : [];
   const pageIdTrim = typeof pageId === 'string' ? pageId.trim() : '';
+  const pageIdsArr = Array.isArray(pageIds) ? pageIds.filter(Boolean) : [];
+  const auth = { headers: { Authorization: `Bearer ${accessToken}` } };
+
+  const handleFigmaError = (res, t) => {
+    if (res.status === 403) throw new Error('No Figma token; re-login to grant file access');
+    if (res.status === 404) throw new Error('File not found');
+    throw new Error(t || 'Figma API error');
+  };
 
   if (scopeType === 'current' && idsArr.length > 0) {
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}/nodes`);
     url.searchParams.set('ids', idsArr.join(','));
     url.searchParams.set('depth', '5');
-    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) {
-      const t = await res.text();
-      if (res.status === 400) throw new Error('File or selection too large. Try a smaller selection or a single page.');
-      if (res.status === 403) throw new Error('No Figma token; re-login to grant file access');
-      if (res.status === 404) throw new Error('File not found');
-      throw new Error(t || 'Figma API error');
-    }
+    const res = await fetch(url.toString(), auth);
+    if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
     const nodesMap = data.nodes || {};
     const docs = Object.values(nodesMap).map((v) => v && v.document).filter(Boolean);
     return { document: { type: 'DOCUMENT', id: '0:0', children: docs.length ? docs : [] } };
   }
 
-  const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
   if (scopeType === 'page' && pageIdTrim) {
+    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     url.searchParams.set('ids', pageIdTrim);
     url.searchParams.set('depth', '4');
-  } else {
+    const res = await fetch(url.toString(), auth);
+    if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
+    const data = await res.json();
+    const doc = data.document || { type: 'DOCUMENT', id: '0:0', children: [] };
+    const children = Array.isArray(doc.children) ? doc.children : [];
+    return { document: { type: 'DOCUMENT', id: '0:0', children } };
+  }
+
+  if (scopeType === 'all' && pageIdsArr.length > 0) {
+    const allChildren = [];
+    for (const pid of pageIdsArr) {
+      const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+      url.searchParams.set('ids', pid);
+      url.searchParams.set('depth', '4');
+      const res = await fetch(url.toString(), auth);
+      if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
+      const data = await res.json();
+      const doc = data.document || {};
+      const kids = Array.isArray(doc.children) ? doc.children : [];
+      allChildren.push(...kids);
+    }
+    return { document: { type: 'DOCUMENT', id: '0:0', children: allChildren } };
+  }
+
+  if (scopeType === 'all') {
+    const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     url.searchParams.set('depth', '2');
+    const res = await fetch(url.toString(), auth);
+    if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
+    const data = await res.json();
+    return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] } };
   }
-  const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) {
-    const t = await res.text();
-    if (res.status === 400) throw new Error('File too large. Try a single page or your current selection.');
-    if (res.status === 403) throw new Error('No Figma token; re-login to grant file access');
-    if (res.status === 404) throw new Error('File not found');
-    throw new Error(t || 'Figma API error');
-  }
+
+  const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
+  url.searchParams.set('depth', '2');
+  const res = await fetch(url.toString(), auth);
+  if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
   const data = await res.json();
   return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] } };
 }
@@ -739,7 +767,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       const accessToken = await getFigmaAccessToken(dbSql, userId);
       if (!accessToken) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
       try {
-        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds);
+        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
       } catch (err) {
         const msg = err && err.message ? err.message : 'Figma API error';
         if (msg.includes('re-login')) return res.status(403).json({ error: msg });
@@ -819,7 +847,7 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
       const accessToken = await getFigmaAccessToken(dbSql, userId);
       if (!accessToken) return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
       try {
-        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds);
+        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
       } catch (err) {
         const msg = err && err.message ? err.message : 'Figma API error';
         if (msg.includes('re-login')) return res.status(403).json({ error: msg });

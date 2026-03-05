@@ -179,17 +179,15 @@ figma.ui.onmessage = async (raw: any) => {
     };
   }
 
-  // File context for backend pipeline. Plugin sends only identifiers; backend fetches file via Figma REST API (ids/depth). See docs/AUDIT-FIGMA-API-APPROACH.md.
+  // File context: for "current" selection we send fileJson from plugin (no token needed, worked always). For all/page we send only identifiers and backend fetches via REST API.
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
+    const POST_MESSAGE_SIZE_LIMIT = 1.4e6;
+    const CHUNK_SIZE = 1e6;
     (async () => {
       try {
         const base = buildFileContextSync(scope, pageId);
-        if (!base.fileKey) {
-          figma.ui.postMessage({ type: 'file-context-result', ...base, error: 'Save the file to run the audit.' });
-          return;
-        }
         let selectionType: string = 'Page';
         let selectionName: string = '';
         if (scope === 'current' && base.nodeIds?.length) {
@@ -200,12 +198,33 @@ figma.ui.onmessage = async (raw: any) => {
             selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'SECTION' ? 'Section' : t === 'PAGE' ? 'Page' : 'Selection';
           }
         }
-        figma.ui.postMessage({
-          type: 'file-context-result',
-          ...base,
-          selectionType,
-          selectionName,
-        });
+
+        if (scope === 'current') {
+          const fileJson = await buildDocumentJsonAsync({ scope: 'current', nodeIds: base.nodeIds ?? undefined });
+          const jsonString = JSON.stringify(fileJson);
+          if (jsonString.length > POST_MESSAGE_SIZE_LIMIT) {
+            const totalChunks = Math.ceil(jsonString.length / CHUNK_SIZE);
+            figma.ui.postMessage({ type: 'file-context-chunked-start', ...base, selectionType, selectionName, totalChunks });
+            for (let i = 0; i < totalChunks; i++) {
+              figma.ui.postMessage({ type: 'file-context-chunk', index: i, chunk: jsonString.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE) });
+            }
+          } else {
+            figma.ui.postMessage({ type: 'file-context-result', ...base, fileJson, selectionType, selectionName });
+          }
+          return;
+        }
+
+        if (!base.fileKey) {
+          figma.ui.postMessage({ type: 'file-context-result', ...base, error: 'Save the file to run the audit.' });
+          return;
+        }
+        if (scope === 'all') {
+          await figma.loadAllPagesAsync();
+          const pageIds = figma.root.children.map((p: PageNode) => p.id);
+          figma.ui.postMessage({ type: 'file-context-result', ...base, pageIds, selectionType, selectionName });
+        } else {
+          figma.ui.postMessage({ type: 'file-context-result', ...base, selectionType, selectionName });
+        }
       } catch (e) {
         console.error('[get-file-context]', e);
         figma.ui.postMessage({ type: 'file-context-result', fileKey: null, scope: scope ?? 'all', pageId: null, nodeIds: null, error: String(e) });

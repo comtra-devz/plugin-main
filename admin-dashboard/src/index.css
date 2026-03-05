@@ -25,6 +25,7 @@ body {
 }
 a { color: var(--black); text-decoration: none; font-weight: 700; }
 a:hover { text-decoration: underline; }
+.health-badge:hover { text-decoration: none; opacity: 0.9; }
 code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
 
 /* ——— BRUTAL tokens ——— */

@@ -16,12 +16,17 @@
 - **Voci in sidebar:** Home, Utenti, Crediti e costi, Token Kimi, Affiliati.
 - **Non in sidebar:** Grafici (contenuto in Home), Weekly Updates (accesso da Home), Support, Security & Logs (accesso da link in Home).
 
-## 4. Weekly Updates (pagina)
+## 4. Weekly Updates (pagina) — aggiornamento automatico
 
 - **Route:** `/weekly-updates`
-- **Sistema di categorie:** FEAT, FIX, DOCS, CHORE, REFACTOR, SECURITY, STYLE (allineate a conventional commits).
-- **Struttura dati:** `WeeklyUpdate`: `id`, `date`, `category`, `title`, `description`, `commitHash?`. Il titolo e la descrizione sono in **linguaggio semplice** (derivabili da commit: subject → title, body → description).
-- **Futuro:** Integrazione con GitHub (o altro) per leggere i commit e mapparli/tradurli in linguaggio semplice (es. `feat(audit): add a11y rules` → "Aggiunte regole di accessibilità all'audit").
+- **API:** `GET /api/admin?route=weekly-updates` (opzionale `per_page=30`). Non richiede database.
+- **Fonte automatica:** se nel progetto Vercel della dashboard sono impostate le variabili d'ambiente:
+  - **`GITHUB_REPO`** (obbligatoria): repository in formato `owner/repo` (es. `comtra-devz/plugin-main-1`).
+  - **`GITHUB_TOKEN`** (opzionale): token GitHub per rate limit più alto (60 req/h senza token, 5000 con token).
+  l'API chiama `GET https://api.github.com/repos/{owner}/{repo}/commits` e mappa i commit in Weekly Updates.
+- **Parsing conventional commits:** dal messaggio di commit vengono estratti tipo (feat, fix, docs, chore, refactor, style, security, test, perf, ci, build) → categoria (FEAT, FIX, DOCS, CHORE, …), subject → title, body → description.
+- **Fallback:** se `GITHUB_REPO` non è impostata o la richiesta fallisce, l'API restituisce `updates: []`; il frontend usa in quel caso i dati placeholder.
+- **Frontend:** Home e pagina Weekly Updates chiamano `fetchWeeklyUpdates()`; in Home vengono mostrati gli ultimi 3, nella pagina tutti con filtro per categoria.
 
 ## 5. Utenti: filtri, search, export
 
@@ -48,3 +53,13 @@
 ---
 
 Tutte le pagine usano lo stile BRUTAL (card, tabelle, pulsanti) già introdotto in dashboard.
+
+---
+
+## 8. Stato dipendenze (Health / down detector)
+
+- **Badge in Home:** in alto a destra (accanto al titolo "Dashboard") un badge mostra lo **stato globale** delle dipendenze: "Tutto ok" (verde), "Degradato" (giallo), "Problemi" (rosso), "Sconosciuto" (grigio). Click/tap sul badge → pagina **Stato dipendenze** (`/health`).
+- **API:** `GET /api/admin?route=health` (con auth admin). Risposta in cache 60 secondi.
+- **Check eseguiti:** (1) **Dashboard** — sempre up se l’API risponde; (2) **Database (Postgres)** — `SELECT 1`; (3) **Auth API** — HEAD alla URL configurata (default `https://auth.comtra.dev`); (4) **Vercel** — HEAD a `https://www.vercel.com`. Lo stato globale è: `up` se tutti up, `down` se tutti down, `degraded` se almeno uno down, `unknown` se tutti unknown.
+- **Pagina /health:** elenco di tutti i servizi con stato, latenza (ms) e eventuale messaggio; pulsante "Aggiorna" per forzare un nuovo check (rispetto alla cache).
+- **Env opzionale:** `AUTH_PUBLIC_URL` — URL base dell’API auth da controllare (default `https://auth.comtra.dev`).

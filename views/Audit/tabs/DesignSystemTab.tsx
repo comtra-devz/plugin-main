@@ -42,6 +42,7 @@ interface Props {
   issueListProps: any;
   dsAuditLoading?: boolean;
   dsAuditError?: string | null;
+  onLoginWithFigmaRequest?: () => void;
 }
 
 function getScopeLabel(scope: ScanScope, selectedPage: DocumentPage | null): string {
@@ -77,6 +78,7 @@ export const DesignSystemTab: React.FC<Props> = ({
   issueListProps,
   dsAuditLoading,
   dsAuditError,
+  onLoginWithFigmaRequest,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
@@ -167,8 +169,13 @@ export const DesignSystemTab: React.FC<Props> = ({
         </div>
       )}
       {dsAuditError && !dsAuditLoading && (
-        <div className="py-2 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800">
-          {dsAuditError}
+        <div className="py-2 px-3 bg-red-100 border-2 border-black text-[10px] font-bold text-red-800 flex flex-col gap-2">
+          <span>{dsAuditError}</span>
+          {(dsAuditError.includes('No Figma token') || dsAuditError.includes('re-login')) && onLoginWithFigmaRequest && (
+            <button type="button" onClick={onLoginWithFigmaRequest} className="self-start mt-1 py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
+              Log in with Figma
+            </button>
+          )}
         </div>
       )}
       {/* Header Stat Card */}
