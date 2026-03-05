@@ -297,8 +297,9 @@ export default function AppTest() {
       alert('Non sei loggato. Fai Log in with Figma.');
       return;
     }
+    const url = `${AUTH_BACKEND_URL}/api/figma/token-status`;
     try {
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/figma/token-status`, {
+      const r = await fetch(url, {
         headers: { Authorization: `Bearer ${user.authToken}` },
       });
       const data = await r.json().catch(() => ({}));
@@ -309,7 +310,14 @@ export default function AppTest() {
           : `Token Figma: assente o non valido.\n${data.reason || ''}\n\nFai Logout e poi Log in with Figma. Controlla i log del backend per "figma_tokens save failed".`;
       alert(msg);
     } catch (e) {
-      alert('Errore di rete: ' + (e instanceof Error ? e.message : String(e)));
+      const errMsg = e instanceof Error ? e.message : String(e);
+      alert(
+        'Errore di rete: ' +
+          errMsg +
+          '\n\nURL: ' +
+          url +
+          '\n\nPossibili cause: backend non raggiungibile, CORS, o URL errata. Vedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md (sezione "Failed to fetch").'
+      );
     }
   }, [user?.authToken]);
 

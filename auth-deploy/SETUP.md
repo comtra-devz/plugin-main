@@ -118,6 +118,17 @@ Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFF
 
 ---
 
+## 4bis. Far comparire una nuova route (es. Verifica token)
+
+Quando aggiungi un **nuovo file** in `auth-deploy/api/` (es. `api/figma/token-status.mjs`), quella route non esiste su auth.comtra.dev finché non rifai il deploy. Passi:
+
+1. **Salva e committa** il nuovo file nel repo (es. `git add auth-deploy/api/figma/token-status.mjs` e `git commit`, poi `git push`).
+2. **Vercel** di solito fa il deploy da solo a ogni push. Se il progetto è collegato al repo, aspetta 1–2 minuti dopo il push.
+3. **Oppure** vai su [vercel.com](https://vercel.com) → il progetto che ha **Root Directory = auth-deploy** → tab **Deployments** → sui tre puntini dell’ultimo deploy clicca **Redeploy** (così usa l’ultimo codice del branch).
+4. **Verifica**: apri `https://auth.comtra.dev/api/figma/token-status` nel browser. Non deve più dare 404 (potrà dare 401 se non mandi il token, ed è ok).
+
+---
+
 ## 5. Redeploy e verifica
 
 1. **Redeploy** del progetto (per caricare tutte le variabili).

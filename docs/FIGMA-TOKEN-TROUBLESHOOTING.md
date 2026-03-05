@@ -91,3 +91,28 @@ Assicurarsi che dopo il login il browser venga reindirizzato allo **stesso** bac
 5. [ ] Il plugin usa lo stesso backend (stesso dominio) per login e per le chiamate audit.
 
 Se tutti i punti sono ok e l’errore persiste, condividi l’output di `/api/figma/token-status` e, se possibile, le righe di log del backend subito dopo un login (senza token sensibili).
+
+---
+
+## "Errore di rete: Failed to fetch" (Verifica token o audit)
+
+Se cliccando **Verifica token** o avviando l’audit compare **"Failed to fetch"**, il plugin **non riesce proprio a contattare il backend**. Non è un problema di token in DB.
+
+**Possibili cause:**
+
+1. **Backend spento o URL sbagliata**  
+   Il plugin usa `AUTH_BACKEND_URL` (in build: variabile `VITE_AUTH_BACKEND_URL`; default `https://auth.comtra.dev`). Controlla che:
+   - il backend sia online (apri in browser l’URL base, es. `https://auth.comtra.dev`);
+   - in sviluppo non stia usando `http://localhost:...` mentre il plugin gira in Figma (dominio diverso: il browser può bloccare la richiesta).
+
+2. **CORS**  
+   La richiesta è cross-origin (dal dominio Figma al tuo backend). Il backend deve rispondere con intestazioni CORS che consentano l’origine del plugin (es. `Access-Control-Allow-Origin: *` o l’origine corretta). Se il backend non le invia, il browser blocca la richiesta e vedi "Failed to fetch".
+
+3. **Deploy non aggiornato**  
+   Se hai aggiunto da poco l’endpoint `/api/figma/token-status`, assicurati di aver fatto il deploy (es. su Vercel) così che quella route esista davvero.
+
+4. **Estensioni / firewall**  
+   Un’estensione del browser (blocco annunci, privacy) o un firewall aziendale possono bloccare le richieste verso il dominio del backend.
+
+**Cosa fare:**  
+Verifica l’URL mostrata nel messaggio di errore (ora è inclusa). Apri quella URL in un altro tab (senza Authorization): se non carica, il problema è raggiungibilità o deploy. Se carica ma il plugin continua a dare "Failed to fetch", è probabile CORS o blocco lato client.
