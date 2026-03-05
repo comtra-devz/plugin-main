@@ -1,6 +1,10 @@
-# "No Figma token; re-login to grant file access" — guida
+# Figma token e "Riconnetti Figma" — guida
 
-Quando vedi questo errore, il plugin è loggato (hai la sessione) ma il **backend** non ha un token Figma valido per te. Il token serve per chiamate come "Tutto" e "Una pagina" (il backend scarica il file da Figma per conto tuo).
+## Comportamento attuale (seamless)
+
+Quando il backend chiama l’API Figma e riceve **403** (token rifiutato), **prima di restituire errore** prova una volta a **rifare il refresh** del token e a **ritentare** la richiesta. Solo se anche il refresh fallisce (es. utente ha revocato l’app su Figma) viene restituito l’errore e in plugin vedi il messaggio **"Figma non connesso"** con un solo pulsante **"Riconnetti Figma"**. In tutti gli altri casi (token scaduto ma refresh ancora valido) l’utente non vede alcun errore.
+
+Quando vedi il messaggio "Figma non connesso" / "Riconnetti Figma", il plugin è loggato (hai la sessione) ma il **backend** non ha un token Figma valido per te. Il token serve per "Tutto" e "Una pagina" (il backend scarica il file da Figma per conto tuo).
 
 ## Dove vive il token
 

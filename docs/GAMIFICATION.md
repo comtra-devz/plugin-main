@@ -9,6 +9,7 @@ Sistema di gamification: **XP** e **livelli** (curva progressiva), **20 trofei**
 - **Guadagno XP**: ogni azione completata (audit, wireframe, sync, fix, ecc.) assegna XP secondo la mappa nel backend (`XP_BY_ACTION`). Gli XP sono cumulativi a vita.
 - **Curva livelli**: L1=0 XP, L2=100, L3=250, L4=500, L5=800, poi formula livello²×20 cumulativo. Il backend espone `current_level`, `total_xp`, `xp_for_next_level`, `xp_for_current_level_start`.
 - **Sync**: GET `/api/credits` e risposta di POST `/api/credits/consume` includono i dati livello/XP; il frontend aggiorna lo stato e mostra la barra XP. Se `level_up: true` viene mostrato il modal "Level Up!".
+- **Sconti sul piano Annual:** 5% ogni 5 livelli (max 20%), applicati al piano 1y. Logiche finanziarie, simulazioni e comportamento al rinnovo (es. uso 5% ora vs 10% al prossimo rinnovo) → [GAMIFICATION-DISCOUNT-FINANCIAL.md](./GAMIFICATION-DISCOUNT-FINANCIAL.md).
 
 ---
 

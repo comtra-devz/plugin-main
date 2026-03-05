@@ -349,6 +349,32 @@ async function getFigmaAccessToken(sql, userId) {
   return data.access_token;
 }
 
+/** Force refresh Figma token (e.g. after 403 from Figma). Returns new access_token or null. Use to recover without asking user to re-login. */
+async function forceRefreshFigmaToken(userId) {
+  const r = await dbSql`SELECT refresh_token FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+  if (r.rows.length === 0) return null;
+  if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return null;
+  const refreshRes = await fetch('https://api.figma.com/v1/oauth/refresh', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: 'Basic ' + Buffer.from(`${FIGMA_CLIENT_ID}:${FIGMA_CLIENT_SECRET}`).toString('base64'),
+    },
+    body: new URLSearchParams({ refresh_token: r.rows[0].refresh_token }),
+  });
+  if (!refreshRes.ok) {
+    console.warn('forceRefreshFigmaToken: Figma refresh failed for user_id=', userId, await refreshRes.text());
+    return null;
+  }
+  const data = await refreshRes.json();
+  const newExpiresIn = Math.max(60, Number(data.expires_in) || 90 * 24 * 3600);
+  const newExpiresAt = new Date(Date.now() + newExpiresIn * 1000);
+  await dbSql`
+    UPDATE figma_tokens SET access_token = ${data.access_token}, expires_at = ${newExpiresAt.toISOString()}, updated_at = NOW() WHERE user_id = ${userId}
+  `;
+  return data.access_token;
+}
+
 // --- Gamification: curva livelli (L1=0, L2=100, L3=250, L4=500, L5=800, poi livello²×20 cumulativo)
 const LEVEL_XP_BASE = [0, 100, 250, 500, 800];
 function xpThresholdForLevel(level) {
@@ -578,23 +604,35 @@ app.post('/api/figma/file', async (req, res) => {
     return res.status(503).json({ error: 'Figma file API requires database' });
   }
   try {
-    const accessToken = await getFigmaAccessToken(dbSql, userId);
+    let accessToken = await getFigmaAccessToken(dbSql, userId);
     if (!accessToken) {
       console.warn('POST /api/figma/file: no token for user_id=', userId, '(no row, expired, or refresh failed)');
       return res.status(403).json({
-        error: 'No Figma token; re-login to grant file access',
-        hint: 'In the plugin: Logout, then Login with Figma. Complete the flow until the "Login completato" page and the window closes. Then try Export again. If it still fails, check Vercel logs for "figma_tokens save failed" after login.',
+        error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.',
+        code: 'FIGMA_RECONNECT',
       });
     }
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     if (depth != null) url.searchParams.set('depth', String(depth));
     if (idsParam) url.searchParams.set('ids', idsParam);
-    const figmaRes = await fetch(url.toString(), {
+
+    let figmaRes = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (figmaRes.status === 403) {
-      console.warn('POST /api/figma/file: Figma API returned 403 for user_id=', userId, '(token rejected by Figma)');
-      return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+      const newToken = await forceRefreshFigmaToken(userId);
+      if (newToken) {
+        figmaRes = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${newToken}` },
+        });
+      }
+    }
+    if (figmaRes.status === 403) {
+      console.warn('POST /api/figma/file: Figma 403 anche dopo refresh per user_id=', userId);
+      return res.status(403).json({
+        error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.',
+        code: 'FIGMA_RECONNECT',
+      });
     }
     if (figmaRes.status === 404) {
       return res.status(404).json({ error: 'File not found' });
@@ -813,16 +851,31 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
       fileJson = fileJsonFromBody;
     } else if (fileKey) {
-      const accessToken = await getFigmaAccessToken(dbSql, userId);
+      let accessToken = await getFigmaAccessToken(dbSql, userId);
       if (!accessToken) {
         console.warn('POST /api/agents/ds-audit: no token for user_id=', userId);
-        return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
       }
+      let fetchErr = null;
       try {
         fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
       } catch (err) {
-        const msg = err && err.message ? err.message : 'Figma API error';
-        if (msg.includes('re-login')) return res.status(403).json({ error: msg });
+        fetchErr = err;
+      }
+      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
+        const newToken = await forceRefreshFigmaToken(userId);
+        if (newToken) {
+          try {
+            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
+            fetchErr = null;
+          } catch (e) {
+            fetchErr = e;
+          }
+        }
+      }
+      if (fetchErr) {
+        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
         if (msg.includes('not found')) return res.status(404).json({ error: msg });
         return res.status(400).json({ error: msg });
       }
@@ -896,16 +949,31 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
     if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
       fileJson = fileJsonFromBody;
     } else if (fileKey) {
-      const accessToken = await getFigmaAccessToken(dbSql, userId);
+      let accessToken = await getFigmaAccessToken(dbSql, userId);
       if (!accessToken) {
         console.warn('POST /api/agents/a11y-audit: no token for user_id=', userId);
-        return res.status(403).json({ error: 'No Figma token; re-login to grant file access' });
+        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
       }
+      let fetchErr = null;
       try {
         fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
       } catch (err) {
-        const msg = err && err.message ? err.message : 'Figma API error';
-        if (msg.includes('re-login')) return res.status(403).json({ error: msg });
+        fetchErr = err;
+      }
+      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
+        const newToken = await forceRefreshFigmaToken(userId);
+        if (newToken) {
+          try {
+            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
+            fetchErr = null;
+          } catch (e) {
+            fetchErr = e;
+          }
+        }
+      }
+      if (fetchErr) {
+        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
         if (msg.includes('not found')) return res.status(404).json({ error: msg });
         return res.status(400).json({ error: msg });
       }

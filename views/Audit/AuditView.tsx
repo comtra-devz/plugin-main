@@ -59,7 +59,12 @@ interface Props {
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
 const isTokenRelatedError = (msg: string | null) =>
-  msg != null && (msg.toLowerCase().includes('no figma token') || msg.toLowerCase().includes('re-login'));
+  msg != null && (
+    msg.toLowerCase().includes('no figma token') ||
+    msg.toLowerCase().includes('re-login') ||
+    msg.toLowerCase().includes('figma non connesso') ||
+    msg.toLowerCase().includes('riconnetti figma')
+  );
 
 export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const { showToast } = useToast();
@@ -68,8 +73,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
       const title = isA11y ? 'Errore A11Y' : 'Errore Design System';
       const actions: { label: string; onClick: () => void }[] = [];
       if (isTokenRelatedError(message)) {
-        if (onLoginWithFigmaRequest) actions.push({ label: 'Log in with Figma', onClick: onLoginWithFigmaRequest });
-        if (onCheckTokenStatus) actions.push({ label: 'Verifica token', onClick: onCheckTokenStatus });
+        if (onLoginWithFigmaRequest) actions.push({ label: 'Riconnetti Figma', onClick: onLoginWithFigmaRequest });
       }
       showToast({ title, description: message, actions, dismissible: true, variant: 'error' });
     },
@@ -815,6 +819,17 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
       {auditFixError && (
         <div className="py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase">
           {auditFixError}
+        </div>
+      )}
+
+      {((activeTab === 'DS' && dsAuditError && isTokenRelatedError(dsAuditError)) || (activeTab === 'A11Y' && a11yAuditError && isTokenRelatedError(a11yAuditError))) && (
+        <div className="py-2 px-3 bg-amber-100 border-2 border-amber-600 text-amber-900 text-[10px] font-bold uppercase flex flex-col gap-2">
+          <span>Figma non connesso. Riconnetti per usare Tutto / Una pagina.</span>
+          {onLoginWithFigmaRequest && (
+            <button type="button" onClick={onLoginWithFigmaRequest} className="w-fit py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
+              Riconnetti Figma
+            </button>
+          )}
         </div>
       )}
 
