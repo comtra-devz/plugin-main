@@ -194,10 +194,24 @@ figma.ui.onmessage = async (raw: any) => {
       }
       return;
     }
+    const POST_MESSAGE_SIZE_LIMIT = 1.4e6; // ~1.4 MB to stay under typical 2MB limit
     (async () => {
       try {
         const base = buildFileContextSync(scope, pageId);
         const fileJson = await buildDocumentJsonAsync({ scope: scope ?? 'all', nodeIds: base.nodeIds, pageId: base.pageId ?? undefined });
+        const payloadSize = JSON.stringify(fileJson).length;
+        if (payloadSize > POST_MESSAGE_SIZE_LIMIT) {
+          figma.ui.postMessage({
+            type: 'file-context-result',
+            ...base,
+            fileKey: base.fileKey,
+            scope: base.scope,
+            pageId: base.pageId,
+            nodeIds: base.nodeIds,
+            error: 'File too large to analyse in one go. Use Current Selection or a single page.',
+          });
+          return;
+        }
         let selectionType: string = 'Page';
         let selectionName: string = '';
         if (scope === 'current' && base.nodeIds?.length) {

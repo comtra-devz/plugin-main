@@ -224,7 +224,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     return () => cancelAnimationFrame(t);
   }, []);
 
-  // Fake progress: random steps and delays so the bar feels real in fast (non-problematic) cases
+  // Fake progress: slow creep so we don't sit at 95% for long; real count-nodes-progress overrides when available
   useEffect(() => {
     if (!isCalculating) {
       setFakeProgressPercent(0);
@@ -236,11 +236,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
     }
     setFakeProgressPercent(0);
     let cancelled = false;
-    const FAKE_CAP = 95; // never show 100% from fake; only real result sets 100%
+    const FAKE_CAP = 82; // stop before "looking done"; real result will jump to 100%
     const scheduleNext = (current: number) => {
       if (cancelled || current >= FAKE_CAP) return;
-      const step = Math.floor(Math.random() * 10) + 4; // 4–13%
-      const delay = 60 + Math.floor(Math.random() * 160); // 60–220ms
+      const step = Math.floor(Math.random() * 4) + 2; // 2–5% per step
+      const delay = 280 + Math.floor(Math.random() * 320); // 280–600ms
       fakeProgressRef.current = setTimeout(() => {
         if (cancelled) return;
         setFakeProgressPercent(prev => {
@@ -250,11 +250,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         });
       }, delay);
     };
-    const firstDelay = 80 + Math.floor(Math.random() * 120);
+    const firstDelay = 400 + Math.floor(Math.random() * 400);
     fakeProgressRef.current = setTimeout(() => {
       if (cancelled) return;
       setFakeProgressPercent(prev => {
-        const step = Math.floor(Math.random() * 10) + 4;
+        const step = Math.floor(Math.random() * 4) + 2;
         const next = Math.min(FAKE_CAP, prev + step);
         scheduleNext(next);
         return next;
@@ -684,6 +684,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   // Full-page loader only after Authorize (not during first scan / count nodes). DS: isScanning. A11Y: waitingForFileContext + a11yAuditLoading.
   const showFullPageLoader = isScanning || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading);
   const fullPageLoaderMsg = isA11yLoader ? a11yLoaderMsg : loadingMsg;
+  const nodeCount = scanStats.nodes || 0;
+  const loaderBarDuration = nodeCount >= 10000 ? 28 : nodeCount >= 5000 ? 20 : nodeCount >= 2000 ? 14 : nodeCount >= 500 ? 9 : 6;
+  const isLargeFile = nodeCount >= 3000;
 
   if (showFullPageLoader) return (
     <div className="p-8 h-[70vh] flex flex-col items-center justify-center text-center overflow-hidden">
@@ -695,12 +698,17 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
       `}</style>
       <div className="text-4xl mb-6 animate-bounce">✨</div>
       <h3 className="text-xl font-black uppercase mb-4 leading-tight">{fullPageLoaderMsg}</h3>
-      <div className="w-full h-4 border-2 border-black p-0.5 rounded-full bg-white">
+      <div className="w-full max-w-sm h-4 border-2 border-black p-0.5 rounded-full bg-white">
          <div 
-           className="h-full bg-[#ff90e8]" 
-           style={{ animation: 'fill-bar 4.5s ease-in-out forwards' }}
-         ></div>
+           className="h-full bg-[#ff90e8] rounded-full" 
+           style={{ animation: `fill-bar ${loaderBarDuration}s ease-in-out forwards` }}
+         />
       </div>
+      {isLargeFile && (
+        <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
+          Large file — analysis may take a minute or more.
+        </p>
+      )}
     </div>
   );
 

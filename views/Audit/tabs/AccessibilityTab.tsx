@@ -82,6 +82,11 @@ export const AccessibilityTab: React.FC<Props> = ({
   if (!hasA11yResult) {
     return (
       <div className="p-4 h-[60vh] flex flex-col items-center justify-center">
+        {a11yAuditError && (
+          <div className="w-full mb-3 py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase text-center">
+            {a11yAuditError}
+          </div>
+        )}
         <div className={`${BRUTAL.card} bg-white py-8 w-full text-center`}>
           <CircularScore score={0} label="Ready" size="sm" />
           <p className="text-xs font-medium text-gray-500 mt-4 px-4 mb-4">Check contrast, touch targets, focus and more.</p>
@@ -220,7 +225,7 @@ export const AccessibilityTab: React.FC<Props> = ({
         <span className="relative z-10">{isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}</span>
       </button>
 
-      <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white -mx-4`}>
+      <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
         <div className="p-3 border-b-2 border-black bg-gray-50 flex justify-between items-center">
           <h3 className="font-bold uppercase text-xs">Categories</h3>
           <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
