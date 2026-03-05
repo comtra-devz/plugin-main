@@ -291,6 +291,8 @@ export default function AppTest() {
     handleLoginWithFigma();
   };
 
+  const clearAuditTokenErrorRef = React.useRef<() => void>(() => {});
+
   /** Debug: call token-status endpoint and show result (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
   const handleCheckTokenStatus = React.useCallback(async () => {
     if (!user?.authToken) {
@@ -309,6 +311,7 @@ export default function AppTest() {
           ? 'Token Figma: presente e valido.'
           : `Token Figma: assente o non valido.\n${data.reason || ''}\n\nFai Logout e poi Log in with Figma. Controlla i log del backend per "figma_tokens save failed".`;
       alert(msg);
+      if (data.hasToken === true) clearAuditTokenErrorRef.current?.();
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       alert(
@@ -513,6 +516,7 @@ export default function AppTest() {
               onUnlockRequest={handleUnlockRequest}
               onLoginWithFigmaRequest={handleLoginWithFigmaFromAudit}
               onCheckTokenStatus={handleCheckTokenStatus}
+              onRegisterClearTokenError={(fn) => { clearAuditTokenErrorRef.current = fn; }}
               creditsRemaining={effectiveCreditsRemaining}
               useInfiniteCreditsForTest={useInfiniteCreditsForTest}
               estimateCredits={estimateCredits}
