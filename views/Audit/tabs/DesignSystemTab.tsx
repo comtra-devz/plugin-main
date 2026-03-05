@@ -99,12 +99,12 @@ export const DesignSystemTab: React.FC<Props> = ({
           <div className="relative z-20 text-left mb-2 px-4">
               <div 
                   onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
-                  className={`${BRUTAL.input} flex justify-between items-center cursor-pointer h-10 bg-white`}
+                  className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white`}
               >
-                  <span className="text-xs font-bold uppercase">
+                  <span className="text-xs font-bold uppercase truncate min-w-0" title={getScopeLabel(scanScope, selectedPage)}>
                       {getScopeLabel(scanScope, selectedPage)}
                   </span>
-                  <span>{isScopeDropdownOpen ? '▲' : '▼'}</span>
+                  <span className="shrink-0">{isScopeDropdownOpen ? '▲' : '▼'}</span>
               </div>
               {isScopeDropdownOpen && (
                   <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
@@ -228,12 +228,12 @@ export const DesignSystemTab: React.FC<Props> = ({
       <div className="relative z-20">
           <div 
               onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
-              className={`${BRUTAL.input} flex justify-between items-center cursor-pointer h-10`}
+              className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10`}
           >
-              <span className="text-xs font-bold uppercase">
+              <span className="text-xs font-bold uppercase truncate min-w-0" title={getScopeLabel(scanScope, selectedPage)}>
                   {getScopeLabel(scanScope, selectedPage)}
               </span>
-              <span>{isScopeDropdownOpen ? '▲' : '▼'}</span>
+              <span className="shrink-0">{isScopeDropdownOpen ? '▲' : '▼'}</span>
           </div>
           {isScopeDropdownOpen && (
               <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] max-h-48 overflow-y-auto custom-scrollbar">

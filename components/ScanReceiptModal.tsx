@@ -36,27 +36,29 @@ export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, sizeLabel, 
           <p className="text-[10px]">Everything in detail</p>
         </div>
 
-        {/* Receipt Body */}
-        <div className="p-6 text-xs space-y-4">
-          <div className="flex justify-between border-b border-black/10 pb-2">
-            <span className="text-gray-500 uppercase">Target</span>
-            <span className="font-bold">{targetOnly}</span>
+        {/* Receipt Body: gap tra label e valore, padding uniforme per evitare che il testo a destra sbatta con la label */}
+        <div className="p-6 text-xs space-y-0">
+          <div className="flex gap-3 items-start border-b border-black/10 py-3 first:pt-0">
+            <span className="text-gray-500 uppercase shrink-0 pt-0.5">Target</span>
+            <span className="font-bold min-w-0 text-left leading-relaxed break-words">{targetOnly}</span>
           </div>
 
-          <div className="flex justify-between border-b border-black/10 pb-2">
-            <span className="text-gray-500 uppercase">Size</span>
-            <span className="font-bold">{sizeDisplay}</span>
+          <div className="flex gap-3 items-center border-b border-black/10 py-3">
+            <span className="text-gray-500 uppercase shrink-0">Size</span>
+            <span className="font-bold min-w-0 text-right">{sizeDisplay}</span>
           </div>
 
-          <div className="flex justify-between border-b border-black/10 pb-2">
-            <span className="text-gray-500 uppercase">Complexity</span>
-            <span className="font-bold">{getComplexityLabel(nodeCount)}</span>
+          <div className="flex gap-3 items-center border-b border-black/10 py-3">
+            <span className="text-gray-500 uppercase shrink-0">Complexity</span>
+            <span className="font-bold min-w-0 text-right">{getComplexityLabel(nodeCount)}</span>
           </div>
 
-          <div className="flex justify-between items-center pt-2">
-            <span className="font-black uppercase text-sm">TOTAL COST</span>
-            <span className="bg-black text-white font-black px-2 py-1 border border-black shadow-[2px_2px_0_0_#999]">
-              {cost} CREDITS
+          <div className="flex gap-3 items-center pt-3">
+            <span className="font-black uppercase text-sm shrink-0">TOTAL COST</span>
+            <span className="min-w-0 flex justify-end">
+              <span className="bg-black text-white font-black px-2 py-1 border border-black shadow-[2px_2px_0_0_#999]">
+                {cost} CREDITS
+              </span>
             </span>
           </div>
         </div>

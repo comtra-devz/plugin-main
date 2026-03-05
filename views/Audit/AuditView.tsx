@@ -40,8 +40,8 @@ interface Props {
   onLoginWithFigmaRequest?: () => void;
   /** Debug: check if backend has a Figma token for current user (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
   onCheckTokenStatus?: () => void;
-  /** Called by parent when token-status returns valid; use to register a callback that clears token-related audit errors. */
-  onRegisterClearTokenError?: (clearFn: () => void) => void;
+  /** When set (timestamp), clear token-related audit errors so banner disappears after "Verifica token" success. */
+  tokenVerifiedAt?: number | null;
   creditsRemaining: number | null;
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
@@ -60,7 +60,7 @@ type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 const isTokenRelatedError = (msg: string | null) =>
   msg != null && (msg.toLowerCase().includes('no figma token') || msg.toLowerCase().includes('re-login'));
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, onCheckTokenStatus, onRegisterClearTokenError, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -153,14 +153,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
   /** Error from last auto-fix credit consumption (e.g. Insufficient credits). Cleared when opening a new confirm or on success. */
   const [auditFixError, setAuditFixError] = useState<string | null>(null);
 
-  // When parent confirms token is valid (e.g. after "Verifica token"), clear token-related audit errors
+  // When parent signals token verified (e.g. after "Verifica token" success), clear token-related audit errors immediately
   useEffect(() => {
-    if (!onRegisterClearTokenError) return;
-    onRegisterClearTokenError(() => {
-      setDsAuditError(prev => (isTokenRelatedError(prev) ? null : prev));
-      setA11yAuditError(prev => (isTokenRelatedError(prev) ? null : prev));
-    });
-  }, [onRegisterClearTokenError]);
+    if (tokenVerifiedAt == null) return;
+    setDsAuditError(prev => (isTokenRelatedError(prev) ? null : prev));
+    setA11yAuditError(prev => (isTokenRelatedError(prev) ? null : prev));
+  }, [tokenVerifiedAt]);
 
   const isPro = plan === 'PRO';
   const infiniteForTest = !!useInfiniteCreditsForTest;
