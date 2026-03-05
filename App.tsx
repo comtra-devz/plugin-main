@@ -365,11 +365,11 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken]);
 
-  const fetchDsAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; depth?: number }) => {
+  const fetchDsAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[] }) => {
     if (!user?.authToken) return { issues: [] };
     const payload = body.file_json
       ? { file_json: body.file_json }
-      : { file_key: body.file_key, depth: body.depth ?? 2 };
+      : { file_key: body.file_key, scope: body.scope, page_id: body.page_id, node_ids: body.node_ids };
     const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/ds-audit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
@@ -389,11 +389,11 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken]);
 
-  const fetchA11yAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; depth?: number }) => {
+  const fetchA11yAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[] }) => {
     if (!user?.authToken) return { issues: [] };
     const payload = body.file_json
       ? { file_json: body.file_json }
-      : { file_key: body.file_key, depth: body.depth ?? 2 };
+      : { file_key: body.file_key, scope: body.scope, page_id: body.page_id, node_ids: body.node_ids };
     const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/a11y-audit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },

@@ -279,7 +279,7 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
   };
 
   return (
-    <div className="p-4 pb-24 flex flex-col gap-6">
+    <div className="p-4 pb-16 flex flex-col gap-6">
       {showConfetti && <Confetti />}
 
       {/* Header Level Card - sfondo scuro (non usare BRUTAL.card che include bg-white) */}

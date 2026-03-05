@@ -31,7 +31,7 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
   };
 
   return (
-    <div data-component="Subscription: View Container" className="p-4 flex flex-col gap-6 pb-24 relative">
+    <div data-component="Subscription: View Container" className="p-4 flex flex-col gap-6 pb-16 relative">
       
       {/* Credits limit warning (simulated for dev) */}
       {showLimitWarning && (

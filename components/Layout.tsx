@@ -11,7 +11,7 @@ interface Props {
 }
 
 export const Layout: React.FC<Props> = ({ children, current, setView, user, onOpenProfile }) => (
-  <div className="min-h-screen bg-[#fdfdfd] text-black font-sans pb-24 relative overflow-x-hidden">
+  <div className="h-screen flex flex-col bg-[#fdfdfd] text-black font-sans overflow-x-hidden">
     <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] p-4 sticky top-0 z-[100] flex items-center justify-between shrink-0 shadow-[0_2px_0_0_#000]">
       <div className="flex items-center gap-3">
         <h1 data-component="Layout: Brand Name" className="text-2xl font-black uppercase tracking-tighter leading-[0.9]">Comtra</h1>
@@ -30,7 +30,7 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
         </button>
       )}
     </header>
-    <main data-component="Layout: Main Content Area" className="max-w-md mx-auto">{children}</main>
+    <main data-component="Layout: Main Content Area" className="flex-1 min-h-0 overflow-y-auto max-w-md mx-auto w-full pb-16">{children}</main>
     {(current !== ViewState.SUBSCRIPTION && current !== ViewState.DOCUMENTATION && current !== ViewState.PRIVACY && current !== ViewState.TERMS) && <NavBar current={current} onChange={setView} />}
     {(current === ViewState.SUBSCRIPTION || current === ViewState.DOCUMENTATION || current === ViewState.PRIVACY || current === ViewState.TERMS) && (
        <button 

@@ -3,7 +3,7 @@ import { BRUTAL } from '../constants';
 
 export const Terms: React.FC = () => {
   return (
-    <div className="p-4 pb-24 flex flex-col gap-6">
+    <div className="p-4 pb-16 flex flex-col gap-6">
       <div className={`${BRUTAL.card} bg-white`}>
         <h2 className="text-2xl font-black uppercase mb-4 bg-black text-white inline-block px-2">Terms & Conditions</h2>
         

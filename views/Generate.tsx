@@ -201,7 +201,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   const filteredSystems = DESIGN_SYSTEMS.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
 
   return (
-    <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-24 min-h-full relative overflow-y-auto">
+    <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-16 min-h-full relative">
       
       {/* Credit Banner */}
       <div className="flex justify-center mb-2">

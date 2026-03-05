@@ -179,29 +179,17 @@ figma.ui.onmessage = async (raw: any) => {
     };
   }
 
-  // File context for backend pipeline. light: true = instant (fileKey/scope/pageId only; backend fetches file). No light = full serialization (slow).
+  // File context for backend pipeline. Plugin sends only identifiers; backend fetches file via Figma REST API (ids/depth). See docs/AUDIT-FIGMA-API-APPROACH.md.
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
-    const light = msg.light === true;
-    if (light) {
-      try {
-        const base = buildFileContextSync(scope, pageId);
-        figma.ui.postMessage({ type: 'file-context-result', ...base });
-      } catch (e) {
-        console.error('[get-file-context]', e);
-        figma.ui.postMessage({ type: 'file-context-result', fileKey: null, scope: scope ?? 'all', pageId: null, nodeIds: null, error: String(e) });
-      }
-      return;
-    }
-    const POST_MESSAGE_SIZE_LIMIT = 1.4e6; // ~1.4 MB to stay under typical 2MB limit
-    const CHUNK_SIZE = 1e6; // 1 MB per chunk
     (async () => {
       try {
         const base = buildFileContextSync(scope, pageId);
-        const fileJson = await buildDocumentJsonAsync({ scope: scope ?? 'all', nodeIds: base.nodeIds, pageId: base.pageId ?? undefined });
-        const jsonString = JSON.stringify(fileJson);
-        const payloadSize = jsonString.length;
+        if (!base.fileKey) {
+          figma.ui.postMessage({ type: 'file-context-result', ...base, error: 'Save the file to run the audit.' });
+          return;
+        }
         let selectionType: string = 'Page';
         let selectionName: string = '';
         if (scope === 'current' && base.nodeIds?.length) {
@@ -212,25 +200,9 @@ figma.ui.onmessage = async (raw: any) => {
             selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'SECTION' ? 'Section' : t === 'PAGE' ? 'Page' : 'Selection';
           }
         }
-        if (payloadSize > POST_MESSAGE_SIZE_LIMIT) {
-          const totalChunks = Math.ceil(payloadSize / CHUNK_SIZE);
-          figma.ui.postMessage({
-            type: 'file-context-chunked-start',
-            ...base,
-            selectionType,
-            selectionName,
-            totalChunks,
-          });
-          for (let i = 0; i < totalChunks; i++) {
-            const chunk = jsonString.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-            figma.ui.postMessage({ type: 'file-context-chunk', index: i, chunk });
-          }
-          return;
-        }
         figma.ui.postMessage({
           type: 'file-context-result',
           ...base,
-          fileJson,
           selectionType,
           selectionName,
         });

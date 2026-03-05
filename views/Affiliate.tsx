@@ -84,7 +84,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
 
   if (!user) {
     return (
-      <div className="p-4 pb-24">
+      <div className="p-4 pb-16">
         <div className={`${BRUTAL.card} bg-white`}>
           <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
           <p className="text-sm text-gray-600">Accedi con Figma per ottenere il tuo codice affiliato e condividere Comtra.</p>
@@ -95,7 +95,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
 
   if (!user.authToken) {
     return (
-      <div className="p-4 pb-24">
+      <div className="p-4 pb-16">
         <div className={`${BRUTAL.card} bg-white`}>
           <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
           <p className="text-sm text-gray-600">Effettua il login (Login with Figma) per ottenere il tuo codice affiliato.</p>
@@ -105,7 +105,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
   }
 
   return (
-    <div className="p-4 pb-24 flex flex-col gap-6">
+    <div className="p-4 pb-16 flex flex-col gap-6">
       <div className={`${BRUTAL.card} bg-white`}>
         <h2 className="text-2xl font-black uppercase mb-1 bg-black text-white inline-block px-2">Partner Program</h2>
         <p className="text-xs text-gray-600 mb-6 font-medium mt-2">

@@ -290,7 +290,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   return (
-    <div className="p-4 pb-24 flex flex-col gap-4 relative">
+    <div className="p-4 pb-16 flex flex-col gap-4 relative">
       {showConfetti && <Confetti />}
       {showLevelUp && (
           <LevelUpModal 

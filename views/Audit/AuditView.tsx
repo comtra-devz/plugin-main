@@ -104,8 +104,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' } | null>(null);
-  /** Chunked file-context: buffer until all chunks received, then reassemble and run audit */
-  const chunkedRef = useRef<{ totalChunks: number; meta: Record<string, unknown>; chunks: Record<number, string> } | null>(null);
   // Ref so "Authorize" always sees the scan type that was set when the receipt was shown (avoids stale closure)
   const pendingScanTypeRef = useRef<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
   // DS Audit agent: real issues from backend (Kimi)
@@ -307,45 +305,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
-      if (msg.type === 'file-context-chunked-start') {
-        chunkedRef.current = {
-          totalChunks: msg.totalChunks ?? 0,
-          meta: {
-            fileKey: msg.fileKey,
-            scope: msg.scope,
-            pageId: msg.pageId,
-            selectionType: msg.selectionType,
-            selectionName: msg.selectionName,
-          },
-          chunks: {},
-        };
-      }
-      if (msg.type === 'file-context-chunk' && chunkedRef.current) {
-        const state = chunkedRef.current;
-        state.chunks[msg.index] = msg.chunk;
-        if (Object.keys(state.chunks).length !== state.totalChunks) return;
-        const parts: string[] = [];
-        for (let i = 0; i < state.totalChunks; i++) parts.push(state.chunks[i]);
-        chunkedRef.current = null;
-        let fileJson: object;
-        try {
-          fileJson = JSON.parse(parts.join('')) as object;
-        } catch {
-          setWaitingForFileContext(false);
-          const payload = confirmPayloadRef.current;
-          if (payload?.pendingScanType === 'A11Y') {
-            setA11yAuditError('Invalid data received. Try again.');
-            setA11yAuditLoading(false);
-          } else {
-            setDsAuditError('Invalid data received. Try again.');
-            setDsAuditIssues(null);
-          }
-          setPendingScanType(null);
-          return;
-        }
-        const synthetic: Record<string, unknown> = { type: 'file-context-result', ...state.meta, fileJson };
-        msg = synthetic;
-      }
       if (msg.type === 'file-context-result') {
         setWaitingForFileContext(false);
         const payload = confirmPayloadRef.current;
@@ -367,15 +326,13 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
           return;
         }
         const hasFileKey = !!msg.fileKey;
-        const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
-        if (!hasFileKey && !hasFileJson) {
+        if (!hasFileKey) {
           setShowReceipt(false);
           setWaitingForFileContext(false);
-          const saveMsg = 'Could not read document. Save the file or try again.';
+          const saveMsg = msg.error || 'Save the file to run the audit.';
           if (payload.pendingScanType === 'A11Y') {
             setA11yAuditError(saveMsg);
             setA11yAuditLoading(false);
-            // Keep previous a11yAuditIssues so user stays on results view
           } else {
             setDsAuditError(saveMsg);
             setDsAuditIssues(null);
@@ -389,9 +346,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         else setAuditScopeLabel('Page');
         setAuditScopeName(typeof msg.selectionName === 'string' ? msg.selectionName : '');
         setAuditScopeIsCurrent(msg.scope === 'current');
-        const auditBody = hasFileJson
-          ? { file_json: msg.fileJson as object }
-          : { file_key: msg.fileKey, depth: 2 };
+        const auditBody = {
+          file_key: msg.fileKey as string,
+          scope: msg.scope ?? 'all',
+          page_id: msg.pageId ?? undefined,
+          node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
+        };
 
         const setAuditError = (message: string) => {
           if (isA11yScan) {
@@ -754,7 +714,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
   );
 
   return (
-    <div className="p-4 flex flex-col gap-4 pb-24 relative">
+    <div className="p-4 flex flex-col gap-4 pb-16 relative">
       {showConfetti && <Confetti />}
       {showSuccess && <SuccessModal score={score} onClose={() => setShowSuccess(false)} />}
       {showReceipt && (
