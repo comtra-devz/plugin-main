@@ -104,6 +104,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' } | null>(null);
+  /** Chunked file-context: buffer until all chunks received, then reassemble and run audit */
+  const chunkedRef = useRef<{ totalChunks: number; meta: Record<string, unknown>; chunks: Record<number, string> } | null>(null);
   // Ref so "Authorize" always sees the scan type that was set when the receipt was shown (avoids stale closure)
   const pendingScanTypeRef = useRef<'MAIN' | 'DEEP' | 'A11Y' | null>(null);
   // DS Audit agent: real issues from backend (Kimi)
@@ -304,6 +306,45 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credit
         setIsCalculating(false);
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
+      }
+      if (msg.type === 'file-context-chunked-start') {
+        chunkedRef.current = {
+          totalChunks: msg.totalChunks ?? 0,
+          meta: {
+            fileKey: msg.fileKey,
+            scope: msg.scope,
+            pageId: msg.pageId,
+            selectionType: msg.selectionType,
+            selectionName: msg.selectionName,
+          },
+          chunks: {},
+        };
+      }
+      if (msg.type === 'file-context-chunk' && chunkedRef.current) {
+        const state = chunkedRef.current;
+        state.chunks[msg.index] = msg.chunk;
+        if (Object.keys(state.chunks).length !== state.totalChunks) return;
+        const parts: string[] = [];
+        for (let i = 0; i < state.totalChunks; i++) parts.push(state.chunks[i]);
+        chunkedRef.current = null;
+        let fileJson: object;
+        try {
+          fileJson = JSON.parse(parts.join('')) as object;
+        } catch {
+          setWaitingForFileContext(false);
+          const payload = confirmPayloadRef.current;
+          if (payload?.pendingScanType === 'A11Y') {
+            setA11yAuditError('Invalid data received. Try again.');
+            setA11yAuditLoading(false);
+          } else {
+            setDsAuditError('Invalid data received. Try again.');
+            setDsAuditIssues(null);
+          }
+          setPendingScanType(null);
+          return;
+        }
+        const synthetic: Record<string, unknown> = { type: 'file-context-result', ...state.meta, fileJson };
+        msg = synthetic;
       }
       if (msg.type === 'file-context-result') {
         setWaitingForFileContext(false);

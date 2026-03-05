@@ -195,23 +195,13 @@ figma.ui.onmessage = async (raw: any) => {
       return;
     }
     const POST_MESSAGE_SIZE_LIMIT = 1.4e6; // ~1.4 MB to stay under typical 2MB limit
+    const CHUNK_SIZE = 1e6; // 1 MB per chunk
     (async () => {
       try {
         const base = buildFileContextSync(scope, pageId);
         const fileJson = await buildDocumentJsonAsync({ scope: scope ?? 'all', nodeIds: base.nodeIds, pageId: base.pageId ?? undefined });
-        const payloadSize = JSON.stringify(fileJson).length;
-        if (payloadSize > POST_MESSAGE_SIZE_LIMIT) {
-          figma.ui.postMessage({
-            type: 'file-context-result',
-            ...base,
-            fileKey: base.fileKey,
-            scope: base.scope,
-            pageId: base.pageId,
-            nodeIds: base.nodeIds,
-            error: 'File too large to analyse in one go. Use Current Selection or a single page.',
-          });
-          return;
-        }
+        const jsonString = JSON.stringify(fileJson);
+        const payloadSize = jsonString.length;
         let selectionType: string = 'Page';
         let selectionName: string = '';
         if (scope === 'current' && base.nodeIds?.length) {
@@ -221,6 +211,21 @@ figma.ui.onmessage = async (raw: any) => {
             const t = first.type;
             selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'SECTION' ? 'Section' : t === 'PAGE' ? 'Page' : 'Selection';
           }
+        }
+        if (payloadSize > POST_MESSAGE_SIZE_LIMIT) {
+          const totalChunks = Math.ceil(payloadSize / CHUNK_SIZE);
+          figma.ui.postMessage({
+            type: 'file-context-chunked-start',
+            ...base,
+            selectionType,
+            selectionName,
+            totalChunks,
+          });
+          for (let i = 0; i < totalChunks; i++) {
+            const chunk = jsonString.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            figma.ui.postMessage({ type: 'file-context-chunk', index: i, chunk });
+          }
+          return;
         }
         figma.ui.postMessage({
           type: 'file-context-result',
