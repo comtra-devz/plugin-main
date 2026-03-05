@@ -611,6 +611,38 @@ app.post('/api/figma/file', async (req, res) => {
   }
 });
 
+// --- Debug: token status (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md)
+app.get('/api/figma/token-status', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.json({ ok: false, hasToken: false, reason: 'no_db' });
+  try {
+    const r = await dbSql`SELECT access_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+    if (r.rows.length === 0) return res.json({ ok: false, hasToken: false, reason: 'no_row' });
+    const token = await getFigmaAccessToken(dbSql, userId);
+    if (!token) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
+    return res.json({ ok: true, hasToken: true });
+  } catch (err) {
+    console.error('GET /api/figma/token-status', err);
+    return res.status(500).json({ ok: false, hasToken: false, reason: 'error' });
+  }
+});
+app.post('/api/figma/token-status', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.json({ ok: false, hasToken: false, reason: 'no_db' });
+  try {
+    const r = await dbSql`SELECT access_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+    if (r.rows.length === 0) return res.json({ ok: false, hasToken: false, reason: 'no_row' });
+    const token = await getFigmaAccessToken(dbSql, userId);
+    if (!token) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
+    return res.json({ ok: true, hasToken: true });
+  } catch (err) {
+    console.error('POST /api/figma/token-status', err);
+    return res.status(500).json({ ok: false, hasToken: false, reason: 'error' });
+  }
+});
+
 // --- DS Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
 const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';

@@ -45,6 +45,7 @@ interface Props {
   a11yAuditLoading?: boolean;
   a11yAuditError?: string | null;
   onLoginWithFigmaRequest?: () => void;
+  onCheckTokenStatus?: () => void;
 }
 
 export const AccessibilityTab: React.FC<Props> = ({
@@ -74,6 +75,7 @@ export const AccessibilityTab: React.FC<Props> = ({
   a11yAuditLoading,
   a11yAuditError,
   onLoginWithFigmaRequest,
+  onCheckTokenStatus,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
@@ -87,10 +89,19 @@ export const AccessibilityTab: React.FC<Props> = ({
         {a11yAuditError && (
           <div className="w-full mb-3 py-2 px-3 bg-red-100 border-2 border-red-500 text-red-800 text-[10px] font-bold uppercase flex flex-col gap-2 items-center">
             <span className="text-center">{a11yAuditError}</span>
-            {(a11yAuditError.includes('No Figma token') || a11yAuditError.includes('re-login')) && onLoginWithFigmaRequest && (
-              <button type="button" onClick={onLoginWithFigmaRequest} className="mt-1 py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
-                Log in with Figma
-              </button>
+            {(a11yAuditError.includes('No Figma token') || a11yAuditError.includes('re-login')) && (
+              <div className="flex flex-wrap gap-2 justify-center mt-1">
+                {onLoginWithFigmaRequest && (
+                  <button type="button" onClick={onLoginWithFigmaRequest} className="py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
+                    Log in with Figma
+                  </button>
+                )}
+                {onCheckTokenStatus && (
+                  <button type="button" onClick={onCheckTokenStatus} className="py-1.5 px-3 bg-white text-black text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-100">
+                    Verifica token
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

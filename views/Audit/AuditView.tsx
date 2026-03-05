@@ -38,6 +38,8 @@ interface Props {
   onUnlockRequest: () => void;
   /** When audit fails for missing Figma token, call this to open login and start OAuth. */
   onLoginWithFigmaRequest?: () => void;
+  /** Debug: check if backend has a Figma token for current user (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
+  onCheckTokenStatus?: () => void;
   creditsRemaining: number | null;
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
@@ -53,7 +55,7 @@ interface Props {
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, onCheckTokenStatus, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -892,6 +894,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
             dsAuditLoading={dsAuditLoading}
             dsAuditError={dsAuditError}
             onLoginWithFigmaRequest={onLoginWithFigmaRequest}
+            onCheckTokenStatus={onCheckTokenStatus}
         />
       )}
 
@@ -923,6 +926,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
             a11yAuditLoading={a11yAuditLoading}
             a11yAuditError={a11yAuditError}
             onLoginWithFigmaRequest={onLoginWithFigmaRequest}
+            onCheckTokenStatus={onCheckTokenStatus}
         />
       )}
 

@@ -291,6 +291,28 @@ export default function AppTest() {
     handleLoginWithFigma();
   };
 
+  /** Debug: call token-status endpoint and show result (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
+  const handleCheckTokenStatus = React.useCallback(async () => {
+    if (!user?.authToken) {
+      alert('Non sei loggato. Fai Log in with Figma.');
+      return;
+    }
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/figma/token-status`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      const data = await r.json().catch(() => ({}));
+      const msg = data.reason
+        ? `hasToken: ${data.hasToken}\nreason: ${data.reason}\n\nVedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md`
+        : data.hasToken
+          ? 'Token Figma: presente e valido.'
+          : `Token Figma: assente o non valido.\n${data.reason || ''}\n\nFai Logout e poi Log in with Figma. Controlla i log del backend per "figma_tokens save failed".`;
+      alert(msg);
+    } catch (e) {
+      alert('Errore di rete: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [user?.authToken]);
+
   const handleOpenPrivacy = () => {
     setShowLogin(false);
     setView(ViewState.PRIVACY);
@@ -482,6 +504,7 @@ export default function AppTest() {
               userTier={user?.tier}
               onUnlockRequest={handleUnlockRequest}
               onLoginWithFigmaRequest={handleLoginWithFigmaFromAudit}
+              onCheckTokenStatus={handleCheckTokenStatus}
               creditsRemaining={effectiveCreditsRemaining}
               useInfiniteCreditsForTest={useInfiniteCreditsForTest}
               estimateCredits={estimateCredits}
