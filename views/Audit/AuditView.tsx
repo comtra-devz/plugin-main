@@ -38,7 +38,7 @@ interface Props {
   userTier?: string;
   onUnlockRequest: () => void;
   /** When audit fails for missing Figma token, call this to open login and start OAuth. */
-  onLoginWithFigmaRequest?: () => void;
+  onRetryConnection?: () => void;
   /** Debug: check if backend has a Figma token for current user (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
   onCheckTokenStatus?: () => void;
   /** When set (timestamp), clear token-related audit errors so banner disappears after "Verifica token" success. */
@@ -66,18 +66,18 @@ const isTokenRelatedError = (msg: string | null) =>
     msg.toLowerCase().includes('riconnetti figma')
   );
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLoginWithFigmaRequest, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const { showToast } = useToast();
   const showAuditErrorToast = useCallback(
     (message: string, isA11y: boolean) => {
       const title = isA11y ? 'Errore A11Y' : 'Errore Design System';
       const actions: { label: string; onClick: () => void }[] = [];
       if (isTokenRelatedError(message)) {
-        if (onLoginWithFigmaRequest) actions.push({ label: 'Riconnetti Figma', onClick: onLoginWithFigmaRequest });
+        if (onRetryConnection) actions.push({ label: 'Riprova', onClick: onRetryConnection });
       }
-      showToast({ title, description: message, actions, dismissible: true, variant: 'error' });
+      showToast({ title, description: 'La connessione non è completa. Riprova tra poco.', actions, dismissible: true, variant: 'error' });
     },
-    [showToast, onLoginWithFigmaRequest, onCheckTokenStatus]
+    [showToast, onRetryConnection]
   );
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
@@ -493,7 +493,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
               }, 1500);
             }
           } catch (err) {
-            setAuditError(err instanceof Error ? err.message : 'Something went wrong');
+            const message = err instanceof Error ? err.message : 'Something went wrong';
+            setAuditError(message);
           } finally {
             setPendingScanType(null);
             setWaitingForFileContext(false);
@@ -824,10 +825,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
 
       {((activeTab === 'DS' && dsAuditError && isTokenRelatedError(dsAuditError)) || (activeTab === 'A11Y' && a11yAuditError && isTokenRelatedError(a11yAuditError))) && (
         <div className="py-2 px-3 bg-amber-100 border-2 border-amber-600 text-amber-900 text-[10px] font-bold uppercase flex flex-col gap-2">
-          <span>Figma non connesso. Riconnetti per usare Tutto / Una pagina.</span>
-          {onLoginWithFigmaRequest && (
-            <button type="button" onClick={onLoginWithFigmaRequest} className="w-fit py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
-              Riconnetti Figma
+          <span>La connessione non è completa. Riprova tra poco.</span>
+          {onRetryConnection && (
+            <button type="button" onClick={onRetryConnection} className="w-fit py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
+              Riprova
             </button>
           )}
         </div>
@@ -942,7 +943,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
             issueListProps={issueListProps}
             dsAuditLoading={dsAuditLoading}
             dsAuditError={dsAuditError}
-            onLoginWithFigmaRequest={onLoginWithFigmaRequest}
+            onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
         />
       )}
@@ -974,7 +975,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onLogi
             issueListProps={issueListProps}
             a11yAuditLoading={a11yAuditLoading}
             a11yAuditError={a11yAuditError}
-            onLoginWithFigmaRequest={onLoginWithFigmaRequest}
+            onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
         />
       )}

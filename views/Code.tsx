@@ -21,6 +21,7 @@ interface Props {
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
+  fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
 }
 
 const SYNC_ITEMS_MOCK = [
@@ -33,7 +34,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, fetchSyncScan }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -70,8 +71,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // Deep Sync State
   const [activeSyncTab, setActiveSyncTab] = useState<'SB' | 'GH' | 'BB'>('SB');
   const [isSbConnected, setIsSbConnected] = useState(false);
+  const [storybookUrl, setStorybookUrl] = useState<string | null>(null);
   const [isSyncScanning, setIsSyncScanning] = useState(false);
   const [syncItems, setSyncItems] = useState<typeof SYNC_ITEMS_MOCK>([]);
+  const [syncScanError, setSyncScanError] = useState<string | null>(null);
   const [hasSyncScanned, setHasSyncScanned] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [lastSyncAllDate, setLastSyncAllDate] = useState<Date | null>(null);
@@ -83,6 +86,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   // Token generation: pending request type for design-tokens-result handler
   const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
+  // Sync scan: waiting for file-context-result
+  const pendingSyncScanRef = useRef(false);
+  const chunkedSyncScanRef = useRef<{ totalChunks: number; meta: any; chunks: Record<number, string> } | null>(null);
 
   const isPro = plan === 'PRO';
   const isAnnual = userTier === '1y';
@@ -103,11 +109,96 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for design-tokens-result from Figma (Variables API)
+  // Listen for file-context (sync scan) and design-tokens-result
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data?.pluginMessage ?? event.data;
       if (!msg?.type) return;
+
+      // --- Sync Scan: file-context ---
+      if (msg.type === 'file-context-chunked-start' && pendingSyncScanRef.current) {
+        chunkedSyncScanRef.current = {
+          totalChunks: msg.totalChunks ?? 0,
+          meta: { fileKey: msg.fileKey, scope: msg.scope, pageId: msg.pageId, pageIds: msg.pageIds },
+          chunks: {},
+        };
+      }
+      if (msg.type === 'file-context-chunk' && chunkedSyncScanRef.current) {
+        const state = chunkedSyncScanRef.current;
+        state.chunks[msg.index] = msg.chunk;
+        if (Object.keys(state.chunks).length !== state.totalChunks) return;
+        const parts: string[] = [];
+        for (let i = 0; i < state.totalChunks; i++) parts.push(state.chunks[i]);
+        chunkedSyncScanRef.current = null;
+        try {
+          const fileJson = JSON.parse(parts.join('')) as object;
+          (async () => {
+            if (!fetchSyncScan || !storybookUrl) return;
+            try {
+              const result = await fetchSyncScan({ file_json: fileJson, storybook_url: storybookUrl });
+              setSyncItems(result.items || []);
+              setHasSyncScanned(true);
+              setSyncScanError(null);
+              startCooldown('scan_sync');
+              setShowLevelUp(true);
+            } catch (err) {
+              setSyncScanError(err instanceof Error ? err.message : 'Sync scan failed');
+              setSyncItems([]);
+            } finally {
+              setIsSyncScanning(false);
+              pendingSyncScanRef.current = false;
+            }
+          })();
+        } catch {
+          setSyncScanError('Invalid data received. Try again.');
+          setIsSyncScanning(false);
+          pendingSyncScanRef.current = false;
+        }
+        return;
+      }
+      if (msg.type === 'file-context-result' && pendingSyncScanRef.current) {
+        pendingSyncScanRef.current = false;
+        if (msg.error) {
+          setSyncScanError(String(msg.error));
+          setSyncItems([]);
+          setIsSyncScanning(false);
+          return;
+        }
+        const hasFileKey = !!msg.fileKey;
+        const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
+        if (!hasFileKey && !hasFileJson) {
+          setSyncScanError(msg.error || 'Save the file to run the scan.');
+          setIsSyncScanning(false);
+          return;
+        }
+        (async () => {
+          if (!fetchSyncScan || !storybookUrl) return;
+          try {
+            const body = hasFileJson
+              ? { file_json: msg.fileJson as object, storybook_url: storybookUrl }
+              : {
+                  file_key: msg.fileKey as string,
+                  storybook_url: storybookUrl,
+                  scope: msg.scope ?? 'all',
+                  page_id: msg.pageId ?? undefined,
+                  page_ids: msg.pageIds ?? undefined,
+                };
+            const result = await fetchSyncScan(body);
+            setSyncItems(result.items || []);
+            setHasSyncScanned(true);
+            setSyncScanError(null);
+            startCooldown('scan_sync');
+            setShowLevelUp(true);
+          } catch (err) {
+            setSyncScanError(err instanceof Error ? err.message : 'Sync scan failed');
+            setSyncItems([]);
+          } finally {
+            setIsSyncScanning(false);
+          }
+        })();
+        return;
+      }
+
       if (msg.type === 'design-tokens-result') {
         const payload = msg.payload as FigmaDesignTokensPayload;
         const pending = pendingTokenRequestRef.current;
@@ -144,7 +235,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [storybookUrl, fetchSyncScan]);
 
   const getRemainingTime = (key: string) => {
     const end = cooldowns[key];
@@ -296,36 +387,108 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
      }, 2000);
   };
 
-  const handleSelectLayer = (id: string, e: React.MouseEvent) => {
+  const handleSelectLayer = (id: string, layerId: string | null | undefined, e: React.MouseEvent) => {
     e.stopPropagation();
     setLayerSelectionFeedback(id);
     setTimeout(() => setLayerSelectionFeedback(null), 2000);
+    if (layerId) {
+      window.parent.postMessage({ pluginMessage: { type: 'select-layer', layerId } }, '*');
+    }
   };
 
   // Sync Logic
-  const handleConnectSb = () => {
+  const handleConnectSb = (url: string) => {
+    setStorybookUrl(url);
     setIsSbConnected(true);
+    setSyncScanError(null);
   };
 
-  const handleSyncScan = () => {
-    // Check Cooldown
+  const handleDisconnectSb = () => {
+    setIsSbConnected(false);
+    setStorybookUrl(null);
+    setSyncScanError(null);
+    setHasSyncScanned(false);
+    setSyncItems([]);
+  };
+
+  const handleSyncScan = async () => {
     if (getRemainingTime('scan_sync')) return;
+    if (!storybookUrl || !fetchSyncScan) return;
+    if (!isPro) {
+      onUnlockRequest();
+      return;
+    }
+    if (!canUseFeature && !useInfiniteCreditsForTest) {
+      onUnlockRequest();
+      return;
+    }
 
+    setSyncScanError(null);
     setIsSyncScanning(true);
-    setTimeout(() => {
+    pendingSyncScanRef.current = true;
+
+    try {
+      const { estimated_credits } = await estimateCredits({ action_type: 'scan_sync' });
+      const cost = estimated_credits ?? 15;
+      if (!useInfiniteCreditsForTest && !isPro && creditsRemaining !== null && creditsRemaining < cost) {
+        setSyncScanError('Insufficient credits');
+        setIsSyncScanning(false);
+        pendingSyncScanRef.current = false;
+        onUnlockRequest();
+        return;
+      }
+      const consumeResult = await consumeCredits({ action_type: 'scan_sync', credits_consumed: cost });
+      if (consumeResult.error) {
+        setSyncScanError(consumeResult.error === 'Insufficient credits' ? 'Crediti insufficienti' : consumeResult.error);
+        setIsSyncScanning(false);
+        pendingSyncScanRef.current = false;
+        if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
+        return;
+      }
+      window.parent.postMessage({ pluginMessage: { type: 'get-file-context', scope: 'all' } }, '*');
+    } catch (err) {
+      setSyncScanError(err instanceof Error ? err.message : 'Scan failed');
       setIsSyncScanning(false);
-      setSyncItems(SYNC_ITEMS_MOCK);
-      setHasSyncScanned(true);
-      startCooldown('scan_sync');
-    }, 2000);
+      pendingSyncScanRef.current = false;
+    }
   };
 
-  const handleSyncItem = (id: string, e?: React.MouseEvent) => {
-    if(e) e.stopPropagation();
-    setSyncItems(prev => prev.filter(i => i.id !== id));
+  const handleSyncItem = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!isPro && !useInfiniteCreditsForTest) {
+      onUnlockRequest();
+      return;
+    }
+    const cost = 5;
+    if (!useInfiniteCreditsForTest && !isPro && creditsRemaining !== null && creditsRemaining < cost) {
+      onUnlockRequest();
+      return;
+    }
+    const result = await consumeCredits({ action_type: 'sync_fix', credits_consumed: cost });
+    if (result.error) {
+      if (result.error === 'Insufficient credits') onUnlockRequest();
+      return;
+    }
+    setSyncItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const handleSyncAll = () => {
+  const handleSyncAll = async () => {
+    const count = syncItems.length;
+    if (count === 0) return;
+    if (!isPro && !useInfiniteCreditsForTest) {
+      onUnlockRequest();
+      return;
+    }
+    const cost = count * 5;
+    if (!useInfiniteCreditsForTest && !isPro && creditsRemaining !== null && creditsRemaining < cost) {
+      onUnlockRequest();
+      return;
+    }
+    const result = await consumeCredits({ action_type: 'sync_storybook', credits_consumed: cost });
+    if (result.error) {
+      if (result.error === 'Insufficient credits') onUnlockRequest();
+      return;
+    }
     setSyncItems([]);
     setLastSyncAllDate(new Date());
     setShowConfetti(true);
@@ -426,12 +589,15 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             activeSyncTab={activeSyncTab}
             setActiveSyncTab={setActiveSyncTab}
             isSbConnected={isSbConnected}
+            storybookUrl={storybookUrl}
             handleConnectSb={handleConnectSb}
+            onDisconnectSb={handleDisconnectSb}
             hasSyncScanned={hasSyncScanned}
             handleSyncScan={handleSyncScan}
             isSyncScanning={isSyncScanning}
             getRemainingTime={getRemainingTime}
             syncItems={syncItems}
+            syncScanError={syncScanError}
             expandedDriftId={expandedDriftId}
             setExpandedDriftId={setExpandedDriftId}
             handleSelectLayer={handleSelectLayer}
@@ -439,7 +605,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             handleSyncItem={handleSyncItem}
             handleSyncAll={handleSyncAll}
             lastSyncAllDate={lastSyncAllDate}
-            onScanComplete={() => setShowLevelUp(true)}
         />
       )}
 

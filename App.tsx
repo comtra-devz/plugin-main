@@ -220,7 +220,7 @@ export default function AppTest() {
   }, []);
 
   /** Apre OAuth nel browser esterno e fa polling dall'UI: l'utente resta sulla login e poi va in home senza "chiudi e riapri". */
-  const handleLoginWithFigma = async () => {
+  const handleLoginWithFigma = React.useCallback(async () => {
     setLoginError(null);
     try {
       setOauthInProgress(true);
@@ -241,7 +241,7 @@ export default function AppTest() {
         ? `Impossibile contattare il server (${msg}). Controlla che auth.comtra.dev sia online e che il plugin sia stato ricaricato dopo il build.`
         : msg);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!oauthReadKey || !oauthInProgress) return;
@@ -252,9 +252,21 @@ export default function AppTest() {
         if (r.status === 202) return;
         if (!r.ok) return;
         const data = await r.json();
+        if (data?.error) {
+          setOauthReadKey(null);
+          clearInterval(interval);
+          setOauthInProgress(false);
+          setLoginError('Qualcosa non è andato a buon fine. Riprova il login.');
+          return;
+        }
         if (data?.user) {
           setOauthReadKey(null);
           clearInterval(interval);
+          setOauthInProgress(false);
+          if (data.tokenSaved === false) {
+            setLoginError('Qualcosa non è andato a buon fine. Riprova il login.');
+            return;
+          }
           window.parent.postMessage({ pluginMessage: { type: 'oauth-complete', user: data.user } }, '*');
         }
       } catch (_) {}
@@ -285,8 +297,8 @@ export default function AppTest() {
     setShowUpgrade(true);
   };
 
-  /** Used when audit fails for missing Figma token: open login and start OAuth so user can grant file access. */
-  const handleLoginWithFigmaFromAudit = () => {
+  /** Used when audit fails for missing Figma token: open OAuth to obtain token. */
+  const handleRetryConnection = () => {
     setShowUpgrade(false);
     setShowLogin(true);
     handleLoginWithFigma();
@@ -467,6 +479,24 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken]);
 
+  const fetchSyncScan = React.useCallback(async (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => {
+    if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
+    const payload = body.file_json
+      ? { file_json: body.file_json, storybook_url: body.storybook_url }
+      : { file_key: body.file_key, storybook_url: body.storybook_url, scope: body.scope, page_id: body.page_id, page_ids: body.page_ids };
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = data.error || `Sync scan failed (${r.status})`;
+      throw new Error(msg);
+    }
+    return data;
+  }, [user?.authToken]);
+
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
@@ -528,7 +558,7 @@ export default function AppTest() {
               plan={user?.plan || 'FREE'} 
               userTier={user?.tier}
               onUnlockRequest={handleUnlockRequest}
-              onLoginWithFigmaRequest={handleLoginWithFigmaFromAudit}
+              onRetryConnection={handleRetryConnection}
               onCheckTokenStatus={handleCheckTokenStatus}
               tokenVerifiedAt={tokenVerifiedAt}
               creditsRemaining={effectiveCreditsRemaining}
@@ -567,6 +597,7 @@ export default function AppTest() {
             useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
+            fetchSyncScan={fetchSyncScan}
           />
         )}
         

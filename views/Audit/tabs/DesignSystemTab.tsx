@@ -42,7 +42,7 @@ interface Props {
   issueListProps: any;
   dsAuditLoading?: boolean;
   dsAuditError?: string | null;
-  onLoginWithFigmaRequest?: () => void;
+  onRetryConnection?: () => void;
   onCheckTokenStatus?: () => void;
 }
 
@@ -79,7 +79,7 @@ export const DesignSystemTab: React.FC<Props> = ({
   issueListProps,
   dsAuditLoading,
   dsAuditError,
-  onLoginWithFigmaRequest,
+  onRetryConnection,
   onCheckTokenStatus,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;

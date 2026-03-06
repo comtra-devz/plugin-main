@@ -178,6 +178,7 @@ Se lo “scan drift” richiederà solo `file_key` (e il backend farà GET file 
 | `auth-deploy/schema.sql` | credit_transactions.action_type, users; nessuna colonna synced_* |
 | `views/Documentation.tsx` | Copy Deep Sync & Drift (Figma = source of truth, push to Storybook/GitHub) |
 | `docs/DESIGN-HANDOFF-DRIFT-RULESET.md` | Ruleset cluster tematici (handoff, drift, token, governance, ecc.) + severity + **consigli durante risultati Sync**; usare per arricchire messaggi e suggerimenti in output drift. |
+| `storybook-test/` | Storybook di test interno: Button, Input, Card. `npm run build && npm run serve` → server su :6006 con `/api/stories`. Per Comtra: esporre con ngrok e usare l'URL pubblico. Vedi `storybook-test/README.md`. |
 
 ---
 

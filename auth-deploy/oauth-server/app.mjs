@@ -12,7 +12,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
-import { sql as dbSql } from './db.mjs';
+import { sql as dbSql, withTransaction } from './db.mjs';
 import {
   generateLevelDiscountCode,
   createLevelDiscount,
@@ -160,7 +160,42 @@ app.get('/auth/figma/callback', async (req, res) => {
     },
   };
 
-  if (POSTGRES_URL) {
+  let tokenSaved = false;
+  let txError = null;
+
+  if (POSTGRES_URL && withTransaction) {
+    const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
+    const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+    const refreshToken = tokenData.refresh_token || tokenData.access_token;
+
+    try {
+      await withTransaction(async (tx) => {
+        await tx`
+          INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, updated_at)
+          VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, NOW())
+          ON CONFLICT (id) DO UPDATE SET
+            email = EXCLUDED.email,
+            name = EXCLUDED.name,
+            img_url = EXCLUDED.img_url,
+            updated_at = NOW()
+        `;
+        await tx`
+          INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
+          VALUES (${user.id}, ${tokenData.access_token}, ${refreshToken}, ${expiresAt.toISOString()}, NOW())
+          ON CONFLICT (user_id) DO UPDATE SET
+            access_token = EXCLUDED.access_token,
+            refresh_token = EXCLUDED.refresh_token,
+            expires_at = EXCLUDED.expires_at,
+            updated_at = NOW()
+        `;
+      });
+      tokenSaved = true;
+    } catch (err) {
+      txError = err;
+      console.error('OAuth callback: users+figma_tokens transaction FAILED — user_id=', user.id, 'error=', err?.message || err);
+    }
+  } else if (POSTGRES_URL) {
+    console.warn('OAuth callback: withTransaction not available, falling back to non-atomic save');
     try {
       await dbSql`
         INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, updated_at)
@@ -171,6 +206,33 @@ app.get('/auth/figma/callback', async (req, res) => {
           img_url = EXCLUDED.img_url,
           updated_at = NOW()
       `;
+      const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
+      const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+      const refreshToken = tokenData.refresh_token || tokenData.access_token;
+      await dbSql`
+        INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
+        VALUES (${user.id}, ${tokenData.access_token}, ${refreshToken}, ${expiresAt.toISOString()}, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = NOW()
+      `;
+      tokenSaved = true;
+    } catch (err) {
+      txError = err;
+      console.error('OAuth callback: fallback save failed — user_id=', user.id, 'error=', err?.message || err);
+    }
+  }
+
+  if (txError && !tokenSaved) {
+    await store.set(flowId, { error: 'token_save_failed', message: txError?.message || 'Database error' });
+    res.clearCookie('figma_oauth_flow');
+    return res.status(500).send(getOAuthErrorHtml());
+  }
+
+  if (POSTGRES_URL && tokenSaved) {
+    try {
       const aff = await dbSql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
       if (aff.rows.length > 0) user.stats.affiliatesCount = Number(aff.rows[0].total_referrals) || 0;
       const xpRow = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${user.id} LIMIT 1`;
@@ -182,34 +244,43 @@ app.get('/auth/figma/callback', async (req, res) => {
         user.xp_for_next_level = info.xpForNextLevel;
         user.xp_for_current_level_start = info.xpForCurrentLevelStart;
       }
-      // Persist Figma OAuth tokens for REST API (GET /v1/files/:key) — pipeline to agents
-      const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
-      const expiresAt = new Date(Date.now() + expiresInSec * 1000);
-      try {
-        await dbSql`
-          INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
-          VALUES (${user.id}, ${tokenData.access_token}, ${tokenData.refresh_token || tokenData.access_token}, ${expiresAt.toISOString()}, NOW())
-          ON CONFLICT (user_id) DO UPDATE SET
-            access_token = EXCLUDED.access_token,
-            refresh_token = EXCLUDED.refresh_token,
-            expires_at = EXCLUDED.expires_at,
-            updated_at = NOW()
-        `;
-      } catch (tokenErr) {
-        console.error('figma_tokens save failed (user_id=', user.id, ')', tokenErr);
-      }
     } catch (err) {
-      console.error('Postgres upsert user', err);
+      console.error('OAuth callback: post-save SELECT failed (non-fatal)', err);
     }
   }
 
   const authToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '365d' });
   user.authToken = authToken;
 
-  await store.set(flowId, { user });
+  await store.set(flowId, { user, tokenSaved });
   res.clearCookie('figma_oauth_flow');
   res.send(getReturnToFigmaHtml());
 });
+
+function getOAuthErrorHtml() {
+  return `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Errore – Comtra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Tiny5&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
+    h1 { font-family: 'Tiny5', sans-serif; font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; color: #000; text-transform: uppercase; letter-spacing: 0.05em; }
+    p { font-size: 0.95rem; color: #000; margin: 0 0 1.5rem; font-weight: 500; }
+    a { color: #000; text-decoration: underline; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Qualcosa non è andato a buon fine</h1>
+  <p>Chiudi questa finestra e riprova il login dal plugin Figma.</p>
+</body>
+</html>`;
+}
 
 function getReturnToFigmaHtml() {
   return `<!DOCTYPE html>
@@ -444,6 +515,8 @@ function estimateCreditsByAction(actionType, nodeCount) {
   if (actionType === 'proto_scan') return 2;
   if (actionType === 'ux_audit') return 4;
   if (actionType === 'sync') return 1;
+  if (actionType === 'scan_sync') return 15;
+  if (actionType === 'sync_fix' || actionType === 'sync_storybook') return 5;
   return 5;
 }
 
@@ -1061,6 +1134,74 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
   }
 });
 
+// --- Sync Scan (Figma vs Storybook drift detection)
+const { runSyncScan } = await import('./sync-scan-engine.mjs');
+
+app.post('/api/agents/sync-scan', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const fileKey = (body.file_key || body.fileKey || '').trim();
+  const fileJsonFromBody = body.file_json || body.fileJson;
+  const storybookUrl = (body.storybook_url || body.storybookUrl || '').trim();
+
+  if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
+  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Sync Scan requires database' });
+
+  try {
+    let fileJson;
+    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
+      fileJson = fileJsonFromBody;
+    } else if (fileKey) {
+      let accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
+      if (!accessToken) {
+        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
+      }
+      let fetchErr = null;
+      try {
+        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope || 'all', body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
+      } catch (err) {
+        fetchErr = err;
+      }
+      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
+        const newToken = await forceRefreshFigmaToken(userId);
+        if (newToken) {
+          try {
+            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope || 'all', body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
+            fetchErr = null;
+          } catch (e) {
+            fetchErr = e;
+          }
+        }
+      }
+      if (fetchErr) {
+        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
+        if (msg.includes('not found')) return res.status(404).json({ error: msg });
+        return res.status(400).json({ error: msg });
+      }
+    } else {
+      return res.status(400).json({ error: 'file_json must include document' });
+    }
+
+    const result = await runSyncScan(fileJson, storybookUrl);
+
+    if (result.connectionStatus === 'unreachable' && result.error) {
+      return res.status(400).json({ error: result.error, connectionStatus: 'unreachable' });
+    }
+
+    res.json({
+      items: result.items || [],
+      connectionStatus: result.connectionStatus || 'ok',
+    });
+  } catch (err) {
+    console.error('POST /api/agents/sync-scan', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- Trofei: contesto utente e check sblocco
 async function getTrophyContext(sql, userId) {
   const u = await dbSql`SELECT total_xp, max_health_score, fixes_accepted_total, consecutive_fixes, token_fixes_total, bug_reports_total, linkedin_shared
@@ -1125,7 +1266,7 @@ function evaluateTrophyCondition(condition, ctx, unlockedIds) {
 }
 
 async function checkTrophies(dbSql, userId) {
-  const ctx = await getTrophyContext(sql, userId);
+  const ctx = await getTrophyContext(dbSql, userId);
   const unlocked = await dbSql`SELECT trophy_id FROM user_trophies WHERE user_id = ${userId}`;
   const unlockedIds = (unlocked.rows || []).map(r => r.trophy_id);
   const all = await dbSql`SELECT id, name, unlock_condition FROM trophies ORDER BY sort_order`;

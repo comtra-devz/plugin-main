@@ -44,7 +44,7 @@ interface Props {
   issueListProps: any;
   a11yAuditLoading?: boolean;
   a11yAuditError?: string | null;
-  onLoginWithFigmaRequest?: () => void;
+  onRetryConnection?: () => void;
   onCheckTokenStatus?: () => void;
 }
 
@@ -74,7 +74,7 @@ export const AccessibilityTab: React.FC<Props> = ({
   issueListProps,
   a11yAuditLoading,
   a11yAuditError,
-  onLoginWithFigmaRequest,
+  onRetryConnection,
   onCheckTokenStatus,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;

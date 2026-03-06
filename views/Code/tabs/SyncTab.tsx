@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { SyncTabProps, BRUTAL, COLORS } from '../types';
 
 export const SyncTab: React.FC<SyncTabProps> = ({
@@ -8,30 +8,27 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   activeSyncTab,
   setActiveSyncTab,
   isSbConnected,
+  storybookUrl,
   handleConnectSb,
+  onDisconnectSb,
   hasSyncScanned,
   handleSyncScan,
   isSyncScanning,
   getRemainingTime,
   syncItems,
+  syncScanError,
   expandedDriftId,
   setExpandedDriftId,
   handleSelectLayer,
   layerSelectionFeedback,
   handleSyncItem,
   handleSyncAll,
-  lastSyncAllDate,
-  onScanComplete
+  lastSyncAllDate
 }) => {
+  const [connectInput, setConnectInput] = useState(storybookUrl || '');
   
   const handleScanClick = () => {
-      handleSyncScan();
-      // Simulate level up trigger after scan logic initiates (mocking the delay in parent)
-      if (onScanComplete) {
-          setTimeout(() => {
-              onScanComplete();
-          }, 2200); // Slightly after the scan logic timeout in parent
-      }
+    handleSyncScan();
   };
 
   return (
@@ -79,14 +76,48 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           {activeSyncTab === 'SB' && (
             <div className="p-4 animate-in slide-in-from-left-2">
               {!isSbConnected ? (
-                <div className="text-center">
-                  <p className="text-xs mb-3 font-medium">Connect your instance to audit code vs design.</p>
-                  <button onClick={handleConnectSb} className={`${BRUTAL.btn} w-full bg-pink-100 hover:bg-pink-200`}>
+                <div className="space-y-3">
+                  <p className="text-xs font-medium">Enter your Storybook URL to compare design vs code.</p>
+                  <input
+                    type="url"
+                    placeholder="https://your-storybook.example.com"
+                    value={connectInput}
+                    onChange={(e) => setConnectInput(e.target.value)}
+                    className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500">Deployed Storybook or storybook-api (npm) exposing /api/stories.</p>
+                  <button
+                    onClick={() => {
+                      const url = connectInput.trim();
+                      if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                        handleConnectSb(url);
+                      }
+                    }}
+                    disabled={!connectInput.trim()}
+                    className={`${BRUTAL.btn} w-full bg-pink-100 hover:bg-pink-200 disabled:bg-gray-200 disabled:cursor-not-allowed`}
+                  >
                     Connect Storybook
                   </button>
                 </div>
               ) : (
                 <div>
+                  {storybookUrl && (
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-[10px] text-gray-500 font-mono truncate flex-1" title={storybookUrl}>
+                        Connected: {storybookUrl}
+                      </p>
+                      {onDisconnectSb && (
+                        <button onClick={onDisconnectSb} className="text-[10px] font-bold underline hover:text-[#ff90e8] ml-1">
+                          Change
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {syncScanError && (
+                    <div className="mb-3 p-2 bg-red-50 border border-red-200 text-[10px] text-red-700">
+                      {syncScanError}
+                    </div>
+                  )}
                   {!hasSyncScanned ? (
                     <div className="text-center">
                       <p className="text-[10px] text-gray-500 mb-2">Ready to inspect.</p>
@@ -146,10 +177,11 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                         </p>
                                         <div className="flex gap-2">
                                             <button 
-                                                onClick={(e) => handleSelectLayer(item.id, e)}
-                                                className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === item.id ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'}`}
+                                                onClick={(e) => handleSelectLayer(item.id, item.layerId ?? null, e)}
+                                                disabled={!item.layerId}
+                                                className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === item.id ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
                                             >
-                                                {layerSelectionFeedback === item.id ? 'SELECTED!' : 'Select Layer'}
+                                                {layerSelectionFeedback === item.id ? 'SELECTED!' : item.layerId ? 'Select Layer' : 'No layer'}
                                             </button>
                                             <button 
                                                 onClick={(e) => handleSyncItem(item.id, e)}
@@ -189,7 +221,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             <span>{getRemainingTime('scan_sync') ? `Cooldown ${getRemainingTime('scan_sync')}` : 'Start New Scan'}</span>
                             {(!getRemainingTime('scan_sync')) && (
                                 <span className="text-[10px] bg-white text-black px-2 py-0.5 rounded-sm font-black">
-                                   -5 Credits
+                                   -15 Credits
                                 </span>
                             )}
                           </button>

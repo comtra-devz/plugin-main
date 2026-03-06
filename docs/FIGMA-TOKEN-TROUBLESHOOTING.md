@@ -40,13 +40,15 @@ Poi fai di nuovo **Logout** nel plugin e **Log in with Figma**, e completa il fl
 
 ### 2. Salvataggio token fallito al primo login
 
-Anche con la tabella presente, l’INSERT può fallire (rete, timeout, constraint). In quel caso nei log del backend (es. Vercel) compare:  
-`figma_tokens save failed (user_id= ...)`.
+Il backend ora salva **users** e **figma_tokens** in una **transazione atomica**: se il salvataggio del token fallisce, l’intero login fallisce e l’utente vede la pagina "Qualcosa non è andato a buon fine" invece di "Login completato". Non si crea più una sessione senza token.
+
+Se il salvataggio fallisce, nei log compare:  
+`OAuth callback: users+figma_tokens transaction FAILED — user_id= ... error= ...`
 
 **Cosa fare:**  
-- Controlla i log del backend subito dopo aver fatto "Login with Figma" e aver visto "Login completato".  
-- Se vedi `figma_tokens save failed`, leggi il messaggio di errore (es. violazione di chiave, tipo di dato).  
-- Correggi il problema (schema, permessi, variabili) e rifai **Logout** + **Log in with Figma**.
+- Controlla i log del backend subito dopo aver fatto "Login with Figma".  
+- Leggi il messaggio di errore (es. violazione di chiave, RLS, permessi).  
+- Correggi il problema (schema, permessi, variabili) e rifai **Log in with Figma**.
 
 ---
 

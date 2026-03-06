@@ -50,18 +50,20 @@ export interface SyncTabProps {
   activeSyncTab: 'SB' | 'GH' | 'BB';
   setActiveSyncTab: (tab: 'SB' | 'GH' | 'BB') => void;
   isSbConnected: boolean;
-  handleConnectSb: () => void;
+  storybookUrl: string | null;
+  handleConnectSb: (url: string) => void;
+  onDisconnectSb?: () => void;
   hasSyncScanned: boolean;
   handleSyncScan: () => void;
   isSyncScanning: boolean;
   getRemainingTime: (key: string) => string | null;
-  syncItems: any[];
+  syncItems: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>;
+  syncScanError: string | null;
   expandedDriftId: string | null;
   setExpandedDriftId: (id: string | null) => void;
-  handleSelectLayer: (id: string, e: React.MouseEvent) => void;
+  handleSelectLayer: (id: string, layerId: string | null | undefined, e: React.MouseEvent) => void;
   layerSelectionFeedback: string | null;
   handleSyncItem: (id: string, e?: React.MouseEvent) => void;
   handleSyncAll: () => void;
   lastSyncAllDate: Date | null;
-  onScanComplete?: () => void; // New prop for Level Up trigger
 }

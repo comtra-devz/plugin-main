@@ -14,3 +14,6 @@ export const sql = raw
         rowCount: (rows || []).length,
       }))
   : null;
+
+/** Esegue fn in una transazione. Se fn lancia, rollback. Usa il client raw (ritorna array, non {rows}). */
+export const withTransaction = raw ? (fn) => raw.begin(fn) : null;
