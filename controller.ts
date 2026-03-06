@@ -376,8 +376,20 @@ figma.ui.onmessage = async (raw: any) => {
     if (layerId) {
       const node = await figma.getNodeByIdAsync(layerId);
       if (node && 'id' in node) {
-        figma.currentPage.selection = [node as SceneNode];
-        figma.viewport.scrollAndZoomIntoView([node as SceneNode]);
+        const sceneNode = node as SceneNode;
+        // Switch to the page containing the node (audit can span multiple pages)
+        let current: BaseNode | null = node;
+        while (current) {
+          if (current.type === 'PAGE') {
+            if (figma.currentPage !== current) {
+              figma.currentPage = current as PageNode;
+            }
+            break;
+          }
+          current = current.parent;
+        }
+        figma.currentPage.selection = [sceneNode];
+        figma.viewport.scrollAndZoomIntoView([sceneNode]);
       }
     }
   }

@@ -13,8 +13,8 @@ import {
   type FigmaDesignTokensPayload
 } from '../services/tokenGeneration';
 
-interface Props { 
-  plan: UserPlan; 
+interface Props {
+  plan: UserPlan;
   userTier?: string;
   onUnlockRequest: () => void;
   creditsRemaining: number | null;
@@ -22,6 +22,7 @@ interface Props {
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
+  onNavigateToStats?: () => void;
 }
 
 const SYNC_ITEMS_MOCK = [
@@ -34,7 +35,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, fetchSyncScan }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, fetchSyncScan, onNavigateToStats }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -499,12 +500,16 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     <div className="p-4 pb-16 flex flex-col gap-4 relative">
       {showConfetti && <Confetti />}
       {showLevelUp && (
-          <LevelUpModal 
-            oldLevel={4}
-            newLevel={5}
-            discount={5}
-            onClose={() => setShowLevelUp(false)}
-          />
+        <LevelUpModal
+          oldLevel={4}
+          newLevel={5}
+          discount={5}
+          onClose={() => setShowLevelUp(false)}
+          onViewStats={() => {
+            setShowLevelUp(false);
+            onNavigateToStats?.();
+          }}
+        />
       )}
       
       {/* Credit Banner */}

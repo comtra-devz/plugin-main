@@ -12,6 +12,7 @@ import { Affiliate } from './views/Affiliate';
 import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
 import { LevelUpModal } from './components/LevelUpModal';
+import { TrophiesModal } from './components/TrophiesModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { ToastProvider } from './contexts/ToastContext';
@@ -184,11 +185,6 @@ export default function AppTest() {
     else setTrophies(null);
   }, [user?.authToken, user?.id, fetchTrophies]);
 
-  useEffect(() => {
-    if (newTrophiesToast.length === 0) return;
-    const t = setTimeout(() => setNewTrophiesToast([]), 4000);
-    return () => clearTimeout(t);
-  }, [newTrophiesToast]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -535,11 +531,14 @@ export default function AppTest() {
   return (
     <ToastProvider>
       {newTrophiesToast.length > 0 && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-[#ffc900] border-2 border-black shadow-[4px_4px_0_0_#000] px-4 py-2 max-w-[90%] animate-in fade-in slide-in-from-top-2">
-          <p className="text-[10px] font-bold uppercase text-black">
-            🏆 Trofei sbloccati: {newTrophiesToast.map(t => t.name).join(', ')}
-          </p>
-        </div>
+        <TrophiesModal
+          trophies={newTrophiesToast}
+          onClose={() => setNewTrophiesToast([])}
+          onViewStats={() => {
+            setNewTrophiesToast([]);
+            setView(ViewState.ANALYTICS);
+          }}
+        />
       )}
       <Layout 
         current={view} 
@@ -553,31 +552,31 @@ export default function AppTest() {
         user={user}
         onOpenProfile={() => setShowProfile(true)}
       >
-        {view === ViewState.AUDIT && (
-           <Audit 
-              plan={user?.plan || 'FREE'} 
-              userTier={user?.tier}
-              onUnlockRequest={handleUnlockRequest}
-              onRetryConnection={handleRetryConnection}
-              onCheckTokenStatus={handleCheckTokenStatus}
-              tokenVerifiedAt={tokenVerifiedAt}
-              creditsRemaining={effectiveCreditsRemaining}
-              useInfiniteCreditsForTest={useInfiniteCreditsForTest}
-              estimateCredits={estimateCredits}
-              consumeCredits={consumeCredits}
-              fetchFigmaFile={fetchFigmaFile}
-              fetchDsAudit={fetchDsAudit}
-              fetchA11yAudit={fetchA11yAudit}
-              onNavigateToGenerate={(prompt) => {
-                  setGenPrompt(prompt);
-                  setView(ViewState.GENERATE);
-              }}
-           />
-        )}
-        
-        {view === ViewState.GENERATE && (
-          <Generate 
-            plan={user?.plan || 'FREE'} 
+        <div className={view === ViewState.AUDIT ? '' : 'hidden'} aria-hidden={view !== ViewState.AUDIT}>
+          <Audit
+            plan={user?.plan || 'FREE'}
+            userTier={user?.tier}
+            onUnlockRequest={handleUnlockRequest}
+            onRetryConnection={handleRetryConnection}
+            onCheckTokenStatus={handleCheckTokenStatus}
+            tokenVerifiedAt={tokenVerifiedAt}
+            creditsRemaining={effectiveCreditsRemaining}
+            useInfiniteCreditsForTest={useInfiniteCreditsForTest}
+            estimateCredits={estimateCredits}
+            consumeCredits={consumeCredits}
+            fetchFigmaFile={fetchFigmaFile}
+            fetchDsAudit={fetchDsAudit}
+            fetchA11yAudit={fetchA11yAudit}
+            onNavigateToGenerate={(prompt) => {
+              setGenPrompt(prompt);
+              setView(ViewState.GENERATE);
+            }}
+          />
+        </div>
+
+        <div className={view === ViewState.GENERATE ? '' : 'hidden'} aria-hidden={view !== ViewState.GENERATE}>
+          <Generate
+            plan={user?.plan || 'FREE'}
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
             creditsRemaining={effectiveCreditsRemaining}
@@ -586,11 +585,11 @@ export default function AppTest() {
             consumeCredits={consumeCredits}
             initialPrompt={genPrompt}
           />
-        )}
-        
-        {view === ViewState.CODE && (
-          <Code 
-            plan={user?.plan || 'FREE'} 
+        </div>
+
+        <div className={view === ViewState.CODE ? '' : 'hidden'} aria-hidden={view !== ViewState.CODE}>
+          <Code
+            plan={user?.plan || 'FREE'}
             userTier={user?.tier}
             onUnlockRequest={handleUnlockRequest}
             creditsRemaining={effectiveCreditsRemaining}
@@ -598,32 +597,35 @@ export default function AppTest() {
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
             fetchSyncScan={fetchSyncScan}
+            onNavigateToStats={() => setView(ViewState.ANALYTICS)}
           />
-        )}
-        
-        {view === ViewState.ANALYTICS && user && (
-          <Analytics
-            user={user}
-            stats={user.stats}
-            trophies={trophies}
-            onLinkedInShare={async () => {
-              if (!user?.authToken) return;
-              try {
-                const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies/linkedin-shared`, {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${user.authToken}` },
-                });
-                if (r.ok) {
-                  const data = await r.json();
-                  if (data.new_trophies?.length) {
-                    setNewTrophiesToast(data.new_trophies);
-                    fetchTrophies();
+        </div>
+
+        <div className={view === ViewState.ANALYTICS ? '' : 'hidden'} aria-hidden={view !== ViewState.ANALYTICS}>
+          {user && (
+            <Analytics
+              user={user}
+              stats={user.stats}
+              trophies={trophies}
+              onLinkedInShare={async () => {
+                if (!user?.authToken) return;
+                try {
+                  const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies/linkedin-shared`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${user.authToken}` },
+                  });
+                  if (r.ok) {
+                    const data = await r.json();
+                    if (data.new_trophies?.length) {
+                      setNewTrophiesToast(data.new_trophies);
+                      fetchTrophies();
+                    }
                   }
-                }
-              } catch (_) {}
-            }}
-          />
-        )}
+                } catch (_) {}
+              }}
+            />
+          )}
+        </div>
 
         {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={effectiveCredits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
         {view === ViewState.DOCUMENTATION && <Documentation />}
@@ -646,6 +648,11 @@ export default function AppTest() {
             discount={levelUpData.discount}
             discountCode={levelUpData.discountCode}
             onClose={() => { setShowLevelUpModal(false); setLevelUpData(null); }}
+            onViewStats={() => {
+              setShowLevelUpModal(false);
+              setLevelUpData(null);
+              setView(ViewState.ANALYTICS);
+            }}
           />
         )}
 

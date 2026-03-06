@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import { BRUTAL } from '../constants';
 import { Confetti } from './Confetti.tsx';
 
 interface Props {
@@ -9,9 +9,11 @@ interface Props {
   /** Unique discount code for this user (Annual plan). Shown when discount > 0. */
   discountCode?: string | null;
   onClose: () => void;
+  /** Navigate to Stats tab (e.g. to see discount). */
+  onViewStats: () => void;
 }
 
-export const LevelUpModal: React.FC<Props> = ({ oldLevel, newLevel, discount, discountCode, onClose }) => {
+export const LevelUpModal: React.FC<Props> = ({ oldLevel, newLevel, discount, discountCode, onClose, onViewStats }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopyCode = () => {
@@ -66,12 +68,20 @@ export const LevelUpModal: React.FC<Props> = ({ oldLevel, newLevel, discount, di
           </div>
         )}
 
-        <button
-          onClick={onClose}
-          className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-[#ff90e8] hover:text-black transition-colors`}
-        >
-          Claim Rewards
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={onViewStats}
+            className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-[#ff90e8] hover:text-black transition-colors`}
+          >
+            View in Stats
+          </button>
+          <button
+            onClick={onClose}
+            className={`${BRUTAL.btn} w-full border-2 border-black bg-white text-black hover:bg-gray-100 transition-colors`}
+          >
+            Continue
+          </button>
+        </div>
       </div>
     </div>
   );
