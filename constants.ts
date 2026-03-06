@@ -9,8 +9,8 @@ export const AUTH_BACKEND_URL =
 /** Plugin ID (manifest); usato per postMessage sicuro verso Figma */
 export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
 
-/** Email degli utenti di test: crediti infiniti di default; opzione "Simula Free Tier" per testare logica reale. Da rimuovere o svuotare in produzione. */
-export const TEST_USER_EMAILS = ['ben.bugli@gmail.com', 'foscacordidonne@gmail.com'];
+/** Email degli utenti di test: crediti infiniti di default; opzione "Simula Free Tier" per testare logica reale. Vuoto = tutti gli account sono effettivi (detrazioni, storico, badge, livelli e dashboard al 100%). */
+export const TEST_USER_EMAILS: string[] = [];
 
 /** Crediti free tier (usati anche per simulazione test user quando API non disponibile). */
 export const FREE_TIER_CREDITS = 25;

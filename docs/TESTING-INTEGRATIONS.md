@@ -6,7 +6,7 @@ Come testare le integrazioni con il backend (auth.comtra.dev) e Supabase. **Appr
 
 ## Account di test e Supabase
 
-**Gli account di test** (es. `ben.bugli@gmail.com`, `foscacordidonne@gmail.com` — vedi `constants.ts` → `TEST_USER_EMAILS`) **finiscono già in Supabase** come tutti gli altri: al primo **Login with Figma** il callback OAuth crea/aggiorna la riga in `users`. Nessuna configurazione speciale: stessi flusso e stesse tabelle.
+**Gli account di test** (vedi `constants.ts` → `TEST_USER_EMAILS`; attualmente vuoto) **finiscono già in Supabase** come tutti gli altri: al primo **Login with Figma** il callback OAuth crea/aggiorna la riga in `users`. Nessuna configurazione speciale: stessi flusso e stesse tabelle.
 
 Nel **frontend** le email in `TEST_USER_EMAILS` abilitano crediti “infiniti” e la voce “Simula Free Tier”; il backend non distingue i test user e li tratta come gli altri.
 
