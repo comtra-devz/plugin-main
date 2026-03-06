@@ -1129,6 +1129,10 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
     const { issues } = runA11yAudit(fileJson);
     res.json({ issues });
   } catch (err) {
+    const msg = err?.message || '';
+    if (msg.includes('File too large')) {
+      return res.status(400).json({ error: msg });
+    }
     console.error('POST /api/agents/a11y-audit', err);
     res.status(500).json({ error: 'Server error' });
   }

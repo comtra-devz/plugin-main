@@ -426,17 +426,36 @@ function collectOKLCHIssues(fileJson, issues, idGen) {
 }
 
 // --- Main
+const A11Y_NODE_CAP = 6000; // Cap to avoid Vercel 5min timeout on huge files
 let idCounter = 0;
 function nextId() {
   idCounter += 1;
   return `a11y-${idCounter}`;
 }
 
+function countNodes(fileJson) {
+  let n = 0;
+  const doc = fileJson?.document;
+  if (!doc?.children) return 0;
+  for (const page of doc.children) {
+    for (const _ of walkNodes(page)) {
+      n++;
+      if (n > A11Y_NODE_CAP) return n;
+    }
+  }
+  return n;
+}
+
 /**
  * Run A11Y audit on Figma file JSON. Returns { issues }.
+ * Throws if file has more than A11Y_NODE_CAP nodes (to avoid timeout).
  * @param {object} fileJson - Full response from GET /v1/files/:key or plugin serialization
  */
 export function runA11yAudit(fileJson) {
+  const nodeCount = countNodes(fileJson);
+  if (nodeCount > A11Y_NODE_CAP) {
+    throw new Error(`File too large for full scan (${nodeCount.toLocaleString()} nodes). Try scanning a single page instead.`);
+  }
   idCounter = 0;
   const issues = [];
   collectContrastIssues(fileJson, issues, nextId);

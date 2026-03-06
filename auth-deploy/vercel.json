@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/agents/*.mjs": {
+      "maxDuration": 300
+    }
+  },
   "rewrites": [
     { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },

@@ -493,7 +493,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               }, 1500);
             }
           } catch (err) {
-            const message = err instanceof Error ? err.message : 'Something went wrong';
+            let message = err instanceof Error ? err.message : 'Something went wrong';
+            if (/timeout|504|timed out/i.test(message)) {
+              message = 'L\'audit ha impiegato troppo tempo. Prova con una singola pagina o una selezione più piccola.';
+            }
             setAuditError(message);
           } finally {
             setPendingScanType(null);
