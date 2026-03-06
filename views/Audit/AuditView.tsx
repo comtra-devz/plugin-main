@@ -118,7 +118,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
   // Scope & Document Pages (for node scan)
   const [documentPages, setDocumentPages] = useState<{ id: string; name: string }[]>([]);
-  const [scanScope, setScanScope] = useState<ScanScope>('all');
+  const [scanScope, setScanScope] = useState<ScanScope>('unselected');
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -512,6 +512,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditErrorToast]);
 
   const handleStartScan = useCallback(() => {
+    if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
     if (knownZeroCredits) {
       onUnlockRequest();
       return;
@@ -524,6 +525,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
 
   const handleRunA11yAudit = useCallback(() => {
+    if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
     if (knownZeroCredits) {
       onUnlockRequest();
       return;
@@ -948,6 +950,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             dsAuditError={dsAuditError}
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
+            disableAllPages={false}
         />
       )}
 
@@ -980,6 +983,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             a11yAuditError={a11yAuditError}
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
+            disableAllPages={true}
         />
       )}
 

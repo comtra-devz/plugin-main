@@ -3,10 +3,10 @@ import React from 'react';
 import { BRUTAL, COLORS } from '../../../constants';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
-import { ExtendedAuditCategory } from '../data';
+import { ExtendedAuditCategory, formatIssueCount } from '../data';
 import { AuditIssue } from '../../../types';
 
-export type ScanScope = 'all' | 'current' | 'page';
+export type ScanScope = 'all' | 'current' | 'page' | 'unselected';
 
 interface DocumentPage {
   id: string;
@@ -44,9 +44,12 @@ interface Props {
   dsAuditError?: string | null;
   onRetryConnection?: () => void;
   onCheckTokenStatus?: () => void;
+  /** When true, "All Pages" is visible but disabled with "Coming soon" message */
+  disableAllPages?: boolean;
 }
 
 function getScopeLabel(scope: ScanScope, selectedPage: DocumentPage | null): string {
+  if (scope === 'unselected') return 'Select an option';
   if (scope === 'all') return 'All Pages';
   if (scope === 'current') return 'Current Selection';
   return selectedPage ? selectedPage.name : 'Select Page';
@@ -81,6 +84,7 @@ export const DesignSystemTab: React.FC<Props> = ({
   dsAuditError,
   onRetryConnection,
   onCheckTokenStatus,
+  disableAllPages = false,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
 
@@ -108,6 +112,15 @@ export const DesignSystemTab: React.FC<Props> = ({
               </div>
               {isScopeDropdownOpen && (
                   <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
+                      {disableAllPages ? (
+                        <div className="flex flex-col gap-0 p-2 opacity-60 cursor-not-allowed" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2 p-2">
+                            <div className="w-3 h-3 shrink-0 border border-black flex items-center justify-center bg-white"></div>
+                            <span className="text-xs font-bold">All Pages</span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 px-2 pb-2 italic">We are working hard to make this option available.</p>
+                        </div>
+                      ) : (
                       <div 
                           onClick={(e) => { e.stopPropagation(); setScanScope('all'); setIsScopeDropdownOpen(false); }}
                           className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
@@ -115,6 +128,7 @@ export const DesignSystemTab: React.FC<Props> = ({
                           <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
                           <span className="text-xs font-bold">All Pages</span>
                       </div>
+                      )}
                       <div 
                           onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
                           className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
@@ -140,7 +154,7 @@ export const DesignSystemTab: React.FC<Props> = ({
           <div className="px-4">
             <button 
                 onClick={handleScanClick} 
-                disabled={isCalculating}
+                disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
                 className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex flex-col justify-center items-center gap-0 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait relative overflow-hidden`}
             >
                 {isCalculating && (
@@ -218,6 +232,15 @@ export const DesignSystemTab: React.FC<Props> = ({
           </div>
           {isScopeDropdownOpen && (
               <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] max-h-48 overflow-y-auto custom-scrollbar">
+                  {disableAllPages ? (
+                    <div className="flex flex-col gap-0 p-2 opacity-60 cursor-not-allowed" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 p-2">
+                        <div className="w-3 h-3 shrink-0 border border-black flex items-center justify-center bg-white"></div>
+                        <span className="text-xs font-bold">All Pages</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 px-2 pb-2 italic">We are working hard to make this option available.</p>
+                    </div>
+                  ) : (
                   <div 
                       onClick={(e) => { e.stopPropagation(); setScanScope('all'); setIsScopeDropdownOpen(false); }}
                       className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
@@ -225,6 +248,7 @@ export const DesignSystemTab: React.FC<Props> = ({
                       <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'all' ? 'bg-black' : 'bg-white'}`}></div>
                       <span className="text-xs font-bold">All Pages</span>
                   </div>
+                  )}
                   <div 
                       onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
                       className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
@@ -248,9 +272,9 @@ export const DesignSystemTab: React.FC<Props> = ({
       </div>
 
       {/* Scan Again Button (Moved Here) */}
-      <button 
+      <button
           onClick={handleScanClick}
-          disabled={isCalculating}
+          disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
           className={`${BRUTAL.btn} w-full bg-white text-black border-black flex flex-col justify-center items-center gap-0 relative overflow-hidden shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
       >
           {isCalculating && (
@@ -273,39 +297,38 @@ export const DesignSystemTab: React.FC<Props> = ({
              </span>
          </div>
          <div>
-             {categories.map(cat => {
-               const isActive = activeCat === cat.id;
-               return (
-                 <div 
-                   key={cat.id}
-                   onClick={() => setActiveCat(isActive ? null : cat.id)}
-                   className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
-                 >
-                    <div className="flex items-center gap-3">
-                       <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>
-                          {cat.icon}
-                       </div>
-                       <div className="flex flex-col">
-                          <span className="text-[10px] font-bold uppercase">{cat.label}</span>
-                          <span className="text-[9px] font-medium opacity-70">{cat.desc}</span>
-                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                       {cat.score === -1 ? (
-                           <span className="text-[9px] font-mono text-gray-400">N/A</span>
-                       ) : (
-                           <span className={`text-[10px] font-mono ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>{cat.score}%</span>
-                       )}
-                       {cat.issuesCount > 0 && (
-                          <span className="size-5 bg-white text-black border border-black flex items-center justify-center text-[9px] font-bold rounded-full">
-                             {cat.issuesCount}
-                          </span>
-                       )}
-                    </div>
-                 </div>
-               );
-             })}
+             {(() => {
+               const totalIssues = categories.reduce((acc, c) => acc + c.issuesCount, 0);
+               return categories.map(cat => {
+                 const isActive = activeCat === cat.id;
+                 const pctOfTotal = totalIssues > 0 ? Math.round((cat.issuesCount / totalIssues) * 100) : 0;
+                 return (
+                   <div 
+                     key={cat.id}
+                     onClick={() => setActiveCat(isActive ? null : cat.id)}
+                     className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
+                   >
+                      <div className="flex items-center gap-3">
+                         <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>
+                            {cat.icon}
+                         </div>
+                         <div className="flex flex-col">
+                            <span className="text-[10px] font-bold uppercase">{cat.label}</span>
+                            <span className="text-[9px] font-medium opacity-70">{cat.desc}</span>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className={`text-[10px] font-mono ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>{pctOfTotal}%</span>
+                         {cat.issuesCount > 0 && (
+                            <span className="size-7 min-w-7 bg-white text-black border border-black flex items-center justify-center text-[9px] font-bold rounded-full">
+                               {formatIssueCount(cat.issuesCount)}
+                            </span>
+                         )}
+                      </div>
+                   </div>
+                 );
+               });
+             })()}
          </div>
       </div>
 

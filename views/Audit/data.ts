@@ -53,6 +53,16 @@ export const DS_SCORE_MATRIX: { min: number; max: number; status: string; target
   { min: 100, max: 100, status: 'Absolute perfection! The stars align with your grid.', target: 'You are a design legend.' },
 ];
 
+/** Formatta il conteggio issue per display: 1.2k, 10k, 100k, 1.1M oltre le migliaia. */
+export function formatIssueCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 100_000) return `${Math.round(n / 1000)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  if (n < 10_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  return `${Math.round(n / 1_000_000)}M`;
+}
+
 export function getDsScoreCopy(score: number): DsScoreCopy {
   const row = DS_SCORE_MATRIX.find(r => score >= r.min && score <= r.max);
   return row ? { status: row.status, target: row.target } : DS_SCORE_MATRIX[0];
