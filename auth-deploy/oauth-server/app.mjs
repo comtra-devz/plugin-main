@@ -359,7 +359,10 @@ async function getFigmaAccessToken(sql, userId) {
 /** Force refresh Figma token (e.g. after 403 from Figma). Returns new access_token or null. Use to recover without asking user to re-login. */
 async function forceRefreshFigmaToken(userId) {
   const r = await dbSql`SELECT refresh_token FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
-  if (r.rows.length === 0) return null;
+  if (r.rows.length === 0) {
+    console.warn('forceRefreshFigmaToken: no row in figma_tokens for user_id=', userId, '(user must complete "Riconnetti Figma" once)');
+    return null;
+  }
   if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return null;
   const refreshRes = await fetch('https://api.figma.com/v1/oauth/refresh', {
     method: 'POST',
@@ -671,6 +674,9 @@ app.post('/api/figma/file', async (req, res) => {
   try {
     let accessToken = await getFigmaAccessToken(dbSql, userId);
     if (!accessToken) {
+      accessToken = await forceRefreshFigmaToken(userId);
+    }
+    if (!accessToken) {
       console.warn('POST /api/figma/file: no token for user_id=', userId, '(no row, expired, or refresh failed)');
       return res.status(403).json({
         error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.',
@@ -917,6 +923,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       fileJson = fileJsonFromBody;
     } else if (fileKey) {
       let accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
       if (!accessToken) {
         console.warn('POST /api/agents/ds-audit: no token for user_id=', userId);
         return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
@@ -1015,6 +1022,7 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
       fileJson = fileJsonFromBody;
     } else if (fileKey) {
       let accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
       if (!accessToken) {
         console.warn('POST /api/agents/a11y-audit: no token for user_id=', userId);
         return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
