@@ -34,6 +34,9 @@ interface IssueListProps {
   onFixAll: () => void;
   onUnlockRequest: () => void;
   totalHiddenCount: number;
+  /** A11Y only: filter by WCAG level. AA = hide AAA, AAA = show all */
+  wcagLevelFilter?: 'AA' | 'AAA';
+  setWcagLevelFilter?: (level: 'AA' | 'AAA') => void;
 }
 
 export const IssueList: React.FC<IssueListProps> = ({
@@ -62,6 +65,8 @@ export const IssueList: React.FC<IssueListProps> = ({
   scopeName = '',
   scopeIsCurrent = false,
   getCreditsForIssue: getCreditsForIssueProp,
+  wcagLevelFilter,
+  setWcagLevelFilter,
 }) => {
   const remainingIssues = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id));
   const getCredits = getCreditsForIssueProp ?? (() => 2);
@@ -80,6 +85,25 @@ export const IssueList: React.FC<IssueListProps> = ({
 
   return (
     <div className="space-y-6">
+      {activeTab === 'A11Y' && setWcagLevelFilter && (
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-black/10">
+          <span className="text-[10px] font-bold uppercase text-gray-600">WCAG level:</span>
+          <div className="flex border-2 border-black">
+            <button
+              onClick={() => setWcagLevelFilter('AA')}
+              className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${wcagLevelFilter === 'AA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+            >
+              AA
+            </button>
+            <button
+              onClick={() => setWcagLevelFilter('AAA')}
+              className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${wcagLevelFilter === 'AAA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+            >
+              AAA
+            </button>
+          </div>
+        </div>
+      )}
       {Object.entries(groupedIssues).map(([pageName, issues]) => (
         <div key={pageName}>
             <div className="mb-2 border-b border-black/10 pb-1">

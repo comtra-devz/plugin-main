@@ -159,6 +159,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [discardedIds, setDiscardedIds] = useState<Set<string>>(new Set());
   const [feedbackSentIds, setFeedbackSentIds] = useState<Set<string>>(new Set());
+  const [wcagLevelFilter, setWcagLevelFilter] = useState<'AA' | 'AAA'>('AA');
   
   // Feedback Modal State
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -198,7 +199,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   if (activeTab === 'PROTOTYPE') currentIssues = PROTO_ISSUES;
 
   // Filter out excluded pages
-  const filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
+  let filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
+  // A11Y: filter by WCAG level (AA = hide AAA, AAA = show all)
+  if (activeTab === 'A11Y' && wcagLevelFilter === 'AA') {
+    filteredIssues = filteredIssues.filter(i => i.wcag_level !== 'AAA');
+  }
   const activeIssues = activeCat ? filteredIssues.filter(i => i.categoryId === activeCat) : filteredIssues;
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
   const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
@@ -760,7 +765,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     onNavDeviation: handleNavDeviation,
     onFixAll: handleFixAll,
     onUnlockRequest: onUnlockRequest,
-    totalHiddenCount: totalHiddenCount
+    totalHiddenCount: totalHiddenCount,
+    wcagLevelFilter,
+    setWcagLevelFilter,
   };
 
   const wordCount = feedbackText.trim().split(/\s+/).filter(w => w.length > 0).length;
