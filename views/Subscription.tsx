@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import React, { useState, useEffect } from 'react';
+import { BRUTAL, COLORS, AUTH_BACKEND_URL } from '../constants';
 import { User } from '../types';
 import type { CreditsState } from '../App';
 
@@ -11,10 +11,34 @@ interface Props {
 }
 
 const FREE_TIER_CREDITS = 25;
+const LEVELS_WITH_DISCOUNT = [5, 10, 15, 20];
 
 export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCreditsForTest, onUpgrade }) => {
   const [showLimitWarning, setShowLimitWarning] = useState(false);
-  
+  const [levelDiscount, setLevelDiscount] = useState<{ code: string; level: number; percent: number } | null>(null);
+  const [discountCopied, setDiscountCopied] = useState(false);
+
+  useEffect(() => {
+    if (!user?.authToken || !user?.current_level) return;
+    if (!LEVELS_WITH_DISCOUNT.includes(user.current_level)) return;
+    fetch(`${AUTH_BACKEND_URL}/api/discounts/me`, {
+      headers: { Authorization: `Bearer ${user.authToken}` },
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.code) setLevelDiscount({ code: d.code, level: d.level ?? 0, percent: d.percent ?? 0 });
+      })
+      .catch(() => {});
+  }, [user?.authToken, user?.current_level]);
+
+  const copyLevelCode = () => {
+    if (!levelDiscount?.code) return;
+    navigator.clipboard.writeText(levelDiscount.code).then(() => {
+      setDiscountCopied(true);
+      setTimeout(() => setDiscountCopied(false), 2000);
+    });
+  };
+
   if (!user) return null;
 
   const isPro = user.plan === 'PRO';
@@ -102,6 +126,25 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
 
         </div>
       </div>
+
+      {levelDiscount && (
+        <div data-component="Subscription: Level Discount Code" className={`${BRUTAL.card} bg-[#ffc900]/30 border-2 border-black`}>
+          <h3 className="font-black uppercase text-xs mb-2">Your level discount (Annual plan)</h3>
+          <p className="text-[10px] text-gray-600 mb-2">Level {levelDiscount.level} — {levelDiscount.percent}% off. One-time use at checkout.</p>
+          <div className="flex items-center gap-2">
+            <code className="font-mono text-sm font-bold bg-white px-2 py-1 border-2 border-black flex-1 truncate">
+              {levelDiscount.code}
+            </code>
+            <button
+              type="button"
+              onClick={copyLevelCode}
+              className={`${BRUTAL.btn} text-[10px] px-2 py-1 shrink-0 border-2 border-black bg-black text-white hover:bg-[#ff90e8] hover:text-black`}
+            >
+              {discountCopied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {!isPro && (
         <div data-component="Subscription: Upgrade Card" className={`${BRUTAL.card} bg-[#ffc900] border-dashed`}>

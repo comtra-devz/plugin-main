@@ -97,7 +97,7 @@ export default function AppTest() {
   const [logoutToast, setLogoutToast] = useState<string | null>(null);
   const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
-  const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number } | null>(null);
+  const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number; discountCode?: string | null } | null>(null);
   const [trophies, setTrophies] = useState<Trophy[] | null>(null);
   const [newTrophiesToast, setNewTrophiesToast] = useState<Array<{ id: string; name: string }>>([]);
 
@@ -383,7 +383,12 @@ export default function AppTest() {
     if (data.level_up && data.current_level != null) {
       const oldLevel = Math.max(1, (user?.current_level ?? 1));
       const discount = Math.min(20, Math.floor((data.current_level ?? 1) / 5) * 5);
-      setLevelUpData({ oldLevel, newLevel: data.current_level, discount });
+      setLevelUpData({
+        oldLevel,
+        newLevel: data.current_level,
+        discount,
+        discountCode: data.level_discount_code ?? null,
+      });
       setShowLevelUpModal(true);
     }
     if (data.new_trophies?.length) {
@@ -608,6 +613,7 @@ export default function AppTest() {
             oldLevel={levelUpData.oldLevel}
             newLevel={levelUpData.newLevel}
             discount={levelUpData.discount}
+            discountCode={levelUpData.discountCode}
             onClose={() => { setShowLevelUpModal(false); setLevelUpData(null); }}
           />
         )}

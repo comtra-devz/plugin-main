@@ -13,6 +13,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 import { sql as dbSql } from './db.mjs';
+import {
+  generateLevelDiscountCode,
+  createLevelDiscount,
+  deleteLevelDiscount,
+  isLevelWithDiscount,
+  discountPercentForLevel,
+} from './lemon-discounts.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -499,6 +506,25 @@ app.post('/api/credits/estimate', async (req, res) => {
   res.json({ estimated_credits: estimated });
 });
 
+// --- Level discount code (gamification): get current code for authenticated user
+app.get('/api/discounts/me', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.json({ code: null, level: null, percent: null });
+  try {
+    const r = await dbSql`
+      SELECT level, code FROM user_level_discounts WHERE user_id = ${userId} LIMIT 1
+    `;
+    const row = r.rows[0];
+    if (!row) return res.json({ code: null, level: null, percent: null });
+    const percent = discountPercentForLevel(row.level);
+    return res.json({ code: row.code, level: Number(row.level), percent });
+  } catch (e) {
+    console.error('GET /api/discounts/me', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.post('/api/credits/consume', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -572,6 +598,44 @@ app.post('/api/credits/consume', async (req, res) => {
     } catch (e) {
       console.error('checkTrophies', e);
     }
+
+    let levelDiscountCode = null;
+    if (POSTGRES_URL && isLevelWithDiscount(currentLevel)) {
+      try {
+        const existing = await dbSql`
+          SELECT level, lemon_discount_id, code FROM user_level_discounts WHERE user_id = ${userId} LIMIT 1
+        `;
+        const prev = existing.rows[0];
+        if (prev && Number(prev.level) !== currentLevel) {
+          await deleteLevelDiscount(prev.lemon_discount_id);
+          await dbSql`DELETE FROM user_level_discounts WHERE user_id = ${userId}`;
+        }
+        if (!prev || Number(prev.level) !== currentLevel) {
+          const code = generateLevelDiscountCode(userId, currentLevel);
+          const percent = discountPercentForLevel(currentLevel);
+          const created = await createLevelDiscount({
+            storeId: process.env.LEMON_SQUEEZY_STORE_ID,
+            variantId1y: process.env.LEMON_VARIANT_1Y || '1345319',
+            name: `Level ${currentLevel} - ${percent}%`,
+            code,
+            amountPercent: percent,
+          });
+          if (created) {
+            await dbSql`
+              INSERT INTO user_level_discounts (user_id, level, lemon_discount_id, code)
+              VALUES (${userId}, ${currentLevel}, ${created.id}, ${created.code})
+              ON CONFLICT (user_id) DO UPDATE SET level = EXCLUDED.level, lemon_discount_id = EXCLUDED.lemon_discount_id, code = EXCLUDED.code
+            `;
+            levelDiscountCode = created.code;
+          }
+        } else {
+          levelDiscountCode = prev.code;
+        }
+      } catch (e) {
+        console.error('Level discount ensure', e);
+      }
+    }
+
     res.json({
       credits_remaining: newRemaining,
       credits_total: total,
@@ -582,6 +646,7 @@ app.post('/api/credits/consume', async (req, res) => {
       xp_for_next_level: xpForNextLevel,
       xp_for_current_level_start: infoResp.xpForCurrentLevelStart,
       new_trophies: newTrophies,
+      level_discount_code: levelDiscountCode,
     });
   } catch (err) {
     console.error('POST /api/credits/consume', err);

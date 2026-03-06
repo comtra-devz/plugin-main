@@ -91,6 +91,17 @@ CREATE TABLE IF NOT EXISTS user_trophies (
 
 CREATE INDEX IF NOT EXISTS idx_user_trophies_user_id ON user_trophies(user_id);
 
+-- Codici sconto livello (gamification): un codice univoco per utente, creato via API Lemon Squeezy
+CREATE TABLE IF NOT EXISTS user_level_discounts (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL CHECK (level IN (5, 10, 15, 20)),
+  lemon_discount_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_level_discounts_user_id ON user_level_discounts(user_id);
+
 -- Colonne aggiuntive users per condizioni trofei (max_health_score, fix consecutivi, linkedin, ecc.)
 -- Migrazione: ALTER TABLE users ADD COLUMN IF NOT EXISTS max_health_score INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS fixes_accepted_total INTEGER NOT NULL DEFAULT 0;

@@ -35,6 +35,8 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `POSTGRES_URL` | URL connessione Postgres (Supabase) | **da aggiungere** — vedi sotto |
 | `JWT_SECRET` | Stringa segreta lunga (es. `openssl rand -hex 32`) | **da aggiungere** |
 | `LEMON_SQUEEZY_WEBHOOK_SECRET` | Signing secret del webhook Lemon Squeezy (6–40 caratteri) | **da aggiungere** per affiliate |
+| `LEMON_SQUEEZY_API_KEY` | API key Lemon Squeezy (Settings → API) | **da aggiungere** per codici sconto livello (gamification) |
+| `LEMON_SQUEEZY_STORE_ID` | ID dello store Lemon Squeezy (per creare discount via API) | **da aggiungere** con API key |
 | `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
 | `KIMI_MODEL` | Nome modello (opzionale) | Default: `kimi-k2-turbo-preview`. Per **testing a basso costo** usa `kimi-k2-0905-preview` (input ~$0.40/M token, contesto 131K). |
 
@@ -115,6 +117,7 @@ Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFF
 3. **Registrazione affiliati (automatica)**: l’utente dal plugin va su **Profilo → Affiliate Program** e clicca **Ottieni il tuo codice affiliato**. Il backend crea una riga in `affiliates` con il suo `user_id` (Figma) e un codice univoco. Il plugin invia `?aff=CODICE` e `checkout[custom][aff]=CODICE`; il webhook riceve il codice e incrementa `total_referrals`. Il profilo (Production Metrics) mostra **AFFILIATES** = `total_referrals` letti nel callback OAuth.
 
 4. **Redirect checkout (Pay now)**: il plugin apre `GET /api/checkout/redirect?tier=6m&aff=...&email=...` su auth.comtra.dev, che fa un redirect 302 al checkout Lemon Squeezy. Opzionale in Vercel: **`LEMON_SQUEEZY_CHECKOUT_BASE`** (default `https://comtra.lemonsqueezy.com/checkout/buy`), **`LEMON_VARIANT_1W`**, **`LEMON_VARIANT_1M`**, **`LEMON_VARIANT_6M`**, **`LEMON_VARIANT_1Y`** se i variant ID differiscono dallo store.
+5. **Codici sconto livello (gamification)**: con **`LEMON_SQUEEZY_API_KEY`** e **`LEMON_SQUEEZY_STORE_ID`** il backend crea un codice sconto univoco per utente quando raggiunge livello 5, 10, 15 o 20 (5%–20% sul piano Annual). Al passaggio di livello superiore il codice precedente viene eliminato via API. Tabella DB: `user_level_discounts` (vedi `schema.sql`). Senza queste variabili il level up funziona ma il codice non viene creato.
 
 ---
 

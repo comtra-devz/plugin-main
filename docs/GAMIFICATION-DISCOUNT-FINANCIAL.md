@@ -135,6 +135,126 @@ Quando si creano i codici (medio/lungo termine):
 
 ---
 
+## 6.1 Identificare se l’utente ha già riscattato un codice sconto (Lemon Squeezy)
+
+Per comunicare in UI che l’utente ha già usato uno sconto livello (es. “Hai già usato il 5% su questo periodo; al prossimo rinnovo potrai applicare il 10%”) è possibile recuperare il dettaglio dai dati Lemon Squeezy.
+
+### Cosa espone Lemon Squeezy
+
+- **Order (dettaglio ordine)**  
+  - [The Order Object](https://docs.lemonsqueezy.com/api/orders/the-order-object): l’ordine ha tra gli attributi:
+    - `discount_total` (cents) — totale sconto applicato nell’ordine;
+    - `user_email` — email acquirente.
+  - Se `discount_total > 0` un coupon è stato applicato; non si sa però *quale* codice (5%, 10%, ecc.) solo dall’ordine.
+
+- **Discount Redemptions (quale codice è stato usato)**  
+  - [The Discount Redemption Object](https://docs.lemonsqueezy.com/api/discount-redemptions/the-discount-redemption-object): ogni riscatto è legato a un **Order** e a un **Discount** e contiene:
+    - `discount_code` — codice inserito a checkout (es. `LEVEL5`, `LEVEL10`);
+    - `discount_name` — nome del discount (es. `"10%"`);
+    - `discount_amount` + `discount_amount_type` (`percent` | `fixed`) — entità dello sconto;
+    - `amount` — importo effettivo dello sconto applicato (cents).
+  - Le redemption **non** sono incluse inline nel payload del webhook; l’ordine ha una relationship:
+    - `relationships["discount-redemptions"].links.related` → `GET https://api.lemonsqueezy.com/v1/orders/{order_id}/discount-redemptions` (con API key) per ottenere la lista.
+
+### Come recuperare il dettaglio
+
+1. **Dal webhook `order_created`**  
+   - Nel payload hai `data.attributes.discount_total` e `data.id` (order id).  
+   - Se `discount_total > 0`: chiamare l’API Lemon Squeezy  
+     `GET /v1/orders/{order_id}/discount-redemptions`  
+     e leggere dalla prima (o dalla lista) redemption `discount_name` / `discount_amount` + `discount_amount_type` per capire se è uno sconto livello (5%, 10%, 15%, 20%) e quale.
+
+2. **A posteriori (senza webhook)**  
+   - Listare gli ordini del cliente (es. `GET /v1/orders?filter[user_email]=...` se supportato, oppure tramite `customer_id`).  
+   - Per ogni ordine pagato con `discount_total > 0`:  
+     `GET /v1/orders/{order_id}/discount-redemptions`  
+     e usare `discount_code` / `discount_name` / `discount_amount` per identificare lo sconto livello.
+
+### Salvarlo per l’UI
+
+- **In fase di webhook (consigliato):** quando si aggiorna l’utente (plan PRO, crediti, scadenza), se `attrs.discount_total > 0`:
+  - chiamare `GET /v1/orders/{order_id}/discount-redemptions` (con API key LS);
+  - se una redemption corrisponde a uno sconto livello (es. codice che inizia con `LEVEL` o nome `"5%"` … `"20%"`), salvare su `users` (o tabella collegata) ad es.:
+    - `level_discount_used_percent` (5 | 10 | 15 | 20), oppure
+    - `level_discount_used_at` + `level_discount_code` / `level_discount_order_id`.
+  - così in plugin/Subscription puoi mostrare: “Hai già riscattato il 5%; al prossimo rinnovo potrai usare il 10%”.
+- **On demand:** se non vuoi salvare in DB, puoi esporre un endpoint che per l’utente loggato (email) recupera l’ultimo ordine pagato da LS, poi le redemption di quell’ordine, e restituisce se è stato usato uno sconto livello e quale (percentuale/codice). Più lento e dipendente da API LS a ogni richiesta.
+
+### Riepilogo
+
+| Domanda | Risposta |
+|--------|----------|
+| Si può sapere se l’utente ha riscattato un codice sconto? | Sì, dai dettagli ordine Lemon Squeezy. |
+| Dove? | `Order.discount_total` indica che c’è stato uno sconto; `GET /orders/{id}/discount-redemptions` dà codice/nome/percentuale. |
+| Per la UI “hai già usato il 5%, al rinnovo il 10%” | Salvare in DB in webhook (es. `level_discount_used_percent`) dopo aver chiamato l’API redemption, oppure recuperare on demand da LS per l’email utente. |
+
+---
+
+## 6.2 Codice sconto univoco per utente (generazione e disattivazione via API)
+
+Obiettivo: generare un codice sconto **univoco** associato all’utente (email/user_id), non riutilizzabile da altri, e **disabilitare** il codice del livello precedente quando l’utente sblocca uno sconto maggiore. Tutte le operazioni tramite **API Lemon Squeezy**.
+
+### Vincolo “solo questo utente”
+
+Lemon Squeezy **non** espone un attributo “limit to email” o “limit to customer” sui discount. Si ottiene l’effetto così:
+
+1. **Codice univoco per utente + livello**  
+   Generare un code che identifichi univocamente l’utente (e il livello), ad es.:
+   - `COMTRA-L5-{hash}` dove `hash` = stringa corta (8–12 caratteri, solo lettere maiuscole e numeri) derivata da `userId` + `level` + secret (es. HMAC o hash crittografico troncato).  
+   - Il codice è **univoco**: solo il backend lo conosce e lo espone solo all’utente loggato (es. in Level Up Modal o in Subscription).
+
+2. **Uso singolo**  
+   Creare il discount in Lemon Squeezy con:
+   - `is_limited_redemptions: true`
+   - `max_redemptions: 1`  
+   Così il codice può essere riscattato **una sola volta** in tutto lo store. Di fatto solo quell’utente lo riceve e può usarlo; se qualcuno lo copiasse, il primo che lo usa “consuma” l’unica redemption.
+
+In questo modo il codice è **di fatto** associato all’utente (univoco + mostrato solo a lui) e non riutilizzabile da altri dopo il primo uso.
+
+### Operazioni via API Lemon Squeezy
+
+- **Creare un discount (codice univoco)**  
+  [Create a Discount](https://docs.lemonsqueezy.com/api/discounts/create-discount):  
+  `POST /v1/discounts`  
+  - `name`: es. `"Level 5 - 5%"`  
+  - `code`: il codice univoco generato (es. `COMTRA-L5-A1B2C3D4`)  
+  - `amount`: 5 | 10 | 15 | 20  
+  - `amount_type`: `"percent"`  
+  - `is_limited_to_products`: `true`  
+  - `relationships.variants`: solo il variant **1y** (Annual), es. id `1345319`  
+  - `is_limited_redemptions`: `true`  
+  - `max_redemptions`: `1`  
+  - `duration`: `once` (o `forever`/`repeating` se si vuole lo sconto anche sui rinnovi)  
+  - `relationships.store`: `store_id` dello store (da env `LEMON_SQUEEZY_STORE_ID` o da API stores)
+
+  Salvare in DB (es. tabella `user_level_discounts`): `user_id`, `level`, `lemon_discount_id`, `code`, `created_at`, così si può mostrare il codice in UI e disabilitarlo in seguito.
+
+- **Disabilitare il codice del livello precedente**  
+  L’API Lemon Squeezy **non** espone un PATCH per i discount (né “disable” né cambio status). Per “disabilitare” un codice si usa:  
+  [Delete a Discount](https://docs.lemonsqueezy.com/api/discounts/delete-discount):  
+  `DELETE /v1/discounts/:id`  
+  con l’`id` del discount creato in precedenza per quell’utente e quel livello.
+
+  **Flusso consigliato** quando l’utente passa al livello superiore (es. da L5 a L10):
+  1. Leggere da DB il `lemon_discount_id` del codice attualmente attivo per quell’utente (es. livello 5).
+  2. Se esiste: chiamare `DELETE /v1/discounts/{lemon_discount_id}` (così il vecchio codice 5% non è più valido).
+  3. Creare il nuovo discount per il livello 10 (codice univoco nuovo, 10%, max_redemptions=1, limitato a variant 1y).
+  4. Salvare in DB il nuovo `lemon_discount_id` e il nuovo `code` (sostituendo o aggiungendo riga per livello 10).
+
+### Riepilogo implementativo
+
+| Cosa | Come |
+|------|------|
+| Codice univoco per utente | Generare lato backend (es. `COMTRA-L{level}-{hash(userId,level,secret)}`), solo lettere/numeri maiuscoli, 3–256 caratteri. |
+| Non usabile da altri | `max_redemptions: 1`; il codice viene mostrato solo all’utente loggato. |
+| Limitato al piano Annual | `is_limited_to_products: true` + `relationships.variants` = variant id 1y. |
+| Disabilitare il precedente | Nessun “disable” in API: usare `DELETE /v1/discounts/:id` sul discount del livello precedente quando si sblocca quello superiore. |
+| Persistenza | Tabella tipo `user_level_discounts` (user_id, level, lemon_discount_id, code) per sapere quale codice mostrare e quale eliminare al passaggio di livello. |
+
+Variabili d’ambiente utili: `LEMON_SQUEEZY_API_KEY` (per create/delete), `LEMON_SQUEEZY_STORE_ID` (per create). Variant id 1y già in uso: es. `1345319` (o da env).
+
+---
+
 ## 7. Riepilogo
 
 | Tema | Conclusione |
@@ -144,3 +264,5 @@ Quando si creano i codici (medio/lungo termine):
 | Guadagno futuro utente | Fino a €125 risparmio su 4 anni (5%→10%→15%→20%). |
 | Impatto business | Netto per vendita ridotto in modo limitato (max −20% sul prezzo Annual); beneficio su conversione e retention. |
 | Codici | Da creare in LS a medio termine; limitare allo variant 1y; definire duration (once vs forever) per i rinnovi. |
+| Sconto già riscattato | Recuperabile da Lemon Squeezy: Order.discount_total + API GET /orders/{id}/discount-redemptions per codice/%; salvare in webhook (es. level_discount_used_percent) per mostrare in UI “hai già usato il X%, al rinnovo il Y%”. |
+| Codice univoco per utente | Generare code per user+livello (es. COMTRA-L5-{hash}); creare discount via POST /v1/discounts con max_redemptions=1 e limitato a variant 1y; al passaggio a livello superiore DELETE /v1/discounts/:id del codice precedente (no PATCH in LS). |
