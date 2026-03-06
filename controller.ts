@@ -401,4 +401,77 @@ figma.ui.onmessage = async (raw: any) => {
       // Logic to revert specific properties would go here
     }
   }
+
+  // Design tokens: read Figma Variables and send serialized payload for CSS/JSON generation (Comtra ruleset)
+  if (msg.type === 'get-design-tokens') {
+    (async () => {
+      try {
+        const fileKey = (figma as any).fileKey ?? null;
+        const collections = await figma.variables.getLocalVariableCollectionsAsync();
+        const payload: {
+          fileKey: string | null;
+          collections: Array<{
+            id: string;
+            name: string;
+            defaultModeId: string;
+            modes: Array<{ modeId: string; name: string }>;
+          }>;
+          variables: Array<{
+            id: string;
+            name: string;
+            description: string;
+            variableCollectionId: string;
+            resolvedType: string;
+            valuesByMode: Record<string, unknown>;
+            codeSyntax?: Record<string, string>;
+            hiddenFromPublishing?: boolean;
+          }>;
+        } = {
+          fileKey,
+          collections: [],
+          variables: []
+        };
+
+        for (const coll of collections) {
+          payload.collections.push({
+            id: coll.id,
+            name: coll.name,
+            defaultModeId: coll.defaultModeId,
+            modes: coll.modes.map(m => ({ modeId: m.modeId, name: m.name }))
+          });
+          for (const variableId of coll.variableIds) {
+            const variable = await figma.variables.getVariableByIdAsync(variableId);
+            if (!variable) continue;
+            const valuesByMode: Record<string, unknown> = {};
+            for (const [modeId, val] of Object.entries(variable.valuesByMode)) {
+              if (val === undefined) continue;
+              if (typeof val === 'object' && val !== null && 'type' in val && (val as { type: string }).type === 'VARIABLE_ALIAS') {
+                valuesByMode[modeId] = { type: 'VARIABLE_ALIAS', id: (val as { id: string }).id };
+              } else if (typeof val === 'object' && val !== null && 'r' in val) {
+                const c = val as { r: number; g: number; b: number; a?: number };
+                valuesByMode[modeId] = { r: c.r, g: c.g, b: c.b, a: c.a };
+              } else {
+                valuesByMode[modeId] = val;
+              }
+            }
+            payload.variables.push({
+              id: variable.id,
+              name: variable.name,
+              description: variable.description ?? '',
+              variableCollectionId: variable.variableCollectionId,
+              resolvedType: variable.resolvedType,
+              valuesByMode,
+              codeSyntax: variable.codeSyntax ? { ...variable.codeSyntax } : undefined,
+              hiddenFromPublishing: variable.hiddenFromPublishing
+            });
+          }
+        }
+
+        figma.ui.postMessage({ type: 'design-tokens-result', payload });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        figma.ui.postMessage({ type: 'design-tokens-error', error: errMsg });
+      }
+    })();
+  }
 };

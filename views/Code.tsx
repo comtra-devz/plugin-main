@@ -1,11 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserPlan } from '../types';
 import { Confetti } from '../components/Confetti.tsx';
 import { TokensTab } from './Code/tabs/TokensTab.tsx';
 import { TargetTab } from './Code/tabs/TargetTab.tsx';
 import { SyncTab } from './Code/tabs/SyncTab.tsx';
 import { LevelUpModal } from '../components/LevelUpModal.tsx';
+import {
+  buildTokenForestFromFigmaPayload,
+  tokenForestToCSS,
+  tokenForestToDTCG,
+  type FigmaDesignTokensPayload
+} from '../services/tokenGeneration';
 
 interface Props { 
   plan: UserPlan; 
@@ -75,6 +81,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // Level Up State
   const [showLevelUp, setShowLevelUp] = useState(false);
 
+  // Token generation: pending request type for design-tokens-result handler
+  const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
+
   const isPro = plan === 'PRO';
   const isAnnual = userTier === '1y';
   const infiniteForTest = !!useInfiniteCreditsForTest;
@@ -92,6 +101,49 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Listen for design-tokens-result from Figma (Variables API)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data?.pluginMessage ?? event.data;
+      if (!msg?.type) return;
+      if (msg.type === 'design-tokens-result') {
+        const payload = msg.payload as FigmaDesignTokensPayload;
+        const pending = pendingTokenRequestRef.current;
+        pendingTokenRequestRef.current = null;
+        try {
+          const forest = buildTokenForestFromFigmaPayload(payload);
+          const fileKey = payload.fileKey ?? undefined;
+          if (pending === 'css') {
+            const css = tokenForestToCSS(forest, { fileKey });
+            setGeneratedCss(css);
+            setLastGeneratedCssDate(new Date());
+            startCooldown('css_update');
+          } else if (pending === 'json') {
+            const dtcg = tokenForestToDTCG(forest, { fileKey });
+            setGeneratedJson(JSON.stringify(dtcg, null, 2));
+            setLastGeneratedJsonDate(new Date());
+            startCooldown('json_update');
+          }
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          if (pending === 'css') setGeneratedCss(`/* Error: ${errMsg} */\n:root {\n  /* No tokens generated */\n}`);
+          if (pending === 'json') setGeneratedJson(JSON.stringify({ $schema: 'https://www.designtokens.org/schemas/2025.10/format.json', error: errMsg }, null, 2));
+        }
+        setIsGeneratingCss(false);
+        setIsGeneratingJson(false);
+      } else if (msg.type === 'design-tokens-error') {
+        pendingTokenRequestRef.current = null;
+        setIsGeneratingCss(false);
+        setIsGeneratingJson(false);
+        const errMsg = msg.error ?? 'Failed to read variables';
+        setGeneratedCss(prev => prev ?? `/* Error: ${errMsg} */\n:root {}`);
+        setGeneratedJson(prev => prev ?? JSON.stringify({ error: errMsg }, null, 2));
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   const getRemainingTime = (key: string) => {
@@ -168,26 +220,17 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   const handleGenerateCss = () => {
     handleAction(() => {
+      pendingTokenRequestRef.current = 'css';
       setIsGeneratingCss(true);
-      setTimeout(() => {
-        setGeneratedCss(getRawCss());
-        setIsGeneratingCss(false);
-        // Update CSS Gen Date. This will make "Sync Storybook" active again if it was synced.
-        setLastGeneratedCssDate(new Date()); 
-        startCooldown('css_update');
-      }, 1000);
+      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
     });
   };
 
   const handleGenerateJson = () => {
     handleAction(() => {
+      pendingTokenRequestRef.current = 'json';
       setIsGeneratingJson(true);
-      setTimeout(() => {
-        setGeneratedJson(getRawJson());
-        setIsGeneratingJson(false);
-        setLastGeneratedJsonDate(new Date());
-        startCooldown('json_update');
-      }, 1000);
+      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
     });
   };
 
