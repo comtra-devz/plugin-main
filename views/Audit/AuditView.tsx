@@ -170,14 +170,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       if (isA11y) {
         setA11yAuditLoading(false);
         if (isFileNotSavedError(message)) {
-          setA11yAuditError(message);
+          const opts = getSystemToastOptions('file_link_unavailable');
+          setA11yAuditError(opts.description ?? opts.title);
           return;
         }
         setA11yAuditError(null);
       } else {
         setDsAuditLoading(false);
         if (isFileNotSavedError(message)) {
-          setDsAuditError(message);
+          const opts = getSystemToastOptions('file_link_unavailable');
+          setDsAuditError(opts.description ?? opts.title);
           setDsAuditIssues(null);
           return;
         }
@@ -413,7 +415,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
         if (!hasFileKey && !hasFileJson) {
           setShowReceipt(false);
-          const saveMsg = (msg as { error?: string }).error || 'Save the file to run the audit.';
+          const saveMsg = (msg as { error?: string }).error || 'FILE_LINK_UNAVAILABLE';
           const isA11y = payload.pendingScanType === 'A11Y';
           showAuditError(saveMsg, isA11y);
           return;
@@ -488,7 +490,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           } catch (err) {
             let message = err instanceof Error ? err.message : 'Something went wrong';
             if (/timeout|504|timed out/i.test(message)) {
-              message = 'L\'audit ha impiegato troppo tempo. Prova con una singola pagina o una selezione più piccola.';
+              message = 'Audit timed out. Try a single page or smaller selection.';
             }
             setAuditError(message);
           } finally {
@@ -585,7 +587,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               credits_consumed: cost,
             });
             if (result.error) {
-              setAuditFixError(result.error === 'Insufficient credits' ? 'Crediti insufficienti. Upgrade o riprova più tardi.' : result.error);
+              setAuditFixError(result.error === 'Insufficient credits' ? 'Insufficient credits. Upgrade or try again later.' : result.error);
               return;
             }
             applySingleFix(id);
@@ -625,7 +627,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               credits_consumed: totalCredits,
             });
             if (result.error) {
-              setAuditFixError(result.error === 'Insufficient credits' ? 'Crediti insufficienti. Upgrade o riprova più tardi.' : result.error);
+              setAuditFixError(result.error === 'Insufficient credits' ? 'Insufficient credits. Upgrade or try again later.' : result.error);
               return;
             }
             const newFixed = new Set(fixedIds);
@@ -825,10 +827,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
       {((activeTab === 'DS' && dsAuditError && isFigmaConnectionError(dsAuditError)) || (activeTab === 'A11Y' && a11yAuditError && isFigmaConnectionError(a11yAuditError))) && (
         <div className="py-2 px-3 bg-amber-100 border-2 border-amber-600 text-amber-900 text-[10px] font-bold uppercase flex flex-col gap-2">
-          <span>La connessione non è completa. Riprova tra poco.</span>
+          <span>Connection isn't complete. Try again in a moment.</span>
           {onRetryConnection && (
             <button type="button" onClick={onRetryConnection} className="w-fit py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
-              Riprova
+              Retry
             </button>
           )}
         </div>

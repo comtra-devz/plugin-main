@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BRUTAL, COLORS } from '../constants';
 import { UserPlan } from '../types';
+import { getSystemToastOptions } from '../lib/errorCopy';
 
 interface Props { 
   plan: UserPlan; 
@@ -173,7 +174,8 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
     const { fileKey, error: ctxError } = await requestFileContext();
     if (ctxError || !fileKey) {
       setLoading(false);
-      setGenError(ctxError || 'Salva il file per generare.');
+      const opts = getSystemToastOptions('file_link_unavailable');
+      setGenError(opts.description ?? opts.title);
       return;
     }
 
@@ -189,7 +191,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
       });
       const actionPlan = data?.action_plan;
       if (!actionPlan) {
-        setGenError('Risposta non valida.');
+        setGenError('Invalid response from server.');
         setLoading(false);
         return;
       }

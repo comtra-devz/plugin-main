@@ -12,6 +12,7 @@ import {
   tokenForestToDTCG,
   type FigmaDesignTokensPayload
 } from '../services/tokenGeneration';
+import { getSystemToastOptions } from '../lib/errorCopy';
 
 interface Props {
   plan: UserPlan;
@@ -168,7 +169,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         const hasFileKey = !!msg.fileKey;
         const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
         if (!hasFileKey && !hasFileJson) {
-          setSyncScanError(msg.error || 'Save the file to run the scan.');
+          const opts = getSystemToastOptions('file_link_unavailable');
+          setSyncScanError(opts.description ?? opts.title);
           setIsSyncScanning(false);
           return;
         }
@@ -440,7 +442,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       }
       const consumeResult = await consumeCredits({ action_type: 'scan_sync', credits_consumed: cost });
       if (consumeResult.error) {
-        setSyncScanError(consumeResult.error === 'Insufficient credits' ? 'Crediti insufficienti' : consumeResult.error);
+        setSyncScanError(consumeResult.error === 'Insufficient credits' ? 'Insufficient credits' : consumeResult.error);
         setIsSyncScanning(false);
         pendingSyncScanRef.current = false;
         if (consumeResult.error === 'Insufficient credits') onUnlockRequest();

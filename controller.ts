@@ -179,7 +179,7 @@ figma.ui.onmessage = async (raw: any) => {
     };
   }
 
-  // File context: for "current" selection we send fileJson from plugin (no token needed, worked always). For all/page we send only identifiers and backend fetches via REST API.
+  // File context: for "current" selection we send fileJson from plugin (no token needed). For all/page we send identifiers and backend fetches via REST API (requires fileKey).
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
@@ -215,7 +215,7 @@ figma.ui.onmessage = async (raw: any) => {
         }
 
         if (!base.fileKey) {
-          figma.ui.postMessage({ type: 'file-context-result', ...base, error: 'Save the file to run the audit.' });
+          figma.ui.postMessage({ type: 'file-context-result', ...base, error: 'FILE_LINK_UNAVAILABLE' });
           return;
         }
         if (scope === 'all') {

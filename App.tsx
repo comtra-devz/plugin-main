@@ -287,15 +287,15 @@ export default function AppTest() {
       const data = await res.json();
       const authUrl = data?.authUrl;
       const readKey = data?.readKey;
-      if (!authUrl || !readKey) throw new Error('Risposta server non valida');
+      if (!authUrl || !readKey) throw new Error('Invalid server response');
       setOauthReadKey(readKey);
       window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl } }, '*');
     } catch (e) {
       setOauthInProgress(false);
-      const msg = e instanceof Error ? e.message : 'Errore di connessione';
+      const msg = e instanceof Error ? e.message : 'Connection error';
       const isNetwork = msg === 'Failed to fetch' || /fetch|network|CORS/i.test(msg);
       setLoginError(isNetwork
-        ? `Impossibile contattare il server (${msg}). Controlla che auth.comtra.dev sia online e che il plugin sia stato ricaricato dopo il build.`
+        ? `Could not reach the server (${msg}). Check that auth.comtra.dev is up and that you reloaded the plugin after building.`
         : msg);
     }
   }, []);
@@ -313,7 +313,7 @@ export default function AppTest() {
           setOauthReadKey(null);
           clearInterval(interval);
           setOauthInProgress(false);
-          setLoginError('Qualcosa non è andato a buon fine. Riprova il login.');
+          setLoginError('Login didn\'t go through. Try again.');
           return;
         }
         if (data?.user) {
@@ -321,7 +321,7 @@ export default function AppTest() {
           clearInterval(interval);
           setOauthInProgress(false);
           if (data.tokenSaved === false) {
-            setLoginError('Qualcosa non è andato a buon fine. Riprova il login.');
+            setLoginError('Login didn\'t go through. Try again.');
             return;
           }
           window.parent.postMessage({ pluginMessage: { type: 'oauth-complete', user: data.user } }, '*');
@@ -338,7 +338,7 @@ export default function AppTest() {
     setSimulatedCredits(null);
     setShowProfile(false);
     setShowLogin(true);
-    setLogoutToast('Hai effettuato la disconnessione, torna presto a trovarci!');
+    setLogoutToast('You\'re logged out. See you next time!');
     setView(ViewState.AUDIT);
     setGenPrompt('');
   };
@@ -367,7 +367,7 @@ export default function AppTest() {
   /** Debug: call token-status endpoint and show result (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
   const handleCheckTokenStatus = React.useCallback(async () => {
     if (!user?.authToken) {
-      alert('Non sei loggato. Fai Log in with Figma.');
+      alert('You\'re not logged in. Use Log in with Figma.');
       return;
     }
     const url = `${AUTH_BACKEND_URL}/api/figma/token-status`;
@@ -381,23 +381,23 @@ export default function AppTest() {
       const reason = data.reason;
       let msg: string;
       if (hasToken) {
-        msg = 'Token Figma: presente e valido.';
+        msg = 'Figma token: present and valid.';
       } else if (reason === 'figma_rejected') {
-        msg = 'Il token in DB non è più accettato da Figma (revocato o scaduto).\n\nFai Logout e poi Log in with Figma per ottenere un nuovo token.';
+        msg = 'The token in DB is no longer accepted by Figma (revoked or expired).\n\nLog out then Log in with Figma to get a new token.';
       } else if (reason) {
-        msg = `Token Figma: assente o non valido.\nreason: ${reason}\n\nFai Logout e poi Log in with Figma. Vedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md`;
+        msg = `Figma token: missing or invalid.\nreason: ${reason}\n\nLog out then Log in with Figma. See docs/FIGMA-TOKEN-TROUBLESHOOTING.md`;
       } else {
-        msg = `Token Figma: assente o non valido.\n\nFai Logout e poi Log in with Figma. Controlla i log del backend per "figma_tokens save failed".`;
+        msg = 'Figma token: missing or invalid.\n\nLog out then Log in with Figma. Check backend logs for "figma_tokens save failed".';
       }
       alert(msg);
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       alert(
-        'Errore di rete: ' +
+        'Network error: ' +
           errMsg +
           '\n\nURL: ' +
           url +
-          '\n\nPossibili cause: backend non raggiungibile, CORS, o URL errata. Vedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md (sezione "Failed to fetch").'
+          '\n\nPossible causes: backend unreachable, CORS, or wrong URL. See docs/FIGMA-TOKEN-TROUBLESHOOTING.md ("Failed to fetch" section).'
       );
     }
   }, [user?.authToken]);
@@ -476,7 +476,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(body),
     });
-    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
+    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -501,7 +501,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
-    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
+    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -526,7 +526,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
-    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
+    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -551,7 +551,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
-    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
+    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       const msg = data.error || `Sync scan failed (${r.status})`;
@@ -572,7 +572,7 @@ export default function AppTest() {
         ds_source: body.ds_source || 'custom',
       }),
     });
-    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
+    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;

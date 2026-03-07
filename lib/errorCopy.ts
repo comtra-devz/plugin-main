@@ -67,6 +67,12 @@ const COPY: Record<string, SystemToastOptions> = {
     description: 'Comtra needs a saved file to work with. Hit ⌘S and try again.',
     variant: 'info',
   },
+  /** When figma.fileKey is unavailable (all/page scope). Don't say "save" — Figma auto-saves. */
+  file_link_unavailable: {
+    title: 'File link not available',
+    description: "For \"All pages\" or \"Single page\" we need a Figma file link. Use Current selection to run the audit, or open a file that's in your Figma account.",
+    variant: 'info',
+  },
   // 4 — Credits
   out_of_credits: {
     title: 'Out of credits',
@@ -213,11 +219,11 @@ export function isRetriableError(messageOrStatus: string | number): boolean {
   return /timeout|timed out|504|503|busy|try again|retry/i.test(m);
 }
 
-/** File-not-saved style message: show only inline banner, no toast (per spec). */
+/** File-context unavailable (no fileKey for all/page, or legacy "save the file"): show only inline banner, no toast (per spec). */
 export function isFileNotSavedError(message: string | null): boolean {
   if (!message) return false;
   const m = message.toLowerCase();
-  return m.includes('save the file') || m.includes('salva il file') || m.includes('saved file');
+  return m.includes('file_link_unavailable') || m.includes('save the file') || m.includes('salva il file') || m.includes('saved file');
 }
 
 /** Figma/token reconnect: show single toast, not banner (per spec). */

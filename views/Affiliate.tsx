@@ -35,7 +35,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
           setAffiliateCode(null);
         }
       } catch (e) {
-        if (!cancelled) setError('Impossibile caricare il programma affiliati.');
+        if (!cancelled) setError('Could not load the affiliate program.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -58,10 +58,10 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
         setAffiliateCode(data.affiliate_code);
         setTotalReferrals(0);
       } else {
-        setError(data.error || 'Registrazione fallita.');
+        setError(data.error || 'Registration failed.');
       }
     } catch {
-      setError('Registrazione fallita.');
+      setError('Registration failed.');
     } finally {
       setRegistering(false);
     }
@@ -120,7 +120,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
           <p className="text-sm text-gray-500">Caricamento…</p>
         ) : !affiliateCode ? (
           <div className="bg-[#f0f0f0] border-2 border-black p-4">
-            <p className="text-xs text-gray-600 mb-2">Non hai ancora un codice affiliato. Registrati in un click.</p>
+            <p className="text-xs text-gray-600 mb-2">You don't have an affiliate code yet. Sign up in one click.</p>
             <button
               onClick={handleGetCode}
               disabled={registering}
@@ -132,7 +132,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
         ) : (
           <>
             <div className="bg-[#f0f0f0] border-2 border-black p-4 mb-4">
-              <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Il tuo codice</label>
+              <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Your code</label>
               <code className="block bg-white border border-gray-400 p-2 font-mono text-sm font-bold">{affiliateCode}</code>
             </div>
             <div className="border-t-2 border-dashed border-black pt-4">

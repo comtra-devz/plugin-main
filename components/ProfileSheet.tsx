@@ -37,7 +37,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
         )}
         {simulateFreeTier && creditsLabel.includes('—') && (
           <p data-component="Profile: Simulate Free Tier Sync Hint" className="text-[10px] font-bold mt-2 bg-white/90 border border-black px-2 py-1">
-            Con Simula Free Tier attivo servono i crediti dal server: effettua di nuovo il <strong>login</strong> (Logout poi Login with Figma) per vedere i 25 crediti free.
+            With Simulate Free Tier on, credits come from the server: <strong>log in</strong> again (Log out then Log in with Figma) to see the 25 free credits.
           </p>
         )}
       </div>
@@ -66,7 +66,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
             <p className="text-[9px] text-gray-500 mt-1">ON = limiti reali (25 credits, paywall a 0)</p>
             {usingSimulatedCredits && onResetSimulatedCredits && (
               <button type="button" onClick={onResetSimulatedCredits} className="text-[9px] font-bold text-gray-600 underline mt-1 hover:text-black">
-                Reset 25 crediti simulati
+                Reset 25 simulated credits
               </button>
             )}
           </div>

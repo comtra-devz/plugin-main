@@ -64,7 +64,7 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
               <div className="text-4xl mb-2">⚡</div>
               <h2 className="text-xl font-black uppercase mb-2 text-red-600">Credits esauriti</h2>
               <p className="text-xs text-gray-600 mb-4 font-medium">
-                 Hai usato tutti i {totalCredits} credits del ciclo attuale. Passa a PRO per continuare.
+                 You've used all {totalCredits} credits in your current cycle. Upgrade to PRO to continue.
               </p>
               <button data-component="Subscription: Warning Upgrade Button" onClick={onUpgrade} className={`${BRUTAL.btn} w-full bg-[#ffc900] mb-2`}>
                  Passa a PRO
