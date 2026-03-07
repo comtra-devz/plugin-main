@@ -12,8 +12,8 @@ export interface ToastOptions {
   actions?: ToastAction[];
   /** Se true, mostra un pulsante Chiudi per chiudere il toast. Default true. */
   dismissible?: boolean;
-  /** 'error' = sfondo rosso come il banner errore (nessun duplicato con banner inline). */
-  variant?: 'default' | 'error';
+  /** error = red, warning = amber (temporary/retriable), info = blue/gray, default = white */
+  variant?: 'default' | 'error' | 'warning' | 'info';
 }
 
 export interface ToastItem extends ToastOptions {

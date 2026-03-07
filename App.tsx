@@ -18,6 +18,7 @@ import { ProfileSheet } from './components/ProfileSheet';
 import { useToast } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
+import { getSystemToastOptions } from './lib/errorCopy';
 import type { FetchFigmaFileBody } from './views/Audit/AuditView';
 
 export interface CreditsState {
@@ -147,29 +148,37 @@ export default function AppTest() {
     }
     const elapsed = now - (firstThrottleAtRef.current ?? now);
     const showDiscountCta = elapsed >= THROTTLE_DISCOUNT_WINDOW_MS;
+    const opts = getSystemToastOptions('service_unavailable');
     showToast({
-      title: 'Servizio temporaneamente non disponibile',
-      description: showDiscountCta
-        ? "L'errore persiste da oltre 15 minuti. Hai diritto a un codice sconto del 5% (una tantum, valido una settimana)."
-        : 'Riprova più tardi.',
-      variant: 'error',
+      ...opts,
       dismissible: true,
       ...(showDiscountCta && {
+        title: 'Comtra is taking a breather',
+        description: 'The outage has lasted a while. You can request a 5% discount code below.',
         actions: [
           {
-            label: 'Richiedi codice sconto',
+            label: 'Request discount code',
             onClick: async () => {
+              const first = firstThrottleAtRef.current ?? 0;
+              if (Date.now() - first < THROTTLE_DISCOUNT_WINDOW_MS) {
+                const notReady = getSystemToastOptions('throttle_code_not_ready');
+                showToast({ ...notReady, dismissible: true });
+                return;
+              }
               if (!user?.authToken) return;
               try {
                 const r = await fetch(`${AUTH_BACKEND_URL}/api/throttle-discount`, { method: 'POST', headers: { Authorization: `Bearer ${user.authToken}` } });
                 const data = await r.json().catch(() => ({}));
                 if (data.code) {
-                  showToast({ title: 'Codice sconto 5%', description: `Usa il codice: ${data.code}. Valido una settimana.`, variant: 'default', dismissible: true });
+                  const ok = getSystemToastOptions('throttle_discount_ok', { code: data.code });
+                  showToast({ ...ok, description: ok.description, dismissible: true });
                 } else {
-                  showToast({ title: 'Errore', description: data.error || 'Non disponibile', variant: 'error', dismissible: true });
+                  const fail = getSystemToastOptions('throttle_code_failed');
+                  showToast({ ...fail, dismissible: true });
                 }
               } catch {
-                showToast({ title: 'Errore', description: 'Riprova più tardi.', variant: 'error', dismissible: true });
+                const fail = getSystemToastOptions('throttle_code_failed');
+                showToast({ ...fail, dismissible: true });
               }
             },
           },

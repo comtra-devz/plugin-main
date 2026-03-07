@@ -58,27 +58,10 @@ interface Props {
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
-const isTokenRelatedError = (msg: string | null) =>
-  msg != null && (
-    msg.toLowerCase().includes('no figma token') ||
-    msg.toLowerCase().includes('re-login') ||
-    msg.toLowerCase().includes('figma non connesso') ||
-    msg.toLowerCase().includes('riconnetti figma')
-  );
+import { getSystemToastOptions, isFileNotSavedError, isFigmaConnectionError } from '../../lib/errorCopy';
 
 export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit }) => {
   const { showToast } = useToast();
-  const showAuditErrorToast = useCallback(
-    (message: string, isA11y: boolean) => {
-      const title = isA11y ? 'Errore A11Y' : 'Errore Design System';
-      const actions: { label: string; onClick: () => void }[] = [];
-      if (isTokenRelatedError(message)) {
-        if (onRetryConnection) actions.push({ label: 'Riprova', onClick: onRetryConnection });
-      }
-      showToast({ title, description: 'La connessione non è completa. Riprova tra poco.', actions, dismissible: true, variant: 'error' });
-    },
-    [showToast, onRetryConnection]
-  );
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -175,9 +158,52 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   // When parent signals token verified (e.g. after "Verifica token" success), clear token-related audit errors immediately
   useEffect(() => {
     if (tokenVerifiedAt == null) return;
-    setDsAuditError(prev => (isTokenRelatedError(prev) ? null : prev));
-    setA11yAuditError(prev => (isTokenRelatedError(prev) ? null : prev));
+    setDsAuditError(prev => (prev != null && isFigmaConnectionError(prev) ? null : prev));
+    setA11yAuditError(prev => (prev != null && isFigmaConnectionError(prev) ? null : prev));
   }, [tokenVerifiedAt]);
+
+  /** One surface per error: file not saved = banner only; connection/Figma = toast only; others = toast only (no duplicate banner). */
+  const showAuditError = useCallback(
+    (message: string, isA11y: boolean) => {
+      setPendingScanType(null);
+      setWaitingForFileContext(false);
+      if (isA11y) {
+        setA11yAuditLoading(false);
+        if (isFileNotSavedError(message)) {
+          setA11yAuditError(message);
+          return;
+        }
+        setA11yAuditError(null);
+      } else {
+        setDsAuditLoading(false);
+        if (isFileNotSavedError(message)) {
+          setDsAuditError(message);
+          setDsAuditIssues(null);
+          return;
+        }
+        setDsAuditError(null);
+        setDsAuditIssues(null);
+      }
+      if (isFigmaConnectionError(message)) {
+        const opts = getSystemToastOptions('figma_connection_lost');
+        showToast({
+          ...opts,
+          dismissible: true,
+          actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Reconnect Figma', onClick: onRetryConnection }] : [],
+        });
+        return;
+      }
+      const opts = /timeout|504|timed out/i.test(message)
+        ? getSystemToastOptions('audit_timed_out')
+        : getSystemToastOptions('audit_couldnt_start');
+      showToast({
+        ...opts,
+        dismissible: true,
+        actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
+      });
+    },
+    [showToast, onRetryConnection]
+  );
 
   const isPro = plan === 'PRO';
   const infiniteForTest = !!useInfiniteCreditsForTest;
@@ -363,19 +389,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         try {
           fileJson = JSON.parse(parts.join('')) as object;
         } catch {
-          setWaitingForFileContext(false);
           const payload = confirmPayloadRef.current;
           const msg = 'Invalid data received. Try again.';
           const isA11y = payload?.pendingScanType === 'A11Y';
-          if (isA11y) {
-            setA11yAuditError(msg);
-            setA11yAuditLoading(false);
-          } else {
-            setDsAuditError(msg);
-            setDsAuditIssues(null);
-          }
-          if (payload) showAuditErrorToast(msg, isA11y);
-          setPendingScanType(null);
+          if (payload) showAuditError(msg, isA11y);
           return;
         }
         msg = { type: 'file-context-result', ...state.meta, fileJson };
@@ -387,36 +404,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         confirmPayloadRef.current = null;
         if (msg.error) {
           setShowReceipt(false);
-          setWaitingForFileContext(false);
           const errMsg = String(msg.error);
           const isA11y = payload.pendingScanType === 'A11Y';
-          if (isA11y) {
-            setA11yAuditError(errMsg);
-            setA11yAuditLoading(false);
-          } else {
-            setDsAuditError(errMsg);
-            setDsAuditIssues(null);
-          }
-          showAuditErrorToast(errMsg, isA11y);
-          setPendingScanType(null);
+          showAuditError(errMsg, isA11y);
           return;
         }
         const hasFileKey = !!msg.fileKey;
         const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
         if (!hasFileKey && !hasFileJson) {
           setShowReceipt(false);
-          setWaitingForFileContext(false);
-          const saveMsg = msg.error || 'Save the file to run the audit.';
+          const saveMsg = (msg as { error?: string }).error || 'Save the file to run the audit.';
           const isA11y = payload.pendingScanType === 'A11Y';
-          if (isA11y) {
-            setA11yAuditError(saveMsg);
-            setA11yAuditLoading(false);
-          } else {
-            setDsAuditError(saveMsg);
-            setDsAuditIssues(null);
-          }
-          showAuditErrorToast(saveMsg, isA11y);
-          setPendingScanType(null);
+          showAuditError(saveMsg, isA11y);
           return;
         }
         const isA11yScan = payload.pendingScanType === 'A11Y';
@@ -436,18 +435,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             };
 
         const setAuditError = (message: string) => {
-          if (isA11yScan) {
-            setA11yAuditError(message);
-            setA11yAuditLoading(false);
-            // Do not clear a11yAuditIssues: keep previous results so the user stays on the results view and can retry or change scope
-          } else {
-            setDsAuditError(message);
-            setDsAuditIssues(null);
-            setDsAuditLoading(false);
-          }
-          showAuditErrorToast(message, isA11yScan);
-          setPendingScanType(null);
-          setWaitingForFileContext(false);
+          showAuditError(message, isA11yScan);
         };
 
         (async () => {
@@ -514,7 +502,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditErrorToast]);
+  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditError]);
 
   const handleStartScan = useCallback(() => {
     if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
@@ -835,7 +823,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         </div>
       )}
 
-      {((activeTab === 'DS' && dsAuditError && isTokenRelatedError(dsAuditError)) || (activeTab === 'A11Y' && a11yAuditError && isTokenRelatedError(a11yAuditError))) && (
+      {((activeTab === 'DS' && dsAuditError && isFigmaConnectionError(dsAuditError)) || (activeTab === 'A11Y' && a11yAuditError && isFigmaConnectionError(a11yAuditError))) && (
         <div className="py-2 px-3 bg-amber-100 border-2 border-amber-600 text-amber-900 text-[10px] font-bold uppercase flex flex-col gap-2">
           <span>La connessione non è completa. Riprova tra poco.</span>
           {onRetryConnection && (

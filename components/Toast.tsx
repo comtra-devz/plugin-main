@@ -8,9 +8,37 @@ interface Props {
   description?: string;
   actions?: ToastAction[];
   dismissible?: boolean;
-  variant?: 'default' | 'error';
+  variant?: 'default' | 'error' | 'warning' | 'info';
   onDismiss: () => void;
 }
+
+const variantStyles = {
+  default: 'bg-white border-black text-black',
+  error: 'bg-red-100 border-red-500 text-red-800',
+  warning: 'bg-amber-100 border-amber-600 text-amber-900',
+  info: 'bg-sky-50 border-sky-600 text-sky-800',
+};
+
+const variantTextStyles = {
+  default: 'text-black',
+  error: 'text-red-800',
+  warning: 'text-amber-900',
+  info: 'text-sky-800',
+};
+
+const variantDescStyles = {
+  default: 'text-gray-700',
+  error: 'text-red-700',
+  warning: 'text-amber-800',
+  info: 'text-sky-700',
+};
+
+const variantBorderStyles = {
+  default: 'border-black/10',
+  error: 'border-red-300',
+  warning: 'border-amber-300',
+  info: 'border-sky-200',
+};
 
 export const Toast: React.FC<Props> = ({
   title,
@@ -20,19 +48,20 @@ export const Toast: React.FC<Props> = ({
   variant = 'default',
   onDismiss,
 }) => {
-  const isError = variant === 'error';
+  const v = variantStyles[variant];
+  const titleCls = variantTextStyles[variant];
+  const descCls = variantDescStyles[variant];
+  const actionBorder = variantBorderStyles[variant];
   return (
     <div
       role="alert"
-      className={`border-2 shadow-[4px_4px_0_0_#000] p-3 max-w-full animate-in slide-in-from-bottom-2 duration-200 ${
-        isError ? 'bg-red-100 border-red-500 text-red-800' : 'bg-white border-black'
-      }`}
+      className={`border-2 shadow-[4px_4px_0_0_#000] p-3 max-w-full animate-in slide-in-from-bottom-2 duration-200 ${v}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className={`text-xs font-black uppercase ${isError ? 'text-red-800' : 'text-black'}`}>{title}</p>
+          <p className={`text-xs font-black uppercase ${titleCls}`}>{title}</p>
           {description && (
-            <p className={`text-[10px] mt-1 leading-relaxed ${isError ? 'text-red-700' : 'text-gray-700'}`}>{description}</p>
+            <p className={`text-[10px] mt-1 leading-relaxed ${descCls}`}>{description}</p>
           )}
         </div>
         {dismissible && (
@@ -47,7 +76,7 @@ export const Toast: React.FC<Props> = ({
         )}
       </div>
       {actions.length > 0 && (
-        <div className={`flex flex-wrap items-center gap-2 mt-3 pt-2 border-t ${isError ? 'border-red-300' : 'border-black/10'}`}>
+        <div className={`flex flex-wrap items-center gap-2 mt-3 pt-2 border-t ${actionBorder}`}>
           {actions.map((a, i) => (
             <button
               key={i}
