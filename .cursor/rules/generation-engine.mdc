@@ -1,0 +1,26 @@
+---
+description: Generation Engine — regole e contesto per la tab Generate e il backend di generazione
+globs: views/Generate*.tsx, services/geminiService*.ts, **/generation*.ts, **/generate*.ts
+alwaysApply: false
+---
+
+# Generation Engine (Comtra)
+
+Quando lavori su **Generate** (UI plugin), sul **servizio di generazione** (geminiService, backend che chiama Kimi/Claude) o sull’**esecuzione dell’action plan** in Figma, rispetta la ruleset ufficiale.
+
+## Riferimento
+
+- **Ruleset completa:** `docs/GENERATION-ENGINE-RULESET.md`
+- **Spec UI placeholder:** `docs/GENERATE-TAB-SPEC.md`
+
+Leggi la ruleset per: regole per modo (Create / Modify copy / Screenshot / Link), governance (solo componenti DS, solo variabili, auto-layout), schema JSON dell’action plan, validazione V-GEN-*, crediti e tier di complessità.
+
+## Principi da non violare
+
+1. **“Refine, Don’t Redraw”** — Il motore assembla da DS esistente; non inventa componenti o token.
+2. **Output Figma nativo** — Solo nodi standard Figma (Dev Mode, Code, Audit, Stats compatibili).
+3. **Niente hardcoded** — Colori, spacing, font solo tramite variabili/token del DS.
+4. **Modi distinti** — Mode 1: no selection (crea da zero). Mode 2: selection (clona e modifica copia). Mode 3: upload screenshot (pixel-to-DS). Mode 4: link Figma (riferimento struttura, rebuild con DS corrente).
+5. **Crediti** — Stima prima (ScanReceiptModal), detrazione solo dopo canvas render riuscito; fallimento = nessun addebito.
+
+Quando implementi o modifichi logica di generazione, allinea payload, validazione e messaggi utente alla ruleset.
