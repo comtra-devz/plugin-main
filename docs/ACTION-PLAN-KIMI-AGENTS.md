@@ -231,6 +231,8 @@ Piano dettagliato: **docs/A11Y-AUDIT-PLAN.md** (ruolo di Kimi vs backend, contra
 
 ## Fase 6 — Generate Agent (wireframe, varianti)
 
+**Stato v1:** Implementato. Endpoint **POST /api/agents/generate** (Kimi only), prompt `generate-system.md`, plugin: tab Generate chiama backend con file_key/prompt/mode/ds_source; crediti 3 (standard); action plan JSON restituito e mostrato in report. Esecuzione action plan su canvas Figma (CREATE_FRAME, INSTANCE_COMPONENT, …) prevista in iterazione successiva. Regole: `docs/GENERATION-ENGINE-RULESET.md`, fattibilità: `docs/GENERATION-ENGINE-FEASIBILITY.md`.
+
 ### 6.1 Definire funzionalità
 
 | Step | Azione | Output |
@@ -239,7 +241,7 @@ Piano dettagliato: **docs/A11Y-AUDIT-PLAN.md** (ruolo di Kimi vs backend, contra
 | 6.1.2 | Varianti da componenti base | Specifica |
 | 6.1.3 | Layout suggestions | Specifica |
 
-**Materiale da produrre:** `docs/GENERATE-AGENT-SPEC.md`
+**Materiale da produrre:** `docs/GENERATE-AGENT-SPEC.md` (opzionale; ruleset in GENERATION-ENGINE-RULESET.md)
 
 ---
 
@@ -252,7 +254,7 @@ Piano dettagliato: **docs/A11Y-AUDIT-PLAN.md** (ruolo di Kimi vs backend, contra
 | UX Audit | `audit-specs/ux-audit/` (da creare) | `ux-audit-system.md` | `/api/agents/ux-audit` | Priorità 3 |
 | Prototype Audit | `audit-specs/proto-audit/` (da creare) | `proto-audit-system.md` | `/api/agents/proto-audit` | Priorità 4 |
 | Code Gen | `audit-specs/code-gen/` o `docs/CODE-AGENT-SPEC.md` | `code-gen-system.md` | `/api/agents/code-gen` | Priorità 5 |
-| Generate | `audit-specs/generate/` o `docs/GENERATE-AGENT-SPEC.md` | `generate-system.md` | `/api/agents/generate` | Priorità 6 |
+| Generate | `docs/GENERATION-ENGINE-RULESET.md` | `generate-system.md` | `/api/agents/generate` | **v1 attivo** (Kimi only) |
 
 ---
 

@@ -111,6 +111,7 @@ app.get('/auth/figma/start', (req, res) => {
 app.get('/auth/figma/callback', async (req, res) => {
   const { code, state: flowId } = req.query;
   const cookieFlow = req.cookies?.figma_oauth_flow;
+  const countryCode = (req.headers['x-vercel-ip-country'] || '').toString().toUpperCase().trim().slice(0, 2) || null;
   if (!flowId) return res.status(400).send('Invalid state (missing)');
 
   const store = await getFlowStore();
@@ -171,12 +172,13 @@ app.get('/auth/figma/callback', async (req, res) => {
     try {
       await withTransaction(async (tx) => {
         await tx`
-          INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, updated_at)
-          VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, NOW())
+          INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, updated_at)
+          VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, NOW())
           ON CONFLICT (id) DO UPDATE SET
             email = EXCLUDED.email,
             name = EXCLUDED.name,
             img_url = EXCLUDED.img_url,
+            country_code = COALESCE(EXCLUDED.country_code, users.country_code),
             updated_at = NOW()
         `;
         await tx`
@@ -198,12 +200,13 @@ app.get('/auth/figma/callback', async (req, res) => {
     console.warn('OAuth callback: withTransaction not available, falling back to non-atomic save');
     try {
       await dbSql`
-        INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, updated_at)
-        VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, NOW())
+        INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, updated_at)
+        VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, NOW())
         ON CONFLICT (id) DO UPDATE SET
           email = EXCLUDED.email,
           name = EXCLUDED.name,
           img_url = EXCLUDED.img_url,
+          country_code = COALESCE(EXCLUDED.country_code, users.country_code),
           updated_at = NOW()
       `;
       const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
@@ -1072,6 +1075,117 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     res.json({ issues });
   } catch (err) {
     console.error('POST /api/agents/ds-audit', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Generate agent (Kimi): file_key + prompt → action plan JSON
+const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
+
+app.post('/api/agents/generate', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const fileKey = (body.file_key || body.fileKey || '').trim();
+  const prompt = (body.prompt || body.promptText || '').trim();
+  const mode = body.mode || 'create';
+  const dsSource = body.ds_source || body.dsSource || 'custom';
+
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  if (!prompt) return res.status(400).json({ error: 'prompt required' });
+  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+
+  let systemPrompt;
+  try {
+    systemPrompt = readFileSync(GENERATE_PROMPT_PATH, 'utf8');
+    if (!systemPrompt || systemPrompt.length === 0) throw new Error('empty');
+  } catch (e) {
+    console.error('Generate: failed to read prompt', GENERATE_PROMPT_PATH, e?.message);
+    return res.status(500).json({ error: 'System prompt not found' });
+  }
+
+  try {
+    let accessToken = await getFigmaAccessToken(dbSql, userId);
+    if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
+    if (!accessToken) {
+      return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
+    }
+    let fileJson;
+    let fetchErr = null;
+    try {
+      fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, 'all', null, null, null);
+    } catch (err) {
+      fetchErr = err;
+    }
+    if (fetchErr?.message?.includes('re-login')) {
+      const newToken = await forceRefreshFigmaToken(userId);
+      if (newToken) {
+        try {
+          fileJson = await fetchFigmaFileForAudit(newToken, fileKey, 'all', null, null, null);
+          fetchErr = null;
+        } catch (e) {
+          fetchErr = e;
+        }
+      }
+    }
+    if (fetchErr || !fileJson) {
+      const msg = fetchErr?.message || 'Figma API error';
+      if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
+      return res.status(400).json({ error: msg });
+    }
+
+    const pageCount = fileJson?.document?.children?.length ?? 0;
+    const contextBlob = `Mode: ${mode}. DS: ${dsSource}. File has ${pageCount} page(s). Use only variable references (no raw hex/px).`;
+    const userMessage = `User prompt:\n${prompt}\n\nContext: ${contextBlob}\n\nReturn only the action plan JSON object, no other text.`;
+
+    const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${KIMI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: KIMI_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_tokens: 8192,
+      }),
+    });
+    if (!kimiRes.ok) {
+      const t = await kimiRes.text();
+      console.error('Generate: Kimi API', kimiRes.status, t.slice(0, 300));
+      return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
+    }
+    const kimiData = await kimiRes.json();
+    const content = kimiData?.choices?.[0]?.message?.content;
+    const actionPlan = extractJsonFromContent(content);
+    if (!actionPlan || typeof actionPlan !== 'object') {
+      console.error('Generate: invalid or missing JSON from Kimi');
+      return res.status(502).json({ error: 'Invalid response from AI' });
+    }
+    if (!actionPlan.version || !actionPlan.metadata || !actionPlan.frame || !Array.isArray(actionPlan.actions)) {
+      return res.status(502).json({ error: 'Action plan missing required fields' });
+    }
+
+    if (dbSql) {
+      const usage = kimiData?.usage;
+      const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
+      const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+      if (inputTokens > 0 || outputTokens > 0) {
+        dbSql`
+          INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+          VALUES ('generate', ${inputTokens}, ${outputTokens}, null, ${KIMI_MODEL})
+        `.catch((err) => console.error('Kimi usage log generate failed', err.message));
+      }
+    }
+
+    res.json({ action_plan: actionPlan });
+  } catch (err) {
+    console.error('POST /api/agents/generate', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

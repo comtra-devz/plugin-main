@@ -11,6 +11,7 @@ import WeeklyUpdates from './pages/WeeklyUpdates';
 import SupportRequests from './pages/SupportRequests';
 import SecurityLogs from './pages/SecurityLogs';
 import Health from './pages/Health';
+import Executions from './pages/Executions';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/support" element={<SupportRequests />} />
           <Route path="/security" element={<SecurityLogs />} />
           <Route path="/health" element={<Health />} />
+          <Route path="/executions" element={<Executions />} />
         </Routes>
       </main>
     </div>

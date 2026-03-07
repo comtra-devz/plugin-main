@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   if (!requireAdmin(req, res)) return;
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries' });
 
   if (route === 'weekly-updates') {
     try {
@@ -66,6 +66,9 @@ export default async function handler(req, res) {
     if (route === 'users') return await handleUsers(req, res);
     if (route === 'affiliates') return await handleAffiliates(req, res);
     if (route === 'token-usage') return await handleTokenUsage(req, res);
+    if (route === 'function-executions') return await handleFunctionExecutions(req, res);
+    if (route === 'executions-users') return await handleExecutionsUsers(req, res);
+    if (route === 'users-countries') return await handleUsersCountries(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -227,11 +230,17 @@ async function handleCreditsTimeline(req, res) {
 async function handleUsers(req, res) {
   const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
   const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+  const countryCode = (req.query?.country || '').trim().toUpperCase().slice(0, 2) || null;
 
-  const total = await sql`SELECT COUNT(*)::int AS c FROM users`;
+  const total = await sql`
+    SELECT COUNT(*)::int AS c FROM users
+    WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+  `;
   const rows = await sql`
-    SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, created_at
-    FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+    SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, country_code, created_at
+    FROM users
+    WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+    ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
   `;
   const users = (rows.rows || []).map(r => ({
     id: r.id,
@@ -242,6 +251,7 @@ async function handleUsers(req, res) {
     credits_total: r.credits_total ?? 0,
     credits_used: r.credits_used ?? 0,
     credits_remaining: Math.max(0, (r.credits_total ?? 0) - (r.credits_used ?? 0)),
+    country_code: r.country_code ?? null,
     created_at: r.created_at,
   }));
   res.status(200).json({ total: total.rows[0]?.c ?? 0, limit, offset, users });
@@ -364,6 +374,87 @@ async function handleTokenUsage(req, res) {
     by_size_band: bySizeBand,
     by_day: byDay,
   });
+}
+
+async function handleFunctionExecutions(req, res) {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+  const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+  const actionType = (req.query?.action_type || '').trim() || null;
+  const userId = (req.query?.user_id || '').trim() || null;
+  const countryCode = (req.query?.country || '').trim().toUpperCase().slice(0, 2) || null;
+  let dateFrom = (req.query?.date_from || '').trim() || null;
+  let dateTo = (req.query?.date_to || '').trim() || null;
+  if (dateFrom && !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) dateFrom = null;
+  if (dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) dateTo = null;
+
+  const countResult = await sql`
+    SELECT COUNT(*)::int AS c FROM credit_transactions ct
+    INNER JOIN users u ON u.id = ct.user_id
+    WHERE (ct.action_type = ${actionType} OR ${actionType}::text IS NULL)
+      AND (ct.user_id = ${userId} OR ${userId}::text IS NULL)
+      AND (u.country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      AND (ct.created_at >= ${dateFrom}::date OR ${dateFrom}::text IS NULL)
+      AND (ct.created_at <= (${dateTo}::date + INTERVAL '1 day') OR ${dateTo}::text IS NULL)
+  `;
+  const total = countResult.rows?.[0]?.c ?? 0;
+
+  const rows = await sql`
+    SELECT ct.id, u.email, u.country_code, ct.action_type, ct.credits_consumed, ct.created_at
+    FROM credit_transactions ct
+    INNER JOIN users u ON u.id = ct.user_id
+    WHERE (ct.action_type = ${actionType} OR ${actionType}::text IS NULL)
+      AND (ct.user_id = ${userId} OR ${userId}::text IS NULL)
+      AND (u.country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      AND (ct.created_at >= ${dateFrom}::date OR ${dateFrom}::text IS NULL)
+      AND (ct.created_at <= (${dateTo}::date + INTERVAL '1 day') OR ${dateTo}::text IS NULL)
+    ORDER BY ct.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  const executions = (rows.rows || []).map((r) => ({
+    id: r.id,
+    user_masked: maskEmail(r.email),
+    country_code: r.country_code ?? null,
+    action_type: r.action_type,
+    credits_consumed: r.credits_consumed ?? 0,
+    created_at: r.created_at,
+  }));
+
+  res.status(200).json({ total, limit, offset, executions });
+}
+
+async function handleExecutionsUsers(req, res) {
+  const countryCode = (req.query?.country || '').trim().toUpperCase().slice(0, 2) || null;
+  let dateFrom = (req.query?.date_from || '').trim() || null;
+  let dateTo = (req.query?.date_to || '').trim() || null;
+  if (dateFrom && !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) dateFrom = null;
+  if (dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) dateTo = null;
+
+  const rows = await sql`
+    SELECT DISTINCT ct.user_id, u.email, u.country_code
+    FROM credit_transactions ct
+    INNER JOIN users u ON u.id = ct.user_id
+    WHERE (u.country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      AND (ct.created_at >= ${dateFrom}::date OR ${dateFrom}::text IS NULL)
+      AND (ct.created_at <= (${dateTo}::date + INTERVAL '1 day') OR ${dateTo}::text IS NULL)
+    ORDER BY u.email
+  `;
+
+  const users = (rows.rows || []).map((r) => ({
+    user_id: r.user_id,
+    user_masked: maskEmail(r.email),
+    country_code: r.country_code ?? null,
+  }));
+
+  res.status(200).json({ users });
+}
+
+async function handleUsersCountries(req, res) {
+  const rows = await sql`
+    SELECT DISTINCT country_code FROM users WHERE country_code IS NOT NULL AND country_code != '' ORDER BY country_code
+  `;
+  const countries = (rows.rows || []).map((r) => r.country_code);
+  res.status(200).json({ countries });
 }
 
 /** Conventional commit type -> category */

@@ -50,8 +50,21 @@ I **prompt** (system prompt per Kimi) stanno in **auth-deploy/prompts/** (vedi `
 | **docs/TESTING-INTEGRATIONS.md** | Test e integrazioni (affiliate, referral, simulazioni). |
 | **docs/AFFILIATE.md** | Sistema affiliati e API. |
 | **docs/GAMIFICATION.md** | XP, livelli, trofei, formula. |
-| **docs/COST-ESTIMATE-DS-AUDIT.md** | Stima costi e crediti DS Audit (Kimi, piani, cassa). |
+| **docs/COST-ESTIMATE-DS-AUDIT.md** | Stima costi e crediti DS Audit (Kimi, piani, cassa); include riferimento Generate. |
 | **docs/COST-ESTIMATE-A11Y.md** | Matrice crediti A11Y Audit v1.0 (senza Kimi, bande complessità). |
+
+---
+
+## Generate (wireframe/layout da Design System)
+
+| File | Contenuto |
+|------|-----------|
+| **docs/GENERATION-ENGINE-RULESET.md** | Regole complete: modi, governance, schema action plan, crediti, validazione. |
+| **docs/GENERATION-ENGINE-FEASIBILITY.md** | Fattibilità tecnica (Kimi only, senza Claude), costi, fallimenti. |
+| **docs/GENERATE-TAB-SPEC.md** | Spec UI tab Generate (props, stato, copy, data-attribute). |
+| **auth-deploy/prompts/generate-system.md** | System prompt Kimi per generazione (action plan JSON). |
+
+Endpoint: **POST /api/agents/generate** (file_key, prompt, mode, ds_source). Crediti: 3 (standard); vedi backend `estimateCreditsByAction('generate')`.
 
 ---
 

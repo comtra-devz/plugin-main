@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { BRUTAL, COLORS } from '../constants';
-import { generateDesignSuggestions } from '../services/geminiService';
 import { UserPlan } from '../types';
 
 interface Props { 
@@ -13,6 +12,8 @@ interface Props {
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
+  fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object }>;
+  requestFileContext: () => Promise<{ fileKey: string | null; error?: string | null }>;
 }
 
 const INSPIRATION = [
@@ -32,9 +33,10 @@ const DESIGN_SYSTEMS = [
   "Uber Base Web"
 ];
 
-export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt }) => {
+export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt, fetchGenerate, requestFileContext }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [hasContent, setHasContent] = useState(!!initialPrompt);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -160,19 +162,56 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
     setLoading(true);
     setShowReport(false);
     setConversionSelected(false);
+    setGenError(null);
 
-    const rawText = inputRef.current?.innerText || "";
-    const dsContext = `[Context: ${selectedSystem}] ${rawText}`;
+    const rawText = inputRef.current?.innerText?.trim() || '';
+    if (!rawText) {
+      setLoading(false);
+      return;
+    }
 
-    const result = await generateDesignSuggestions(dsContext);
-    
-    setTimeout(() => {
-        setRes(result);
+    const { fileKey, error: ctxError } = await requestFileContext();
+    if (ctxError || !fileKey) {
+      setLoading(false);
+      setGenError(ctxError || 'Salva il file per generare.');
+      return;
+    }
+
+    const mode = selectedLayer ? 'modify' : 'create';
+    const dsSource = selectedSystem === 'Custom (Current)' ? 'custom' : selectedSystem;
+
+    try {
+      const data = await fetchGenerate({
+        file_key: fileKey,
+        prompt: rawText,
+        mode,
+        ds_source: dsSource,
+      });
+      const actionPlan = data?.action_plan;
+      if (!actionPlan) {
+        setGenError('Risposta non valida.');
         setLoading(false);
-        if (selectedLayer) {
-            setShowReport(true);
-        }
-    }, 2000);
+        return;
+      }
+      const creditsToConsume = (actionPlan.metadata?.estimated_credits ?? 3);
+      const consumed = await consumeCredits({
+        action_type: 'generate',
+        credits_consumed: creditsToConsume,
+        file_id: fileKey,
+      });
+      if (consumed?.error) {
+        setGenError(consumed.error);
+        setLoading(false);
+        return;
+      }
+      setRes(JSON.stringify(actionPlan, null, 2));
+      setShowReport(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setGenError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleViewFigma = () => {
@@ -209,6 +248,14 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
             Credits: {creditsDisplay}
           </div>
       </div>
+
+      {/* Error from generation or file context */}
+      {genError && (
+        <div className="bg-red-50 border-2 border-red-400 p-3 text-[10px] font-medium text-red-800 flex justify-between items-start gap-2">
+          <span>{genError}</span>
+          <button type="button" onClick={() => setGenError(null)} className="font-bold shrink-0" aria-label="Dismiss">✕</button>
+        </div>
+      )}
 
       {/* Info Alert */}
       {!showReport && (
@@ -391,7 +438,15 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                     </div>
                     <div className="flex items-start gap-2">
                         <span className="text-green-500 font-bold">✓</span>
-                        <p className="text-[10px] text-gray-600">Successfully used <strong>3 existing tokens</strong> from your Design System.</p>
+                        <p className="text-[10px] text-gray-600">
+                          Action plan with <strong>{(() => { try { const p = res ? JSON.parse(res) : null; return Array.isArray(p?.actions) ? p.actions.length : 0; } catch { return 0; } })()}</strong> actions.
+                          {res && (
+                            <details className="mt-2">
+                              <summary className="cursor-pointer font-bold uppercase text-[9px]">JSON</summary>
+                              <pre className="mt-1 p-2 bg-gray-100 text-[9px] overflow-x-auto max-h-[200px] overflow-y-auto border border-black">{res}</pre>
+                            </details>
+                          )}
+                        </p>
                     </div>
                     
                     {/* Interactive Selection */}

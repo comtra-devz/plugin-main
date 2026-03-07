@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem } from '../api';
+import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExecutions, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem, type FunctionExecution } from '../api';
 import DualLineChart from '../components/DualLineChart';
 import HealthBadge from '../components/HealthBadge';
 import { PLACEHOLDER_WEEKLY_UPDATES, type UpdateCategory } from '../data/weeklyUpdates';
@@ -20,6 +20,7 @@ export default function Home() {
   const [data, setData] = useState<AdminStats | null>(null);
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
   const [weeklyUpdates, setWeeklyUpdates] = useState<WeeklyUpdateItem[]>([]);
+  const [recentExecutions, setRecentExecutions] = useState<FunctionExecution[]>([]);
   const [chartPeriod, setChartPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,14 @@ export default function Home() {
     fetchWeeklyUpdates(20)
       .then((r) => { if (!cancelled && r.updates?.length) setWeeklyUpdates(r.updates); })
       .catch(() => { if (!cancelled) setWeeklyUpdates(PLACEHOLDER_WEEKLY_UPDATES); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFunctionExecutions(10, 0)
+      .then((r) => { if (!cancelled && r.executions?.length) setRecentExecutions(r.executions); })
+      .catch(() => { if (!cancelled) setRecentExecutions([]); });
     return () => { cancelled = true; };
   }, []);
 
@@ -203,6 +212,45 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      {/* Esecuzioni funzioni — anteprima + link approfondimento */}
+      <section style={{ marginBottom: '2rem' }}>
+        <h2 className="section-title">Esecuzioni funzioni</h2>
+        <div className="brutal-card">
+          <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
+            Ultime esecuzioni (audit, scan, generate, sync…) con utente anonimizzato.
+          </p>
+          {recentExecutions.length > 0 ? (
+            <div className="brutal-table-wrap">
+              <table className="brutal-table" style={{ marginBottom: '0.75rem' }}>
+                <thead>
+                  <tr>
+                    <th>Utente</th>
+                    <th>Tipo</th>
+                    <th>Crediti</th>
+                    <th>Quando</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentExecutions.map((e) => (
+                    <tr key={e.id}>
+                      <td className="mono" style={{ fontSize: '0.8rem' }}>{e.user_masked}</td>
+                      <td className="mono" style={{ fontSize: '0.8rem' }}>{e.action_type}</td>
+                      <td>{e.credits_consumed}</td>
+                      <td style={{ fontSize: '0.8rem' }}>{new Date(e.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>Nessuna esecuzione recente.</p>
+          )}
+          <Link to="/executions" className="brutal-btn primary" style={{ display: 'inline-block' }}>
+            Vedi tutto e filtra per utente / tipo / periodo →
+          </Link>
+        </div>
+      </section>
 
       {/* Weekly Updates — richiamo come concept originale, con CTA */}
       <section style={{ marginBottom: '2rem' }}>

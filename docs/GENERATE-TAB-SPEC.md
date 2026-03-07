@@ -2,6 +2,8 @@
 
 Documento estratto dalla UI placeholder attuale (`views/Generate.tsx`) per mettere in campo la main tab "Generate". Tutte le stringhe, i data-attribute, gli stati e i flussi sono documentati qui.
 
+**Stato implementazione (v1):** La tab Generate è collegata al backend. Il plugin invia `file_key` (tramite `requestFileContext`), `prompt`, `mode`, `ds_source` a **POST /api/agents/generate**; il backend usa Kimi e restituisce un **action plan** JSON. I crediti (3 standard) vengono detratti dopo successo. L’esecuzione delle azioni su canvas Figma (CREATE_FRAME, INSTANCE_COMPONENT, …) è prevista in una successiva iterazione.
+
 ---
 
 ## 1. Props del componente `Generate`

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Layout } from './components/Layout';
 import { Audit } from './views/Audit';
 import { Generate } from './views/Generate';
@@ -186,6 +186,8 @@ export default function AppTest() {
   }, [user?.authToken, user?.id, fetchTrophies]);
 
 
+  const fileContextResolveRef = useRef<((data: { fileKey: string | null; error?: string | null }) => void) | null>(null);
+
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const msg = e.data?.pluginMessage ?? e.data;
@@ -202,6 +204,11 @@ export default function AppTest() {
         setShowLogin(false);
         setOauthInProgress(false);
         setOauthReadKey(null);
+      }
+      if (msg.type === 'file-context-result' && fileContextResolveRef.current) {
+        const resolve = fileContextResolveRef.current;
+        fileContextResolveRef.current = null;
+        resolve({ fileKey: msg.fileKey ?? null, error: msg.error ?? null });
       }
     };
     window.addEventListener('message', onMessage);
@@ -493,6 +500,46 @@ export default function AppTest() {
     return data;
   }, [user?.authToken]);
 
+  const fetchGenerate = useCallback(async (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => {
+    if (!user?.authToken) throw new Error('Unauthorized');
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify({
+        file_key: body.file_key,
+        prompt: body.prompt,
+        mode: body.mode || 'create',
+        ds_source: body.ds_source || 'custom',
+      }),
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        msg = j.error || text;
+      } catch {
+        // keep as-is
+      }
+      throw new Error(msg);
+    }
+    return r.json();
+  }, [user?.authToken]);
+
+  const requestFileContext = useCallback(() => {
+    return new Promise<{ fileKey: string | null; error?: string | null }>((resolve) => {
+      fileContextResolveRef.current = resolve;
+      window.parent.postMessage({ pluginMessage: { type: 'get-file-context', scope: 'all' } }, '*');
+      setTimeout(() => {
+        if (fileContextResolveRef.current) {
+          const r = fileContextResolveRef.current;
+          fileContextResolveRef.current = null;
+          r({ fileKey: null, error: 'Timeout' });
+        }
+      }, 15000);
+    });
+  }, []);
+
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
@@ -584,6 +631,8 @@ export default function AppTest() {
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
             initialPrompt={genPrompt}
+            fetchGenerate={fetchGenerate}
+            requestFileContext={requestFileContext}
           />
         </div>
 

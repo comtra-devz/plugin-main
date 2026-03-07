@@ -3,6 +3,7 @@
 Contiene i **system prompt** usati dal backend quando chiama l’API Moonshot (Kimi). Ogni file `*-system.md` è letto e inviato come messaggio di sistema nella richiesta `POST .../v1/chat/completions`.
 
 - **ds-audit-system.md** — Agente Design System Audit (regole da `audit-specs/ds-audit/`).
+- **generate-system.md** — Agente Generate: action plan JSON (wireframe/layout da DS). Regole: `docs/GENERATION-ENGINE-RULESET.md`.
 - Per altri agenti: creare `a11y-audit-system.md`, `ux-audit-system.md`, ecc.
 
 Dove gestire la knowledge per Moonshot/Kimi: **docs/AUDIT-PIPELINE-AND-KNOWLEDGE.md**.

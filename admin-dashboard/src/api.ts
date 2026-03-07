@@ -28,8 +28,16 @@ export async function fetchCreditsTimeline(period = 30): Promise<CreditsTimeline
   return r.json();
 }
 
-export async function fetchUsers(limit = 50, offset = 0): Promise<AdminUsersResponse> {
-  const r = await fetch(apiUrl('users', { limit, offset }), { headers: headers() });
+export async function fetchUsers(limit = 50, offset = 0, country?: string): Promise<AdminUsersResponse> {
+  const params: Record<string, string | number> = { limit, offset };
+  if (country && country.trim()) params.country = country.trim().toUpperCase().slice(0, 2);
+  const r = await fetch(apiUrl('users', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function fetchUsersCountries(): Promise<{ countries: string[] }> {
+  const r = await fetch(apiUrl('users-countries'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -148,6 +156,7 @@ export interface AdminUser {
   credits_total: number;
   credits_used: number;
   credits_remaining: number;
+  country_code?: string | null;
   created_at: string;
 }
 
@@ -168,4 +177,64 @@ export interface AdminAffiliate {
 export interface AdminAffiliatesResponse {
   total: number;
   affiliates: AdminAffiliate[];
+}
+
+export interface FunctionExecution {
+  id: string;
+  user_masked: string;
+  country_code?: string | null;
+  action_type: string;
+  credits_consumed: number;
+  created_at: string;
+}
+
+export interface FunctionExecutionsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  executions: FunctionExecution[];
+}
+
+export interface ExecutionsUser {
+  user_id: string;
+  user_masked: string;
+  country_code?: string | null;
+}
+
+export interface ExecutionsUsersResponse {
+  users: ExecutionsUser[];
+}
+
+export interface FunctionExecutionsFilters {
+  action_type?: string;
+  date_from?: string;
+  date_to?: string;
+  user_id?: string;
+  country?: string;
+}
+
+export async function fetchFunctionExecutions(
+  limit: number,
+  offset: number,
+  filters?: FunctionExecutionsFilters
+): Promise<FunctionExecutionsResponse> {
+  const params: Record<string, string | number> = { limit, offset };
+  if (filters?.action_type) params.action_type = filters.action_type;
+  if (filters?.date_from) params.date_from = filters.date_from;
+  if (filters?.date_to) params.date_to = filters.date_to;
+  if (filters?.user_id) params.user_id = filters.user_id;
+  if (filters?.country) params.country = filters.country.trim().toUpperCase().slice(0, 2);
+  const r = await fetch(apiUrl('function-executions', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function fetchExecutionsUsers(dateFrom?: string, dateTo?: string, country?: string): Promise<ExecutionsUsersResponse> {
+  const params: Record<string, string> = {};
+  if (dateFrom) params.date_from = dateFrom;
+  if (dateTo) params.date_to = dateTo;
+  if (country && country.trim()) params.country = country.trim().toUpperCase().slice(0, 2);
+  const r = await fetch(apiUrl('executions-users', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
 }

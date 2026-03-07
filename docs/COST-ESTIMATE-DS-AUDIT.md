@@ -33,6 +33,10 @@ Esempio — **Scan DS** (da `SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`):
 | Scan DS | ≤5k (Medium) | 5 |
 | Scan DS | ≤50k (Large) | 8 |
 | Scan DS | >50k (200k+) | 11 |
+| **Generate** | Standard (action plan) | **3** |
+| Generate | Screenshot conversion | +2 (sul tier) |
+
+*(Generate: credito consumato dopo canvas render riuscito; stima da `estimateCreditsByAction('generate')` in backend.)*
 
 ---
 
@@ -93,6 +97,10 @@ In altre parole:
 | 200k+ | ~$0.036 | ~$0.0016 | **~$0.038** |
 
 **Caso medio:** ~**$0.012–0.015** per scan.
+
+### 4.1 Generate (v1)
+
+Per una generazione standard (action plan, contesto file depth=2): input stimato ~15–25K token, output ~1–3K token → costo Kimi ~**$0.008–0.015** per richiesta. Con 3 crediti addebitati il margine per credito resta nell’ordine di DS Audit. Telemetria: `kimi_usage_log` con `action_type = 'generate'` (senza size_band).
 
 ---
 

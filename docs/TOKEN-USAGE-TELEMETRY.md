@@ -6,7 +6,7 @@ Specifica per un **contatore di token utilizzati per azione** che gira in modo *
 
 ## 1. Obiettivo
 
-- **Misurare in modo reale** quanti token (input + output) consuma ogni chiamata a Kimi per azione (DS Audit, future A11Y, Generate, ecc.) e, dove applicabile, per dimensione/band del file.
+- **Misurare in modo reale** quanti token (input + output) consuma ogni chiamata a Kimi per azione (DS Audit, A11Y, **Generate**, ecc.) e, dove applicabile, per dimensione/band del file. Generate (v1) registra in `kimi_usage_log` con `action_type = 'generate'`.
 - **Non mostrare nulla in UI** nel plugin: l’utente non vede contatori o log; i dati sono solo lato backend/dashboard.
 - **Anonimità:** non inviare user_id, file_key, email o altri identificativi; solo aggregati o record anonimi (action_type, token_in, token_out, eventuale band di dimensione, timestamp).
 

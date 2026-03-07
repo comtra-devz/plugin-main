@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { fetchUsers, type AdminUser, type AdminUsersResponse } from '../api';
+import { fetchUsers, fetchUsersCountries, type AdminUser, type AdminUsersResponse } from '../api';
 
 const PAGE_SIZE = 50;
 
@@ -8,7 +8,7 @@ function toDateOnly(iso: string): string {
 }
 
 function exportUsersToCsv(users: AdminUser[]) {
-  const headers = ['Email', 'Nome', 'Piano', 'Scadenza', 'Crediti rimanenti', 'Crediti totali', 'Iscrizione'];
+  const headers = ['Email', 'Nome', 'Piano', 'Scadenza', 'Crediti rimanenti', 'Crediti totali', 'Provenienza', 'Iscrizione'];
   const rows = users.map((u) => [
     u.email_masked,
     u.name,
@@ -16,6 +16,7 @@ function exportUsersToCsv(users: AdminUser[]) {
     u.plan_expires_at ? toDateOnly(u.plan_expires_at) : '',
     String(u.credits_remaining),
     String(u.credits_total),
+    u.country_code ?? '',
     toDateOnly(u.created_at),
   ]);
   const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -37,16 +38,30 @@ export default function Users() {
   const [planFilter, setPlanFilter] = useState<string>('ALL');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [countryFilter, setCountryFilter] = useState<string>('');
+  const [countries, setCountries] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchUsersCountries()
+      .then((d) => { if (!cancelled) setCountries(d.countries || []); })
+      .catch(() => { if (!cancelled) setCountries([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (countryFilter) setOffset(0);
+  }, [countryFilter]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchUsers(PAGE_SIZE, offset)
+    fetchUsers(PAGE_SIZE, offset, countryFilter.trim() || undefined)
       .then((d) => { if (!cancelled) { setRes(d); setError(null); } })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [offset]);
+  }, [offset, countryFilter]);
 
   const filteredUsers = useMemo(() => {
     if (!res?.users) return [];
@@ -74,7 +89,7 @@ export default function Users() {
   const total = res?.total ?? 0;
   const hasMore = offset + PAGE_SIZE < total;
   const hasPrev = offset > 0;
-  const hasActiveFilters = search.trim() || planFilter !== 'ALL' || dateFrom || dateTo;
+  const hasActiveFilters = search.trim() || planFilter !== 'ALL' || dateFrom || dateTo || countryFilter !== '';
 
   return (
     <>
@@ -109,6 +124,20 @@ export default function Users() {
               <option value="ALL">Tutti</option>
               <option value="FREE">FREE</option>
               <option value="PRO">PRO</option>
+            </select>
+          </div>
+          <div>
+            <label className="brutal-label">Provenienza</label>
+            <select
+              className="brutal-input"
+              value={countryFilter}
+              onChange={(e) => setCountryFilter(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="">Tutti</option>
+              {countries.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -159,13 +188,14 @@ export default function Users() {
                   <th>Piano</th>
                   <th>Scadenza</th>
                   <th>Crediti</th>
+                  <th>Provenienza</th>
                   <th>Iscrizione</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                       Nessun utente corrisponde ai filtri.
                     </td>
                   </tr>
@@ -187,6 +217,7 @@ export default function Users() {
                           : '—'}
                       </td>
                       <td>{u.credits_remaining} / {u.credits_total}</td>
+                      <td className="mono">{u.country_code ?? '—'}</td>
                       <td>
                         {new Date(u.created_at).toLocaleDateString('it-IT', {
                           day: '2-digit',

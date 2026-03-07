@@ -77,9 +77,9 @@ export default function DualLineChart({ timeline, period, onPeriodChange }: Dual
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-          <svg viewBox={`0 0 ${w} ${h}`} style={{ maxWidth: '100%', height: 'auto' }}>
+      <div style={{ position: 'relative', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 320px', minWidth: 0, position: 'relative' }}>
+          <svg viewBox={`0 0 ${w} ${h}`} style={{ maxWidth: '100%', height: 'auto', display: 'block' }}>
             <path
               d={pathScans}
               fill="none"
@@ -105,10 +105,10 @@ export default function DualLineChart({ timeline, period, onPeriodChange }: Dual
               return (
                 <g key={d.date}>
                   <rect
-                    x={x - 10}
-                    y={pad.top}
-                    width={20}
-                    height={innerH}
+                    x={x - 16}
+                    y={pad.top - 4}
+                    width={32}
+                    height={innerH + 8}
                     fill="transparent"
                     onMouseEnter={() => setHoverIdx(i)}
                     onMouseLeave={() => setHoverIdx(null)}
@@ -140,18 +140,31 @@ export default function DualLineChart({ timeline, period, onPeriodChange }: Dual
               <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--yellow)', border: '2px solid var(--black)' }} /> Crediti
             </span>
           </div>
+          {hover && hoverIdx != null && (
+            <div
+              className="brutal-card"
+              style={{
+                position: 'absolute',
+                top: 8,
+                left: `clamp(0px, ${(data.length > 1 ? (hoverIdx / (data.length - 1)) * 100 : 0)}%, 100%)`,
+                transform: 'translateX(-50%)',
+                minWidth: 180,
+                maxWidth: 200,
+                padding: '0.5rem 0.75rem',
+                zIndex: 10,
+                pointerEvents: 'auto',
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>{new Date(hover.date).toLocaleDateString('it-IT')}</div>
+              <div>Scan: <strong>{hover.scans}</strong></div>
+              <div>Crediti: <strong>{hover.credits}</strong></div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>~${(hover.scans * COST_PER_SCAN).toFixed(2)}</div>
+              <Link to="/credits" state={{ highlightDate: hover.date }} style={{ display: 'inline-block', marginTop: 6, fontSize: '0.8rem' }}>
+                Dettaglio crediti →
+              </Link>
+            </div>
+          )}
         </div>
-        {hover && (
-          <div className="brutal-card" style={{ minWidth: 180, padding: '0.5rem 0.75rem' }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>{new Date(hover.date).toLocaleDateString('it-IT')}</div>
-            <div>Scan: <strong>{hover.scans}</strong></div>
-            <div>Crediti: <strong>{hover.credits}</strong></div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>~${(hover.scans * COST_PER_SCAN).toFixed(2)}</div>
-            <Link to="/credits" state={{ highlightDate: hover.date }} style={{ display: 'inline-block', marginTop: 6, fontSize: '0.8rem' }}>
-              Dettaglio crediti →
-            </Link>
-          </div>
-        )}
       </div>
     </div>
   );

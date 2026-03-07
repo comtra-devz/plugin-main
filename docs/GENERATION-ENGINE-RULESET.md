@@ -32,7 +32,7 @@ Ruleset per il **Comtra Generation Engine**: generazione di wireframe/layout in 
 ### 2.2 LLM e fallback
 
 - **Primario:** Kimi K2.5 (multimodale, agentico, costo favorevole). Output MUST essere JSON-only con `max_tokens` limitati.
-- **Fallback:** se Kimi fallisce (JSON malformato, componenti allucinati, timeout > 8 s): retry una volta → Claude Sonnet 4.5 → Claude Opus solo per richieste enterprise multi-pagina.
+- **Fallback:** se Kimi fallisce (JSON malformato, componenti allucinati, timeout > 8 s): retry fino a 2 volte (totale 3 tentativi). Nessun fallback su Claude nella v1 (costi 6–11× superiori); vedi `docs/GENERATION-ENGINE-FEASIBILITY.md`.
 
 ### 2.3 Performance (non negoziabili)
 
@@ -293,7 +293,7 @@ Il tier è determinato **prima** della generazione; il plugin stima i componenti
 - **Open DS:** manifest JSON pre-indicizzati (component inventory, token map, doc, reference index <4K token); caricati lato server al cambio DS; plugin scarica e mette in cache a sessione.
 - **Prompt Kimi:** (1) system prompt con regole da questo ruleset, (2) DS component reference index, (3) DS documentation context, (4) variability_seed, (5) prompt designer, (6) contesto mode (selection, screenshot base64, o struttura da link).
 - **Esecuzione plugin:** `figma.createFrame()`, `figma.getNodeById()`, `component.createInstance()`, `instance.setProperties()`, `node.setBoundVariable()`, slot APIs; tutto in un unico `figma.commitUndo()` (un solo Cmd+Z per annullare).
-- **Error handling:** timeout LLM 8 s → retry → fallback Claude; validazione fallita → re-request con prompt più stretto; errore a metà esecuzione → rollback completo (undo nodi) + messaggio; crediti detratti SOLO dopo canvas render riuscito.
+- **Error handling:** timeout LLM 8 s → retry Kimi (fino a 2 retry); validazione fallita → re-request a Kimi con prompt più stretto; errore a metà esecuzione → rollback completo (undo nodi) + messaggio; crediti detratti SOLO dopo canvas render riuscito.
 
 ---
 

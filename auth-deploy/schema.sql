@@ -154,6 +154,10 @@ CREATE TABLE IF NOT EXISTS kimi_usage_log (
 CREATE INDEX IF NOT EXISTS idx_kimi_usage_log_action_created ON kimi_usage_log(action_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_kimi_usage_log_created_at ON kimi_usage_log(created_at);
 
+-- Provenienza utente (paese da IP, header Vercel x-vercel-ip-country). Non salviamo l'IP, solo il codice paese 2 lettere.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS country_code TEXT;
+CREATE INDEX IF NOT EXISTS idx_users_country_code ON users(country_code);
+
 -- Migrazione: se la tabella users esiste già senza colonne XP, esegui (PostgreSQL 9.5+):
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;
