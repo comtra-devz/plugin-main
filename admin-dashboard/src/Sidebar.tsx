@@ -21,6 +21,9 @@ export default function Sidebar() {
         <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Affiliati
         </NavLink>
+        <NavLink to="/discounts" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Codici sconto
+        </NavLink>
       </nav>
       <div style={{ marginTop: 'auto', padding: '1rem' }}>
         <button type="button" className="brutal-btn" onClick={logout} style={{ width: '100%', fontSize: '0.75rem' }}>

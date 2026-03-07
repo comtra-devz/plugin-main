@@ -110,3 +110,60 @@ export function isLevelWithDiscount(level) {
 export function discountPercentForLevel(level) {
   return Math.min(20, Math.floor(Number(level) / 5) * 5);
 }
+
+/**
+ * Create a 5% one-time discount for throttle/503 recovery. Valid 1 week, any plan.
+ * @param {{ userId: string, storeId?: string }} opts
+ * @returns {{ id: string, code: string, expires_at: string } | null}
+ */
+export async function createThrottleDiscount(opts) {
+  const apiKey = process.env.LEMON_SQUEEZY_API_KEY;
+  const storeId = opts.storeId || process.env.LEMON_SQUEEZY_STORE_ID;
+  if (!apiKey || !storeId) {
+    console.warn('lemon-discounts: LEMON_SQUEEZY_API_KEY or LEMON_SQUEEZY_STORE_ID missing');
+    return null;
+  }
+  const code = `COMTRA-T5-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const body = {
+    data: {
+      type: 'discounts',
+      attributes: {
+        name: 'Throttle recovery 5%',
+        code,
+        amount: 5,
+        amount_type: 'percent',
+        is_limited_to_products: false,
+        is_limited_redemptions: true,
+        max_redemptions: 1,
+        expires_at: expiresAt.toISOString(),
+        duration: 'once',
+      },
+      relationships: {
+        store: { data: { type: 'stores', id: String(storeId) } },
+      },
+    },
+  };
+  try {
+    const res = await fetch(`${LEMON_API}/discounts`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('lemon-discounts createThrottleDiscount', res.status, data);
+      return null;
+    }
+    const id = data?.data?.id;
+    const returnedCode = data?.data?.attributes?.code || code;
+    return id ? { id: String(id), code: returnedCode, expires_at: expiresAt.toISOString() } : null;
+  } catch (err) {
+    console.error('lemon-discounts createThrottleDiscount', err);
+    return null;
+  }
+}

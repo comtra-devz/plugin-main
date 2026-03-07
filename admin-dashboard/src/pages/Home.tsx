@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExecutions, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem, type FunctionExecution } from '../api';
+import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExecutions, fetchThrottleEvents, fetchDiscountsStats, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem, type FunctionExecution, type ThrottleEventsResponse, type DiscountsStats } from '../api';
 import DualLineChart from '../components/DualLineChart';
 import HealthBadge from '../components/HealthBadge';
 import { PLACEHOLDER_WEEKLY_UPDATES, type UpdateCategory } from '../data/weeklyUpdates';
@@ -21,6 +21,8 @@ export default function Home() {
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
   const [weeklyUpdates, setWeeklyUpdates] = useState<WeeklyUpdateItem[]>([]);
   const [recentExecutions, setRecentExecutions] = useState<FunctionExecution[]>([]);
+  const [throttleEvents, setThrottleEvents] = useState<ThrottleEventsResponse | null>(null);
+  const [discountsStats, setDiscountsStats] = useState<DiscountsStats | null>(null);
   const [chartPeriod, setChartPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,22 @@ export default function Home() {
     fetchFunctionExecutions(10, 0)
       .then((r) => { if (!cancelled && r.executions?.length) setRecentExecutions(r.executions); })
       .catch(() => { if (!cancelled) setRecentExecutions([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchThrottleEvents()
+      .then((t) => { if (!cancelled) setThrottleEvents(t); })
+      .catch(() => { if (!cancelled) setThrottleEvents({ total: 0, by_day: [], recent: [] }); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDiscountsStats()
+      .then((d) => { if (!cancelled) setDiscountsStats(d); })
+      .catch(() => { if (!cancelled) setDiscountsStats(null); });
     return () => { cancelled = true; };
   }, []);
 
@@ -211,7 +229,54 @@ export default function Home() {
             <Link to="/affiliates">Vedi lista →</Link>
           </div>
         </section>
+        <section>
+          <h2 className="section-title">Codici sconto</h2>
+          <Link to="/discounts" className="brutal-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <p style={{ margin: '0.25rem 0' }}>
+              <strong>Livello (gamification):</strong> {discountsStats?.level?.total ?? '—'} totali
+              {discountsStats?.level?.by_level && (
+                <span style={{ fontSize: '0.9rem', color: 'var(--muted)', marginLeft: '0.5rem' }}>
+                  (5%: {discountsStats.level.by_level[5]} · 10%: {discountsStats.level.by_level[10]} · 15%: {discountsStats.level.by_level[15]} · 20%: {discountsStats.level.by_level[20]})
+                </span>
+              )}
+            </p>
+            <p style={{ margin: '0.25rem 0' }}>
+              <strong>Throttle (5% una tantum):</strong> {discountsStats?.throttle?.total ?? '—'} totali
+              {discountsStats?.throttle != null && (
+                <span style={{ fontSize: '0.9rem', color: 'var(--muted)', marginLeft: '0.5rem' }}>
+                  (validi: {discountsStats.throttle.valid} · scaduti: {discountsStats.throttle.expired})
+                </span>
+              )}
+            </p>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Dettaglio e liste →</span>
+          </Link>
+        </section>
       </div>
+
+      {/* Throttle/503 — eventi segnalati dal plugin (monitoraggio anche con Vercel Pro) */}
+      {(throttleEvents && throttleEvents.total > 0) && (
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 className="section-title">Throttle / 503 (plugin)</h2>
+          <div className="brutal-card">
+            <p style={{ margin: '0.25rem 0' }}>Eventi totali: <strong>{throttleEvents.total}</strong></p>
+            {throttleEvents.by_day.length > 0 && (
+              <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', color: 'var(--muted)' }}>
+                Ultimi 7 gg: {throttleEvents.by_day.slice(0, 7).reduce((s, d) => s + d.count, 0)}
+              </p>
+            )}
+            {throttleEvents.recent.length > 0 && (
+              <details style={{ marginTop: '0.75rem' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Ultimi eventi</summary>
+                <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85rem' }}>
+                  {throttleEvents.recent.slice(0, 10).map((e) => (
+                    <li key={e.id}>{e.user_masked} — {new Date(e.occurred_at).toLocaleString()}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Esecuzioni funzioni — anteprima + link approfondimento */}
       <section style={{ marginBottom: '2rem' }}>

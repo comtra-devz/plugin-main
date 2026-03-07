@@ -97,6 +97,18 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return r.json();
 }
 
+export interface ThrottleEventsResponse {
+  total: number;
+  by_day: { day: string; count: number }[];
+  recent: { id: string; user_id: string; user_masked: string; occurred_at: string }[];
+}
+
+export async function fetchThrottleEvents(): Promise<ThrottleEventsResponse> {
+  const r = await fetch(apiUrl('throttle-events'), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
 export interface TokenUsageResponse {
   period_days: number;
   since: string;
@@ -235,6 +247,69 @@ export async function fetchExecutionsUsers(dateFrom?: string, dateTo?: string, c
   if (dateTo) params.date_to = dateTo;
   if (country && country.trim()) params.country = country.trim().toUpperCase().slice(0, 2);
   const r = await fetch(apiUrl('executions-users', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+// --- Codici sconto (livello gamification + throttle 5%)
+export interface DiscountsStats {
+  level: { total: number; by_level: { 5: number; 10: number; 15: number; 20: number } };
+  throttle: { total: number; valid: number; expired: number };
+}
+
+export async function fetchDiscountsStats(): Promise<DiscountsStats> {
+  const r = await fetch(apiUrl('discounts-stats'), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export interface DiscountLevelItem {
+  user_id: string;
+  user_masked: string;
+  level: number;
+  code: string;
+  created_at: string;
+}
+
+export interface DiscountsLevelResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: DiscountLevelItem[];
+}
+
+export async function fetchDiscountsLevel(limit: number, offset: number, level?: number): Promise<DiscountsLevelResponse> {
+  const params: Record<string, string | number> = { limit, offset };
+  if (level != null && [5, 10, 15, 20].includes(level)) params.level = level;
+  const r = await fetch(apiUrl('discounts-level', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export interface DiscountThrottleItem {
+  user_id: string;
+  user_masked: string;
+  code: string;
+  expires_at: string;
+  issued_at: string;
+  status: 'valid' | 'expired';
+}
+
+export interface DiscountsThrottleResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: DiscountThrottleItem[];
+}
+
+export async function fetchDiscountsThrottle(
+  limit: number,
+  offset: number,
+  status?: 'valid' | 'expired'
+): Promise<DiscountsThrottleResponse> {
+  const params: Record<string, string | number> = { limit, offset };
+  if (status) params.status = status;
+  const r = await fetch(apiUrl('discounts-throttle', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }

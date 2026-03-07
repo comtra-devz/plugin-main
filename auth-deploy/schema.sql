@@ -158,6 +158,25 @@ CREATE INDEX IF NOT EXISTS idx_kimi_usage_log_created_at ON kimi_usage_log(creat
 ALTER TABLE users ADD COLUMN IF NOT EXISTS country_code TEXT;
 CREATE INDEX IF NOT EXISTS idx_users_country_code ON users(country_code);
 
+-- Throttle/503: eventi per dashboard + codice sconto 5% (una tantum, valido 1 settimana)
+CREATE TABLE IF NOT EXISTS throttle_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_throttle_events_user_id ON throttle_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_throttle_events_occurred_at ON throttle_events(occurred_at);
+
+-- Codice sconto 5% per utente che ha subito 503/throttle (una tantum)
+CREATE TABLE IF NOT EXISTS user_throttle_discounts (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  lemon_discount_id TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_throttle_discounts_issued_at ON user_throttle_discounts(issued_at);
+
 -- Migrazione: se la tabella users esiste già senza colonne XP, esegui (PostgreSQL 9.5+):
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;

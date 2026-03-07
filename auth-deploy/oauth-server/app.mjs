@@ -16,6 +16,7 @@ import { sql as dbSql, withTransaction } from './db.mjs';
 import {
   generateLevelDiscountCode,
   createLevelDiscount,
+  createThrottleDiscount,
   deleteLevelDiscount,
   isLevelWithDiscount,
   discountPercentForLevel,
@@ -1438,6 +1439,47 @@ app.post('/api/trophies/linkedin-shared', async (req, res) => {
     res.json({ linkedin_shared: true, new_trophies: newTrophies });
   } catch (err) {
     console.error('POST /api/trophies/linkedin-shared', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Throttle/503: tracciamento eventi + codice sconto 5% (una tantum, valido 1 settimana)
+app.post('/api/report-throttle', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.status(204).end();
+  try {
+    await dbSql`INSERT INTO throttle_events (user_id) VALUES (${userId})`;
+    res.status(204).end();
+  } catch (err) {
+    console.error('POST /api/report-throttle', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/throttle-discount', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Database not configured' });
+  try {
+    const existing = await dbSql`SELECT code, expires_at FROM user_throttle_discounts WHERE user_id = ${userId} LIMIT 1`;
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0];
+      const exp = row.expires_at ? new Date(row.expires_at) : null;
+      if (exp && exp > new Date()) {
+        return res.json({ code: row.code, expires_at: row.expires_at, already_issued: true });
+      }
+      return res.status(400).json({ error: 'Codice sconto throttle già usato (una tantum per utente).' });
+    }
+    const created = await createThrottleDiscount({ userId, storeId: process.env.LEMON_SQUEEZY_STORE_ID });
+    if (!created) return res.status(503).json({ error: 'Impossibile creare il codice. Riprova più tardi.' });
+    await dbSql`
+      INSERT INTO user_throttle_discounts (user_id, code, lemon_discount_id, expires_at)
+      VALUES (${userId}, ${created.code}, ${created.id}, ${created.expires_at})
+    `;
+    res.json({ code: created.code, expires_at: created.expires_at });
+  } catch (err) {
+    console.error('POST /api/throttle-discount', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

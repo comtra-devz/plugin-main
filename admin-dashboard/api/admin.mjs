@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   if (!requireAdmin(req, res)) return;
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle' });
 
   if (route === 'weekly-updates') {
     try {
@@ -69,6 +69,10 @@ export default async function handler(req, res) {
     if (route === 'function-executions') return await handleFunctionExecutions(req, res);
     if (route === 'executions-users') return await handleExecutionsUsers(req, res);
     if (route === 'users-countries') return await handleUsersCountries(req, res);
+    if (route === 'throttle-events') return await handleThrottleEvents(req, res);
+    if (route === 'discounts-stats') return await handleDiscountsStats(req, res);
+    if (route === 'discounts-level') return await handleDiscountsLevel(req, res);
+    if (route === 'discounts-throttle') return await handleDiscountsThrottle(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -455,6 +459,136 @@ async function handleUsersCountries(req, res) {
   `;
   const countries = (rows.rows || []).map((r) => r.country_code);
   res.status(200).json({ countries });
+}
+
+/** Throttle/503 events (plugin report-throttle). Monitoraggio anche dopo passaggio a Vercel Pro. */
+async function handleThrottleEvents(req, res) {
+  try {
+    const totalResult = await sql`SELECT COUNT(*)::int AS c FROM throttle_events`;
+    const total = totalResult.rows?.[0]?.c ?? 0;
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const byDayResult = await sql`
+      SELECT DATE(occurred_at) AS day, COUNT(*)::int AS c
+      FROM throttle_events WHERE occurred_at >= ${thirtyDaysAgo}
+      GROUP BY DATE(occurred_at) ORDER BY day DESC
+      LIMIT 31
+    `;
+    const by_day = (byDayResult.rows || []).map((r) => ({ day: r.day, count: r.c }));
+    const recentResult = await sql`
+      SELECT te.id, te.user_id, te.occurred_at, u.email
+      FROM throttle_events te
+      LEFT JOIN users u ON u.id = te.user_id
+      ORDER BY te.occurred_at DESC
+      LIMIT 50
+    `;
+    const recent = (recentResult.rows || []).map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_masked: maskEmail(r.email),
+      occurred_at: r.occurred_at,
+    }));
+    res.status(200).json({ total, by_day, recent });
+  } catch (err) {
+    console.error('handleThrottleEvents', err);
+    res.status(200).json({ total: 0, by_day: [], recent: [] });
+  }
+}
+
+async function handleDiscountsStats(req, res) {
+  try {
+    const levelTotalResult = await sql`SELECT COUNT(*)::int AS c FROM user_level_discounts`;
+    const levelTotal = levelTotalResult.rows?.[0]?.c ?? 0;
+    const levelByLevelResult = await sql`
+      SELECT level, COUNT(*)::int AS c FROM user_level_discounts GROUP BY level ORDER BY level
+    `;
+    const by_level = { 5: 0, 10: 0, 15: 0, 20: 0 };
+    for (const r of levelByLevelResult.rows || []) {
+      if (r.level in by_level) by_level[r.level] = r.c;
+    }
+    const throttleTotalResult = await sql`SELECT COUNT(*)::int AS c FROM user_throttle_discounts`;
+    const throttleTotal = throttleTotalResult.rows?.[0]?.c ?? 0;
+    const throttleValidResult = await sql`
+      SELECT COUNT(*)::int AS c FROM user_throttle_discounts WHERE expires_at > NOW()
+    `;
+    const throttleValid = throttleValidResult.rows?.[0]?.c ?? 0;
+    const throttleExpired = throttleTotal - throttleValid;
+    res.status(200).json({
+      level: { total: levelTotal, by_level: by_level },
+      throttle: { total: throttleTotal, valid: throttleValid, expired: throttleExpired },
+    });
+  } catch (err) {
+    console.error('handleDiscountsStats', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+async function handleDiscountsLevel(req, res) {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+  const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+  const levelFilter = req.query?.level ? parseInt(req.query.level, 10) : null;
+  const validLevels = [5, 10, 15, 20];
+  const level = levelFilter && validLevels.includes(levelFilter) ? levelFilter : null;
+  try {
+    const countResult = await sql`
+      SELECT COUNT(*)::int AS c FROM user_level_discounts ld
+      WHERE (ld.level = ${level} OR ${level}::int IS NULL)
+    `;
+    const total = countResult.rows?.[0]?.c ?? 0;
+    const rows = await sql`
+      SELECT ld.user_id, ld.level, ld.code, ld.created_at, u.email
+      FROM user_level_discounts ld
+      LEFT JOIN users u ON u.id = ld.user_id
+      WHERE (ld.level = ${level} OR ${level}::int IS NULL)
+      ORDER BY ld.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+    const items = (rows.rows || []).map((r) => ({
+      user_id: r.user_id,
+      user_masked: maskEmail(r.email),
+      level: r.level,
+      code: r.code,
+      created_at: r.created_at,
+    }));
+    res.status(200).json({ total, limit, offset, items });
+  } catch (err) {
+    console.error('handleDiscountsLevel', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+async function handleDiscountsThrottle(req, res) {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+  const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+  const statusFilter = (req.query?.status || '').toLowerCase().trim() || null; // 'valid' | 'expired' | null = tutti
+  const showAll = !statusFilter || (statusFilter !== 'valid' && statusFilter !== 'expired');
+  try {
+    const countResult = await sql`
+      SELECT COUNT(*)::int AS c FROM user_throttle_discounts td
+      WHERE (${showAll}) OR (td.expires_at > NOW() AND ${statusFilter === 'valid'}) OR (td.expires_at <= NOW() AND ${statusFilter === 'expired'})
+    `;
+    const total = countResult.rows?.[0]?.c ?? 0;
+    const rows = await sql`
+      SELECT td.user_id, td.code, td.expires_at, td.issued_at, u.email
+      FROM user_throttle_discounts td
+      LEFT JOIN users u ON u.id = td.user_id
+      WHERE (${showAll}) OR (td.expires_at > NOW() AND ${statusFilter === 'valid'}) OR (td.expires_at <= NOW() AND ${statusFilter === 'expired'})
+      ORDER BY td.issued_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+    const now = new Date();
+    const items = (rows.rows || []).map((r) => ({
+      user_id: r.user_id,
+      user_masked: maskEmail(r.email),
+      code: r.code,
+      expires_at: r.expires_at,
+      issued_at: r.issued_at,
+      status: r.expires_at && new Date(r.expires_at) <= now ? 'expired' : 'valid',
+    }));
+    res.status(200).json({ total, limit, offset, items });
+  } catch (err) {
+    console.error('handleDiscountsThrottle', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 }
 
 /** Conventional commit type -> category */

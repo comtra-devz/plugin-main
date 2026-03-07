@@ -15,7 +15,7 @@ import { LevelUpModal } from './components/LevelUpModal';
 import { TrophiesModal } from './components/TrophiesModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
-import { ToastProvider } from './contexts/ToastContext';
+import { useToast } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import type { FetchFigmaFileBody } from './views/Audit/AuditView';
@@ -86,7 +86,12 @@ function SessionLoader() {
   );
 }
 
+const THROTTLE_DISCOUNT_WINDOW_MS = 15 * 60 * 1000; // 15 min
+
 export default function AppTest() {
+  const { showToast } = useToast();
+  const firstThrottleAtRef = useRef<number | null>(null);
+
   const [view, setView] = useState<ViewState>(ViewState.AUDIT);
   const [user, setUser] = useState<User | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -134,12 +139,52 @@ export default function AppTest() {
     return () => clearTimeout(t);
   }, [logoutToast]);
 
+  const handle503 = useCallback(() => {
+    const now = Date.now();
+    if (firstThrottleAtRef.current === null) firstThrottleAtRef.current = now;
+    if (user?.authToken) {
+      fetch(`${AUTH_BACKEND_URL}/api/report-throttle`, { method: 'POST', headers: { Authorization: `Bearer ${user.authToken}` } }).catch(() => {});
+    }
+    const elapsed = now - (firstThrottleAtRef.current ?? now);
+    const showDiscountCta = elapsed >= THROTTLE_DISCOUNT_WINDOW_MS;
+    showToast({
+      title: 'Servizio temporaneamente non disponibile',
+      description: showDiscountCta
+        ? "L'errore persiste da oltre 15 minuti. Hai diritto a un codice sconto del 5% (una tantum, valido una settimana)."
+        : 'Riprova più tardi.',
+      variant: 'error',
+      dismissible: true,
+      ...(showDiscountCta && {
+        actions: [
+          {
+            label: 'Richiedi codice sconto',
+            onClick: async () => {
+              if (!user?.authToken) return;
+              try {
+                const r = await fetch(`${AUTH_BACKEND_URL}/api/throttle-discount`, { method: 'POST', headers: { Authorization: `Bearer ${user.authToken}` } });
+                const data = await r.json().catch(() => ({}));
+                if (data.code) {
+                  showToast({ title: 'Codice sconto 5%', description: `Usa il codice: ${data.code}. Valido una settimana.`, variant: 'default', dismissible: true });
+                } else {
+                  showToast({ title: 'Errore', description: data.error || 'Non disponibile', variant: 'error', dismissible: true });
+                }
+              } catch {
+                showToast({ title: 'Errore', description: 'Riprova più tardi.', variant: 'error', dismissible: true });
+              }
+            },
+          },
+        ],
+      }),
+    });
+  }, [showToast, user?.authToken]);
+
   const fetchCredits = React.useCallback(async () => {
     if (!user?.authToken) return;
     try {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
         headers: { Authorization: `Bearer ${user.authToken}` },
       });
+      if (r.status === 503) { handle503(); return; }
       if (!r.ok) return;
       const data = await r.json();
       setCredits({
@@ -161,7 +206,7 @@ export default function AppTest() {
         return { ...prev, ...updates };
       });
     } catch (_) {}
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   useEffect(() => {
     if (user?.authToken) fetchCredits();
@@ -174,17 +219,17 @@ export default function AppTest() {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies`, {
         headers: { Authorization: `Bearer ${user.authToken}` },
       });
+      if (r.status === 503) { handle503(); return; }
       if (!r.ok) return;
       const data = await r.json();
       setTrophies(data.trophies ?? []);
     } catch (_) {}
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   useEffect(() => {
     if (user?.authToken) fetchTrophies();
     else setTrophies(null);
   }, [user?.authToken, user?.id, fetchTrophies]);
-
 
   const fileContextResolveRef = useRef<((data: { fileKey: string | null; error?: string | null }) => void) | null>(null);
 
@@ -359,10 +404,11 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (r.status === 503) { handle503(); return { estimated_credits: 5 }; }
     if (!r.ok) return { estimated_credits: 5 };
     const data = await r.json();
     return { estimated_credits: data.estimated_credits ?? 5 };
-  }, []);
+  }, [handle503]);
 
   const consumeCredits = React.useCallback(async (payload: { action_type: string; credits_consumed: number; file_id?: string; max_health_score?: number; reset_consecutive_fixes?: boolean; token_fixes_delta?: number }) => {
     const cost = Math.max(0, payload.credits_consumed);
@@ -389,6 +435,7 @@ export default function AppTest() {
       const msg = err instanceof Error ? err.message : 'Network error';
       return { error: msg as 'Server error' };
     }
+    if (r.status === 503) { handle503(); return { error: 'Server error' as 'Server error' }; }
     if (r.status === 402) return { error: 'Insufficient credits' as const, credits_remaining: data.credits_remaining };
     if (!r.ok) return { error: (data?.error || 'Server error') as 'Server error' };
     setCredits({ remaining: data.credits_remaining, total: data.credits_total, used: data.credits_used });
@@ -411,7 +458,7 @@ export default function AppTest() {
       fetchTrophies();
     }
     return { credits_remaining: data.credits_remaining, level_up: data.level_up };
-  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies]);
+  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies, handle503]);
 
   const fetchFigmaFile = React.useCallback(async (body: FetchFigmaFileBody) => {
     if (!user?.authToken) return;
@@ -420,6 +467,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(body),
     });
+    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -432,7 +480,7 @@ export default function AppTest() {
       throw new Error(msg);
     }
     return r.json();
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   const fetchDsAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => {
     if (!user?.authToken) return { issues: [] };
@@ -444,6 +492,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
+    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -456,7 +505,7 @@ export default function AppTest() {
       throw new Error(msg);
     }
     return r.json();
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   const fetchA11yAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => {
     if (!user?.authToken) return { issues: [] };
@@ -468,6 +517,7 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
+    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -480,7 +530,7 @@ export default function AppTest() {
       throw new Error(msg);
     }
     return r.json();
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   const fetchSyncScan = React.useCallback(async (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => {
     if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
@@ -492,13 +542,14 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
+    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       const msg = data.error || `Sync scan failed (${r.status})`;
       throw new Error(msg);
     }
     return data;
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   const fetchGenerate = useCallback(async (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => {
     if (!user?.authToken) throw new Error('Unauthorized');
@@ -512,6 +563,7 @@ export default function AppTest() {
         ds_source: body.ds_source || 'custom',
       }),
     });
+    if (r.status === 503) { handle503(); throw new Error('Servizio temporaneamente non disponibile'); }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -524,7 +576,7 @@ export default function AppTest() {
       throw new Error(msg);
     }
     return r.json();
-  }, [user?.authToken]);
+  }, [user?.authToken, handle503]);
 
   const requestFileContext = useCallback(() => {
     return new Promise<{ fileKey: string | null; error?: string | null }>((resolve) => {
@@ -576,7 +628,7 @@ export default function AppTest() {
   }
 
   return (
-    <ToastProvider>
+    <>
       {newTrophiesToast.length > 0 && (
         <TrophiesModal
           trophies={newTrophiesToast}
@@ -656,13 +708,14 @@ export default function AppTest() {
               user={user}
               stats={user.stats}
               trophies={trophies}
-              onLinkedInShare={async () => {
+              onLinkedInShare={              async () => {
                 if (!user?.authToken) return;
                 try {
                   const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies/linkedin-shared`, {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${user.authToken}` },
                   });
+                  if (r.status === 503) { handle503(); return; }
                   if (r.ok) {
                     const data = await r.json();
                     if (data.new_trophies?.length) {
@@ -745,6 +798,6 @@ export default function AppTest() {
           />
         )}
       </Layout>
-    </ToastProvider>
+    </>
   );
 }

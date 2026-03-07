@@ -12,6 +12,7 @@ import SupportRequests from './pages/SupportRequests';
 import SecurityLogs from './pages/SecurityLogs';
 import Health from './pages/Health';
 import Executions from './pages/Executions';
+import Discounts from './pages/Discounts';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/security" element={<SecurityLogs />} />
           <Route path="/health" element={<Health />} />
           <Route path="/executions" element={<Executions />} />
+          <Route path="/discounts" element={<Discounts />} />
         </Routes>
       </main>
     </div>
