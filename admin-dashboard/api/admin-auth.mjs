@@ -71,7 +71,9 @@ export default async function handler(req, res) {
       const sent = await sendMagicLinkEmail(user.email, magicToken);
       if (!sent.ok) {
         console.error('sendMagicLinkEmail', sent.error);
-        return res.status(500).json({ error: 'Impossibile inviare l\'email. Riprova più tardi.' });
+        return res.status(500).json({
+          error: sent.error || 'Impossibile inviare l\'email. Riprova più tardi.',
+        });
       }
       return res.status(200).json({ ok: true });
     }
