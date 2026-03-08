@@ -10,8 +10,9 @@ import { sql } from './db.mjs';
 
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.ADMIN_SECRET || 'change-me';
 const ISSUER = 'comtra-admin';
-const SESSION_EXP = '24h';
+const SESSION_EXP = '24h'; // sessione dopo login (standard admin)
 const TEMP_TOKEN_EXP = '5m';
+const MAGIC_LINK_EXP = '15m'; // link nel messaggio email
 
 function getSecretKey() {
   return crypto.createSecretKey(Buffer.from(JWT_SECRET, 'utf-8'));
@@ -107,6 +108,29 @@ export async function verifySessionToken(token) {
     const key = getSecretKey();
     const { payload } = await jose.jwtVerify(token, key, { issuer: ISSUER });
     if (payload.purpose !== 'session') return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/** Token per magic link (incluso nel link email); scadenza 15 min */
+export async function createMagicLinkToken(payload) {
+  const key = getSecretKey();
+  return new jose.SignJWT({ ...payload, purpose: 'magic-link' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuer(ISSUER)
+    .setExpirationTime(MAGIC_LINK_EXP)
+    .sign(key);
+}
+
+/** Verifica token magic link; ritorna payload o null */
+export async function verifyMagicLinkToken(token) {
+  if (!token) return null;
+  try {
+    const key = getSecretKey();
+    const { payload } = await jose.jwtVerify(token, key, { issuer: ISSUER });
+    if (payload.purpose !== 'magic-link') return null;
     return payload;
   } catch {
     return null;

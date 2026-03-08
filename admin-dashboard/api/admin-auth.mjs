@@ -1,10 +1,8 @@
 /**
- * POST /api/admin-auth — Login email+password e 2FA (TOTP).
- * Body: { action: 'login'|'verify-2fa'|'setup-2fa'|'confirm-2fa', ... }
- * - login: { email, password } → { need2FA, tempToken } o { need2FA: 'setup', tempToken }
- * - setup-2fa: { tempToken } → { qrUrl, secret, setupToken }
- * - confirm-2fa: { setupToken, code } → { token } (session JWT)
- * - verify-2fa: { tempToken, code } → { token } (session JWT)
+ * POST /api/admin-auth — Magic link (fase 1) + login password/2FA (fase 2).
+ * Magic link:
+ * - request-magic-link: { email } → invia email con link, risponde sempre { ok: true } se email valida
+ * - verify-magic-link: { token } → scambia token link con session JWT
  */
 import { sql } from '../lib/db.mjs';
 import {
@@ -18,7 +16,10 @@ import {
   verifyTempToken,
   createSessionToken,
   updateUserTotp,
+  createMagicLinkToken,
+  verifyMagicLinkToken,
 } from '../lib/admin-session.mjs';
+import { sendMagicLinkEmail } from '../lib/send-magic-link.mjs';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -43,18 +44,49 @@ function parseBody(req) {
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method === 'GET') return res.status(200).json({ ok: true, service: 'admin-auth' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const body = await parseBody(req);
+  // Vercel a volte inietta req.body già parsato; altrimenti leggi lo stream
+  let body = req.body && typeof req.body === 'object' ? req.body : null;
+  if (!body) body = await parseBody(req);
   const action = (body.action || '').toLowerCase();
 
-  if (!['login', 'verify-2fa', 'setup-2fa', 'confirm-2fa'].includes(action)) {
-    return res.status(400).json({ error: 'Invalid action. Use login, verify-2fa, setup-2fa, confirm-2fa' });
+  const allowedActions = ['request-magic-link', 'verify-magic-link', 'login', 'verify-2fa', 'setup-2fa', 'confirm-2fa'];
+  if (!allowedActions.includes(action)) {
+    return res.status(400).json({ error: 'Invalid action' });
   }
 
-  if (!sql) return res.status(503).json({ error: 'Database not configured' });
+  if (!sql && action !== 'verify-magic-link') return res.status(503).json({ error: 'Database not configured' });
 
   try {
+    if (action === 'request-magic-link') {
+      const email = (body.email || '').trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: 'Email richiesta' });
+      const user = await getAdminByEmail(email);
+      if (!user) {
+        return res.status(200).json({ ok: true });
+      }
+      const magicToken = await createMagicLinkToken({ sub: user.id, email: user.email });
+      const sent = await sendMagicLinkEmail(user.email, magicToken);
+      if (!sent.ok) {
+        console.error('sendMagicLinkEmail', sent.error);
+        return res.status(500).json({ error: 'Impossibile inviare l\'email. Riprova più tardi.' });
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'verify-magic-link') {
+      const token = (body.token || '').trim();
+      if (!token) return res.status(400).json({ error: 'Token richiesto' });
+      const payload = await verifyMagicLinkToken(token);
+      if (!payload || !payload.email) {
+        return res.status(401).json({ error: 'Link non valido o scaduto. Richiedi un nuovo link.' });
+      }
+      const sessionToken = await createSessionToken({ sub: payload.sub, email: payload.email });
+      return res.status(200).json({ token: sessionToken });
+    }
+
     if (action === 'login') {
       const email = (body.email || '').trim().toLowerCase();
       const password = body.password;

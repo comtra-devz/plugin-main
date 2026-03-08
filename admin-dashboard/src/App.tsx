@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLogin, { isAdminLoggedIn } from './AdminLogin';
+import AuthVerify from './pages/AuthVerify';
 import Sidebar from './Sidebar';
 import Home from './pages/Home';
 import Users from './pages/Users';
@@ -32,7 +33,12 @@ export default function App() {
 
   if (checking) return null;
   if (!authenticated) {
-    return <AdminLogin onSuccess={() => setAuthenticated(true)} />;
+    return (
+      <Routes>
+        <Route path="/auth/verify" element={<AuthVerify onSuccess={() => setAuthenticated(true)} />} />
+        <Route path="*" element={<AdminLogin onSuccess={() => setAuthenticated(true)} />} />
+      </Routes>
+    );
   }
 
   return (
@@ -59,6 +65,7 @@ export default function App() {
         </header>
       <main id="main-content" className="main" ref={mainRef} tabIndex={-1} aria-label="Contenuto principale">
         <Routes>
+          <Route path="/auth/verify" element={<Navigate to="/" replace />} />
           <Route path="/" element={<Home />} />
           <Route path="/charts" element={<Home />} />
           <Route path="/users" element={<Users />} />

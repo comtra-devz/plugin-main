@@ -44,15 +44,64 @@ export interface Setup2FAResponse {
   setupToken: string;
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  const r = await fetch(authApiUrl(), {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ action: 'login', email: email.trim().toLowerCase(), password }),
-  });
+/** Magic link: richiedi invio email con link */
+export async function requestMagicLink(email: string): Promise<{ ok: boolean }> {
+  let r: Response;
+  try {
+    r = await fetch(authApiUrl(), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ action: 'request-magic-link', email: email.trim().toLowerCase() }),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/fetch|network|failed/i.test(msg)) {
+      throw new Error('Impossibile raggiungere il server. In locale imposta VITE_ADMIN_API_URL con l\'URL della dashboard deployata.');
+    }
+    throw err;
+  }
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
     throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
+}
+
+/** Magic link: scambia token dal link con session JWT */
+export async function verifyMagicLink(token: string): Promise<{ token: string }> {
+  const r = await fetch(authApiUrl(), {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ action: 'verify-magic-link', token }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || 'Link non valido o scaduto');
+  }
+  return r.json();
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  let r: Response;
+  try {
+    r = await fetch(authApiUrl(), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ action: 'login', email: email.trim().toLowerCase(), password }),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/fetch|network|failed/i.test(msg)) {
+      throw new Error('Impossibile raggiungere il server. Se sei in locale (npm run dev), imposta VITE_ADMIN_API_URL con l\'URL della dashboard deployata.');
+    }
+    throw err;
+  }
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    const serverMsg = data.error || '';
+    if (r.status === 503) throw new Error(serverMsg || 'Server non configurato (manca POSTGRES_URL?)');
+    if (r.status === 401) throw new Error(serverMsg || 'Credenziali non valide');
+    throw new Error(serverMsg || `Errore ${r.status}`);
   }
   return r.json();
 }
