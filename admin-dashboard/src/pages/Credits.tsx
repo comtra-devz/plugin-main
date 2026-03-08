@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { fetchStats, fetchCreditsTimeline, type AdminStats, type CreditsTimeline } from '../api';
+import { fetchStats, fetchCreditsTimeline, fetchTokenUsage, type AdminStats, type CreditsTimeline, type TokenUsageResponse } from '../api';
 
 const COST_PER_SCAN = 0.013;
 
@@ -9,6 +9,7 @@ export default function Credits() {
   const highlightDate = (location.state as { highlightDate?: string } | null)?.highlightDate;
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageResponse | null>(null);
   const [period, setPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,11 +17,12 @@ export default function Credits() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchStats(), fetchCreditsTimeline(period)])
-      .then(([s, t]) => {
+    Promise.all([fetchStats(), fetchCreditsTimeline(period), fetchTokenUsage(period)])
+      .then(([s, t, k]) => {
         if (!cancelled) {
           setStats(s);
           setTimeline(t);
+          setTokenUsage(k);
           setError(null);
         }
       })
@@ -118,6 +120,134 @@ export default function Credits() {
           </div>
         ) : (
           <p className="loading">Nessun dato per il periodo selezionato.</p>
+        )}
+      </section>
+
+      {/* Token Kimi — unico approfondimento crediti e costi */}
+      <section style={{ marginBottom: '2rem' }}>
+        <h2 className="section-title">Token Kimi (chiamate e costo)</h2>
+        <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+          Dati anonimi a ogni chiamata Kimi. Input $0.40/1M · Output $2/1M.
+        </p>
+        {tokenUsage ? (
+          <>
+            <div className="grid grid-4" style={{ marginBottom: '1.5rem' }}>
+              <div className="brutal-card">
+                <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Chiamate</h3>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{tokenUsage.totals.count}</div>
+              </div>
+              <div className="brutal-card">
+                <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Token input</h3>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{tokenUsage.totals.input_tokens.toLocaleString()}</div>
+              </div>
+              <div className="brutal-card">
+                <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Token output</h3>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{tokenUsage.totals.output_tokens.toLocaleString()}</div>
+              </div>
+              <div className="brutal-card">
+                <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo stimato (USD)</h3>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${tokenUsage.totals.cost_usd.toFixed(3)}</div>
+              </div>
+            </div>
+
+            {tokenUsage.by_action.length > 0 && (
+              <div className="brutal-card" style={{ marginBottom: '1.5rem' }}>
+                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Per tipo azione</h3>
+                <div className="brutal-table-wrap">
+                  <table className="brutal-table">
+                    <thead>
+                      <tr>
+                        <th>Azione</th>
+                        <th style={{ textAlign: 'right' }}>Chiamate</th>
+                        <th style={{ textAlign: 'right' }}>Token in</th>
+                        <th style={{ textAlign: 'right' }}>Token out</th>
+                        <th style={{ textAlign: 'right' }}>Costo USD</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tokenUsage.by_action.map((a) => (
+                        <tr key={a.action_type}>
+                          <td className="mono">{a.action_type}</td>
+                          <td style={{ textAlign: 'right' }}>{a.count}</td>
+                          <td style={{ textAlign: 'right' }}>{a.input_tokens.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>{a.output_tokens.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>${a.cost_usd.toFixed(3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tokenUsage.by_size_band.length > 0 && (
+              <div className="brutal-card" style={{ marginBottom: '1.5rem' }}>
+                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>DS Audit per size band</h3>
+                <div className="brutal-table-wrap">
+                  <table className="brutal-table">
+                    <thead>
+                      <tr>
+                        <th>Band</th>
+                        <th style={{ textAlign: 'right' }}>Chiamate</th>
+                        <th style={{ textAlign: 'right' }}>Token in</th>
+                        <th style={{ textAlign: 'right' }}>Token out</th>
+                        <th style={{ textAlign: 'right' }}>Costo USD</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tokenUsage.by_size_band.map((b) => (
+                        <tr key={b.size_band}>
+                          <td className="mono">{b.size_band}</td>
+                          <td style={{ textAlign: 'right' }}>{b.count}</td>
+                          <td style={{ textAlign: 'right' }}>{b.input_tokens.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>{b.output_tokens.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>${b.cost_usd.toFixed(3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tokenUsage.by_day.length > 0 && (
+              <div className="brutal-card">
+                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Kimi per giorno</h3>
+                <div className="brutal-table-wrap">
+                  <table className="brutal-table" style={{ minWidth: 320 }}>
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th style={{ textAlign: 'right' }}>Chiamate</th>
+                        <th style={{ textAlign: 'right' }}>Token in</th>
+                        <th style={{ textAlign: 'right' }}>Token out</th>
+                        <th style={{ textAlign: 'right' }}>Costo USD</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...tokenUsage.by_day].reverse().map((d) => (
+                        <tr key={d.date}>
+                          <td>{d.date}</td>
+                          <td style={{ textAlign: 'right' }}>{d.count}</td>
+                          <td style={{ textAlign: 'right' }}>{d.input_tokens.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>{d.output_tokens.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }}>${d.cost_usd.toFixed(3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tokenUsage.totals.count === 0 && (
+              <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
+                Nessun dato Kimi nel periodo. La tabella <code>kimi_usage_log</code> viene popolata a ogni chiamata Kimi dopo il deploy.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="loading">Caricamento token…</p>
         )}
       </section>
     </>

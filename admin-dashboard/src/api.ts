@@ -155,7 +155,7 @@ export interface AdminStats {
 export interface CreditsTimeline {
   period_days: number;
   since: string;
-  timeline: { date: string; credits: number; scans: number }[];
+  timeline: { date: string; credits: number; scans: number; kimi_calls?: number; kimi_cost_usd?: number }[];
   by_action_per_day: Record<string, Record<string, { count: number; credits: number }>>;
 }
 

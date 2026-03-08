@@ -156,6 +156,7 @@ export default function Home() {
               timeline={timeline.timeline}
               period={chartPeriod}
               onPeriodChange={setChartPeriod}
+              byActionPerDay={timeline.by_action_per_day}
             />
             <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
               Passa il mouse su un punto per il dettaglio; il link porta alla pagina Crediti e costi.
@@ -191,7 +192,7 @@ export default function Home() {
                 ? `Reale da token: ${kimi.token_usage_30d.calls} chiamate`
                 : `~${kimi.cost_per_scan_usd}/scan (stima)`}
             </p>
-            <Link to="/token-usage">Dettaglio token →</Link>
+            <Link to="/credits">Dettaglio crediti e Kimi →</Link>
           </div>
           <div className="brutal-card">
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Cassa minima suggerita (30 gg)</h3>

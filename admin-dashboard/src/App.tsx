@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLogin, { isAdminLoggedIn } from './AdminLogin';
 import Sidebar from './Sidebar';
 import Home from './pages/Home';
 import Users from './pages/Users';
 import Credits from './pages/Credits';
 import Affiliates from './pages/Affiliates';
-import TokenUsage from './pages/TokenUsage';
 import WeeklyUpdates from './pages/WeeklyUpdates';
 import SupportRequests from './pages/SupportRequests';
 import SecurityLogs from './pages/SecurityLogs';
@@ -37,7 +36,7 @@ export default function App() {
           <Route path="/charts" element={<Home />} />
           <Route path="/users" element={<Users />} />
           <Route path="/credits" element={<Credits />} />
-          <Route path="/token-usage" element={<TokenUsage />} />
+          <Route path="/token-usage" element={<Navigate to="/credits" replace />} />
           <Route path="/affiliates" element={<Affiliates />} />
           <Route path="/weekly-updates" element={<WeeklyUpdates />} />
           <Route path="/support" element={<SupportRequests />} />

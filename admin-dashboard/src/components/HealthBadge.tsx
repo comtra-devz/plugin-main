@@ -60,7 +60,9 @@ export default function HealthBadge() {
           width: 8,
           height: 8,
           borderRadius: '50%',
-          background: loading ? 'var(--muted)' : status === 'up' ? 'var(--ok)' : status === 'down' ? 'var(--white)' : 'var(--black)',
+          background: loading ? 'var(--muted)' : status === 'up' ? 'var(--black)' : status === 'down' ? 'var(--white)' : 'var(--black)',
+          border: status === 'up' ? '2px solid var(--white)' : 'none',
+          boxSizing: 'border-box',
           flexShrink: 0,
         }}
       />

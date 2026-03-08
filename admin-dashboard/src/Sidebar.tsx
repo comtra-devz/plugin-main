@@ -15,9 +15,6 @@ export default function Sidebar() {
         <NavLink to="/credits" className={({ isActive }) => (isActive ? 'active' : '')}>
           Crediti e costi
         </NavLink>
-        <NavLink to="/token-usage" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Token Kimi
-        </NavLink>
         <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Affiliati
         </NavLink>

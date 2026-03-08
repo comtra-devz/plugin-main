@@ -220,12 +220,42 @@ async function handleCreditsTimeline(req, res) {
     date: toDateStr(r.day),
     credits: r.credits ?? 0,
     scans: r.scans ?? 0,
+    kimi_calls: 0,
+    kimi_cost_usd: 0,
   }));
   const byAction = {};
   for (const r of byActionByDay.rows || []) {
     const d = toDateStr(r.day);
     if (!byAction[d]) byAction[d] = {};
     byAction[d][r.action_type] = { count: r.count, credits: r.credits };
+  }
+
+  let kimiByDay = [];
+  try {
+    const kimiRows = await sql`
+      SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
+             COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens
+      FROM kimi_usage_log WHERE created_at >= ${since}
+      GROUP BY 1 ORDER BY 1
+    `;
+    kimiByDay = (kimiRows.rows || []).map(r => {
+      const inTok = Number(r.input_tokens) || 0;
+      const outTok = Number(r.output_tokens) || 0;
+      const costUsd = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+      return { day: toDateStr(r.day), count: r.count ?? 0, cost_usd: Math.round(costUsd * 1000) / 1000 };
+    });
+  } catch (_) {}
+  const kimiByDate = {};
+  for (const r of kimiByDay) {
+    kimiByDate[r.day] = { kimi_calls: r.count, kimi_cost_usd: r.cost_usd };
+  }
+  for (const d of days) {
+    if (kimiByDate[d.date]) {
+      d.kimi_calls = kimiByDate[d.date].kimi_calls;
+      d.kimi_cost_usd = kimiByDate[d.date].kimi_cost_usd;
+    }
   }
 
   res.status(200).json({ period_days: period, since, timeline: days, by_action_per_day: byAction });
