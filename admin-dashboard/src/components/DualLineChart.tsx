@@ -151,7 +151,7 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
         )}
       </div>
       <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.75rem', marginTop: 0 }}>
-        <strong>Scan</strong> = n° operazioni audit/scan (DS Audit) · <strong>Crediti</strong> = crediti consumati nel giorno (tutte le azioni: audit, scan, generate, sync, …). Puoi avere crediti senza scan se hai usato altre funzioni.
+        <strong>Scan</strong> = n° operazioni audit/scan · <strong>Crediti</strong> = crediti consumati nel giorno (tutte le funzioni: audit, a11y_audit, generate, sync, …). Puoi avere crediti senza scan se hai usato altre funzioni.
       </p>
       <div style={{ position: 'relative', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div ref={chartWrapRef} style={{ flex: '1 1 320px', minWidth: 0, position: 'relative', isolation: 'isolate' }}>

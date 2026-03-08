@@ -123,11 +123,11 @@ export default function Credits() {
         )}
       </section>
 
-      {/* Token Kimi — unico approfondimento crediti e costi */}
+      {/* Token Kimi — costo cumulativo + dettaglio per funzione */}
       <section style={{ marginBottom: '2rem' }}>
         <h2 className="section-title">Token Kimi (chiamate e costo)</h2>
         <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-          Dati anonimi a ogni chiamata Kimi. Input $0.40/1M · Output $2/1M.
+          I totali sopra sono <strong>cumulativi</strong> (tutte le funzioni). Qui sotto: dettaglio per tipo azione e, per DS Audit, per size band. Input $0.40/1M · Output $2/1M.
         </p>
         {tokenUsage ? (
           <>
@@ -152,7 +152,7 @@ export default function Credits() {
 
             {tokenUsage.by_action.length > 0 && (
               <div className="brutal-card" style={{ marginBottom: '1.5rem' }}>
-                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Per tipo azione</h3>
+                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Costo per funzione (tipo azione)</h3>
                 <div className="brutal-table-wrap">
                   <table className="brutal-table">
                     <thead>
@@ -182,7 +182,7 @@ export default function Credits() {
 
             {tokenUsage.by_size_band.length > 0 && (
               <div className="brutal-card" style={{ marginBottom: '1.5rem' }}>
-                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>DS Audit per size band</h3>
+                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Dettaglio: DS Audit per size band</h3>
                 <div className="brutal-table-wrap">
                   <table className="brutal-table">
                     <thead>

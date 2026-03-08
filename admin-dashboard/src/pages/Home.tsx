@@ -128,9 +128,9 @@ export default function Home() {
         )}
       </section>
 
-      {/* Crediti e scan — un solo blocco: KPI + grafico dual-line + consumo per tipo + link */}
+      {/* Crediti e consumo — KPI + grafico + consumo per tipo azione (tutte le funzioni), una sola CTA */}
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Crediti e scan (DS Audit)</h2>
+        <h2 className="section-title">Crediti e consumo</h2>
         <div className="grid grid-4">
           <div className="brutal-card">
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Scan oggi</h3>
@@ -159,15 +159,15 @@ export default function Home() {
               byActionPerDay={timeline.by_action_per_day}
             />
             <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
-              Passa il mouse su un punto per il dettaglio; il link porta alla pagina Crediti e costi.
+              Passa il mouse su un punto per il dettaglio.
             </p>
-            <Link to="/credits" style={{ display: 'inline-block', marginTop: '0.5rem' }}>Timeline e dettagli →</Link>
           </div>
         ) : null}
 
         {credits.by_action_type.length > 0 && (
           <div className="brutal-card" style={{ marginTop: '1rem' }}>
             <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Consumo per tipo azione (30d)</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '0.5rem' }}>Tutte le funzioni che consumano crediti (audit, a11y_audit, generate, sync, …).</p>
             <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
               {credits.by_action_type.map((a) => (
                 <li key={a.action_type}>
@@ -175,24 +175,25 @@ export default function Home() {
                 </li>
               ))}
             </ul>
-            <Link to="/credits">Timeline e dettagli →</Link>
+            <Link to="/credits" style={{ display: 'inline-block', marginTop: '0.75rem', fontWeight: 700 }}>Timeline e dettagli →</Link>
           </div>
         )}
       </section>
 
-      {/* Costi Kimi */}
+      {/* Costi Kimi — cumulativi (tutte le funzioni); dettaglio per funzione in Crediti e costi */}
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Costi Kimi (stima DS Audit)</h2>
+        <h2 className="section-title">Costi Kimi</h2>
+        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>Costo cumulativo (tutte le chiamate Kimi). Dettaglio per funzione e per size nella pagina Crediti e costi.</p>
         <div className="grid grid-3">
           <div className={`brutal-card ${kimi.cost_alert ? 'alert' : ''}`}>
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo (30d)</h3>
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${kimi.cost_30d_usd.toFixed(2)}</div>
             <p style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
               {kimi.token_usage_30d
-                ? `Reale da token: ${kimi.token_usage_30d.calls} chiamate`
-                : `~${kimi.cost_per_scan_usd}/scan (stima)`}
+                ? `${kimi.token_usage_30d.calls} chiamate (da token)`
+                : `Stima da scan: ~${kimi.cost_per_scan_usd}/scan`}
             </p>
-            <Link to="/credits">Dettaglio crediti e Kimi →</Link>
+            <Link to="/credits">Crediti e costi (timeline, Kimi per funzione) →</Link>
           </div>
           <div className="brutal-card">
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Cassa minima suggerita (30 gg)</h3>
