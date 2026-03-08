@@ -1,9 +1,28 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { logout } from './AdminLogin';
 
-export default function Sidebar() {
+type SidebarProps = { open?: boolean; onClose?: () => void };
+
+export default function Sidebar({ open = false, onClose }: SidebarProps) {
+  const location = useLocation();
+  const prevPathRef = useRef(location.pathname);
+  const [logoutMessage, setLogoutMessage] = useState(false);
+
+  useEffect(() => {
+    if (location.pathname !== prevPathRef.current) {
+      prevPathRef.current = location.pathname;
+      onClose?.();
+    }
+  }, [location.pathname, onClose]);
+
+  const handleLogout = () => {
+    setLogoutMessage(true);
+    window.setTimeout(() => logout(), 1500);
+  };
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Navigazione">
       <div className="sidebar-title">Comtra Admin</div>
       <nav className="sidebar-nav">
         <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -15,17 +34,39 @@ export default function Sidebar() {
         <NavLink to="/credits" className={({ isActive }) => (isActive ? 'active' : '')}>
           Crediti e costi
         </NavLink>
+        <NavLink to="/executions" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Esecuzioni
+        </NavLink>
         <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Affiliati
         </NavLink>
         <NavLink to="/discounts" className={({ isActive }) => (isActive ? 'active' : '')}>
           Codici sconto
         </NavLink>
+        <span className="sidebar-group" aria-hidden="true">Altro</span>
+        <NavLink to="/weekly-updates" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Aggiornamenti
+        </NavLink>
+        <NavLink to="/health" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Stato servizi
+        </NavLink>
+        <NavLink to="/support" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Supporto
+        </NavLink>
+        <NavLink to="/security" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Sicurezza e log
+        </NavLink>
       </nav>
       <div style={{ marginTop: 'auto', padding: '1rem' }}>
-        <button type="button" className="brutal-btn" onClick={logout} style={{ width: '100%', fontSize: '0.75rem' }}>
-          Logout
-        </button>
+        {logoutMessage ? (
+          <p role="status" className="logout-feedback" style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--ok)' }}>
+            Disconnessione effettuata
+          </p>
+        ) : (
+          <button type="button" className="brutal-btn" onClick={handleLogout} style={{ width: '100%', fontSize: '0.75rem' }}>
+            Logout
+          </button>
+        )}
       </div>
     </aside>
   );

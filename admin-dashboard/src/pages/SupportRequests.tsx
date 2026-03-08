@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PageHeader from '../components/PageHeader';
 import {
   PLACEHOLDER_SUPPORT_REQUESTS,
   SUPPORT_STATUS_LABELS,
@@ -19,7 +20,7 @@ export default function SupportRequests() {
 
   return (
     <>
-      <h1 className="page-title">Support Requests</h1>
+      <PageHeader title="Supporto" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
         Placeholder: nessun collegamento a backend. In futuro: integrazione con sistema di ticketing.
       </p>
@@ -50,12 +51,12 @@ export default function SupportRequests() {
         <table className="brutal-table">
           <thead>
             <tr>
-              <th>Stato</th>
-              <th>Oggetto</th>
-              <th>Descrizione</th>
-              <th>Utente</th>
-              <th>Creato</th>
-              <th>Aggiornato</th>
+              <th scope="col">Stato</th>
+              <th scope="col">Oggetto</th>
+              <th scope="col">Descrizione</th>
+              <th scope="col">Utente</th>
+              <th scope="col">Creato</th>
+              <th scope="col">Aggiornato</th>
             </tr>
           </thead>
           <tbody>

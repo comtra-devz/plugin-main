@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import PageHeader from '../components/PageHeader';
 import {
   PLACEHOLDER_SECURITY_LOGS,
   EVENT_CATEGORY_LABELS,
@@ -35,7 +36,7 @@ export default function SecurityLogs() {
 
   return (
     <>
-      <h1 className="page-title">Security & Logs</h1>
+      <PageHeader title="Sicurezza e log" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
         Categorie evento: Login, Login fallito, Cambio ruolo, Uso API key, Export dati, Config, Patch sicurezza, Accesso revocato.
         Severità: Info, Warning, Critical. Fix: Patch, Config, Revoca accesso, Reset password. Placeholder: nessun collegamento a log reali.
@@ -87,12 +88,12 @@ export default function SecurityLogs() {
         <table className="brutal-table">
           <thead>
             <tr>
-              <th>Data / Ora</th>
-              <th>Categoria</th>
-              <th>Severità</th>
-              <th>Descrizione</th>
-              <th>IP</th>
-              <th>Fix</th>
+              <th scope="col">Data / Ora</th>
+              <th scope="col">Categoria</th>
+              <th scope="col">Severità</th>
+              <th scope="col">Descrizione</th>
+              <th scope="col">IP</th>
+              <th scope="col">Fix</th>
             </tr>
           </thead>
           <tbody>

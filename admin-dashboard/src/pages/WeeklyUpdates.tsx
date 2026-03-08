@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchWeeklyUpdates, type WeeklyUpdateItem } from '../api';
+import PageHeader from '../components/PageHeader';
 import {
   PLACEHOLDER_WEEKLY_UPDATES,
   UPDATE_CATEGORY_LABELS,
@@ -55,7 +56,7 @@ export default function WeeklyUpdates() {
 
   return (
     <>
-      <h1 className="page-title">Weekly Updates</h1>
+      <PageHeader title="Aggiornamenti" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
         {source === 'github'
           ? 'Aggiornamenti derivati automaticamente dai commit del repository (conventional commits).'

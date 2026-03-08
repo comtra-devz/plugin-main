@@ -74,7 +74,7 @@ export default function TokenUsage() {
             <table className="brutal-table">
               <thead>
                 <tr>
-                  <th>Azione</th>
+                  <th scope="col">Azione</th>
                   <th style={{ textAlign: 'right' }}>Chiamate</th>
                   <th style={{ textAlign: 'right' }}>Token in</th>
                   <th style={{ textAlign: 'right' }}>Token out</th>
@@ -104,7 +104,7 @@ export default function TokenUsage() {
             <table className="brutal-table">
               <thead>
                 <tr>
-                  <th>Band</th>
+                  <th scope="col">Band</th>
                   <th style={{ textAlign: 'right' }}>Chiamate</th>
                   <th style={{ textAlign: 'right' }}>Token in</th>
                   <th style={{ textAlign: 'right' }}>Token out</th>
@@ -134,7 +134,7 @@ export default function TokenUsage() {
             <table className="brutal-table" style={{ minWidth: 320 }}>
               <thead>
                 <tr>
-                  <th>Data</th>
+                  <th scope="col">Data</th>
                   <th style={{ textAlign: 'right' }}>Chiamate</th>
                   <th style={{ textAlign: 'right' }}>Token in</th>
                   <th style={{ textAlign: 'right' }}>Token out</th>

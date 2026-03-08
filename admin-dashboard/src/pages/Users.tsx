@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { fetchUsers, fetchUsersCountries, type AdminUser, type AdminUsersResponse } from '../api';
+import PageHeader from '../components/PageHeader';
 
 const PAGE_SIZE = 50;
 
@@ -40,6 +41,7 @@ export default function Users() {
   const [dateTo, setDateTo] = useState('');
   const [countryFilter, setCountryFilter] = useState<string>('');
   const [countries, setCountries] = useState<string[]>([]);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,10 +95,10 @@ export default function Users() {
 
   return (
     <>
-      <h1 className="page-title">Utenti</h1>
+      <PageHeader title="Utenti" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
         Email offuscate. Totale in DB: <strong>{total}</strong>
-        {hasActiveFilters && <> · Visibili (filtri su questa pagina): <strong>{filteredUsers.length}</strong></>}
+        {hasActiveFilters && <> · Risultati filtrati (visibili): <strong>{filteredUsers.length}</strong></>}
       </p>
 
       {/* Filtri e search */}
@@ -162,16 +164,43 @@ export default function Users() {
             <button
               type="button"
               className="brutal-btn primary"
-              onClick={() => exportUsersToCsv(filteredUsers)}
+              onClick={() => {
+                exportUsersToCsv(filteredUsers);
+                setExportMessage('Export CSV completato.');
+                window.setTimeout(() => setExportMessage(null), 3000);
+              }}
               disabled={filteredUsers.length === 0}
             >
               Esporta CSV (visibili)
             </button>
           </div>
+          {hasActiveFilters && (
+            <div>
+              <button
+                type="button"
+                className="brutal-btn"
+                onClick={() => {
+                  setSearch('');
+                  setPlanFilter('ALL');
+                  setDateFrom('');
+                  setDateTo('');
+                  setCountryFilter('');
+                  setOffset(0);
+                }}
+              >
+                Azzera filtri
+              </button>
+            </div>
+          )}
         </div>
         <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
           I filtri si applicano ai {res?.users?.length ?? 0} utenti caricati in questa pagina. Esporta: solo gli utenti visibili (filtrati).
         </p>
+        {exportMessage && (
+          <p role="status" className="export-feedback" style={{ marginTop: '0.5rem', color: 'var(--ok)', fontWeight: 700 }}>
+            {exportMessage}
+          </p>
+        )}
       </div>
 
       {loading && <p className="loading">Caricamento…</p>}
@@ -183,13 +212,13 @@ export default function Users() {
             <table className="brutal-table">
               <thead>
                 <tr>
-                  <th>Email</th>
-                  <th>Nome</th>
-                  <th>Piano</th>
-                  <th>Scadenza</th>
-                  <th>Crediti</th>
-                  <th>Provenienza</th>
-                  <th>Iscrizione</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Nome</th>
+                  <th scope="col">Piano</th>
+                  <th scope="col">Scadenza</th>
+                  <th scope="col">Crediti</th>
+                  <th scope="col">Provenienza</th>
+                  <th scope="col">Iscrizione</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,6 +265,15 @@ export default function Users() {
             <button
               type="button"
               className="brutal-btn"
+              disabled={offset === 0 || loading}
+              onClick={() => setOffset(0)}
+              aria-label="Prima pagina"
+            >
+              Prima
+            </button>
+            <button
+              type="button"
+              className="brutal-btn"
               disabled={!hasPrev || loading}
               onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
             >
@@ -251,6 +289,15 @@ export default function Users() {
               onClick={() => setOffset((o) => o + PAGE_SIZE)}
             >
               Successive →
+            </button>
+            <button
+              type="button"
+              className="brutal-btn"
+              disabled={!hasMore || loading}
+              onClick={() => setOffset(Math.max(0, Math.ceil(total / PAGE_SIZE) * PAGE_SIZE - PAGE_SIZE))}
+              aria-label="Ultima pagina"
+            >
+              Ultima
             </button>
           </div>
         </>

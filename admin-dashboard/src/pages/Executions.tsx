@@ -8,6 +8,7 @@ import {
   type ExecutionsUser,
   type FunctionExecutionsFilters,
 } from '../api';
+import PageHeader from '../components/PageHeader';
 
 const PAGE_SIZE = 50;
 
@@ -71,15 +72,29 @@ export default function Executions() {
 
   const hasMore = offset + PAGE_SIZE < total;
   const hasPrev = offset > 0;
+  const hasActiveFilters = !!(
+    actionType.trim() || dateFrom || dateTo || userId || country.trim()
+  );
+
+  const clearFilters = () => {
+    setActionType('');
+    setDateFrom('');
+    setDateTo('');
+    setUserId('');
+    setCountry('');
+    setOffset(0);
+  };
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Esecuzioni funzioni</h1>
-        <Link to="/">← Dashboard</Link>
-      </div>
+      <PageHeader title="Esecuzioni funzioni" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
         Singole esecuzioni (credit_transactions) con filtri per tipo, periodo e utente (anonimizzato).
+        {hasActiveFilters ? (
+          <> Totale risultati (con filtri): <strong>{total}</strong></>
+        ) : (
+          <> Totale in DB: <strong>{total}</strong></>
+        )}
       </p>
 
       <div className="brutal-card" style={{ marginBottom: '1rem' }}>
@@ -131,6 +146,13 @@ export default function Executions() {
             <label className="brutal-label">Data a</label>
             <input type="date" className="brutal-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
+          {hasActiveFilters && (
+            <div>
+              <button type="button" className="brutal-btn" onClick={clearFilters}>
+                Azzera filtri
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -143,11 +165,11 @@ export default function Executions() {
             <table className="brutal-table">
               <thead>
                 <tr>
-                  <th>Utente (anonimizzato)</th>
-                  <th>Provenienza</th>
-                  <th>Tipo</th>
-                  <th>Crediti</th>
-                  <th>Data / Ora</th>
+                  <th scope="col">Utente (anonimizzato)</th>
+                  <th scope="col">Provenienza</th>
+                  <th scope="col">Tipo</th>
+                  <th scope="col">Crediti</th>
+                  <th scope="col">Data / Ora</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,6 +197,15 @@ export default function Executions() {
             <button
               type="button"
               className="brutal-btn"
+              disabled={offset === 0 || loading}
+              onClick={() => setOffset(0)}
+              aria-label="Prima pagina"
+            >
+              Prima
+            </button>
+            <button
+              type="button"
+              className="brutal-btn"
               disabled={!hasPrev || loading}
               onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
             >
@@ -190,6 +221,15 @@ export default function Executions() {
               onClick={() => setOffset((o) => o + PAGE_SIZE)}
             >
               Successive →
+            </button>
+            <button
+              type="button"
+              className="brutal-btn"
+              disabled={!hasMore || loading}
+              onClick={() => setOffset(Math.max(0, Math.ceil(total / PAGE_SIZE) * PAGE_SIZE - PAGE_SIZE))}
+              aria-label="Ultima pagina"
+            >
+              Ultima
             </button>
           </div>
         </>

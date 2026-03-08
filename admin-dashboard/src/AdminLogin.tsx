@@ -99,7 +99,9 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
             value={user}
             onChange={(e) => setUser(e.target.value)}
             autoComplete="username"
+            autoFocus
             style={{ marginBottom: '1rem' }}
+            aria-label="Admin ID"
           />
           <label className="brutal-label">Password</label>
           <input
@@ -109,6 +111,7 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
             onChange={(e) => setPass(e.target.value)}
             autoComplete="current-password"
             style={{ marginBottom: '1rem' }}
+            aria-label="Password"
           />
           <button type="submit" className="brutal-btn primary" style={{ width: '100%' }}>
             Authenticate

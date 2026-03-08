@@ -8,6 +8,7 @@ import {
   type DiscountLevelItem,
   type DiscountThrottleItem,
 } from '../api';
+import PageHeader from '../components/PageHeader';
 
 const PAGE_SIZE = 50;
 
@@ -78,10 +79,7 @@ export default function Discounts() {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Codici sconto</h1>
-        <Link to="/">← Dashboard</Link>
-      </div>
+      <PageHeader title="Codici sconto" />
       <p style={{ color: 'var(--muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
         Codici livello (gamification, 5–20% sul piano Annual) e codici throttle (5% una tantum dopo 503). L’uso effettivo è tracciato su Lemon Squeezy.
       </p>
@@ -129,16 +127,26 @@ export default function Discounts() {
               <option value="15">15%</option>
               <option value="20">20%</option>
             </select>
+            {levelFilter !== '' && (
+              <button type="button" className="brutal-btn" onClick={() => { setLevelFilter(''); setLevelOffset(0); }}>
+                Azzera filtri
+              </button>
+            )}
           </div>
+          {levelFilter !== '' && stats && (
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+              Totale in DB: {stats.level.total} · Risultati con filtro: <strong>{levelTotal}</strong>
+            </p>
+          )}
         </div>
         <div className="brutal-table-wrap">
           <table className="brutal-table">
             <thead>
               <tr>
-                <th>Utente (anonimizzato)</th>
-                <th>Livello / Sconto</th>
-                <th>Codice</th>
-                <th>Creato</th>
+                <th scope="col">Utente (anonimizzato)</th>
+                <th scope="col">Livello / Sconto</th>
+                <th scope="col">Codice</th>
+                <th scope="col">Creato</th>
               </tr>
             </thead>
             <tbody>
@@ -164,10 +172,22 @@ export default function Discounts() {
             type="button"
             className="brutal-btn"
             disabled={levelOffset === 0 || loadingLevel}
+            onClick={() => setLevelOffset(0)}
+            aria-label="Prima pagina"
+          >
+            Prima
+          </button>
+          <button
+            type="button"
+            className="brutal-btn"
+            disabled={levelOffset === 0 || loadingLevel}
             onClick={() => setLevelOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
             ← Precedenti
           </button>
+          <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            {levelOffset + 1}–{Math.min(levelOffset + PAGE_SIZE, levelTotal)} di {levelTotal}
+          </span>
           <button
             type="button"
             className="brutal-btn"
@@ -176,9 +196,15 @@ export default function Discounts() {
           >
             Successive →
           </button>
-          <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-            {levelOffset + 1}–{Math.min(levelOffset + PAGE_SIZE, levelTotal)} di {levelTotal}
-          </span>
+          <button
+            type="button"
+            className="brutal-btn"
+            disabled={levelOffset + PAGE_SIZE >= levelTotal || loadingLevel}
+            onClick={() => setLevelOffset(Math.max(0, Math.ceil(levelTotal / PAGE_SIZE) * PAGE_SIZE - PAGE_SIZE))}
+            aria-label="Ultima pagina"
+          >
+            Ultima
+          </button>
         </div>
       </section>
 
@@ -198,17 +224,27 @@ export default function Discounts() {
               <option value="valid">Validi</option>
               <option value="expired">Scaduti</option>
             </select>
+            {throttleFilter !== '' && (
+              <button type="button" className="brutal-btn" onClick={() => { setThrottleFilter(''); setThrottleOffset(0); }}>
+                Azzera filtri
+              </button>
+            )}
           </div>
+          {throttleFilter !== '' && stats && (
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+              Totale in DB: {stats.throttle.total} · Risultati con filtro: <strong>{throttleTotal}</strong>
+            </p>
+          )}
         </div>
         <div className="brutal-table-wrap">
           <table className="brutal-table">
             <thead>
               <tr>
-                <th>Utente (anonimizzato)</th>
-                <th>Codice</th>
-                <th>Stato</th>
-                <th>Rilasciato</th>
-                <th>Scadenza</th>
+                <th scope="col">Utente (anonimizzato)</th>
+                <th scope="col">Codice</th>
+                <th scope="col">Stato</th>
+                <th scope="col">Rilasciato</th>
+                <th scope="col">Scadenza</th>
               </tr>
             </thead>
             <tbody>
@@ -239,10 +275,22 @@ export default function Discounts() {
             type="button"
             className="brutal-btn"
             disabled={throttleOffset === 0 || loadingThrottle}
+            onClick={() => setThrottleOffset(0)}
+            aria-label="Prima pagina"
+          >
+            Prima
+          </button>
+          <button
+            type="button"
+            className="brutal-btn"
+            disabled={throttleOffset === 0 || loadingThrottle}
             onClick={() => setThrottleOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
             ← Precedenti
           </button>
+          <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
+            {throttleOffset + 1}–{Math.min(throttleOffset + PAGE_SIZE, throttleTotal)} di {throttleTotal}
+          </span>
           <button
             type="button"
             className="brutal-btn"
@@ -251,9 +299,15 @@ export default function Discounts() {
           >
             Successive →
           </button>
-          <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-            {throttleOffset + 1}–{Math.min(throttleOffset + PAGE_SIZE, throttleTotal)} di {throttleTotal}
-          </span>
+          <button
+            type="button"
+            className="brutal-btn"
+            disabled={throttleOffset + PAGE_SIZE >= throttleTotal || loadingThrottle}
+            onClick={() => setThrottleOffset(Math.max(0, Math.ceil(throttleTotal / PAGE_SIZE) * PAGE_SIZE - PAGE_SIZE))}
+            aria-label="Ultima pagina"
+          >
+            Ultima
+          </button>
         </div>
       </section>
     </>

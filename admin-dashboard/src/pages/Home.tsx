@@ -25,60 +25,111 @@ export default function Home() {
   const [discountsStats, setDiscountsStats] = useState<DiscountsStats | null>(null);
   const [chartPeriod, setChartPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorStats, setErrorStats] = useState<string | null>(null);
+  const [errorTimeline, setErrorTimeline] = useState<string | null>(null);
+  const [errorWeeklyUpdates, setErrorWeeklyUpdates] = useState<string | null>(null);
+  const [errorExecutions, setErrorExecutions] = useState<string | null>(null);
+  const [errorThrottle, setErrorThrottle] = useState<string | null>(null);
+  const [errorDiscounts, setErrorDiscounts] = useState<string | null>(null);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [loadingWeeklyUpdates, setLoadingWeeklyUpdates] = useState(true);
+  const [loadingExecutions, setLoadingExecutions] = useState(true);
+  const [loadingThrottle, setLoadingThrottle] = useState(true);
+  const [loadingDiscounts, setLoadingDiscounts] = useState(true);
+
+  const loadStats = () => {
+    setErrorStats(null);
+    setLoading(true);
+    fetchStats()
+      .then((d) => { setData(d); setErrorStats(null); })
+      .catch((e) => setErrorStats(e.message || 'Errore di caricamento'))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    fetchStats()
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    loadStats();
   }, []);
+
+  const loadTimeline = () => {
+    setErrorTimeline(null);
+    setLoadingTimeline(true);
+    fetchCreditsTimeline(chartPeriod)
+      .then((t) => setTimeline(t))
+      .catch((e) => setErrorTimeline(e.message || 'Errore timeline'))
+      .finally(() => setLoadingTimeline(false));
+  };
 
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
+    setErrorTimeline(null);
+    setLoadingTimeline(true);
     fetchCreditsTimeline(chartPeriod)
       .then((t) => { if (!cancelled) setTimeline(t); })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .catch((e) => { if (!cancelled) setErrorTimeline(e.message || 'Errore timeline'); })
+      .finally(() => { if (!cancelled) setLoadingTimeline(false); });
     return () => { cancelled = true; };
   }, [chartPeriod, data]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadWeeklyUpdates = () => {
+    setErrorWeeklyUpdates(null);
+    setLoadingWeeklyUpdates(true);
     fetchWeeklyUpdates(20)
-      .then((r) => { if (!cancelled && r.updates?.length) setWeeklyUpdates(r.updates); })
-      .catch(() => { if (!cancelled) setWeeklyUpdates(PLACEHOLDER_WEEKLY_UPDATES); });
-    return () => { cancelled = true; };
+      .then((r) => { setWeeklyUpdates(r.updates?.length ? r.updates : []); setErrorWeeklyUpdates(null); })
+      .catch((e) => setErrorWeeklyUpdates(e.message || 'Errore caricamento aggiornamenti'))
+      .finally(() => setLoadingWeeklyUpdates(false));
+  };
+  useEffect(() => {
+    loadWeeklyUpdates();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadExecutions = () => {
+    setErrorExecutions(null);
+    setLoadingExecutions(true);
     fetchFunctionExecutions(10, 0)
-      .then((r) => { if (!cancelled && r.executions?.length) setRecentExecutions(r.executions); })
-      .catch(() => { if (!cancelled) setRecentExecutions([]); });
-    return () => { cancelled = true; };
+      .then((r) => { setRecentExecutions(r.executions?.length ? r.executions : []); setErrorExecutions(null); })
+      .catch((e) => setErrorExecutions(e.message || 'Errore caricamento esecuzioni'))
+      .finally(() => setLoadingExecutions(false));
+  };
+  useEffect(() => {
+    loadExecutions();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadThrottle = () => {
+    setErrorThrottle(null);
+    setLoadingThrottle(true);
     fetchThrottleEvents()
-      .then((t) => { if (!cancelled) setThrottleEvents(t); })
-      .catch(() => { if (!cancelled) setThrottleEvents({ total: 0, by_day: [], recent: [] }); });
-    return () => { cancelled = true; };
-  }, []);
-
+      .then((t) => { setThrottleEvents(t); setErrorThrottle(null); })
+      .catch((e) => setErrorThrottle(e.message || 'Errore caricamento throttle'))
+      .finally(() => setLoadingThrottle(false));
+  };
   useEffect(() => {
-    let cancelled = false;
-    fetchDiscountsStats()
-      .then((d) => { if (!cancelled) setDiscountsStats(d); })
-      .catch(() => { if (!cancelled) setDiscountsStats(null); });
-    return () => { cancelled = true; };
+    loadThrottle();
   }, []);
 
-  if (loading && !data) return <p className="loading">Caricamento…</p>;
-  if (error) return <p className="error">{error}</p>;
+  const loadDiscounts = () => {
+    setErrorDiscounts(null);
+    setLoadingDiscounts(true);
+    fetchDiscountsStats()
+      .then((d) => { setDiscountsStats(d); setErrorDiscounts(null); })
+      .catch((e) => setErrorDiscounts(e.message || 'Errore caricamento sconti'))
+      .finally(() => setLoadingDiscounts(false));
+  };
+  useEffect(() => {
+    loadDiscounts();
+  }, []);
+
+  if (loading && !data && !errorStats) return <p className="loading">Caricamento…</p>;
+  if (errorStats && !data) {
+    return (
+      <div className="brutal-card" style={{ maxWidth: 400 }}>
+        <p className="error" style={{ marginTop: 0 }}>{errorStats}</p>
+        <button type="button" className="brutal-btn primary" onClick={loadStats}>
+          Riprova
+        </button>
+      </div>
+    );
+  }
   if (!data) return null;
 
   const { users, credits, kimi, affiliates, funnel } = data;
@@ -150,7 +201,16 @@ export default function Home() {
           </div>
         </div>
 
-        {timeline?.timeline?.length ? (
+        {loadingTimeline ? (
+          <p style={{ marginTop: '1rem', color: 'var(--muted)' }}>Caricamento grafico…</p>
+        ) : errorTimeline ? (
+          <div className="brutal-card" style={{ marginTop: '1rem' }}>
+            <p className="error" style={{ marginTop: 0 }}>{errorTimeline}</p>
+            <button type="button" className="brutal-btn" onClick={loadTimeline}>
+              Riprova
+            </button>
+          </div>
+        ) : timeline?.timeline?.length ? (
           <div style={{ marginTop: '1rem' }}>
             <DualLineChart
               timeline={timeline.timeline}
@@ -162,6 +222,8 @@ export default function Home() {
               Passa il mouse su un punto per il dettaglio.
             </p>
           </div>
+        ) : timeline ? (
+          <p style={{ marginTop: '1rem', color: 'var(--muted)' }}>Nessun dato per il periodo selezionato.</p>
         ) : null}
 
         {credits.by_action_type.length > 0 && (
@@ -233,7 +295,19 @@ export default function Home() {
         </section>
         <section>
           <h2 className="section-title">Codici sconto</h2>
-          <Link to="/discounts" className="brutal-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+          {loadingDiscounts ? (
+            <div className="brutal-card">
+              <p style={{ color: 'var(--muted)' }}>Caricamento sconti…</p>
+            </div>
+          ) : (
+            <>
+              {errorDiscounts && (
+                <div className="brutal-card" style={{ marginBottom: '0.5rem' }}>
+                  <p className="error" style={{ marginTop: 0 }}>{errorDiscounts}</p>
+                  <button type="button" className="brutal-btn" onClick={loadDiscounts}>Riprova</button>
+                </div>
+              )}
+              <Link to="/discounts" className="brutal-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
             <p style={{ margin: '0.25rem 0' }}>
               <strong>Livello (gamification):</strong> {discountsStats?.level?.total ?? '—'} totali
               {discountsStats?.level?.by_level && (
@@ -251,22 +325,34 @@ export default function Home() {
               )}
             </p>
             <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Dettaglio e liste →</span>
-          </Link>
+              </Link>
+            </>
+          )}
         </section>
       </div>
 
       {/* Throttle/503 — eventi segnalati dal plugin (monitoraggio anche con Vercel Pro) */}
-      {(throttleEvents && throttleEvents.total > 0) && (
+      {(loadingThrottle || errorThrottle || (throttleEvents && throttleEvents.total > 0)) && (
         <section style={{ marginBottom: '2rem' }}>
           <h2 className="section-title">Throttle / 503 (plugin)</h2>
           <div className="brutal-card">
-            <p style={{ margin: '0.25rem 0' }}>Eventi totali: <strong>{throttleEvents.total}</strong></p>
-            {throttleEvents.by_day.length > 0 && (
+            {loadingThrottle ? (
+              <p style={{ color: 'var(--muted)' }}>Caricamento…</p>
+            ) : (
+              <>
+                {errorThrottle && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <p className="error" style={{ marginTop: 0 }}>{errorThrottle}</p>
+                    <button type="button" className="brutal-btn" onClick={loadThrottle}>Riprova</button>
+                  </div>
+                )}
+                <p style={{ margin: '0.25rem 0' }}>Eventi totali: <strong>{throttleEvents?.total ?? 0}</strong></p>
+            {throttleEvents?.by_day?.length > 0 && (
               <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', color: 'var(--muted)' }}>
                 Ultimi 7 gg: {throttleEvents.by_day.slice(0, 7).reduce((s, d) => s + d.count, 0)}
               </p>
             )}
-            {throttleEvents.recent.length > 0 && (
+            {throttleEvents?.recent?.length > 0 && (
               <details style={{ marginTop: '0.75rem' }}>
                 <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Ultimi eventi</summary>
                 <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85rem' }}>
@@ -275,6 +361,8 @@ export default function Home() {
                   ))}
                 </ul>
               </details>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -284,18 +372,28 @@ export default function Home() {
       <section style={{ marginBottom: '2rem' }}>
         <h2 className="section-title">Esecuzioni funzioni</h2>
         <div className="brutal-card">
-          <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
-            Ultime esecuzioni (audit, scan, generate, sync…) con utente anonimizzato.
-          </p>
-          {recentExecutions.length > 0 ? (
+          {loadingExecutions ? (
+            <p style={{ color: 'var(--muted)' }}>Caricamento esecuzioni…</p>
+          ) : (
+            <>
+              {errorExecutions && (
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <p className="error" style={{ marginTop: 0 }}>{errorExecutions}</p>
+                  <button type="button" className="brutal-btn" onClick={loadExecutions}>Riprova</button>
+                </div>
+              )}
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
+                Ultime esecuzioni (audit, scan, generate, sync…) con utente anonimizzato.
+              </p>
+              {recentExecutions.length > 0 ? (
             <div className="brutal-table-wrap">
               <table className="brutal-table" style={{ marginBottom: '0.75rem' }}>
                 <thead>
                   <tr>
-                    <th>Utente</th>
-                    <th>Tipo</th>
-                    <th>Crediti</th>
-                    <th>Quando</th>
+                    <th scope="col">Utente</th>
+                    <th scope="col">Tipo</th>
+                    <th scope="col">Crediti</th>
+                    <th scope="col">Quando</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -314,19 +412,31 @@ export default function Home() {
             <p style={{ fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>Nessuna esecuzione recente.</p>
           )}
           <Link to="/executions" className="brutal-btn primary" style={{ display: 'inline-block' }}>
-            Vedi tutto e filtra per utente / tipo / periodo →
-          </Link>
+                Vedi tutto e filtra per utente / tipo / periodo →
+              </Link>
+            </>
+          )}
         </div>
       </section>
 
-      {/* Weekly Updates — richiamo come concept originale, con CTA */}
+      {/* Aggiornamenti — richiamo con CTA */}
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Weekly Updates</h2>
+        <h2 className="section-title">Aggiornamenti</h2>
         <div className="brutal-card">
-          <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem' }}>
-            Ultimi aggiornamenti in linguaggio semplice (derivati dai commit).
-          </p>
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+          {loadingWeeklyUpdates ? (
+            <p style={{ color: 'var(--muted)' }}>Caricamento aggiornamenti…</p>
+          ) : (
+            <>
+              {errorWeeklyUpdates && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <p className="error" style={{ marginTop: 0 }}>{errorWeeklyUpdates}</p>
+                  <button type="button" className="brutal-btn" onClick={loadWeeklyUpdates}>Riprova</button>
+                </div>
+              )}
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+                Ultimi aggiornamenti in linguaggio semplice (derivati dai commit).
+              </p>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {recentUpdates.map((u) => (
               <li
                 key={u.id}
@@ -356,11 +466,13 @@ export default function Home() {
           <Link to="/weekly-updates" className="brutal-btn primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
             Tutti gli aggiornamenti →
           </Link>
-          <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--muted)' }}>
-            <Link to="/support">Support</Link>
-            {' · '}
-            <Link to="/security">Security & Logs</Link>
-          </p>
+              <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--muted)' }}>
+                <Link to="/support">Supporto</Link>
+                {' · '}
+                <Link to="/security">Sicurezza e log</Link>
+              </p>
+            </>
+          )}
         </div>
       </section>
     </>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { fetchHealth, type HealthResponse, type HealthStatus } from '../api';
+import PageHeader from '../components/PageHeader';
 
 const STATUS_LABEL: Record<HealthStatus, string> = {
   up: 'Operativo',
@@ -42,16 +42,14 @@ export default function Health() {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-        <h1 className="page-title">Stato dipendenze</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Link to="/">← Dashboard</Link>
+      <PageHeader
+        title="Stato servizi"
+        actions={
           <button type="button" className="brutal-btn" onClick={load} disabled={loading}>
             Aggiorna
           </button>
-        </div>
-      </div>
-
+        }
+      />
       <p style={{ color: 'var(--muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
         Stato di salute di server, API e servizi. I dati sono in cache per 1 minuto.
       </p>
@@ -81,10 +79,10 @@ export default function Health() {
             <table className="brutal-table">
               <thead>
                 <tr>
-                  <th>Servizio</th>
-                  <th>Stato</th>
-                  <th>Latenza</th>
-                  <th>Dettaglio</th>
+                  <th scope="col">Servizio</th>
+                  <th scope="col">Stato</th>
+                  <th scope="col">Latenza</th>
+                  <th scope="col">Dettaglio</th>
                 </tr>
               </thead>
               <tbody>

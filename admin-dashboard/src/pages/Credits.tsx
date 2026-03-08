@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { fetchStats, fetchCreditsTimeline, fetchTokenUsage, type AdminStats, type CreditsTimeline, type TokenUsageResponse } from '../api';
+import PageHeader from '../components/PageHeader';
 
 const COST_PER_SCAN = 0.013;
 
@@ -40,7 +41,7 @@ export default function Credits() {
 
   return (
     <>
-      <h1 className="page-title">Crediti e costi</h1>
+      <PageHeader title="Crediti e costi" />
       {highlightDate && (
         <p style={{ marginBottom: '1rem', padding: '0.5rem', background: 'var(--yellow)', border: '2px solid var(--black)', fontSize: '0.9rem' }}>
           Collegamento da Grafici: dati del <strong>{new Date(highlightDate).toLocaleDateString('it-IT')}</strong>.
@@ -157,7 +158,7 @@ export default function Credits() {
                   <table className="brutal-table">
                     <thead>
                       <tr>
-                        <th>Azione</th>
+                        <th scope="col">Azione</th>
                         <th style={{ textAlign: 'right' }}>Chiamate</th>
                         <th style={{ textAlign: 'right' }}>Token in</th>
                         <th style={{ textAlign: 'right' }}>Token out</th>
@@ -187,7 +188,7 @@ export default function Credits() {
                   <table className="brutal-table">
                     <thead>
                       <tr>
-                        <th>Band</th>
+                        <th scope="col">Band</th>
                         <th style={{ textAlign: 'right' }}>Chiamate</th>
                         <th style={{ textAlign: 'right' }}>Token in</th>
                         <th style={{ textAlign: 'right' }}>Token out</th>
@@ -217,7 +218,7 @@ export default function Credits() {
                   <table className="brutal-table" style={{ minWidth: 320 }}>
                     <thead>
                       <tr>
-                        <th>Data</th>
+                        <th scope="col">Data</th>
                         <th style={{ textAlign: 'right' }}>Chiamate</th>
                         <th style={{ textAlign: 'right' }}>Token in</th>
                         <th style={{ textAlign: 'right' }}>Token out</th>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchAffiliates, type AdminAffiliate } from '../api';
+import PageHeader from '../components/PageHeader';
 
 export default function Affiliates() {
   const [data, setData] = useState<{ total: number; affiliates: AdminAffiliate[] } | null>(null);
@@ -21,7 +22,7 @@ export default function Affiliates() {
 
   return (
     <>
-      <h1 className="page-title">Affiliati</h1>
+      <PageHeader title="Affiliati" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
         Totale: <strong>{data.total}</strong> · Referral totali: <strong>{data.affiliates.reduce((s, a) => s + a.total_referrals, 0)}</strong>
       </p>
@@ -33,10 +34,10 @@ export default function Affiliates() {
           <table className="brutal-table">
             <thead>
               <tr>
-                <th>Codice</th>
-                <th>Referral</th>
-                <th>Guadagni (cent)</th>
-                <th>Registrato</th>
+                <th scope="col">Codice</th>
+                <th scope="col">Referral</th>
+                <th scope="col">Guadagni (cent)</th>
+                <th scope="col">Registrato</th>
               </tr>
             </thead>
             <tbody>
