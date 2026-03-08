@@ -6,10 +6,12 @@ Audit delle **connessioni, interazioni, flussi, animazioni e variabili** del pro
 
 ## Scope
 
-- **In scope:** solo **Figma Design** prototyping. Dati letti via Plugin API: `reactions`, `overflowDirection`, `overlayPositionType`, `overlayBackground`, ecc.
+- **In scope:** solo **Figma Design** prototyping. Dati letti via Plugin API: `reactions`, `overflowDirection`, `overlayPositionType`, `overlayBackground`, `flowStartingPoints`, ecc.
 - **Fuori scope:** Figma Make (prototipo generato da AI), Figma Sites, tool di prototipazione di terze parti.
 
 L’audit è **statico**: analizza il grafo delle connessioni e le impostazioni di transizione/overlay/variabili. Non simula l’esecuzione in presentation mode.
+
+**Scope UI:** non sono previste “All Pages” né opzioni per pagina. L’utente sceglie **quali flussi** auditare tramite **multi-select** sui flow starting point della pagina corrente (`figma.currentPage.flowStartingPoints`). Vedi **SCOPE-AND-UI.md**.
 
 ---
 
@@ -31,6 +33,8 @@ L’audit è **statico**: analizza il grafo delle connessioni e le impostazioni 
 | **TYPES-AND-CATEGORIES.md** | `categoryId` per UI, severity, colori. |
 | **EFFORT-VS-FIDELITY.md** | Consigli basati su ricerca: quando usare prototipazione avanzata, quando preferire flussi lineari, trade-off effort/fedeltà. |
 | **AGENT-DIRECTIVES.md** | (Opzionale) Tono e linee guida per eventuali tips AI. |
+| **SCOPE-AND-UI.md** | Scope per flussi: multi-select sui flow starting point; no “All Pages”. |
+| **COST-PROSPECT.md** | Riferimento a docs/COST-ESTIMATE-DS-AUDIT.md (tabella unificata costi; Prototype = 1–4 cr per numero flussi). |
 
 ---
 
@@ -64,7 +68,7 @@ L’audit è **statico**: analizza il grafo delle connessioni e le impostazioni 
 ## Implementazione
 
 - **Plugin:** traversale da `figma.currentPage.children`, lettura `node.reactions`, costruzione grafo adjacency (source → destinationId). Un solo pass per grafo; riuso per tutte le regole. Performance: non bloccante (async/yield), cache per `getNodeById`, Smart Animate (P-09) limitato a profondità 5.
-- **UI:** il tab Prototype può seguire il pattern del tab UX (scope: pagina corrente / elenco pagine, “Run Prototype Audit”, score, categorie, lista issue con rule_id P-NN, flowName se presente).
+- **UI:** il tab Prototype usa **multi-select flussi** (da `flowStartingPoints`), non “All Pages” né select pagina. Run → score, categorie, lista issue con rule_id P-NN e flowName. Costo da `getPrototypeAuditCost(selectedFlowCount)` (1–4 crediti). Vedi SCOPE-AND-UI.md e COST-PROSPECT.md.
 
 ---
 

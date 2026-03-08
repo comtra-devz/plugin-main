@@ -5,10 +5,17 @@ import { User, UserStats, Trophy } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
 import { Confetti } from '../components/Confetti';
 
+export interface RecentTransaction {
+  action_type: string;
+  credits_consumed: number;
+  created_at: string;
+}
+
 interface Props {
   user?: User | null;
   stats: UserStats;
   trophies?: Trophy[] | null;
+  recentTransactions?: RecentTransaction[];
   onLinkedInShare?: () => Promise<void>;
 }
 
@@ -200,7 +207,36 @@ const ICON_ID_TO_COMPONENT: Record<string, React.ReactNode> = {
   GOD: <Icons.Eye />,
 };
 
-export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFromApi, onLinkedInShare }) => {
+const ACTION_LABELS: Record<string, string> = {
+  audit: 'Design System Audit',
+  scan: 'Design System Scan',
+  a11y_audit: 'A11y Audit',
+  a11y_check: 'A11y Check',
+  ux_audit: 'UX Audit',
+  proto_audit: 'Prototype Audit',
+  proto_scan: 'Proto Scan',
+  generate: 'Generate',
+  wireframe_gen: 'Wireframe Gen',
+  wireframe_modified: 'Wireframe Modified',
+  sync_storybook: 'Sync Storybook',
+  sync_github: 'Sync GitHub',
+  sync_bitbucket: 'Sync Bitbucket',
+  scan_sync: 'Sync Scan',
+  sync_fix: 'Sync Fix',
+};
+
+function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const sec = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (sec < 60) return 'Just now';
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+
+export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFromApi, recentTransactions = [], onLinkedInShare }) => {
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -334,6 +370,22 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
       {/* Stats Widget */}
       <UserStatsWidget stats={stats} />
 
+      {/* Recent activity */}
+      {recentTransactions.length > 0 && (
+        <div className={`${BRUTAL.card} bg-white`}>
+          <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2">Recent activity</h3>
+          <ul className="space-y-2 max-h-48 overflow-y-auto">
+            {recentTransactions.map((tx, i) => (
+              <li key={i} className="flex justify-between items-center text-[10px] border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                <span className="font-bold uppercase">{ACTION_LABELS[tx.action_type] ?? tx.action_type}</span>
+                <span className="text-gray-500 font-mono shrink-0 ml-2">{tx.credits_consumed} cr</span>
+                <span className="text-gray-400 shrink-0 ml-2">{formatRelativeTime(tx.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Badges Grid */}
       <div className={`${BRUTAL.card} bg-white`}>
           <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2 flex justify-between items-center">
@@ -361,7 +413,7 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
               <div className={`${BRUTAL.card} bg-white max-w-xs w-full text-center relative animate-in zoom-in-95`} onClick={e => e.stopPropagation()}>
                   <button 
                     onClick={(e) => { e.stopPropagation(); setSelectedBadge(null); }} 
-                    className="absolute top-2 right-2 text-2xl font-black hover:text-red-600 w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-black transition-all"
+                    className="absolute top-3 right-2 text-2xl font-black hover:text-red-600 w-8 h-8 flex items-center justify-center border-2 border-transparent hover:border-black transition-all"
                   >
                     ×
                   </button>

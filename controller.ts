@@ -81,6 +81,24 @@ figma.ui.onmessage = async (raw: any) => {
     figma.ui.postMessage({ type: 'pages-result', pages });
   }
 
+  if (msg.type === 'get-flow-starting-points') {
+    const page = figma.currentPage;
+    const flows = (page as any).flowStartingPoints != null
+      ? Array.from((page as any).flowStartingPoints as ReadonlyArray<{ nodeId: string; name: string }>).map(f => ({ nodeId: f.nodeId, name: f.name }))
+      : [];
+    figma.ui.postMessage({ type: 'flow-starting-points-result', flows });
+  }
+
+  if (msg.type === 'run-proto-audit') {
+    const selectedFlowNodeIds: string[] = Array.isArray(msg.selectedFlowNodeIds) ? msg.selectedFlowNodeIds : [];
+    // TODO: run real prototype audit (traverse from selectedFlowNodeIds, build graph, apply P-01–P-20). For now return mock issues.
+    const mockIssues = [
+      { id: 'P-04-001', rule_id: 'P-04', categoryId: 'flow-integrity', msg: 'Broken destination: target frame not found', severity: 'HIGH', layerId: 'nav-home', fix: 'Reconnect to an existing frame or remove the link.', pageName: 'Current page', flowName: 'Main Flow' },
+      { id: 'P-01-001', rule_id: 'P-01', categoryId: 'flow-integrity', msg: 'Dead-end frame: no outgoing connections or Back actions', severity: 'HIGH', layerId: 'flow-end', fix: 'Add a Back action or Navigate to to return to previous screen.', pageName: 'Current page', flowName: 'Checkout Flow' },
+    ];
+    figma.ui.postMessage({ type: 'proto-audit-result', issues: mockIssues });
+  }
+
   // Serialize document tree for audit. Chunked + yield so the main thread never blocks for long.
   const MAX_SERIALIZE_DEPTH = 6;
   const SERIALIZE_CHUNK = 20;

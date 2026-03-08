@@ -248,6 +248,8 @@ app.get('/auth/figma/callback', async (req, res) => {
         user.xp_for_next_level = info.xpForNextLevel;
         user.xp_for_current_level_start = info.xpForCurrentLevelStart;
       }
+      const productionStats = await getProductionStats(dbSql, user.id);
+      if (productionStats) user.stats = productionStats;
     } catch (err) {
       console.error('OAuth callback: post-save SELECT failed (non-fatal)', err);
     }
@@ -517,6 +519,14 @@ function estimateCreditsByAction(actionType, nodeCount) {
   }
   if (actionType === 'wireframe_gen' || actionType === 'generate') return 3;
   if (actionType === 'proto_scan') return 2;
+  // Prototype Audit: node_count = number of selected flows; low credits (1–4). See audit-specs/prototype-audit/COST-PROSPECT.md
+  if (actionType === 'proto_audit') {
+    const flows = Math.max(0, Math.floor(n));
+    if (flows <= 1) return 1;
+    if (flows <= 3) return 2;
+    if (flows <= 6) return 3;
+    return 4;
+  }
   if (actionType === 'ux_audit') return 4;
   if (actionType === 'sync') return 1;
   if (actionType === 'scan_sync') return 15;
@@ -559,8 +569,31 @@ app.get('/api/credits', async (req, res) => {
     const total = Number(row.credits_total) || 0;
     const used = Number(row.credits_used) || 0;
     const remaining = Math.max(0, total - used);
-      const totalXp = Math.max(0, Number(row.total_xp) || 0);
+    const totalXp = Math.max(0, Number(row.total_xp) || 0);
     const info = getLevelInfo(totalXp);
+    let stats = null;
+    try {
+      stats = await getProductionStats(dbSql, userId);
+    } catch (statsErr) {
+      console.error('GET /api/credits: getProductionStats failed (non-fatal)', statsErr);
+    }
+    let recent_transactions = [];
+    try {
+      const tx = await dbSql`
+        SELECT action_type, credits_consumed, created_at
+        FROM credit_transactions
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 30
+      `;
+      recent_transactions = (tx.rows || []).map((r) => ({
+        action_type: r.action_type,
+        credits_consumed: Number(r.credits_consumed) || 0,
+        created_at: r.created_at,
+      }));
+    } catch (txErr) {
+      console.error('GET /api/credits: recent_transactions failed (non-fatal)', txErr);
+    }
     res.json({
       credits_remaining: remaining,
       credits_total: total,
@@ -571,6 +604,8 @@ app.get('/api/credits', async (req, res) => {
       total_xp: totalXp,
       xp_for_next_level: info.xpForNextLevel,
       xp_for_current_level_start: info.xpForCurrentLevelStart ?? 0,
+      ...(stats && { stats }),
+      recent_transactions,
     });
   } catch (err) {
     console.error('GET /api/credits', err);
@@ -1339,6 +1374,7 @@ async function getTrophyContext(sql, userId) {
   for (const r of ct.rows) counts[r.action_type] = Number(r.c) || 0;
   const audits = (counts.audit || 0) + (counts.scan || 0);
   const wireframesGen = (counts.wireframe_gen || 0) + (counts.generate || 0);
+  const wireframesModified = counts.wireframe_modified || 0;
   const protoScans = counts.proto_scan || 0;
   const a11y = counts.a11y_check || counts.a11y_audit || 0;
   const ux = counts.ux_audit || 0;
@@ -1355,8 +1391,25 @@ async function getTrophyContext(sql, userId) {
 
   return {
     totalXp, maxHealth, fixesAccepted, consecutiveFixes, tokenFixes, bugReports, linkedinShared,
-    audits, wireframesGen, protoScans, a11y, ux, syncStorybook, syncGithub, syncBitbucket,
+    audits, wireframesGen, wireframesModified, protoScans, a11y, ux, syncStorybook, syncGithub, syncBitbucket,
     auditsToday, affiliateReferrals,
+  };
+}
+
+/** Build production metrics object for plugin (UserStats shape). */
+async function getProductionStats(dbSql, userId) {
+  const ctx = await getTrophyContext(dbSql, userId);
+  return {
+    maxHealthScore: ctx.maxHealth,
+    wireframesGenerated: ctx.wireframesGen,
+    wireframesModified: ctx.wireframesModified ?? 0,
+    analyzedA11y: ctx.a11y,
+    analyzedUX: ctx.ux,
+    analyzedProto: ctx.protoScans,
+    syncedStorybook: ctx.syncStorybook,
+    syncedGithub: ctx.syncGithub,
+    syncedBitbucket: ctx.syncBitbucket,
+    affiliatesCount: ctx.affiliateReferrals,
   };
 }
 

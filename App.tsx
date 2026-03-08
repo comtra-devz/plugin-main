@@ -107,6 +107,7 @@ export default function AppTest() {
   const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number; discountCode?: string | null } | null>(null);
   const [trophies, setTrophies] = useState<Trophy[] | null>(null);
   const [newTrophiesToast, setNewTrophiesToast] = useState<Array<{ id: string; name: string }>>([]);
+  const [recentTransactions, setRecentTransactions] = useState<Array<{ action_type: string; credits_consumed: number; created_at: string }>>([]);
 
   const [genPrompt, setGenPrompt] = useState('');
   const [credits, setCredits] = useState<CreditsState | null>(null);
@@ -211,15 +212,19 @@ export default function AppTest() {
           updates.xp_for_current_level_start = data.xp_for_current_level_start ?? prev.xp_for_current_level_start;
         }
         if (data.plan != null) updates.plan = data.plan as User['plan'];
+        if (data.stats != null && typeof data.stats === 'object') {
+          updates.stats = { ...prev.stats, ...data.stats };
+        }
         if (Object.keys(updates).length === 0) return prev;
         return { ...prev, ...updates };
       });
+      if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
     } catch (_) {}
   }, [user?.authToken, handle503]);
 
   useEffect(() => {
     if (user?.authToken) fetchCredits();
-    else setCredits(null);
+    else { setCredits(null); setRecentTransactions([]); }
   }, [user?.authToken, user?.id, fetchCredits]);
 
   const fetchTrophies = React.useCallback(async () => {
@@ -336,6 +341,7 @@ export default function AppTest() {
     setUser(null);
     setCredits(null);
     setSimulatedCredits(null);
+    setRecentTransactions([]);
     setShowProfile(false);
     setShowLogin(true);
     setLogoutToast('You\'re logged out. See you next time!');
@@ -717,6 +723,7 @@ export default function AppTest() {
               user={user}
               stats={user.stats}
               trophies={trophies}
+              recentTransactions={recentTransactions}
               onLinkedInShare={              async () => {
                 if (!user?.authToken) return;
                 try {

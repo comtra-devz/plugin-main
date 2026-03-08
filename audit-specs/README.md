@@ -30,12 +30,14 @@ audit-specs/
     ├── SOURCES.md               Fonti (Nielsen, Baymard, NNGroup, Carbon, …)
     └── AGENT-DIRECTIVES.md      Tono, falsi positivi, costo crediti
 ├── prototype-audit/          Prototype Audit (in-plugin deterministico, no Kimi)
-    ├── README.md               Scope, AI vs deterministico, tabella regole
+    ├── README.md               Scope, AI vs deterministico, tabella regole, scope UI per flussi
+    ├── SCOPE-AND-UI.md         Multi-select flussi (flowStartingPoints); no All Pages
     ├── PROTOTYPE-AUDIT-RULES.md  20 regole P-01–P-20 (flow, nav, interaction, overlay, variables, docs)
     ├── OUTPUT-SCHEMA.md         Schema JSON (findings, summary, health score)
     ├── SEVERITY-AND-SCORE.md    Punti per severity, advisory levels (Healthy / Needs Attention / …)
     ├── TYPES-AND-CATEGORIES.md  categoryId per UI (6 categorie)
     ├── EFFORT-VS-FIDELITY.md    Consigli effort vs fedeltà, quando usare proto avanzato (ricerca utente)
+    ├── COST-PROSPECT.md         Crediti proporzionali a numero flussi (1–4), bassi
     └── AGENT-DIRECTIVES.md      Direttive per eventuali tips AI opzionali
 ```
 

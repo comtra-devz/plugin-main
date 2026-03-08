@@ -27,16 +27,26 @@ Ogni azione nel plugin **consuma** un certo numero di crediti (definito in **`co
 
 Esempio — **Scan DS** (da `SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`): ad ogni scan vengono addebitati 2–11 crediti in base alla dimensione del file. Altre azioni hanno il loro mapping credito/azione (es. Generate 3, Sync 1).
 
-| Azione (es. Scan DS) | Dimensione file (nodi) | Crediti consumati |
-|----------------------|------------------------|-------------------|
-| Scan DS | ≤500 (Small) | 2 |
+| Azione | Dimensione / parametro | Crediti consumati |
+|--------|------------------------|-------------------|
+| **Scan DS** | ≤500 (Small) | 2 |
 | Scan DS | ≤5k (Medium) | 5 |
 | Scan DS | ≤50k (Large) | 8 |
 | Scan DS | >50k (200k+) | 11 |
+| **A11Y Audit** | ≤500 (Small) | 1 |
+| A11Y Audit | ≤5k (Medium) | 2 |
+| A11Y Audit | ≤50k (Large) | 4 |
+| A11Y Audit | >50k (200k+) | 6 |
+| **UX Logic Audit** | Attualmente flat (backend) | **4** |
+| UX Logic Audit (ruleset) | Formula: BASE 3 + pages×1 × mult. nodi | 4–20+ (es. 5 pag, 300 nodi → 12) |
 | **Generate** | Standard (action plan) | **3** |
 | Generate | Screenshot conversion | +2 (sul tier) |
 
-*(Generate: credito consumato dopo canvas render riuscito; stima da `estimateCreditsByAction('generate')` in backend.)*
+- **Scan DS:** `getScanCostAndSize(nodeCount)` in `constants.ts`; backend `audit` / `scan`. Dettaglio: questo documento (§ 3–5).
+- **A11Y Audit:** `getA11yCostAndSize(nodeCount)`; backend `a11y_audit`. Dettaglio: **docs/COST-ESTIMATE-A11Y.md**.
+- **Prototype Audit:** dettaglio **docs/COST-ESTIMATE-PROTOTYPE-AUDIT.md**.
+- **UX Logic Audit:** agente Kimi (design statico, 60 regole UXL). Backend: `estimateCreditsByAction('ux_audit')` = 4 (flat). Ruleset: formula BASE 3 + pages×1 × mult. nodi. Dettaglio: **docs/COST-ESTIMATE-UX-AUDIT.md**.
+- **Generate:** credito dopo canvas render; stima da `estimateCreditsByAction('generate')` in backend.
 
 ---
 

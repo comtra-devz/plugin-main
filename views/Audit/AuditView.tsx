@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, COUNT_CAP } from '../../constants';
+import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, COUNT_CAP } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
 import { CircularScore } from '../../components/widgets/CircularScore';
 import { Confetti } from '../../components/Confetti';
@@ -10,21 +10,23 @@ import { ConfirmationModal } from '../../components/ConfirmationModal';
 import { DesignSystemTab, ScanScope } from './tabs/DesignSystemTab';
 import { AccessibilityTab } from './tabs/AccessibilityTab';
 import { UxAuditTab } from './tabs/UxAuditTab';
-import { DeepAnalysisTab } from './tabs/DeepAnalysisTab';
+import { PrototypeAuditTab } from './tabs/PrototypeAuditTab';
 import { 
   LOADING_MSGS,
   A11Y_LOADING_MSGS,
   DS_ISSUES, 
   A11Y_ISSUES, 
-  UX_ISSUES, 
-  PROTO_ISSUES,
+  UX_ISSUES,
   buildDsCategoriesFromIssues,
   buildA11yCategoriesFromIssues,
   buildUxCategoriesFromIssues,
+  buildPrototypeCategoriesFromIssues,
   computeDsScoreFromIssues,
   computeUxHealthScoreFromIssues,
+  computePrototypeHealthScoreFromIssues,
   getDsScoreCopy,
   getUxScoreCopy,
+  getPrototypeScoreCopy,
 } from './data';
 import { getCreditsForIssue, getCreditsForFixAll, ACTION_AUTO_FIX, ACTION_AUTO_FIX_ALL } from './autoFixConfig';
 import { useToast } from '../../contexts/ToastContext';
@@ -82,9 +84,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [hasUxAudited, setHasUxAudited] = useState(false);
   const [lastUxAuditDate, setLastUxAuditDate] = useState<Date | null>(null);
 
-  // Selection State for Deep Audits (Prototype tab)
-  const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
-  const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
+  // Prototype Audit: flow multi-select and result state
+  const [flowStartingPoints, setFlowStartingPoints] = useState<{ nodeId: string; name: string }[]>([]);
+  const [selectedFlowIds, setSelectedFlowIds] = useState<string[]>([]);
+  const [isFlowDropdownOpen, setIsFlowDropdownOpen] = useState(false);
+  const [hasProtoAudited, setHasProtoAudited] = useState(false);
+  const [lastProtoAuditDate, setLastProtoAuditDate] = useState<Date | null>(null);
+  const [protoAuditIssues, setProtoAuditIssues] = useState<AuditIssue[] | null>(null);
+  const [protoAuditLoading, setProtoAuditLoading] = useState(false);
+  const [protoAuditError, setProtoAuditError] = useState<string | null>(null);
+  const protoCostRef = useRef<number>(0);
+
+  // A11Y / legacy deep scan (receipt flow)
   const [hasDeepScanned, setHasDeepScanned] = useState(false);
   const [isDeepScanning, setIsDeepScanning] = useState(false);
 
@@ -232,7 +243,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   let currentIssues = activeTab === 'DS' && dsAuditIssues != null ? dsAuditIssues : DS_ISSUES;
   if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? (selectedPageName ? a11yIssuesScoped : a11yAuditIssues) : A11Y_ISSUES;
   if (activeTab === 'UX') currentIssues = hasUxAudited ? UX_ISSUES : []; // UX: no scope; when result exists show issues (later: uxAuditIssues from API)
-  if (activeTab === 'PROTOTYPE') currentIssues = PROTO_ISSUES;
+  if (activeTab === 'PROTOTYPE') currentIssues = hasProtoAudited && protoAuditIssues ? protoAuditIssues : [];
 
   // Filter out excluded pages
   let filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
@@ -264,6 +275,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const uxCategories = activeTab === 'UX' ? buildUxCategoriesFromIssues(filteredIssues) : [];
   const uxScore = activeTab === 'UX' ? computeUxHealthScoreFromIssues(filteredIssues) : 100;
   const uxScoreCopy = activeTab === 'UX' ? getUxScoreCopy(uxScore) : { badge: 'EXCELLENT' as const, status: '' };
+
+  // Prototype tab: categories and score from Prototype audit result
+  const protoCategories = activeTab === 'PROTOTYPE' ? buildPrototypeCategoriesFromIssues(filteredIssues) : [];
+  const protoScore = activeTab === 'PROTOTYPE' ? computePrototypeHealthScoreFromIssues(filteredIssues) : 100;
+  const protoScoreCopy = activeTab === 'PROTOTYPE' ? getPrototypeScoreCopy(protoScore) : { advisoryLevel: 'healthy' as const, status: '' };
 
   const highSeverityCount = activeIssues.filter(i => i.severity === 'HIGH').length; 
 
@@ -305,6 +321,13 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     });
     return () => cancelAnimationFrame(t);
   }, []);
+
+  // Fetch flow starting points when Prototype tab is active (current page only).
+  useEffect(() => {
+    if (activeTab === 'PROTOTYPE') {
+      window.parent.postMessage({ pluginMessage: { type: 'get-flow-starting-points' } }, '*');
+    }
+  }, [activeTab]);
 
   // Fake progress: slow creep so we don't sit at 95% for long; real count-nodes-progress overrides when available
   useEffect(() => {
@@ -359,6 +382,25 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       if (msg.type === 'pages-result' && msg.pages) {
         setDocumentPages(msg.pages);
         setSelectedPageId((prev) => (prev ? prev : msg.pages[0]?.id ?? null));
+      }
+      if (msg.type === 'flow-starting-points-result' && Array.isArray(msg.flows)) {
+        setFlowStartingPoints(msg.flows);
+      }
+      if (msg.type === 'proto-audit-result') {
+        const issues = Array.isArray(msg.issues) ? msg.issues as AuditIssue[] : [];
+        setProtoAuditIssues(issues);
+        setProtoAuditLoading(false);
+        setHasProtoAudited(true);
+        setLastProtoAuditDate(new Date());
+        setScanProgress({ percent: 100, count: 0 });
+        setTimeout(() => setIsCalculating(false), 200);
+        const cost = protoCostRef.current;
+        if (cost > 0 && !useInfiniteCreditsForTest && !(plan === 'PRO')) {
+          consumeCredits({ action_type: 'proto_audit', credits_consumed: cost }).then((result) => {
+            if (result.error === 'Insufficient credits') onUnlockRequest();
+            else if (result.error) setProtoAuditError(result.error);
+          });
+        }
       }
       if (msg.type === 'count-nodes-progress') {
         setScanProgress({ percent: msg.percent ?? 0, count: msg.count ?? 0 });
@@ -573,18 +615,42 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     }, 2000);
   }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
 
-  const handleDeepScan = () => {
+  /** Prototype Audit: confirm then run in-plugin audit; cost from getPrototypeAuditCost(selectedFlowIds.length). */
+  const handleRunProtoAudit = useCallback(() => {
+    if (flowStartingPoints.length === 0 || selectedFlowIds.length === 0) return;
     if (knownZeroCredits) {
       onUnlockRequest();
       return;
     }
-    const mockNodes = Math.floor(Math.random() * 1000) + 50;
-    const { cost, sizeLabel } = getScanCostAndSize(mockNodes);
-    setScanStats({ nodes: mockNodes, cost, sizeLabel, target: 'Current Selection' });
-    setPendingScanType('DEEP');
-    pendingScanTypeRef.current = 'DEEP';
-    setShowReceipt(true);
-  };
+    const { cost } = getPrototypeAuditCost(selectedFlowIds.length);
+    protoCostRef.current = cost;
+    const flowWord = selectedFlowIds.length === 1 ? 'flow' : 'flows';
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Run Prototype Audit',
+      message: `This audit will use ${cost} credit${cost !== 1 ? 's' : ''} (${selectedFlowIds.length} ${flowWord}). Continue?`,
+      confirmLabel: `Run (-${cost} credit${cost !== 1 ? 's' : ''})`,
+      onConfirm: () => {
+        setConfirmConfig(null);
+        setProtoAuditError(null);
+        setProtoAuditLoading(true);
+        setIsCalculating(true);
+        setScanProgress({ percent: 0, count: 0 });
+        const start = Date.now();
+        const tick = () => {
+          const elapsed = Date.now() - start;
+          const pct = Math.min(90, Math.floor((elapsed / 1500) * 90));
+          setScanProgress(prev => ({ ...prev, percent: pct }));
+          if (pct < 90) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        window.parent.postMessage(
+          { pluginMessage: { type: 'run-proto-audit', selectedFlowNodeIds: selectedFlowIds } },
+          '*'
+        );
+      },
+    });
+  }, [flowStartingPoints.length, selectedFlowIds, knownZeroCredits, onUnlockRequest]);
 
   const handleConfirmScan = () => {
     const cost = scanStats.cost;
@@ -931,25 +997,25 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
       <div className="grid grid-cols-2 border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
         <button 
-          onClick={() => { setActiveTab('DS'); setSelectedLayer(null); setHasDeepScanned(false); }}
+          onClick={() => { setActiveTab('DS'); setActiveCat(null); }}
           className={`py-2 text-[10px] font-black uppercase transition-colors border-b-2 border-black ${activeTab === 'DS' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           Design System
         </button>
         <button 
-          onClick={() => { setActiveTab('A11Y'); setHasDeepScanned(false); }}
+          onClick={() => { setActiveTab('A11Y'); setActiveCat(null); }}
           className={`py-2 text-[10px] font-black uppercase transition-colors border-l-2 border-b-2 border-black ${activeTab === 'A11Y' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           Accessibility
         </button>
         <button 
-          onClick={() => { setActiveTab('UX'); setActiveCat(null); setHasDeepScanned(false); }}
+          onClick={() => { setActiveTab('UX'); setActiveCat(null); }}
           className={`py-2 text-[10px] font-black uppercase transition-colors ${activeTab === 'UX' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           UX Audit
         </button>
         <button 
-          onClick={() => { setActiveTab('PROTOTYPE'); setHasDeepScanned(false); }}
+          onClick={() => { setActiveTab('PROTOTYPE'); setActiveCat(null); }}
           className={`py-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'PROTOTYPE' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           Prototype
@@ -1052,18 +1118,29 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       )}
 
       {activeTab === 'PROTOTYPE' && (
-        <DeepAnalysisTab 
-            activeTab={activeTab}
-            selectedLayer={selectedLayer}
-            setSelectedLayer={setSelectedLayer}
-            hasDeepScanned={hasDeepScanned}
-            setHasDeepScanned={setHasDeepScanned}
-            lastDeepScanDate={lastDeepScanDate}
-            isDeepScanning={isDeepScanning}
-            activeIssues={activeIssues}
-            onDeepScan={handleDeepScan}
-            issueListProps={issueListProps}
-            deepScanError={null}
+        <PrototypeAuditTab
+          flowStartingPoints={flowStartingPoints}
+          selectedFlowIds={selectedFlowIds}
+          setSelectedFlowIds={setSelectedFlowIds}
+          isFlowDropdownOpen={isFlowDropdownOpen}
+          setIsFlowDropdownOpen={setIsFlowDropdownOpen}
+          hasProtoResult={hasProtoAudited}
+          score={protoScore}
+          lastAuditDate={lastProtoAuditDate}
+          categories={protoCategories}
+          statusCopy={protoScoreCopy.status}
+          highSeverityCount={highSeverityCount}
+          activeCat={activeCat}
+          setActiveCat={setActiveCat}
+          isPro={isPro}
+          displayIssues={displayIssues}
+          activeIssues={activeIssues}
+          onRunProtoAudit={handleRunProtoAudit}
+          isCalculating={isCalculating}
+          scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
+          issueListProps={issueListProps}
+          protoAuditLoading={protoAuditLoading}
+          protoAuditError={protoAuditError}
         />
       )}
     </div>

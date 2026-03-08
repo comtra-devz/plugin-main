@@ -110,6 +110,23 @@ export function getA11yCostAndSize(nodeCount: number): { cost: number; sizeLabel
   return { cost: last.cost, sizeLabel: last.label };
 }
 
+/** Prototype Audit: cost by number of flows selected (multi-select). Low credits; no "All Pages". See audit-specs/prototype-audit/COST-PROSPECT.md, SCOPE-AND-UI.md. */
+export const PROTO_AUDIT_FLOW_TIERS: { maxFlows: number; label: string; cost: number }[] = [
+  { maxFlows: 1, label: '1 flow', cost: 1 },
+  { maxFlows: 3, label: '2–3 flows', cost: 2 },
+  { maxFlows: 6, label: '4–6 flows', cost: 3 },
+  { maxFlows: Infinity, label: '7+ flows', cost: 4 },
+];
+
+export function getPrototypeAuditCost(selectedFlowCount: number): { cost: number; sizeLabel: string } {
+  const n = Math.max(0, selectedFlowCount);
+  for (const tier of PROTO_AUDIT_FLOW_TIERS) {
+    if (n <= tier.maxFlows) return { cost: tier.cost, sizeLabel: tier.label };
+  }
+  const last = PROTO_AUDIT_FLOW_TIERS[PROTO_AUDIT_FLOW_TIERS.length - 1];
+  return { cost: last.cost, sizeLabel: last.label };
+}
+
 /** Lemon Squeezy: base checkout URL (store custom domain). Aggiungere ?aff=CODICE per attribuzione affiliato. */
 export const LEMON_SQUEEZY_CHECKOUT_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_SQUEEZY_CHECKOUT_BASE) || 'https://comtra.lemonsqueezy.com/checkout/buy';
 
