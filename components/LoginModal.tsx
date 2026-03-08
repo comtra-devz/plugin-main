@@ -28,7 +28,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
         )}
         {oauthInProgress ? (
           <p className="text-sm font-bold text-black/80">
-            Apri il browser per accedere con Figma, poi torna qui.
+            Open the browser to sign in with Figma, then come back here.
           </p>
         ) : (
           <button 
@@ -71,7 +71,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
             type="button"
             onClick={onDismissToast}
             className="shrink-0 w-6 h-6 flex items-center justify-center text-black/60 hover:text-black border border-transparent hover:border-black rounded"
-            aria-label="Chiudi avviso"
+            aria-label="Dismiss"
           >
             ✕
           </button>

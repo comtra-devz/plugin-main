@@ -607,7 +607,7 @@ export default function AppTest() {
       ? '∞'
       : effectiveCredits === null
         ? (user?.authToken ? '—' : '— (re-login to sync)')
-        : `${effectiveCredits.remaining}/${effectiveCredits.total}${usingSimulatedCredits ? ' (simulati)' : ''}`;
+        : `${effectiveCredits.remaining}/${effectiveCredits.total}${usingSimulatedCredits ? ' (simulated)' : ''}`;
   const hasZeroCredits = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && effectiveCreditsRemaining !== null && effectiveCreditsRemaining <= 0;
   const lowCreditsWarning = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && effectiveCreditsRemaining !== null && effectiveCreditsRemaining > 0 && effectiveCreditsRemaining <= 5;
 

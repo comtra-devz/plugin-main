@@ -69,7 +69,7 @@ export const Toast: React.FC<Props> = ({
             type="button"
             onClick={onDismiss}
             className="shrink-0 text-gray-400 hover:text-black font-bold text-sm leading-none p-0.5"
-            aria-label="Chiudi"
+            aria-label="Dismiss"
           >
             ×
           </button>
@@ -96,7 +96,7 @@ export const Toast: React.FC<Props> = ({
               onClick={onDismiss}
               className="text-[10px] font-bold uppercase underline text-gray-500 hover:text-black"
             >
-              Chiudi
+              Dismiss
             </button>
           )}
         </div>

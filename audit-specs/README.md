@@ -15,16 +15,32 @@ audit-specs/
 │   ├── OUTPUT-SCHEMA.md      Formato JSON di risposta dell'agente
 │   ├── SOURCES.md            Fonti autorevoli e mappatura alle regole
 │   └── RECURRING-PROBLEMS.md Problematiche ricorrenti (community), severity, mappatura
-└── a11y-audit/               Accessibility Audit (Kimi + API gratuite)
+├── a11y-audit/               Accessibility Audit (Kimi + API gratuite)
+│   ├── README.md
+│   ├── A11Y-AUDIT-RULES.md   Regole: contrast, touch, focus, alt, semantics, color
+│   └── OUTPUT-SCHEMA.md      Formato JSON di risposta (stesso schema AuditIssue)
+└── ux-logic-audit/           UX Logic Audit (Kimi)
     ├── README.md
-    ├── A11Y-AUDIT-RULES.md   Regole: contrast, touch, focus, alt, semantics, color
-    └── OUTPUT-SCHEMA.md      Formato JSON di risposta (stesso schema AuditIssue)
+    ├── UX-LOGIC-AUDIT-RULES.md  60 regole, 11 categorie, detection logic
+    ├── OUTPUT-SCHEMA.md         Schema JSON (issues + summary + escalations)
+    ├── SEVERITY-AND-SCORE.md    Severity, UX Health Score, badge
+    ├── ESCALATION-RULES.md      Combinazioni che aggravano / flag (ESC-001…006)
+    ├── STATE-MATRIX.md          Matrice stati varianti componenti
+    ├── DETECTION-PIPELINE.md   Pipeline a 5 fasi
+    ├── SOURCES.md               Fonti (Nielsen, Baymard, NNGroup, Carbon, …)
+    └── AGENT-DIRECTIVES.md      Tono, falsi positivi, costo crediti
+├── prototype-audit/          Prototype Audit (in-plugin deterministico, no Kimi)
+    ├── README.md               Scope, AI vs deterministico, tabella regole
+    ├── PROTOTYPE-AUDIT-RULES.md  20 regole P-01–P-20 (flow, nav, interaction, overlay, variables, docs)
+    ├── OUTPUT-SCHEMA.md         Schema JSON (findings, summary, health score)
+    ├── SEVERITY-AND-SCORE.md    Punti per severity, advisory levels (Healthy / Needs Attention / …)
+    ├── TYPES-AND-CATEGORIES.md  categoryId per UI (6 categorie)
+    ├── EFFORT-VS-FIDELITY.md    Consigli effort vs fedeltà, quando usare proto avanzato (ricerca utente)
+    └── AGENT-DIRECTIVES.md      Direttive per eventuali tips AI opzionali
 ```
 
 In futuro, stessa struttura per altri agenti:
 
-- `ux-audit/` — UX audit
-- `proto-audit/` — Prototype audit
 - `code-gen/` — Code generation
 - `generate/` — Wireframe/variant generation
 

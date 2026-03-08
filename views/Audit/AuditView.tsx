@@ -9,6 +9,7 @@ import { ScanReceiptModal } from '../../components/ScanReceiptModal';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
 import { DesignSystemTab, ScanScope } from './tabs/DesignSystemTab';
 import { AccessibilityTab } from './tabs/AccessibilityTab';
+import { UxAuditTab } from './tabs/UxAuditTab';
 import { DeepAnalysisTab } from './tabs/DeepAnalysisTab';
 import { 
   LOADING_MSGS,
@@ -19,8 +20,11 @@ import {
   PROTO_ISSUES,
   buildDsCategoriesFromIssues,
   buildA11yCategoriesFromIssues,
+  buildUxCategoriesFromIssues,
   computeDsScoreFromIssues,
+  computeUxHealthScoreFromIssues,
   getDsScoreCopy,
+  getUxScoreCopy,
 } from './data';
 import { getCreditsForIssue, getCreditsForFixAll, ACTION_AUTO_FIX, ACTION_AUTO_FIX_ALL } from './autoFixConfig';
 import { useToast } from '../../contexts/ToastContext';
@@ -74,7 +78,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [showConfetti, setShowConfetti] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
-  // Selection State for Deep Audits
+  // UX Audit: no scope (no "All Pages"); result state
+  const [hasUxAudited, setHasUxAudited] = useState(false);
+  const [lastUxAuditDate, setLastUxAuditDate] = useState<Date | null>(null);
+
+  // Selection State for Deep Audits (Prototype tab)
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
   const [hasDeepScanned, setHasDeepScanned] = useState(false);
@@ -223,7 +231,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   // Determine which issue set to use (DS / A11Y use real issues from agent when available)
   let currentIssues = activeTab === 'DS' && dsAuditIssues != null ? dsAuditIssues : DS_ISSUES;
   if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? (selectedPageName ? a11yIssuesScoped : a11yAuditIssues) : A11Y_ISSUES;
-  if (activeTab === 'UX') currentIssues = UX_ISSUES;
+  if (activeTab === 'UX') currentIssues = hasUxAudited ? UX_ISSUES : []; // UX: no scope; when result exists show issues (later: uxAuditIssues from API)
   if (activeTab === 'PROTOTYPE') currentIssues = PROTO_ISSUES;
 
   // Filter out excluded pages
@@ -251,6 +259,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const a11yScore = activeTab === 'A11Y' ? (a11yAuditIssues != null ? computeDsScoreFromIssues(a11yFullForScore) : 100) : 100;
   const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(filteredIssues) : [];
   const a11yScoreCopy = activeTab === 'A11Y' ? getDsScoreCopy(a11yScore) : { status: '', target: '' };
+
+  // UX tab: categories and score from UX Logic ruleset (no scope / no "All Pages")
+  const uxCategories = activeTab === 'UX' ? buildUxCategoriesFromIssues(filteredIssues) : [];
+  const uxScore = activeTab === 'UX' ? computeUxHealthScoreFromIssues(filteredIssues) : 100;
+  const uxScoreCopy = activeTab === 'UX' ? getUxScoreCopy(uxScore) : { badge: 'EXCELLENT' as const, status: '' };
+
   const highSeverityCount = activeIssues.filter(i => i.severity === 'HIGH').length; 
 
   useEffect(() => {
@@ -532,6 +546,31 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       { pluginMessage: { type: 'count-nodes', scope: scanScope, pageId: scanScope === 'page' ? selectedPageId ?? undefined : undefined, countCap: COUNT_CAP } },
       '*'
     );
+  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
+
+  /** UX Audit: scope = Current Selection or single page (no "All Pages" option). For now mock result; later wire fetchUxAudit + credits. */
+  const handleRunUxAudit = useCallback(() => {
+    if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
+    if (knownZeroCredits) {
+      onUnlockRequest();
+      return;
+    }
+    setIsCalculating(true);
+    setScanProgress({ percent: 0, count: 0 });
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(95, Math.floor((elapsed / 1800) * 95));
+      setScanProgress(prev => ({ ...prev, percent: pct }));
+      if (pct < 95) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    setTimeout(() => {
+      setHasUxAudited(true);
+      setLastUxAuditDate(new Date());
+      setScanProgress(prev => ({ ...prev, percent: 100 }));
+      setTimeout(() => setIsCalculating(false), 200);
+    }, 2000);
   }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
 
   const handleDeepScan = () => {
@@ -852,7 +891,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                   />
                   <div className="mb-4">
                       <p className="text-[10px] text-gray-500 leading-tight">
-                          You accept to send data to improve the plugin quality and the <button onClick={() => setShowPrivacyModal(true)} className="underline cursor-pointer hover:text-black">Privacy e Policy</button>.
+                          You accept to send data to improve the plugin quality and the <button onClick={() => setShowPrivacyModal(true)} className="underline cursor-pointer hover:text-black">Privacy & Policy</button>.
                       </p>
                   </div>
                   <button 
@@ -904,7 +943,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           Accessibility
         </button>
         <button 
-          onClick={() => { setActiveTab('UX'); setHasDeepScanned(false); }}
+          onClick={() => { setActiveTab('UX'); setActiveCat(null); setHasDeepScanned(false); }}
           className={`py-2 text-[10px] font-black uppercase transition-colors ${activeTab === 'UX' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           UX Audit
@@ -984,7 +1023,35 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         />
       )}
 
-      {(activeTab === 'UX' || activeTab === 'PROTOTYPE') && (
+      {activeTab === 'UX' && (
+        <UxAuditTab
+            hasUxResult={hasUxAudited}
+            score={uxScore}
+            lastAuditDate={lastUxAuditDate}
+            categories={uxCategories}
+            statusCopy={uxScoreCopy.status}
+            targetCopy={uxScoreCopy.badge}
+            highSeverityCount={highSeverityCount}
+            activeCat={activeCat}
+            setActiveCat={setActiveCat}
+            documentPages={documentPages}
+            scanScope={scanScope}
+            setScanScope={setScanScope}
+            selectedPageId={selectedPageId}
+            setSelectedPageId={setSelectedPageId}
+            isScopeDropdownOpen={isScopeDropdownOpen}
+            setIsScopeDropdownOpen={setIsScopeDropdownOpen}
+            isPro={isPro}
+            displayIssues={displayIssues}
+            activeIssues={activeIssues}
+            onRunUxAudit={handleRunUxAudit}
+            isCalculating={isCalculating}
+            scanProgress={{ ...scanProgress, percent: Math.max(scanProgress.percent, fakeProgressPercent) }}
+            issueListProps={issueListProps}
+        />
+      )}
+
+      {activeTab === 'PROTOTYPE' && (
         <DeepAnalysisTab 
             activeTab={activeTab}
             selectedLayer={selectedLayer}

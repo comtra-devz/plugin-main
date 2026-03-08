@@ -18,7 +18,7 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: str
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={(e) => { if (forceOpen) e.stopPropagation(); else e.target === e.currentTarget && onClose(); }}>
+    <div className="fixed inset-0 bg-black/80 z-[110] flex items-center justify-center p-4" onClick={(e) => { if (forceOpen) e.stopPropagation(); else e.target === e.currentTarget && onClose(); }}>
       <div className={`${BRUTAL.card} max-w-sm w-full relative max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
         {!forceOpen && <button onClick={onClose} className="absolute top-2 right-2 font-bold text-xl">×</button>}
         <h2 className="text-2xl font-black uppercase mb-4 bg-[#ffc900] inline-block px-1">Unlock Pro</h2>
@@ -47,7 +47,7 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: str
 
         <div className="mb-4">
             <label className="text-[10px] font-bold uppercase mb-1 block leading-tight">
-              Codice affiliato (opzionale). Se vuoto, checkout senza attribuzione. <span onClick={openDiscord} className="underline cursor-pointer hover:text-[#ff90e8]">Discord</span>.
+              Affiliate code (optional). If empty, checkout without attribution. <span onClick={openDiscord} className="underline cursor-pointer hover:text-[#ff90e8]">Discord</span>.
             </label>
             <input 
                 type="text" 

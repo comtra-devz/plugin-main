@@ -67,10 +67,10 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
                  You've used all {totalCredits} credits in your current cycle. Upgrade to PRO to continue.
               </p>
               <button data-component="Subscription: Warning Upgrade Button" onClick={onUpgrade} className={`${BRUTAL.btn} w-full bg-[#ffc900] mb-2`}>
-                 Passa a PRO
+                 Upgrade to PRO
               </button>
               <button data-component="Subscription: Warning Dismiss" onClick={() => setShowLimitWarning(false)} className="text-[10px] font-bold underline">
-                 Chiudi
+                 Close
               </button>
            </div>
         </div>
@@ -121,7 +121,7 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
           )}
 
           <button data-component="Subscription: Dev Simulator" onClick={handleSimulateLimit} className="text-[9px] text-gray-400 underline decoration-dashed">
-             [Dev: Simula credits esauriti]
+             [Dev: Simulate credits exhausted]
           </button>
 
         </div>

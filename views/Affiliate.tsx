@@ -87,7 +87,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
       <div className="p-4 pb-16">
         <div className={`${BRUTAL.card} bg-white`}>
           <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
-          <p className="text-sm text-gray-600">Accedi con Figma per ottenere il tuo codice affiliato e condividere Comtra.</p>
+          <p className="text-sm text-gray-600">Sign in with Figma to get your affiliate code and share Comtra.</p>
         </div>
       </div>
     );
@@ -98,7 +98,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
       <div className="p-4 pb-16">
         <div className={`${BRUTAL.card} bg-white`}>
           <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
-          <p className="text-sm text-gray-600">Effettua il login (Login with Figma) per ottenere il tuo codice affiliato.</p>
+          <p className="text-sm text-gray-600">Log in (Login with Figma) to get your affiliate code.</p>
         </div>
       </div>
     );
@@ -109,7 +109,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
       <div className={`${BRUTAL.card} bg-white`}>
         <h2 className="text-2xl font-black uppercase mb-1 bg-black text-white inline-block px-2">Partner Program</h2>
         <p className="text-xs text-gray-600 mb-6 font-medium mt-2">
-          Condividi Comtra: quando qualcuno acquista con il tuo link, viene attribuito a te. Le metriche sono nel tuo profilo (Affiliates).
+          Share Comtra: when someone buys with your link, it's attributed to you. Metrics are in your profile (Affiliates).
         </p>
 
         {error && (
@@ -117,7 +117,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
         )}
 
         {loading ? (
-          <p className="text-sm text-gray-500">Caricamento…</p>
+          <p className="text-sm text-gray-500">Loading…</p>
         ) : !affiliateCode ? (
           <div className="bg-[#f0f0f0] border-2 border-black p-4">
             <p className="text-xs text-gray-600 mb-2">You don't have an affiliate code yet. Sign up in one click.</p>
@@ -126,7 +126,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
               disabled={registering}
               className={`${BRUTAL.btn} bg-[${COLORS.primary}] font-bold uppercase text-sm py-2 px-4 border-2 border-black disabled:opacity-60`}
             >
-              {registering ? 'Registrazione…' : 'Ottieni il tuo codice affiliato'}
+              {registering ? 'Registering…' : 'Get your affiliate code'}
             </button>
           </div>
         ) : (
@@ -136,7 +136,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
               <code className="block bg-white border border-gray-400 p-2 font-mono text-sm font-bold">{affiliateCode}</code>
             </div>
             <div className="border-t-2 border-dashed border-black pt-4">
-              <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Link da condividere</label>
+              <label className="text-[10px] font-bold uppercase text-gray-500 mb-1 block">Link to share</label>
               <div className="flex gap-2">
                 <input
                   readOnly
@@ -147,7 +147,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
                   onClick={handleCopy}
                   className="bg-black text-white px-3 py-2 text-[10px] font-bold uppercase hover:bg-[#ff90e8] hover:text-black transition-colors border-2 border-black"
                 >
-                  {copied ? 'Copiato' : 'Copia'}
+                  {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
             </div>

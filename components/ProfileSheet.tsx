@@ -32,7 +32,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
         </div>
         {lowCreditsWarning && (
           <p data-component="Profile: Low Credits Warning" className="text-[10px] font-bold uppercase mt-2 bg-[#ffc900] border border-black px-2 py-1">
-            Credits in esaurimento — Passa a PRO
+            Credits running low — Upgrade to PRO
           </p>
         )}
         {simulateFreeTier && creditsLabel.includes('—') && (
@@ -54,7 +54,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
         {isTestUser && onSimulateFreeTierChange && (
           <div className="p-2 border border-dashed border-gray-400 bg-gray-50 mb-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-gray-700">Simula Free Tier</span>
+              <span className="text-[10px] font-bold uppercase text-gray-700">Simulate Free Tier</span>
               <button
                 data-component="Profile: Simulate Free Tier Toggle"
                 onClick={() => onSimulateFreeTierChange(!simulateFreeTier)}
@@ -63,7 +63,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
                 {simulateFreeTier ? 'ON' : 'OFF'}
               </button>
             </div>
-            <p className="text-[9px] text-gray-500 mt-1">ON = limiti reali (25 credits, paywall a 0)</p>
+            <p className="text-[9px] text-gray-500 mt-1">ON = real limits (25 credits, paywall at 0)</p>
             {usingSimulatedCredits && onResetSimulatedCredits && (
               <button type="button" onClick={onResetSimulatedCredits} className="text-[9px] font-bold text-gray-600 underline mt-1 hover:text-black">
                 Reset 25 simulated credits

@@ -65,7 +65,7 @@ export interface AuditIssue {
   fix: string;
   tokenPath?: string;
   pageName?: string;
-  /** Rule ID from Comtra Accessibility Ruleset (e.g. CTR-001, TGT-001) */
+  /** Rule ID from Comtra Accessibility Ruleset (e.g. CTR-001, TGT-001) or UX Logic (UXL-001) */
   rule_id?: string;
   /** WCAG Success Criterion (e.g. 1.4.3, 2.5.8) */
   wcag_sc?: string;
@@ -73,6 +73,14 @@ export interface AuditIssue {
   measured_value?: number;
   required_value?: number;
   passes?: boolean;
+  /** UX Logic Audit: Nielsen heuristic (e.g. "H1 - Visibility of System Status") */
+  heuristic?: string;
+  /** UX Logic Audit: Figma node name (e.g. "submit-btn") */
+  nodeName?: string;
+  /** UX Logic Audit: whether an auto-fix is available */
+  autoFixAvailable?: boolean;
+  /** Prototype Audit: flow name (e.g. "Checkout Flow") */
+  flowName?: string;
 }
 
 export interface NavProps {

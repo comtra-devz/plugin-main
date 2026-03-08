@@ -108,6 +108,137 @@ export function buildA11yCategoriesFromIssues(issues: AuditIssue[]): ExtendedAud
   }).filter(c => c.issuesCount > 0);
 }
 
+/** UX Logic Audit: category config. See audit-specs/ux-logic-audit/README.md, UX-LOGIC-AUDIT-RULES.md. */
+export const UX_LOGIC_CATEGORIES_CONFIG: { id: string; label: string; desc: string; icon: string; color: string }[] = [
+  { id: 'system-feedback', label: 'System Feedback', desc: 'Loading, progress, success/error states', icon: '◉', color: 'bg-blue-200' },
+  { id: 'interaction-safety', label: 'Interaction Safety', desc: 'Modals, destructive actions, undo', icon: '⚠', color: 'bg-amber-200' },
+  { id: 'form-ux', label: 'Form UX', desc: 'Labels, validation, required, error messages', icon: '▢', color: 'bg-cyan-200' },
+  { id: 'navigation-ia', label: 'Navigation & IA', desc: 'Breadcrumbs, active state, back nav', icon: '▤', color: 'bg-violet-200' },
+  { id: 'content-copy', label: 'Content & Copy', desc: 'CTAs, jargon, terminology, microcopy', icon: '¶', color: 'bg-orange-200' },
+  { id: 'error-handling', label: 'Error & Empty States', desc: 'What/Why/Fix, empty states, recovery', icon: '◐', color: 'bg-red-200' },
+  { id: 'data-tables', label: 'Data Tables & Lists', desc: 'Alignment, sort, sticky header, empty', icon: '▦', color: 'bg-slate-200' },
+  { id: 'responsive-layout', label: 'Responsive & Layout', desc: 'Breakpoints, auto-layout, spacing', icon: '▣', color: 'bg-teal-200' },
+  { id: 'cognitive-load', label: 'Cognitive Load', desc: 'Hierarchy, grouping, progressive disclosure', icon: '◈', color: 'bg-indigo-200' },
+  { id: 'dark-patterns', label: 'Dark Patterns & Ethics', desc: 'Asymmetric actions, pre-selected opt-in', icon: '⚡', color: 'bg-rose-200' },
+  { id: 'i18n', label: 'Internationalization', desc: 'Text expansion, RTL, date/currency format', icon: '🌐', color: 'bg-emerald-200' },
+];
+
+/** UX Health Score formula: 100 - (HIGH×5 + MED×2 + LOW×1). See audit-specs/ux-logic-audit/SEVERITY-AND-SCORE.md */
+export function computeUxHealthScoreFromIssues(issues: AuditIssue[]): number {
+  if (issues.length === 0) return 100;
+  const high = issues.filter(i => i.severity === 'HIGH').length;
+  const med = issues.filter(i => i.severity === 'MED').length;
+  const low = issues.filter(i => i.severity === 'LOW').length;
+  return Math.max(0, Math.min(100, 100 - (high * 5 + med * 2 + low * 1)));
+}
+
+/** Badge ranges: 90–100 EXCELLENT, 70–89 GOOD, 50–69 NEEDS WORK, 0–49 CRITICAL */
+export interface UxScoreCopy {
+  badge: 'EXCELLENT' | 'GOOD' | 'NEEDS WORK' | 'CRITICAL';
+  status: string;
+}
+
+export const UX_SCORE_MATRIX: { min: number; max: number; badge: UxScoreCopy['badge']; status: string }[] = [
+  { min: 0, max: 49, badge: 'CRITICAL', status: 'Serious UX failures requiring immediate attention.' },
+  { min: 50, max: 69, badge: 'NEEDS WORK', status: 'Multiple UX problems impacting experience.' },
+  { min: 70, max: 89, badge: 'GOOD', status: 'Solid foundation with some gaps.' },
+  { min: 90, max: 100, badge: 'EXCELLENT', status: 'File follows UX best practices.' },
+];
+
+export function getUxScoreCopy(score: number): UxScoreCopy {
+  const row = UX_SCORE_MATRIX.find(r => score >= r.min && score <= r.max);
+  return row ? { badge: row.badge, status: row.status } : { badge: 'CRITICAL', status: UX_SCORE_MATRIX[0].status };
+}
+
+/** Build UX Logic categories from issues (dynamic). Uses UX Health Score formula per category. */
+export function buildUxCategoriesFromIssues(issues: AuditIssue[]): ExtendedAuditCategory[] {
+  return UX_LOGIC_CATEGORIES_CONFIG.map(config => {
+    const catIssues = issues.filter(i => i.categoryId === config.id);
+    const count = catIssues.length;
+    const high = catIssues.filter(i => i.severity === 'HIGH').length;
+    const med = catIssues.filter(i => i.severity === 'MED').length;
+    const low = catIssues.filter(i => i.severity === 'LOW').length;
+    const score = count === 0 ? 100 : Math.max(0, 100 - (high * 5 + med * 2 + low * 1));
+    return {
+      id: config.id,
+      label: config.label,
+      desc: config.desc,
+      icon: config.icon,
+      color: config.color,
+      score: count === 0 ? -1 : score,
+      issuesCount: count,
+    };
+  }).filter(c => c.issuesCount > 0);
+}
+
+/** Prototype Audit: category config. See audit-specs/prototype-audit/TYPES-AND-CATEGORIES.md, PROTOTYPE-AUDIT-RULES.md. */
+export const PROTOTYPE_CATEGORIES_CONFIG: { id: string; label: string; desc: string; icon: string; color: string }[] = [
+  { id: 'flow-integrity', label: 'Flow Integrity', desc: 'Dead-ends, orphans, start point, broken refs', icon: '▣', color: 'bg-red-200' },
+  { id: 'navigation-coverage', label: 'Navigation & Coverage', desc: 'Back nav, unreachable frames, loops', icon: '↩', color: 'bg-amber-200' },
+  { id: 'interaction-quality', label: 'Interaction & Animation', desc: 'Triggers, Smart Animate, duration, easing', icon: '◇', color: 'bg-blue-200' },
+  { id: 'overlay-scroll', label: 'Overlay & Scroll', desc: 'Overlay config, scroll overflow', icon: '▢', color: 'bg-cyan-200' },
+  { id: 'component-advanced', label: 'Components & Advanced', desc: 'Interactive components, variables, conditionals', icon: '⚡', color: 'bg-violet-200' },
+  { id: 'documentation-coverage', label: 'Documentation & Coverage', desc: 'Flow naming, hotspot coverage, presentation', icon: '¶', color: 'bg-slate-200' },
+];
+
+/** Rule IDs that count as Critical (8 pt) in Prototype Health Score. All other HIGH = 5 pt. */
+const PROTO_HEALTH_CRITICAL_RULES = ['P-01', 'P-02', 'P-03', 'P-04'];
+
+/** Prototype Health Score: 100 - (critical×8 + high×5 + medium×3 + low×1). See audit-specs/prototype-audit/SEVERITY-AND-SCORE.md */
+export function computePrototypeHealthScoreFromIssues(issues: AuditIssue[]): number {
+  if (issues.length === 0) return 100;
+  let pts = 0;
+  for (const i of issues) {
+    if (i.severity === 'HIGH')
+      pts += i.rule_id && PROTO_HEALTH_CRITICAL_RULES.includes(i.rule_id) ? 8 : 5;
+    else if (i.severity === 'MED') pts += 3;
+    else if (i.severity === 'LOW') pts += 1;
+  }
+  return Math.max(0, Math.min(100, 100 - pts));
+}
+
+/** Advisory levels: 80–100 Healthy, 50–79 Needs Attention, 26–49 At Risk, 0–25 Critical */
+export interface PrototypeScoreCopy {
+  advisoryLevel: 'healthy' | 'needs_attention' | 'at_risk' | 'critical';
+  status: string;
+}
+
+export const PROTOTYPE_SCORE_MATRIX: { min: number; max: number; advisoryLevel: PrototypeScoreCopy['advisoryLevel']; status: string }[] = [
+  { min: 0, max: 25, advisoryLevel: 'critical', status: 'Fundamental prototype issues. Fix flows and connections first.' },
+  { min: 26, max: 49, advisoryLevel: 'at_risk', status: 'Structural gaps. Review flow architecture and prioritise fixes.' },
+  { min: 50, max: 79, advisoryLevel: 'needs_attention', status: 'Functional with quality gaps. Address findings to improve confidence.' },
+  { min: 80, max: 100, advisoryLevel: 'healthy', status: 'No blocking issues. Safe to share and test.' },
+];
+
+export function getPrototypeScoreCopy(score: number): PrototypeScoreCopy {
+  const row = PROTOTYPE_SCORE_MATRIX.find(r => score >= r.min && score <= r.max);
+  return row ? { advisoryLevel: row.advisoryLevel, status: row.status } : { advisoryLevel: 'critical', status: PROTOTYPE_SCORE_MATRIX[0].status };
+}
+
+/** Build Prototype categories from issues (dynamic). Uses same score weights as computePrototypeHealthScoreFromIssues per category. */
+export function buildPrototypeCategoriesFromIssues(issues: AuditIssue[]): ExtendedAuditCategory[] {
+  return PROTOTYPE_CATEGORIES_CONFIG.map(config => {
+    const catIssues = issues.filter(i => i.categoryId === config.id);
+    const count = catIssues.length;
+    let pts = 0;
+    for (const i of catIssues) {
+      if (i.severity === 'HIGH') pts += i.rule_id && PROTO_HEALTH_CRITICAL_RULES.includes(i.rule_id) ? 8 : 5;
+      else if (i.severity === 'MED') pts += 3;
+      else if (i.severity === 'LOW') pts += 1;
+    }
+    const score = count === 0 ? 100 : Math.max(0, 100 - pts);
+    return {
+      id: config.id,
+      label: config.label,
+      desc: config.desc,
+      icon: config.icon,
+      color: config.color,
+      score: count === 0 ? -1 : score,
+      issuesCount: count,
+    };
+  }).filter(c => c.issuesCount > 0);
+}
+
 export const LOADING_MSGS = [
   "Admiring the magnificent colors...",
   "Reading the beautiful story...",
@@ -162,13 +293,15 @@ export const A11Y_ISSUES: AuditIssue[] = [
   { id: 'a3', categoryId: 'focus', msg: 'Missing :focus state', severity: 'MED', layerId: 'input-field', fix: 'Add Focus Variant', pageName: 'Design System' },
 ];
 
+/** Mock UX Logic issues (categoryIds from audit-specs/ux-logic-audit). Replace with real Kimi output. */
 export const UX_ISSUES: AuditIssue[] = [
-  { id: 'u1', categoryId: 'flow', msg: 'Dead End Interaction', severity: 'HIGH', layerId: 'submit-btn', fix: 'Add Success/Error State', pageName: 'Home V2' },
-  { id: 'u2', categoryId: 'semantics', msg: 'Input missing Label', severity: 'MED', layerId: 'email-input', fix: 'Wrap in <label> component', pageName: 'Home V2' },
-  { id: 'u3', categoryId: 'feedback', msg: 'No Loading State', severity: 'LOW', layerId: 'card-list', fix: 'Add Skeleton Loader', pageName: 'Home V2' },
+  { id: 'UXL-002', categoryId: 'system-feedback', msg: 'No Success/Error outcome state', severity: 'HIGH', layerId: 'submit-btn', fix: 'Add success/done or error/fail variant to component set', pageName: 'Home V2', rule_id: 'UXL-002', heuristic: 'H1 - Visibility of System Status' },
+  { id: 'UXL-012', categoryId: 'form-ux', msg: 'Input missing visible label', severity: 'HIGH', layerId: 'email-input', fix: 'Add persistent visible label (above or left); avoid placeholder-only', pageName: 'Home V2', rule_id: 'UXL-012', heuristic: 'H5 - Error Prevention' },
+  { id: 'UXL-001', categoryId: 'system-feedback', msg: 'No loading state variant', severity: 'LOW', layerId: 'card-list', fix: 'Add loading/spinner or skeleton variant for async content', pageName: 'Home V2', rule_id: 'UXL-001', heuristic: 'H1 - Visibility of System Status' },
 ];
 
+/** Mock Prototype Audit issues (categoryIds from audit-specs/prototype-audit). Replace with real in-plugin or API results. */
 export const PROTO_ISSUES: AuditIssue[] = [
-  { id: 'p1', categoryId: 'logic', msg: 'Broken Link', severity: 'HIGH', layerId: 'nav-home', fix: 'Link to Frame: Home_V2', pageName: 'Home V2' },
-  { id: 'p2', categoryId: 'visual', msg: 'Missing Confirmation Wireframe', severity: 'HIGH', layerId: 'flow-end', fix: 'Create Success State', pageName: 'Home V2' },
+  { id: 'P-04-001', rule_id: 'P-04', categoryId: 'flow-integrity', msg: 'Broken destination: target frame not found', severity: 'HIGH', layerId: 'nav-home', fix: 'Reconnect to an existing frame or remove the link.', pageName: 'Home V2', flowName: 'Main Flow' },
+  { id: 'P-01-001', rule_id: 'P-01', categoryId: 'flow-integrity', msg: 'Dead-end frame: no outgoing connections or Back actions', severity: 'HIGH', layerId: 'flow-end', fix: 'Add a Back action or Navigate to to return to previous screen.', pageName: 'Home V2', flowName: 'Checkout Flow' },
 ];
