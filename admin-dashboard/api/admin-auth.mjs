@@ -1,0 +1,145 @@
+/**
+ * POST /api/admin-auth — Login email+password e 2FA (TOTP).
+ * Body: { action: 'login'|'verify-2fa'|'setup-2fa'|'confirm-2fa', ... }
+ * - login: { email, password } → { need2FA, tempToken } o { need2FA: 'setup', tempToken }
+ * - setup-2fa: { tempToken } → { qrUrl, secret, setupToken }
+ * - confirm-2fa: { setupToken, code } → { token } (session JWT)
+ * - verify-2fa: { tempToken, code } → { token } (session JWT)
+ */
+import { sql } from '../lib/db.mjs';
+import {
+  getAdminByEmail,
+  verifyPassword,
+  createTotpSecret,
+  verifyTotp,
+  getTotpUri,
+  createTempToken,
+  createSetupToken,
+  verifyTempToken,
+  createSessionToken,
+  updateUserTotp,
+} from '../lib/admin-session.mjs';
+
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function parseBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        resolve({});
+      }
+    });
+  });
+}
+
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const body = await parseBody(req);
+  const action = (body.action || '').toLowerCase();
+
+  if (!['login', 'verify-2fa', 'setup-2fa', 'confirm-2fa'].includes(action)) {
+    return res.status(400).json({ error: 'Invalid action. Use login, verify-2fa, setup-2fa, confirm-2fa' });
+  }
+
+  if (!sql) return res.status(503).json({ error: 'Database not configured' });
+
+  try {
+    if (action === 'login') {
+      const email = (body.email || '').trim().toLowerCase();
+      const password = body.password;
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password required' });
+      }
+      const user = await getAdminByEmail(email);
+      if (!user) {
+        return res.status(401).json({ error: 'Credenziali non valide' });
+      }
+      const ok = await verifyPassword(password, user.password_hash);
+      if (!ok) {
+        return res.status(401).json({ error: 'Credenziali non valide' });
+      }
+      const tempToken = await createTempToken({ sub: user.id, email: user.email });
+      if (user.totp_secret) {
+        return res.status(200).json({ need2FA: true, tempToken });
+      }
+      return res.status(200).json({ need2FA: 'setup', tempToken });
+    }
+
+    if (action === 'setup-2fa') {
+      const tempToken = (body.tempToken || '').trim();
+      if (!tempToken) return res.status(400).json({ error: 'tempToken required' });
+      const payload = await verifyTempToken(tempToken);
+      if (!payload || payload.purpose !== '2fa') {
+        return res.status(401).json({ error: 'Token non valido o scaduto' });
+      }
+      const secret = createTotpSecret();
+      const user = await getAdminByEmail(payload.email);
+      if (!user) return res.status(401).json({ error: 'Utente non trovato' });
+      const qrUrl = getTotpUri({ secret, email: user.email });
+      const setupToken = await createSetupToken({
+        sub: user.id,
+        email: user.email,
+        purpose: '2fa-setup',
+        pendingSecret: secret,
+      });
+      return res.status(200).json({ qrUrl, secret, setupToken });
+    }
+
+    if (action === 'confirm-2fa') {
+      const setupToken = (body.setupToken || '').trim();
+      const code = (body.code || '').trim();
+      if (!setupToken || !code) {
+        return res.status(400).json({ error: 'setupToken and code required' });
+      }
+      const payload = await verifyTempToken(setupToken);
+      if (!payload || payload.purpose !== '2fa-setup' || !payload.pendingSecret) {
+        return res.status(401).json({ error: 'Token non valido o scaduto' });
+      }
+      const valid = await verifyTotp(payload.pendingSecret, code);
+      if (!valid) {
+        return res.status(401).json({ error: 'Codice 2FA non valido' });
+      }
+      await updateUserTotp(payload.sub, payload.pendingSecret);
+      const token = await createSessionToken({ sub: payload.sub, email: payload.email });
+      return res.status(200).json({ token });
+    }
+
+    if (action === 'verify-2fa') {
+      const tempToken = (body.tempToken || '').trim();
+      const code = (body.code || '').trim();
+      if (!tempToken || !code) {
+        return res.status(400).json({ error: 'tempToken and code required' });
+      }
+      const payload = await verifyTempToken(tempToken);
+      if (!payload || payload.purpose !== '2fa') {
+        return res.status(401).json({ error: 'Token non valido o scaduto' });
+      }
+      const user = await getAdminByEmail(payload.email);
+      if (!user || !user.totp_secret) {
+        return res.status(401).json({ error: '2FA non configurata' });
+      }
+      const valid = await verifyTotp(user.totp_secret, code);
+      if (!valid) {
+        return res.status(401).json({ error: 'Codice 2FA non valido' });
+      }
+      const token = await createSessionToken({ sub: user.id, email: user.email });
+      return res.status(200).json({ token });
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
+  } catch (err) {
+    console.error('POST /api/admin-auth', action, err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+}

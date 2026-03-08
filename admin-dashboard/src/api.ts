@@ -2,13 +2,98 @@
 const BASE = (import.meta as any).env?.VITE_ADMIN_API_URL ?? '';
 const SECRET = (import.meta as any).env?.VITE_ADMIN_SECRET ?? '';
 
-function headers(): HeadersInit {
+const AUTH_TOKEN_KEY = 'admin_token';
+
+export function getStoredToken(): string | null {
+  return sessionStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setStoredToken(token: string | null): void {
+  if (token) sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+  else sessionStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+function authHeaders(): HeadersInit {
   const h: HeadersInit = { 'Content-Type': 'application/json' };
-  if (SECRET) {
+  const token = getStoredToken();
+  if (token) {
+    (h as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  } else if (SECRET) {
     (h as Record<string, string>)['Authorization'] = `Bearer ${SECRET}`;
     (h as Record<string, string>)['X-Admin-Key'] = SECRET;
   }
   return h;
+}
+
+function headers(): HeadersInit {
+  return authHeaders();
+}
+
+function authApiUrl(): string {
+  return `${BASE}/api/admin-auth`;
+}
+
+export interface LoginResponse {
+  need2FA?: boolean | 'setup';
+  tempToken?: string;
+}
+
+export interface Setup2FAResponse {
+  qrUrl: string;
+  secret: string;
+  setupToken: string;
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const r = await fetch(authApiUrl(), {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ action: 'login', email: email.trim().toLowerCase(), password }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function verify2fa(tempToken: string, code: string): Promise<{ token: string }> {
+  const r = await fetch(authApiUrl(), {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ action: 'verify-2fa', tempToken, code: code.trim() }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function setup2fa(tempToken: string): Promise<Setup2FAResponse> {
+  const r = await fetch(authApiUrl(), {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ action: 'setup-2fa', tempToken }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function confirm2fa(setupToken: string, code: string): Promise<{ token: string }> {
+  const r = await fetch(authApiUrl(), {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ action: 'confirm-2fa', setupToken, code: code.trim() }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
 }
 
 function apiUrl(route: string, params?: Record<string, string | number>) {
