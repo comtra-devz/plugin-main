@@ -695,21 +695,32 @@ async function handleGenerateABStats(req, res) {
   }
 }
 
-/** Supporto: feedback da A/B test Generate e altre fonti */
+/** Supporto: feedback da A/B test Generate + support tickets da Documentation & Help */
 async function handleSupportFeedback(req, res) {
   const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 100));
   try {
-    const rows = await sql`
-      SELECT f.id, f.request_id, f.variant, f.thumbs, f.comment, r.created_at, u.email
+    const abRows = await sql`
+      SELECT f.id::text, 'A/B Generate' AS source, f.variant, f.thumbs, f.comment, r.created_at, u.email
       FROM generate_ab_feedback f
       JOIN generate_ab_requests r ON r.id = f.request_id
       LEFT JOIN users u ON u.id = r.user_id
-      ORDER BY r.created_at DESC
-      LIMIT ${limit}
     `;
-    const items = (rows.rows || []).map((r) => ({
+    let ticketRows = { rows: [] };
+    try {
+      ticketRows = await sql`
+        SELECT st.id::text, 'Support Ticket' AS source, st.type AS variant, NULL::text AS thumbs, st.message AS comment, st.created_at, u.email
+        FROM support_tickets st
+        LEFT JOIN users u ON u.id = st.user_id
+      `;
+    } catch (e) {
+      if (!/relation "support_tickets" does not exist/i.test(String(e))) throw e;
+    }
+    const combined = [...(abRows.rows || []), ...(ticketRows.rows || [])]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, limit);
+    const items = combined.map((r) => ({
       id: r.id,
-      source: 'A/B Generate',
+      source: r.source,
       variant: r.variant,
       thumbs: r.thumbs,
       comment: r.comment || null,
@@ -881,7 +892,9 @@ async function handleHealth(req, res) {
   const checks = [
     { id: 'dashboard', name: 'Dashboard (Vercel)', url: null },
     { id: 'database', name: 'Database (Postgres)', url: null },
-    { id: 'auth', name: 'Auth API', url: authUrl },
+    { id: 'auth', name: 'Auth API (root)', url: authUrl },
+    { id: 'auth-credits', name: 'Auth API – GET /api/credits', url: null },
+    { id: 'auth-oauth-init', name: 'Auth API – GET /api/figma-oauth/init', url: null },
     { id: 'vercel', name: 'Vercel', url: 'https://www.vercel.com' },
   ];
 
@@ -898,6 +911,8 @@ async function handleHealth(req, res) {
       }
     })(),
     pingUrl(authUrl, 'auth'),
+    pingApiGet(authUrl + '/api/credits', 'auth-credits', 401),
+    pingApiGet(authUrl + '/api/figma-oauth/init', 'auth-oauth-init', 200),
     pingUrl('https://www.vercel.com', 'vercel'),
   ]);
 
@@ -937,6 +952,19 @@ async function pingUrl(url, id) {
     const r = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
     const ok = r.ok || r.status < 500;
     return { id, status: ok ? 'up' : 'degraded', latencyMs: Date.now() - start, message: ok ? null : `HTTP ${r.status}` };
+  } catch (e) {
+    return { id, status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Timeout o errore' };
+  }
+}
+
+/** GET an API endpoint; expect a specific status (e.g. 401 for /api/credits without token, 200 for /init). */
+async function pingApiGet(url, id, expectedStatus) {
+  const start = Date.now();
+  try {
+    const r = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000) });
+    const ok = r.status === expectedStatus || (r.status < 500 && expectedStatus === 200);
+    const message = ok ? null : `HTTP ${r.status} (expected ${expectedStatus})`;
+    return { id, status: ok ? 'up' : r.status >= 500 ? 'down' : 'degraded', latencyMs: Date.now() - start, message };
   } catch (e) {
     return { id, status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Timeout o errore' };
   }

@@ -6,6 +6,7 @@
   },
   "rewrites": [
     { "source": "/api/feedback/generate", "destination": "/api/credits-trophies?service=feedback&sub=generate" },
+    { "source": "/api/support/ticket", "destination": "/api/credits-trophies?service=support&sub=ticket" },
     { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },
     { "source": "/auth/figma/start", "destination": "/api/figma-oauth/start" },

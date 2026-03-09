@@ -202,6 +202,17 @@ CREATE TABLE IF NOT EXISTS generate_ab_feedback (
 CREATE INDEX IF NOT EXISTS idx_generate_ab_feedback_request_id ON generate_ab_feedback(request_id);
 CREATE INDEX IF NOT EXISTS idx_generate_ab_feedback_variant ON generate_ab_feedback(variant);
 
+-- Support tickets from Documentation & Help (plugin)
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('BUG', 'FEATURE', 'LOVE')),
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_created_at ON support_tickets(created_at);
+
 -- Migrazione: se la tabella users esiste già senza colonne XP, esegui (PostgreSQL 9.5+):
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;

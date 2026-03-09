@@ -48,7 +48,7 @@ export default function SupportRequests() {
                   </td>
                   <td>{r.source}</td>
                   <td><strong>{r.variant}</strong></td>
-                  <td>{r.thumbs === 'up' ? '👍' : '👎'}</td>
+                  <td>{r.source === 'Support Ticket' ? (r.variant === 'BUG' ? '🐛' : r.variant === 'FEATURE' ? '🚀' : '❤️') : (r.thumbs === 'up' ? '👍' : '👎')}</td>
                   <td style={{ maxWidth: 280 }}>{r.comment || '—'}</td>
                   <td className="mono" style={{ fontSize: '0.85rem' }}>{r.user_masked}</td>
                 </tr>

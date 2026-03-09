@@ -533,3 +533,31 @@ export async function fetchPluginLogs(limit = 100): Promise<PluginLogsResponse> 
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
+
+// --- Content Management (Documentation CMS)
+export interface DocContentData {
+  header: { title: string; subtitle: string };
+  tutorials: Record<string, { title: string; content: string }>;
+  videos: { id: string; title: string; time: string; url: string }[];
+  faqs: { q: string; a: string }[];
+}
+
+export interface DocContentResponse {
+  data: DocContentData;
+}
+
+export async function fetchDocContent(): Promise<DocContentResponse> {
+  const r = await fetch(`${BASE}/api/doc-content`, { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function saveDocContent(data: DocContentData): Promise<{ ok: boolean }> {
+  const r = await fetch(`${BASE}/api/doc-content`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ data }),
+  });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}

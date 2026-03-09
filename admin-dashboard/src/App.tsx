@@ -15,6 +15,8 @@ import Executions from './pages/Executions';
 import Discounts from './pages/Discounts';
 import ABTests from './pages/ABTests';
 import GenerateABTest from './pages/GenerateABTest';
+import DocContent from './pages/DocContent';
+import PageHeader from './components/PageHeader';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -84,6 +86,9 @@ export default function App() {
             <Route index element={<Navigate to="generate" replace />} />
             <Route path="generate" element={<GenerateABTest />} />
           </Route>
+          <Route path="/content/documentation" element={<DocContent />} />
+          <Route path="/content/altro" element={<><PageHeader title="Altro" /><p style={{ color: 'var(--muted)' }}>Sezione in arrivo.</p></>} />
+          <Route path="/content/aggiornamenti" element={<Navigate to="/weekly-updates" replace />} />
         </Routes>
       </main>
       </div>

@@ -1309,6 +1309,31 @@ app.post('/api/feedback/generate', async (req, res) => {
   }
 });
 
+// --- Support ticket (Documentation & Help modal)
+app.post('/api/support/ticket', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const type = (body.type || 'BUG').toUpperCase();
+  const message = (body.message || '').trim().slice(0, 2000);
+
+  if (!['BUG', 'FEATURE', 'LOVE'].includes(type)) return res.status(400).json({ error: 'type must be BUG, FEATURE or LOVE' });
+  if (message.length < 2) return res.status(400).json({ error: 'message must be at least 2 characters' });
+
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+
+  try {
+    await dbSql`
+      INSERT INTO support_tickets (user_id, type, message)
+      VALUES (${userId}, ${type}, ${message})
+    `;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/support/ticket', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- A11Y Audit agent (v1.0: no Kimi — backend only: contrast, touch, focus, alt, semantics, color, OKLCH)
 const { runA11yAudit } = await import('./a11y-audit-engine.mjs');
 

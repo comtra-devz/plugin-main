@@ -6,6 +6,8 @@ import { User } from '../types';
 interface Props {
   user: User;
   creditsLabel: string;
+  /** When credits show "—", optional reason (e.g. "401", "503", "network") for debugging. */
+  creditsFetchError?: string | null;
   lowCreditsWarning?: boolean;
   isTestUser?: boolean;
   simulateFreeTier?: boolean;
@@ -20,7 +22,7 @@ interface Props {
   onOpenTerms: () => void;
 }
 
-export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms }) => (
+export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetchError, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
@@ -35,7 +37,12 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, lowCreditsWa
             Credits running low — Upgrade to PRO
           </p>
         )}
-        {simulateFreeTier && creditsLabel.includes('—') && (
+        {creditsFetchError && creditsLabel.includes('—') && (
+          <p data-component="Profile: Credits Sync Error" className="text-[10px] font-bold mt-2 bg-red-100 border border-red-600 px-2 py-1 text-red-800">
+            Credits sync failed: {creditsFetchError === 'network' ? 'network error' : `HTTP ${creditsFetchError}`}. Check Stato servizi in the dashboard or retry later.
+          </p>
+        )}
+        {simulateFreeTier && creditsLabel.includes('—') && !creditsFetchError && (
           <p data-component="Profile: Simulate Free Tier Sync Hint" className="text-[10px] font-bold mt-2 bg-white/90 border border-black px-2 py-1">
             With Simulate Free Tier on, credits come from the server: <strong>log in</strong> again (Log out then Log in with Figma) to see the 25 free credits.
           </p>

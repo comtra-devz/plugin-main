@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { BRUTAL, COLORS } from '../constants';
 import { Confetti } from '../components/Confetti';
+import { AUTH_BACKEND_URL } from '../constants';
+import type { User } from '../types';
 
 const TUTORIALS = {
   'WORKFLOW': {
@@ -52,29 +54,60 @@ const TUTORIALS = {
 
 const VIDEOS = [
   { id: 'v1', title: "Figma in 5 Minutes", time: "5:00", url: "https://www.youtube.com/watch?v=5V50GPV3Zts" },
-  { id: 'v2', title: "Mastering Design Tokens", time: "5:00", url: "https://www.youtube.com/results?search_query=figma+design+tokens" },
-  { id: 'v3', title: "Syncing with Storybook", time: "3:45", url: "https://www.youtube.com/results?search_query=figma+storybook+sync" },
+  { id: 'v2', title: "Figma Variables & Design Tokens", time: "~15:00", url: "https://www.youtube.com/watch?v=r4t5FlcRPg8" },
+  { id: 'v3', title: "Figma + Storybook Integration", time: "8:33", url: "https://www.youtube.com/watch?v=O3afqyCS2-o" },
+  { id: 'v4', title: "Design System Best Practices", time: "~12:00", url: "https://www.youtube.com/watch?v=e2uEv1ro-aI" },
+  { id: 'v5', title: "Audit Your Figma File", time: "~5:00", url: "https://www.youtube.com/watch?v=0NdMULGUuFg" },
 ];
 
 const FAQS = [
-  { q: "How much does a Scan cost?", a: "A standard Audit Scan costs 5 Credits. If you scan a huge prototype (>250 nodes), it costs +1 Credit for every 50 extra nodes. You always see a receipt before paying." },
+  { q: "How much does a Scan cost?", a: "Audit costs depend on size: Small (≤500 nodes) 2 credits, Medium (≤5k) 5, Large (≤50k) 8, 200k+ 11. Prototype audit is 1–4 credits by flow count. You always see a receipt before paying." },
   { q: "What happens to my data?", a: "We process your Figma structure ephemerally. We calculate a hash, send it to the AI for analysis, and then discard the raw data. We do NOT train models on your designs." },
   { q: "Can I export to Tailwind?", a: "Yes! React + Tailwind is our default and most optimized export format. It respects your Figma Variables mapping." },
   { q: "Do unused credits roll over?", a: "Free tier: 25 credits are a one-time welcome bonus (no reset, no expiry). Pro subscription credits are valid for the duration of your subscription cycle." },
+  { q: "Is Deep Sync available on Free tier?", a: "No. The Code tab → Sync (drift detection, push to Storybook/GitHub) requires a PRO subscription. Generate CSS/JSON tokens are always free for everyone." },
+  { q: "How do I get more credits?", a: "Upgrade to PRO from Profile → Manage Subscription. Plans start at €7/week (20 credits) up to €250/year (unlimited). You can also use an affiliate code at checkout for perks." },
 ];
 
-export const Documentation: React.FC = () => {
+interface DocumentationProps {
+  user?: User | null;
+}
+
+export const Documentation: React.FC<DocumentationProps> = ({ user }) => {
   const [activeTab, setActiveTab] = useState<keyof typeof TUTORIALS>('WORKFLOW');
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportType, setSupportType] = useState('BUG');
   const [supportMsg, setSupportMsg] = useState('');
   const [showConfetti, setShowConfetti] = useState(false);
+  const [supportError, setSupportError] = useState<string | null>(null);
+  const [supportSending, setSupportSending] = useState(false);
 
-  const handleSubmitSupport = () => {
+  const handleSubmitSupport = async () => {
+    const wc = supportMsg.trim().split(/\s+/).filter(w => w.length > 0).length;
+    if (!user?.authToken || wc < 2) return;
+    setSupportSending(true);
+    setSupportError(null);
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({ type: supportType, message: supportMsg.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setSupportError(data.error || `Errore ${r.status}`);
+        setSupportSending(false);
+        return;
+      }
       setShowSupportModal(false);
+      setSupportMsg('');
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
-      setSupportMsg('');
+    } catch (e) {
+      setSupportError('Network error. Riprova.');
+    } finally {
+      setSupportSending(false);
+    }
   };
 
   const handleOpenVideo = (url: string) => {
@@ -84,7 +117,7 @@ export const Documentation: React.FC = () => {
   const wordCount = supportMsg.trim().split(/\s+/).filter(w => w.length > 0).length;
 
   return (
-    <div className="p-4 pb-40 flex flex-col gap-6 relative">
+    <div className="p-4 pb-8 flex flex-col gap-6 relative">
       {showConfetti && <Confetti />}
 
       {/* Header */}
@@ -192,17 +225,18 @@ export const Documentation: React.FC = () => {
                           <label className="text-[10px] font-bold uppercase block mb-1">Message</label>
                           <textarea 
                             value={supportMsg}
-                            onChange={(e) => setSupportMsg(e.target.value)}
+                            onChange={(e) => { setSupportMsg(e.target.value); setSupportError(null); }}
                             placeholder="Tell us what's happening (min 2 words)..."
                             className="w-full border-2 border-black p-2 text-xs font-mono min-h-[100px] outline-none bg-white"
                           />
                       </div>
+                      {supportError && <p className="text-[10px] font-bold text-red-600">{supportError}</p>}
                       <button 
                         onClick={handleSubmitSupport}
-                        disabled={wordCount < 2}
-                        className={`${BRUTAL.btn} w-full ${wordCount >= 2 ? `bg-[${COLORS.primary}] text-black` : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                        disabled={wordCount < 2 || supportSending || !user?.authToken}
+                        className={`${BRUTAL.btn} w-full ${wordCount >= 2 && !supportSending && user?.authToken ? `bg-[${COLORS.primary}] text-black` : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
-                          Send Ticket
+                          {supportSending ? 'Sending…' : 'Send Ticket'}
                       </button>
                   </div>
               </div>

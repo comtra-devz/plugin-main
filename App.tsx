@@ -111,6 +111,8 @@ export default function AppTest() {
 
   const [genPrompt, setGenPrompt] = useState('');
   const [credits, setCredits] = useState<CreditsState | null>(null);
+  /** Diagnostic: why credits fetch failed (e.g. "401", "503", "network"). Cleared on success. */
+  const [creditsFetchError, setCreditsFetchError] = useState<string | null>(null);
   const [simulateFreeTier, setSimulateFreeTier] = useState(getSimulateFreeTierFromStorage);
   /** Per utenti di test con "Simula Free Tier" ON quando l'API non restituisce crediti: simulazione locale (25 crediti, consumo in localStorage). */
   const [simulatedCredits, setSimulatedCredits] = useState<CreditsState | null>(null);
@@ -190,18 +192,30 @@ export default function AppTest() {
 
   const fetchCredits = React.useCallback(async () => {
     if (!user?.authToken) return;
+    setCreditsFetchError(null);
     try {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
         headers: { Authorization: `Bearer ${user.authToken}` },
       });
-      if (r.status === 503) { handle503(); return; }
-      if (!r.ok) return;
+      if (r.status === 503) {
+        handle503();
+        setCreditsFetchError('503');
+        console.warn('[Comtra] GET /api/credits: 503 Service Unavailable');
+        return;
+      }
+      if (!r.ok) {
+        const err = `${r.status}`;
+        setCreditsFetchError(err);
+        console.warn('[Comtra] GET /api/credits failed:', r.status, r.statusText);
+        return;
+      }
       const data = await r.json();
       setCredits({
         remaining: data.credits_remaining ?? 0,
         total: data.credits_total ?? 0,
         used: data.credits_used ?? 0,
       });
+      setCreditsFetchError(null);
       setUser(prev => {
         if (!prev) return prev;
         const updates: Partial<User> = {};
@@ -219,13 +233,34 @@ export default function AppTest() {
         return { ...prev, ...updates };
       });
       if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
-    } catch (_) {}
+    } catch (e) {
+      setCreditsFetchError('network');
+      console.warn('[Comtra] GET /api/credits: network or parse error', e);
+    }
   }, [user?.authToken, handle503]);
 
+  const creditsRetryRef = useRef(false);
   useEffect(() => {
-    if (user?.authToken) fetchCredits();
-    else { setCredits(null); setRecentTransactions([]); }
+    if (user?.authToken) {
+      creditsRetryRef.current = false;
+      fetchCredits();
+    } else {
+      setCredits(null);
+      setRecentTransactions([]);
+      setCreditsFetchError(null);
+      creditsRetryRef.current = false;
+    }
   }, [user?.authToken, user?.id, fetchCredits]);
+
+  // Retry credits fetch once if we have auth but credits never loaded (e.g. first request failed or was too early)
+  useEffect(() => {
+    if (!user?.authToken || credits !== null || creditsRetryRef.current) return;
+    const t = setTimeout(() => {
+      creditsRetryRef.current = true;
+      fetchCredits();
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [user?.authToken, credits, fetchCredits]);
 
   const fetchTrophies = React.useCallback(async () => {
     if (!user?.authToken) return;
@@ -786,7 +821,7 @@ export default function AppTest() {
         </div>
 
         {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={effectiveCredits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
-        {view === ViewState.DOCUMENTATION && <Documentation />}
+        {view === ViewState.DOCUMENTATION && <Documentation user={user} />}
         {view === ViewState.PRIVACY && <Privacy />}
         {view === ViewState.TERMS && <Terms />}
         {view === ViewState.AFFILIATE && <Affiliate user={user} />}
@@ -818,6 +853,7 @@ export default function AppTest() {
           <ProfileSheet 
             user={user} 
             creditsLabel={creditsLabel}
+            creditsFetchError={creditsFetchError}
             lowCreditsWarning={lowCreditsWarning}
             isTestUser={isTestUser}
             simulateFreeTier={simulateFreeTier}

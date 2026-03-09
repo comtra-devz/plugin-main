@@ -43,9 +43,11 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
 
   const isPro = user.plan === 'PRO';
   const subType = isPro ? '6 MONTH PRO' : 'FREE TIER';
-  const totalCredits = isPro ? 600 : FREE_TIER_CREDITS;
+  const totalCreditsFromApi = credits?.total;
+  const totalCredits = isPro ? 600 : (totalCreditsFromApi ?? FREE_TIER_CREDITS);
   const usedCredits = credits?.used ?? 0;
-  const remainingCredits = useInfiniteCreditsForTest ? Infinity : (credits?.remaining ?? totalCredits);
+  const creditsLoaded = credits != null;
+  const remainingCredits = useInfiniteCreditsForTest ? Infinity : (credits?.remaining ?? (creditsLoaded ? 0 : null));
   const usedForMeter = useInfiniteCreditsForTest ? 0 : (isPro ? usedCredits : Math.min(usedCredits, totalCredits));
   const remainingPercent = useInfiniteCreditsForTest ? 100 : (totalCredits > 0 ? Math.round(((totalCredits - usedForMeter) / totalCredits) * 100) : 0);
   const expiryDate = isPro ? '24 Oct 2024' : 'N/A';
@@ -103,13 +105,13 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
              <div className="flex justify-between items-end mb-1">
                 <span data-component="Subscription: Meter Label" className="font-bold text-xs uppercase">Credits</span>
                 <span data-component="Subscription: Meter Stats" className="font-mono text-[10px] font-bold">
-                   {useInfiniteCreditsForTest ? '∞ (test)' : `${remainingCredits} / ${totalCredits} (${remainingPercent}% left)`}
+                   {useInfiniteCreditsForTest ? '∞ (test)' : !creditsLoaded ? '—' : `${remainingCredits} / ${totalCredits} (${remainingPercent}% left)`}
                 </span>
              </div>
              <div className="w-full h-3 border-2 border-black p-0.5 bg-gray-100 rounded-sm">
                 <div 
-                   className={`h-full ${remainingPercent < 10 ? 'bg-red-500' : 'bg-black'} transition-all duration-500`} 
-                   style={{ width: `${(usedForMeter / totalCredits) * 100}%` }}
+                   className={`h-full ${!creditsLoaded ? 'bg-gray-300' : remainingPercent < 10 ? 'bg-red-500' : 'bg-black'} transition-all duration-500`} 
+                   style={{ width: creditsLoaded && totalCredits > 0 ? `${(usedForMeter / totalCredits) * 100}%` : '0%' }}
                 ></div>
              </div>
           </div>

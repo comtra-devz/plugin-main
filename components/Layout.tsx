@@ -36,7 +36,7 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
        <button 
          data-component="Layout: Back to Dashboard Button"
          onClick={() => setView(ViewState.AUDIT)} 
-         className="fixed bottom-6 left-1/2 -translate-x-1/2 border-2 border-black bg-white px-4 py-2 font-bold uppercase shadow-[4px_4px_0_0_#000]"
+         className="fixed bottom-6 left-1/2 -translate-x-1/2 border-2 border-black bg-white px-4 py-2 font-bold uppercase shadow-[4px_4px_0_0_#000] whitespace-nowrap"
        >
          Back to Dashboard
        </button>
