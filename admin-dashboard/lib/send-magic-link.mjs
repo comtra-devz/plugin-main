@@ -35,6 +35,12 @@ export async function sendMagicLinkEmail(toEmail, magicLinkToken) {
     `,
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    const msg = error.message || '';
+    if (/your own email address|only send testing emails|verify a domain/i.test(msg)) {
+      return { ok: false, error: 'Impossibile inviare l\'email. In modalità test puoi inviare solo all\'indirizzo configurato. Per inviare ad altri destinatari, verifica un dominio su resend.com/domains.' };
+    }
+    return { ok: false, error: msg };
+  }
   return { ok: true };
 }

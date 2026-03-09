@@ -57,5 +57,11 @@ export default function handler(req, res) {
     return app(req, res);
   }
 
-  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|report-throttle|throttle-discount' });
+  if (service === 'feedback' && sub === 'generate') {
+    if (req.method !== 'POST') return res.status(405).end();
+    req.url = '/api/feedback/generate';
+    return app(req, res);
+  }
+
+  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|report-throttle|throttle-discount|feedback' });
 }
