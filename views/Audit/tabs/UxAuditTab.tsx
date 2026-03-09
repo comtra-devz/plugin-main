@@ -91,6 +91,11 @@ export const UxAuditTab: React.FC<Props> = ({
   if (!hasUxResult) {
     return (
       <div className="p-4 h-[60vh] flex flex-col items-center justify-center">
+        {uxAuditError && (
+          <div className="w-full mb-4 p-3 bg-red-50 border-2 border-red-600 text-[10px] font-bold text-red-700">
+            {uxAuditError}
+          </div>
+        )}
         <div className={`${BRUTAL.card} bg-white py-8 w-full text-center`}>
           <CircularScore score={0} label="Ready" size="sm" />
           <p className="text-xs font-medium text-gray-500 mt-4 px-4 mb-4">
@@ -151,6 +156,11 @@ export const UxAuditTab: React.FC<Props> = ({
 
   return (
     <div className="flex flex-col gap-4 animate-in slide-in-from-left-2 mt-4">
+      {uxAuditError && (
+        <div className="p-3 bg-red-50 border-2 border-red-600 text-[10px] font-bold text-red-700">
+          {uxAuditError}
+        </div>
+      )}
       {uxAuditLoading && (
         <div className="flex items-center gap-2 py-2 px-3 bg-[#ffc900] border-2 border-black text-[10px] font-bold uppercase">
           <span className="w-2 h-2 bg-black animate-pulse" />

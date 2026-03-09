@@ -125,9 +125,8 @@ Esportazione codice e sincronizzazione con strumenti di sviluppo. 3 tab interne.
 
 **Tab TOKENS**
 
-- **Generate CSS**: genera variabili CSS con token del DS (`:root { --primary, --surface, --border }`) + pulsante copia + indicatore sync
-- **Generate JSON**: genera JSON strutturato con token (colori, spacing, border) + pulsante copia + indicatore sync
-- **Sync to Storybook / GitHub / Bitbucket** (PRO): invia i token al repository scelto; cooldown 2 min; stato visivo "Synced" / "Out of Sync"
+- **Generate CSS** e **Generate JSON**: sempre **gratuiti** per tutti (anche senza PRO). Generano variabili CSS e JSON con i token del file Figma; pulsante copia + indicatore sync.
+- **Sync to Storybook / GitHub / Bitbucket** (in Tokens: push token verso repo): disponibile con PRO; costi/cooldown come da piano.
 
 **Tab TARGET**
 
@@ -137,11 +136,12 @@ Esportazione codice e sincronizzazione con strumenti di sviluppo. 3 tab interne.
 - **Code block** con copia negli appunti
 - **Sync to Storybook** (PRO): invia il componente direttamente a Storybook; mostra timestamp dell'ultimo sync
 
-**Tab SYNC**
+**Tab SYNC (Deep Sync)**
 
+- **Sblocco:** solo con **PRO** (qualsiasi piano). Il tier FREE non può accedere alla tab Sync.
 - **Sub-tab**: Storybook | GitHub | Bitbucket
 - **Connect Storybook**: pulsante di connessione (diventa badge "Connected")
-- **Scan for Drift**: rileva divergenze tra Figma e codebase; cooldown 2 min
+- **Scan for Drift**: rileva divergenze tra Figma e codebase; **15 crediti** per scan; cooldown 2 min
 - **Lista drift** con severity per componente:
   - es. "Primary Button — Padding inconsistency: Figma 12px vs Code 16px"
   - Ogni item espandibile; "Select Layer" per navigare; "Sync" per risolvere singolarmente
@@ -264,13 +264,14 @@ Setup backend e webhook: **[auth-deploy/SETUP.md](auth-deploy/SETUP.md)** (sezio
 | PRO 1 Year | Illimitati | Sync senza cooldown |
 
 Costo per operazione:
+- **Code → Tokens (Generate CSS, Generate JSON):** sempre **gratuiti** per tutti (FREE e PRO), nessun credito e nessun PRO richiesto.
 - **Audit Scan**: a **scaglioni** in base al numero di nodi (conteggio fino a max 200.000; oltre = tier 200k+):
   - **Small** (≤500 nodi): 2 crediti
   - **Medium** (≤5.000): 5 crediti
   - **Large** (≤50.000): 8 crediti
   - **200k+** (>50.000 o conteggio fermato a 200k): 11 crediti
 - **Generate**: 3 crediti
-- **Deep Sync** (Code tab, PRO): Scan Project 15 crediti; Sync Fix (singolo) 5 crediti; Sync All N×5 crediti. Con piano annuale: illimitati (nessun cooldown)
+- **Deep Sync** (tab Sync in Code): **solo PRO** (il tier FREE non può usare Sync). Con PRO: Scan Project **15 crediti**; Sync Fix (singolo) 5 crediti; Sync All N×5 crediti. Con piano annuale: illimitati (nessun cooldown)
 
 ---
 

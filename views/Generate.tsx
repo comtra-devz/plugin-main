@@ -204,7 +204,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
       }
       const creditsToConsume = (actionPlan.metadata?.estimated_credits ?? 3);
       const consumed = await consumeCredits({
-        action_type: 'generate',
+        action_type: mode === 'modify' ? 'wireframe_modified' : 'generate',
         credits_consumed: creditsToConsume,
         file_id: fileKey,
       });

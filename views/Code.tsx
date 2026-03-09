@@ -312,20 +312,17 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
      });
   };
 
+  // Tokens (CSS / JSON): always free, no PRO or credits required
   const handleGenerateCss = () => {
-    handleAction(() => {
-      pendingTokenRequestRef.current = 'css';
-      setIsGeneratingCss(true);
-      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
-    });
+    pendingTokenRequestRef.current = 'css';
+    setIsGeneratingCss(true);
+    window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
   };
 
   const handleGenerateJson = () => {
-    handleAction(() => {
-      pendingTokenRequestRef.current = 'json';
-      setIsGeneratingJson(true);
-      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
-    });
+    pendingTokenRequestRef.current = 'json';
+    setIsGeneratingJson(true);
+    window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
   };
 
   const copyToClipboard = (text: string) => {

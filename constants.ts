@@ -127,6 +127,9 @@ export function getPrototypeAuditCost(selectedFlowCount: number): { cost: number
   return { cost: last.cost, sizeLabel: last.label };
 }
 
+/** UX Logic Audit: flat cost (backend estimateCreditsByAction returns 4). See docs/COST-ESTIMATE-UX-AUDIT.md. */
+export const UX_AUDIT_CREDITS = 4;
+
 /** Lemon Squeezy: base checkout URL (store custom domain). Aggiungere ?aff=CODICE per attribuzione affiliato. */
 export const LEMON_SQUEEZY_CHECKOUT_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_SQUEEZY_CHECKOUT_BASE) || 'https://comtra.lemonsqueezy.com/checkout/buy';
 

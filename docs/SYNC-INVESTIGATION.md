@@ -9,7 +9,7 @@ Documento generato dall’analisi del codebase per la funzione **Sync** nella ta
 ### 0.1 Cosa fa il prodotto (logica attuale)
 
 - **Figma = source of truth.** Il drift è “design aggiornato, codice (Storybook/repo) indietro”. La Sync serve a **rilevare** le differenze e **aggiornare** il “codice vivo” (Storybook) o il repo (GitHub/Bitbucket).
-- Flusso UI già definito: Connect Storybook → Scan Project (drift) → lista violazioni → Sync Fix (singolo) / Sync All. Crediti e cooldown in UI; gate PRO.
+- Flusso UI già definito: Connect Storybook → Scan Project (drift) → lista violazioni → Sync Fix (singolo) / Sync All. La tab **Sync è sbloccata solo con PRO** (FREE non può usarla); con PRO, Scan costa **15 crediti**, Fix 5, Sync All N×5. Cooldown in UI.
 - Per una Sync “reale” servono: (1) **lettura** da Storybook (e/o repo) per confrontare con Figma; (2) **scrittura** per “aggiornare” (push).
 
 ### 0.2 Integrazioni Figma–Storybook esistenti (contesto)
@@ -78,10 +78,10 @@ Priorità: prima **Storybook (lettura per drift + chiarire il canale di “scrit
 | Aspetto | Stato | Dettaglio |
 |--------|--------|-----------|
 | **UI (SyncTab)** | ✅ Placeholder completo | Gate PRO, tab SB/GH/BB, Connect → Scan → Lista drift → Sync Fix / Sync All, cooldown, crediti in UI |
-| **Stato e handler (Code.tsx)** | ✅ Solo locale | `handleSyncScan` → mock dopo 2s; `handleSyncItem` / `handleSyncAll` solo setState; nessuna chiamata API |
+| **Stato e handler (Code.tsx)** | ✅ Implementato | `handleSyncScan` chiama `fetchSyncScan` (POST /api/agents/sync-scan); `handleSyncItem` / `handleSyncAll` con consume crediti |
 | **Crediti (consume)** | ✅ Collegati | `scan_sync` 15 crediti, `sync_fix` 5 crediti, `sync_storybook` (Sync All) N×5 crediti |
 | **Backend crediti** | ✅ Pronto | `scan_sync` → 15, `sync_fix` / `sync_storybook` → 5; XP per `sync_storybook` / `sync_github` / `sync_bitbucket` (25 ciascuno) |
-| **API Sync/Drift/Storybook** | ❌ Assenti | Nessun endpoint `/api/sync`, `/api/drift`, `/api/storybook`; nessuna integrazione Storybook/GitHub/Bitbucket |
+| **API Sync/Drift/Storybook** | ⚠️ Parziale | Endpoint `POST /api/agents/sync-scan` implementato (Figma vs Storybook); GitHub/Bitbucket da implementare |
 | **Contesto file Figma** | ❌ Non usato in Code | Tab Code non richiede `get-file-context` né `file_key`; solo Tokens usa `get-design-tokens` (Variables) |
 | **Statistiche sync (user.stats)** | ⚠️ Solo default 0 | Backend restituisce sempre `syncedStorybook: 0` (e GH/BB); nessuna colonna DB né logica che le aggiorni |
 
@@ -145,11 +145,8 @@ La **tab Code (Sync)** oggi non invia mai `get-file-context`. Per uno “scan dr
 
 ### 3.3 Crediti e cooldown
 
-- **Crediti Sync (implementati):** Scan Project 15 crediti (`scan_sync`), Fix singolo 5 crediti (`sync_fix`), Sync All N×5 crediti (`sync_storybook`). (Precedentemente: scan -15, fix singolo -5, rescan -5, “Sync All” = N×5 crediti.
+- **Crediti Sync (implementati):** Scan Project 15 crediti (`scan_sync`), Fix singolo 5 crediti (`sync_fix`), Sync All N×5 crediti (`sync_storybook`).
 - **Backend:** `estimateCreditsByAction` supporta `scan_sync` (15), `sync_fix` e `sync_storybook` (5); `consumeCredits` accetta gli stessi `action_type`.
-- **Scelte da fare:**
-  - Allineare le label UI ai valori che il backend accetta (es. introdurre `scan_sync`, `sync_fix`, `sync_storybook` in `estimateCreditsByAction` e in consume).
-  - Oppure usare un unico `action_type: 'sync'` con `credits_consumed` variabile (15, 5, N×5) e lasciare la stima a 1 per “unità minima”; da definire con product.
 
 ---
 

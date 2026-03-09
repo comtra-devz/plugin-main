@@ -518,6 +518,7 @@ function estimateCreditsByAction(actionType, nodeCount) {
     return 6;
   }
   if (actionType === 'wireframe_gen' || actionType === 'generate') return 3;
+  if (actionType === 'wireframe_modified') return 3;
   if (actionType === 'proto_scan') return 2;
   // Prototype Audit: node_count = number of selected flows; low credits (1–4). See audit-specs/prototype-audit/COST-PROSPECT.md
   if (actionType === 'proto_audit') {
@@ -1370,6 +1371,140 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
   }
 });
 
+// --- UX Logic Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
+const UX_AUDIT_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'ux-audit-system.md');
+
+function normalizeUxAuditIssue(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = raw.id != null ? String(raw.id) : `UXL-${Math.random().toString(36).slice(2, 9)}`;
+  const categoryId = raw.categoryId != null ? String(raw.categoryId) : 'form-ux';
+  const msg = raw.msg != null ? String(raw.msg) : 'Issue';
+  const severity = raw.severity === 'HIGH' || raw.severity === 'MED' || raw.severity === 'LOW' ? raw.severity : 'MED';
+  const layerId = raw.layerId != null ? String(raw.layerId) : '';
+  const fix = raw.fix != null ? String(raw.fix) : '';
+  return {
+    id,
+    categoryId,
+    msg,
+    severity,
+    layerId,
+    fix,
+    rule_id: raw.id,
+    pageName: raw.pageName != null ? String(raw.pageName) : undefined,
+    heuristic: raw.heuristic != null ? String(raw.heuristic) : undefined,
+    nodeName: raw.nodeName != null ? String(raw.nodeName) : undefined,
+  };
+}
+
+app.post('/api/agents/ux-audit', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const fileKey = (body.file_key || body.fileKey || '').trim();
+  const fileJsonFromBody = body.file_json || body.fileJson;
+
+  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
+  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+
+  let systemPrompt;
+  const pathsToTry = [UX_AUDIT_PROMPT_PATH, path.join(process.cwd(), 'prompts', 'ux-audit-system.md')];
+  for (const p of pathsToTry) {
+    try {
+      systemPrompt = readFileSync(p, 'utf8');
+      if (systemPrompt && systemPrompt.length > 0) break;
+    } catch (_) {}
+  }
+  if (!systemPrompt) {
+    console.error('UX Audit: failed to read prompt', pathsToTry);
+    return res.status(500).json({ error: 'System prompt not found' });
+  }
+
+  try {
+    let fileJson;
+    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
+      fileJson = fileJsonFromBody;
+    } else if (fileKey) {
+      let accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
+      if (!accessToken) {
+        console.warn('POST /api/agents/ux-audit: no token for user_id=', userId);
+        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
+      }
+      let fetchErr = null;
+      try {
+        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
+      } catch (err) {
+        fetchErr = err;
+      }
+      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
+        const newToken = await forceRefreshFigmaToken(userId);
+        if (newToken) {
+          try {
+            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
+            fetchErr = null;
+          } catch (e) {
+            fetchErr = e;
+          }
+        }
+      }
+      if (fetchErr) {
+        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
+        if (msg.includes('not found')) return res.status(404).json({ error: msg });
+        return res.status(400).json({ error: msg });
+      }
+    } else {
+      return res.status(400).json({ error: 'file_json must include document' });
+    }
+
+    const userMessage = `Ecco il JSON del file di design. Esegui l'audit UX secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.\n\n${JSON.stringify(fileJson)}`;
+
+    const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${KIMI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: KIMI_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_completion_tokens: 4096,
+      }),
+    });
+    if (!kimiRes.ok) {
+      const t = await kimiRes.text();
+      console.error('UX Audit: Kimi API', kimiRes.status, t.slice(0, 300));
+      return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
+    }
+    const kimiData = await kimiRes.json();
+    const content = kimiData?.choices?.[0]?.message?.content;
+    const parsed = extractJsonFromContent(content);
+    const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
+    const issues = rawIssues.map(normalizeUxAuditIssue).filter(Boolean);
+
+    const usage = kimiData?.usage;
+    const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
+    const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+    if (dbSql && (inputTokens > 0 || outputTokens > 0)) {
+      const nodeCount = countFigmaNodes(fileJson?.document);
+      const sizeBand = nodeCount > 0 ? sizeBandFromNodeCount(nodeCount) : null;
+      dbSql`
+        INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+        VALUES ('ux_audit', ${inputTokens}, ${outputTokens}, ${sizeBand}, ${KIMI_MODEL})
+      `.catch((err) => console.error('Kimi usage log ux_audit failed', err.message));
+    }
+
+    res.json({ issues });
+  } catch (err) {
+    console.error('POST /api/agents/ux-audit', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- Sync Scan (Figma vs Storybook drift detection)
 const { runSyncScan } = await import('./sync-scan-engine.mjs');
 
@@ -1457,7 +1592,7 @@ async function getTrophyContext(sql, userId) {
   const audits = (counts.audit || 0) + (counts.scan || 0);
   const wireframesGen = (counts.wireframe_gen || 0) + (counts.generate || 0);
   const wireframesModified = counts.wireframe_modified || 0;
-  const protoScans = counts.proto_scan || 0;
+  const protoScans = (counts.proto_scan || 0) + (counts.proto_audit || 0);
   const a11y = counts.a11y_check || counts.a11y_audit || 0;
   const ux = counts.ux_audit || 0;
   const syncStorybook = counts.sync_storybook || 0;

@@ -547,6 +547,31 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken, handle503]);
 
+  const fetchUxAudit = React.useCallback(async (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => {
+    if (!user?.authToken) return { issues: [] };
+    const payload = body.file_json
+      ? { file_json: body.file_json }
+      : { file_key: body.file_key, scope: body.scope, page_id: body.page_id, node_ids: body.node_ids, page_ids: body.page_ids };
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/ux-audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify(payload),
+    });
+    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        msg = j.error || text;
+      } catch {
+        // keep as-is
+      }
+      throw new Error(msg);
+    }
+    return r.json();
+  }, [user?.authToken, handle503]);
+
   const fetchSyncScan = React.useCallback(async (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => {
     if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
     const payload = body.file_json
@@ -694,6 +719,7 @@ export default function AppTest() {
             fetchFigmaFile={fetchFigmaFile}
             fetchDsAudit={fetchDsAudit}
             fetchA11yAudit={fetchA11yAudit}
+            fetchUxAudit={fetchUxAudit}
             onNavigateToGenerate={(prompt) => {
               setGenPrompt(prompt);
               setView(ViewState.GENERATE);

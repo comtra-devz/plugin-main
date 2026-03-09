@@ -38,6 +38,189 @@ async function getStoredUser(): Promise<any> {
 // Invalidated when scope or pageId changes; not used for scope 'current' (selection-dependent).
 let nodeCountCache: { scope: string; pageId: string | undefined; count: number; target: string } | null = null;
 
+/** Prototype Audit: P-01–P-04 (flow integrity). In-plugin, deterministic. */
+async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Promise<Array<{ id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string }>> {
+  const pageName = page.name || 'Current page';
+  const issues: Array<{ id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string }> = [];
+  let p01Count = 0, p02Count = 0, p03Count = 0, p04Count = 0;
+
+  const flows = (page as any).flowStartingPoints != null
+    ? Array.from((page as any).flowStartingPoints as ReadonlyArray<{ nodeId: string; name: string }>)
+    : [];
+  const flowStartIds = new Set(flows.map((f: { nodeId: string }) => f.nodeId));
+  const flowStartNames: Record<string, string> = {};
+  flows.forEach((f: { nodeId: string; name: string }) => { flowStartNames[f.nodeId] = f.name || 'Flow'; });
+
+  const topFrames = page.children.filter((n): n is FrameNode | ComponentNode => n.type === 'FRAME' || n.type === 'COMPONENT');
+  const topFrameIds = new Set(topFrames.map((f) => f.id));
+
+  function getRootFrameId(node: BaseNode): string | null {
+    let n: BaseNode | null = node;
+    while (n) {
+      if (topFrameIds.has(n.id)) return n.id;
+      n = n.parent;
+    }
+    return null;
+  }
+
+  const outgoingByFrame = new Map<string, boolean>();
+  const destinationFrameIds = new Set<string>();
+  const brokenReactions: Array<{ nodeId: string; nodeName: string; destId: string; flowName: string }> = [];
+
+  function walkReactions(node: BaseNode, rootFrameId: string | null, flowName: string) {
+    const r = (node as SceneNode & { reactions?: ReadonlyArray<{ actions?: Array<{ type: string; destinationId?: string | null }> }> }).reactions;
+    if (!Array.isArray(r)) return;
+    for (const reaction of r) {
+      const actions = reaction.actions ?? (reaction as any).action ? [(reaction as any).action] : [];
+      for (const a of actions) {
+        if (!a || typeof a !== 'object') continue;
+        if (a.type === 'NODE' && a.destinationId) {
+          const dest = figma.getNodeById(a.destinationId);
+          if (!dest) {
+            brokenReactions.push({ nodeId: node.id, nodeName: node.name || 'Node', destId: a.destinationId, flowName });
+          } else {
+            const destRoot = getRootFrameId(dest);
+            if (destRoot) {
+              destinationFrameIds.add(destRoot);
+              outgoingByFrame.set(rootFrameId || destRoot, true);
+            }
+          }
+        } else if (a.type === 'BACK' || a.type === 'CLOSE') {
+          if (rootFrameId) outgoingByFrame.set(rootFrameId, true);
+        }
+      }
+    }
+  }
+
+  function walk(node: BaseNode, rootFrameId: string | null, flowName: string) {
+    if ('reactions' in node && node.reactions) walkReactions(node, rootFrameId, flowName);
+    if ('children' in node && Array.isArray((node as ChildrenMixin).children)) {
+      for (const c of (node as ChildrenMixin).children as BaseNode[]) {
+        walk(c, rootFrameId || getRootFrameId(c), flowName);
+      }
+    }
+  }
+
+  for (const frame of topFrames) {
+    const rid = getRootFrameId(frame) || frame.id;
+    walk(frame, rid, flowStartNames[frame.id] || '');
+  }
+
+  for (const br of brokenReactions) {
+    p04Count++;
+    issues.push({
+      id: `P-04-${String(p04Count).padStart(3, '0')}`,
+      rule_id: 'P-04',
+      categoryId: 'flow-integrity',
+      msg: 'Broken destination: target frame not found',
+      severity: 'HIGH',
+      layerId: br.nodeId,
+      fix: 'Reconnect to an existing frame or remove the link. The target frame may have been deleted or moved.',
+      pageName,
+      flowName: br.flowName,
+    });
+  }
+
+  if (flows.length === 0) {
+    p03Count++;
+    issues.push({
+      id: `P-03-${String(p03Count).padStart(3, '0')}`,
+      rule_id: 'P-03',
+      categoryId: 'flow-integrity',
+      msg: 'No flow starting point on this page',
+      severity: 'HIGH',
+      layerId: page.id,
+      fix: 'Set at least one frame as flow starting point so the prototype can be previewed.',
+      pageName,
+    });
+  }
+
+  const reachable = new Set<string>();
+  const toVisit = [...selectedFlowNodeIds];
+  const visited = new Set<string>();
+  while (toVisit.length > 0) {
+    const fid = toVisit.pop()!;
+    if (visited.has(fid)) continue;
+    visited.add(fid);
+    const node = figma.getNodeById(fid);
+    if (node && (topFrameIds.has(fid) || flowStartIds.has(fid))) reachable.add(fid);
+    if (node && 'children' in node) {
+      function collectDests(n: BaseNode) {
+        const r = (n as SceneNode & { reactions?: ReadonlyArray<{ actions?: Array<{ type: string; destinationId?: string | null }> }> }).reactions;
+        if (Array.isArray(r)) {
+          for (const re of r) {
+            const acts = re.actions ?? (re as any).action ? [(re as any).action] : [];
+            for (const a of acts) {
+              if (a?.type === 'NODE' && a.destinationId) {
+                const dest = figma.getNodeById(a.destinationId);
+                if (dest) {
+                  const destRoot = getRootFrameId(dest);
+                  if (destRoot && !visited.has(destRoot)) toVisit.push(destRoot);
+                }
+              }
+            }
+          }
+        }
+        if ('children' in n) for (const c of (n as ChildrenMixin).children as BaseNode[]) collectDests(c);
+      }
+      collectDests(node);
+    }
+  }
+
+  for (const fid of reachable) {
+    if (flowStartIds.has(fid)) {
+      if (!outgoingByFrame.get(fid)) {
+        p03Count++;
+        const flowName = flowStartNames[fid] || 'Flow';
+        issues.push({
+          id: `P-03-${String(p03Count).padStart(3, '0')}`,
+          rule_id: 'P-03',
+          categoryId: 'flow-integrity',
+          msg: 'Flow starting point has no outgoing connection',
+          severity: 'HIGH',
+          layerId: fid,
+          fix: 'Add at least one interaction from this starting frame to another frame.',
+          pageName,
+          flowName,
+        });
+      }
+    } else if (!outgoingByFrame.get(fid)) {
+      p01Count++;
+      const flowName = Object.values(flowStartNames)[0] || 'Flow';
+      issues.push({
+        id: `P-01-${String(p01Count).padStart(3, '0')}`,
+        rule_id: 'P-01',
+        categoryId: 'flow-integrity',
+        msg: 'Dead-end frame: no outgoing connections or Back actions',
+        severity: 'HIGH',
+        layerId: fid,
+        fix: 'Add a Back action or Navigate to action so the user can leave this screen.',
+        pageName,
+        flowName,
+      });
+    }
+  }
+
+  for (const frame of topFrames) {
+    const fid = frame.id;
+    if (!flowStartIds.has(fid) && !destinationFrameIds.has(fid)) {
+      p02Count++;
+      issues.push({
+        id: `P-02-${String(p02Count).padStart(3, '0')}`,
+        rule_id: 'P-02',
+        categoryId: 'flow-integrity',
+        msg: 'Orphan frame: not connected to any flow',
+        severity: 'HIGH',
+        layerId: fid,
+        fix: 'Connect this frame to a flow (add a Navigate to or Open overlay from another frame) or remove it if unused.',
+        pageName,
+      });
+    }
+  }
+
+  return issues;
+}
+
 figma.ui.onmessage = async (raw: any) => {
   const msg = raw?.pluginMessage ?? raw;
   if (msg.type === 'resize-window') {
@@ -91,12 +274,15 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'run-proto-audit') {
     const selectedFlowNodeIds: string[] = Array.isArray(msg.selectedFlowNodeIds) ? msg.selectedFlowNodeIds : [];
-    // TODO: run real prototype audit (traverse from selectedFlowNodeIds, build graph, apply P-01–P-20). For now return mock issues.
-    const mockIssues = [
-      { id: 'P-04-001', rule_id: 'P-04', categoryId: 'flow-integrity', msg: 'Broken destination: target frame not found', severity: 'HIGH', layerId: 'nav-home', fix: 'Reconnect to an existing frame or remove the link.', pageName: 'Current page', flowName: 'Main Flow' },
-      { id: 'P-01-001', rule_id: 'P-01', categoryId: 'flow-integrity', msg: 'Dead-end frame: no outgoing connections or Back actions', severity: 'HIGH', layerId: 'flow-end', fix: 'Add a Back action or Navigate to to return to previous screen.', pageName: 'Current page', flowName: 'Checkout Flow' },
-    ];
-    figma.ui.postMessage({ type: 'proto-audit-result', issues: mockIssues });
+    (async () => {
+      try {
+        const issues = await runProtoAudit(figma.currentPage, selectedFlowNodeIds);
+        figma.ui.postMessage({ type: 'proto-audit-result', issues });
+      } catch (e) {
+        console.error('[run-proto-audit]', e);
+        figma.ui.postMessage({ type: 'proto-audit-result', issues: [], error: String(e) });
+      }
+    })();
   }
 
   // Serialize document tree for audit. Chunked + yield so the main thread never blocks for long.

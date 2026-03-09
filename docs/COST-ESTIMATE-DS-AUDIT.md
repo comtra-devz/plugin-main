@@ -47,6 +47,8 @@ Esempio — **Scan DS** (da `SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`):
 - **Prototype Audit:** dettaglio **docs/COST-ESTIMATE-PROTOTYPE-AUDIT.md**.
 - **UX Logic Audit:** agente Kimi (design statico, 60 regole UXL). Backend: `estimateCreditsByAction('ux_audit')` = 4 (flat). Ruleset: formula BASE 3 + pages×1 × mult. nodi. Dettaglio: **docs/COST-ESTIMATE-UX-AUDIT.md**.
 - **Generate:** credito dopo canvas render; stima da `estimateCreditsByAction('generate')` in backend.
+- **Code → Tokens (Generate CSS, Generate JSON):** sempre **gratuiti** per tutti (FREE e PRO), nessun credito.
+- **Deep Sync** (tab Sync in Code): **solo PRO** (FREE non può usarla). Con PRO: `scan_sync` 15 crediti, `sync_fix` / `sync_storybook` 5 crediti (Sync All = N×5).
 
 ---
 
