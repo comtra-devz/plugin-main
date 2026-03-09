@@ -1115,8 +1115,23 @@ app.post('/api/agents/ds-audit', async (req, res) => {
   }
 });
 
-// --- Generate agent (Kimi): file_key + prompt → action plan JSON
+// --- Generate agent (Kimi): file_key + prompt → action plan JSON. A/B: 50% Direct (A), 50% ASCII first (B)
 const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
+const GENERATE_ASCII_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-ascii-system.md');
+
+async function callKimi(messages, maxTokens = 8192) {
+  const r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
+    body: JSON.stringify({ model: KIMI_MODEL, messages, temperature: 0.3, max_tokens: maxTokens }),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t || `Kimi API ${r.status}`);
+  }
+  const data = await r.json();
+  return { content: data?.choices?.[0]?.message?.content, usage: data?.usage };
+}
 
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
@@ -1130,6 +1145,12 @@ app.post('/api/agents/generate', async (req, res) => {
   if (!fileKey) return res.status(400).json({ error: 'file_key required' });
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+
+  const variant = Math.random() < 0.5 ? 'B' : 'A';
+  const startMs = Date.now();
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let asciiWireframe = null;
 
   let systemPrompt;
   try {
@@ -1173,32 +1194,46 @@ app.post('/api/agents/generate', async (req, res) => {
 
     const pageCount = fileJson?.document?.children?.length ?? 0;
     const contextBlob = `Mode: ${mode}. DS: ${dsSource}. File has ${pageCount} page(s). Use only variable references (no raw hex/px).`;
-    const userMessage = `User prompt:\n${prompt}\n\nContext: ${contextBlob}\n\nReturn only the action plan JSON object, no other text.`;
 
-    const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${KIMI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: KIMI_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        temperature: 0.3,
-        max_tokens: 8192,
-      }),
-    });
-    if (!kimiRes.ok) {
-      const t = await kimiRes.text();
-      console.error('Generate: Kimi API', kimiRes.status, t.slice(0, 300));
-      return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
+    let actionPlan;
+
+    if (variant === 'B') {
+      let asciiPrompt;
+      try {
+        asciiPrompt = readFileSync(GENERATE_ASCII_PROMPT_PATH, 'utf8');
+        if (!asciiPrompt?.trim()) throw new Error('empty');
+      } catch (e) {
+        console.error('Generate B: ASCII prompt not found', e?.message);
+        asciiPrompt = 'Create an ASCII wireframe using +, -, |. Return only the wireframe, no other text.';
+      }
+      const asciiUserMsg = `User request: ${prompt}\n\nCreate the ASCII wireframe.`;
+      const { content: asciiContent, usage: asciiUsage } = await callKimi(
+        [{ role: 'system', content: asciiPrompt }, { role: 'user', content: asciiUserMsg }],
+        2048
+      );
+      totalInputTokens += Math.max(0, Number(asciiUsage?.input_tokens ?? asciiUsage?.prompt_tokens ?? 0));
+      totalOutputTokens += Math.max(0, Number(asciiUsage?.output_tokens ?? asciiUsage?.completion_tokens ?? 0));
+      asciiWireframe = (asciiContent || '').trim();
+
+      const convertUserMsg = `ASCII wireframe:\n${asciiWireframe}\n\nOriginal prompt: ${prompt}\n\nContext: ${contextBlob}\n\nConvert this ASCII wireframe into the action plan JSON. Return only the JSON object, no other text.`;
+      const { content: jsonContent, usage: jsonUsage } = await callKimi(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: convertUserMsg }],
+        8192
+      );
+      totalInputTokens += Math.max(0, Number(jsonUsage?.input_tokens ?? jsonUsage?.prompt_tokens ?? 0));
+      totalOutputTokens += Math.max(0, Number(jsonUsage?.output_tokens ?? jsonUsage?.completion_tokens ?? 0));
+      actionPlan = extractJsonFromContent(jsonContent);
+    } else {
+      const userMessage = `User prompt:\n${prompt}\n\nContext: ${contextBlob}\n\nReturn only the action plan JSON object, no other text.`;
+      const { content, usage } = await callKimi([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ]);
+      totalInputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
+      totalOutputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+      actionPlan = extractJsonFromContent(content);
     }
-    const kimiData = await kimiRes.json();
-    const content = kimiData?.choices?.[0]?.message?.content;
-    const actionPlan = extractJsonFromContent(content);
+
     if (!actionPlan || typeof actionPlan !== 'object') {
       console.error('Generate: invalid or missing JSON from Kimi');
       return res.status(502).json({ error: 'Invalid response from AI' });
@@ -1207,21 +1242,68 @@ app.post('/api/agents/generate', async (req, res) => {
       return res.status(502).json({ error: 'Action plan missing required fields' });
     }
 
-    if (dbSql) {
-      const usage = kimiData?.usage;
-      const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
-      const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
-      if (inputTokens > 0 || outputTokens > 0) {
-        dbSql`
-          INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
-          VALUES ('generate', ${inputTokens}, ${outputTokens}, null, ${KIMI_MODEL})
-        `.catch((err) => console.error('Kimi usage log generate failed', err.message));
-      }
-    }
+    const creditsConsumed = actionPlan.metadata?.estimated_credits ?? 3;
+    const latencyMs = Date.now() - startMs;
 
-    res.json({ action_plan: actionPlan });
+    if (dbSql) {
+      dbSql`
+        INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+        VALUES ('generate', ${totalInputTokens}, ${totalOutputTokens}, null, ${KIMI_MODEL})
+      `.catch((err) => console.error('Kimi usage log generate failed', err.message));
+
+      const ins = await dbSql`
+        INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms)
+        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs})
+        RETURNING id
+      `.catch(() => ({ rows: [] }));
+      const requestId = ins?.rows?.[0]?.id ?? null;
+
+      res.json({
+        action_plan: actionPlan,
+        variant,
+        request_id: requestId,
+        ...(asciiWireframe && { ascii_wireframe: asciiWireframe }),
+      });
+    } else {
+      res.json({
+        action_plan: actionPlan,
+        variant,
+        request_id: null,
+        ...(asciiWireframe && { ascii_wireframe: asciiWireframe }),
+      });
+    }
   } catch (err) {
     console.error('POST /api/agents/generate', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Feedback Generate (thumbs up/down + optional comment)
+app.post('/api/feedback/generate', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const requestId = body.request_id;
+  const thumbs = body.thumbs;
+  const comment = (body.comment || '').trim().slice(0, 2000);
+
+  if (!requestId) return res.status(400).json({ error: 'request_id required' });
+  if (thumbs !== 'up' && thumbs !== 'down') return res.status(400).json({ error: 'thumbs must be up or down' });
+
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+
+  try {
+    const sel = await dbSql`SELECT id, user_id, variant FROM generate_ab_requests WHERE id = ${requestId} LIMIT 1`;
+    const reqRow = sel?.rows?.[0];
+    if (!reqRow || reqRow.user_id !== userId) return res.status(404).json({ error: 'Request not found' });
+
+    await dbSql`
+      INSERT INTO generate_ab_feedback (request_id, variant, thumbs, comment)
+      VALUES (${requestId}, ${reqRow.variant}, ${thumbs}, ${comment || null})
+    `;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/feedback/generate', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

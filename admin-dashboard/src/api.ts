@@ -447,3 +447,46 @@ export async function fetchDiscountsThrottle(
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
+
+// --- A/B test Generate
+export interface GenerateABStatsResponse {
+  period_days: number;
+  since: string;
+  total: {
+    count: number;
+    input_tokens: number;
+    output_tokens: number;
+    credits_consumed: number;
+    avg_latency_ms: number | null;
+    cost_usd: number;
+  };
+  by_variant: {
+    variant: string;
+    count: number;
+    input_tokens: number;
+    output_tokens: number;
+    credits_consumed: number;
+    avg_latency_ms: number | null;
+  }[];
+  feedback_by_variant: Record<string, { up: number; down: number }>;
+  requests_list: {
+    id: string;
+    user_id: string;
+    user_masked: string;
+    variant: string;
+    input_tokens: number;
+    output_tokens: number;
+    credits_consumed: number;
+    latency_ms: number | null;
+    created_at: string;
+    feedback_thumbs: string | null;
+    feedback_comment: string | null;
+  }[];
+  timeline: { date: string; A: { count: number; credits: number }; B: { count: number; credits: number } }[];
+}
+
+export async function fetchGenerateABStats(period = 30): Promise<GenerateABStatsResponse> {
+  const r = await fetch(apiUrl('generate-ab-stats', { period }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}

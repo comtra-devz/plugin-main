@@ -13,8 +13,9 @@ interface Props {
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
-  fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object }>;
+  fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null; ascii_wireframe?: string }>;
   requestFileContext: () => Promise<{ fileKey: string | null; error?: string | null }>;
+  fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
 }
 
 const INSPIRATION = [
@@ -34,10 +35,16 @@ const DESIGN_SYSTEMS = [
   "Uber Base Web"
 ];
 
-export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt, fetchGenerate, requestFileContext }) => {
+export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt, fetchGenerate, requestFileContext, fetchGenerateFeedback }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null);
+  const [lastVariant, setLastVariant] = useState<string | null>(null);
+  const [asciiWireframe, setAsciiWireframe] = useState<string | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState('');
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [hasContent, setHasContent] = useState(!!initialPrompt);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -207,6 +214,10 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
         return;
       }
       setRes(JSON.stringify(actionPlan, null, 2));
+      setLastRequestId(data?.request_id ?? null);
+      setLastVariant(data?.variant ?? null);
+      setAsciiWireframe(data?.ascii_wireframe ?? null);
+      setFeedbackSent(false);
       setShowReport(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -237,6 +248,36 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   const handleDeleteUpload = () => {
       setUploadedImage(null);
   }
+
+  const handleFeedback = async (thumbs: 'up' | 'down') => {
+    if (!lastRequestId || feedbackSent) return;
+    if (thumbs === 'down') {
+      setShowFeedbackModal(true);
+      return;
+    }
+    try {
+      await fetchGenerateFeedback({ request_id: lastRequestId, thumbs });
+      setFeedbackSent(true);
+    } catch {
+      // silent fail
+    }
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!lastRequestId || feedbackSent) return;
+    try {
+      await fetchGenerateFeedback({
+        request_id: lastRequestId,
+        thumbs: 'down',
+        comment: feedbackComment.trim() || undefined,
+      });
+      setFeedbackSent(true);
+      setShowFeedbackModal(false);
+      setFeedbackComment('');
+    } catch {
+      // silent fail
+    }
+  };
 
   // Filter Design Systems
   const filteredSystems = DESIGN_SYSTEMS.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
@@ -438,6 +479,15 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                         <span className="text-green-500 font-bold">✓</span>
                         <p className="text-[10px] text-gray-600">Generated using <strong>{selectedSystem}</strong> conventions.</p>
                     </div>
+                    {asciiWireframe && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-blue-500 font-bold">◇</span>
+                        <div className="text-[10px] text-gray-600">
+                          <p className="font-bold uppercase text-[9px] mb-1">ASCII Wireframe (Variant B)</p>
+                          <pre className="p-2 bg-gray-100 text-[9px] overflow-x-auto max-h-[120px] overflow-y-auto border border-black font-mono whitespace-pre">{asciiWireframe}</pre>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-start gap-2">
                         <span className="text-green-500 font-bold">✓</span>
                         <p className="text-[10px] text-gray-600">
@@ -470,6 +520,34 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                         </p>
                     </div>
                 </div>
+
+                {/* Feedback: Thumbs up/down */}
+                {lastRequestId && (
+                  <div className="mt-3 pt-3 border-t border-black/10">
+                    <p className="text-[9px] font-bold uppercase text-gray-500 mb-2">Was this output helpful?</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleFeedback('up')}
+                        disabled={feedbackSent}
+                        className={`p-2 rounded border-2 border-black transition-colors ${feedbackSent ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-100'}`}
+                        title="Thumbs up"
+                      >
+                        <span className="text-base">👍</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFeedback('down')}
+                        disabled={feedbackSent}
+                        className={`p-2 rounded border-2 border-black transition-colors ${feedbackSent ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-100'}`}
+                        title="Thumbs down"
+                      >
+                        <span className="text-base">👎</span>
+                      </button>
+                      {feedbackSent && <span className="text-[10px] text-gray-500 self-center">Thanks for your feedback!</span>}
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* Action Buttons */}
@@ -487,6 +565,31 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                     {conversionSelected ? 'View Component in Figma' : 'Apply Changes'}
                 </button>
             </div>
+        </div>
+      )}
+
+      {/* Feedback Modal (thumbs down) */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowFeedbackModal(false)}>
+          <div className={`${BRUTAL.card} bg-white max-w-sm w-full mx-4 p-4`} onClick={e => e.stopPropagation()}>
+            <h3 className="font-black uppercase text-sm mb-2">Share your feedback</h3>
+            <p className="text-[10px] text-gray-600 mb-3">What could we improve? (optional)</p>
+            <textarea
+              value={feedbackComment}
+              onChange={e => setFeedbackComment(e.target.value)}
+              placeholder="Your comment..."
+              className="w-full p-2 text-[12px] border-2 border-black mb-3 min-h-[80px] resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => { setShowFeedbackModal(false); setFeedbackComment(''); }} className={`${BRUTAL.btn} flex-1 bg-white text-black text-xs`}>
+                Cancel
+              </button>
+              <button onClick={handleFeedbackSubmit} className={`${BRUTAL.btn} flex-1 bg-black text-white text-xs`}>
+                Send feedback
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -13,6 +13,8 @@ import SecurityLogs from './pages/SecurityLogs';
 import Health from './pages/Health';
 import Executions from './pages/Executions';
 import Discounts from './pages/Discounts';
+import ABTests from './pages/ABTests';
+import GenerateABTest from './pages/GenerateABTest';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -78,6 +80,10 @@ export default function App() {
           <Route path="/health" element={<Health />} />
           <Route path="/executions" element={<Executions />} />
           <Route path="/discounts" element={<Discounts />} />
+          <Route path="/ab-tests" element={<ABTests />}>
+            <Route index element={<Navigate to="generate" replace />} />
+            <Route path="generate" element={<GenerateABTest />} />
+          </Route>
         </Routes>
       </main>
       </div>

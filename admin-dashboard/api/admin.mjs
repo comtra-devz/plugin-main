@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats' });
 
   if (route === 'weekly-updates') {
     try {
@@ -73,6 +73,7 @@ export default async function handler(req, res) {
     if (route === 'discounts-stats') return await handleDiscountsStats(req, res);
     if (route === 'discounts-level') return await handleDiscountsLevel(req, res);
     if (route === 'discounts-throttle') return await handleDiscountsThrottle(req, res);
+    if (route === 'generate-ab-stats') return await handleGenerateABStats(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -582,6 +583,112 @@ async function handleDiscountsLevel(req, res) {
     res.status(200).json({ total, limit, offset, items });
   } catch (err) {
     console.error('handleDiscountsLevel', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+/** A/B test Generate: performance e feedback per varianti A vs B */
+async function handleGenerateABStats(req, res) {
+  const period = Math.min(365, Math.max(1, parseInt(req.query?.period, 10) || 30));
+  const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const requestsByVariant = await sql`
+      SELECT variant, COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+             COALESCE(SUM(credits_consumed), 0)::int AS credits_consumed,
+             AVG(latency_ms)::numeric(12,2) AS avg_latency_ms
+      FROM generate_ab_requests WHERE created_at >= ${since}
+      GROUP BY variant
+    `;
+    const totals = await sql`
+      SELECT COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+             COALESCE(SUM(credits_consumed), 0)::int AS credits_consumed,
+             AVG(latency_ms)::numeric(12,2) AS avg_latency_ms
+      FROM generate_ab_requests WHERE created_at >= ${since}
+    `;
+    const feedbackByVariant = await sql`
+      SELECT f.variant, f.thumbs, COUNT(*)::int AS count
+      FROM generate_ab_feedback f
+      INNER JOIN generate_ab_requests r ON r.id = f.request_id
+      WHERE r.created_at >= ${since}
+      GROUP BY f.variant, f.thumbs
+    `;
+    const requestsLimit = Math.min(200, Math.max(50, parseInt(req.query?.requests_limit, 10) || 100));
+    const requestsList = await sql`
+      SELECT r.id, r.user_id, r.variant, r.input_tokens, r.output_tokens, r.credits_consumed, r.latency_ms, r.created_at,
+             u.email, f.thumbs AS feedback_thumbs, f.comment AS feedback_comment
+      FROM generate_ab_requests r
+      LEFT JOIN users u ON u.id = r.user_id
+      LEFT JOIN generate_ab_feedback f ON f.request_id = r.id
+      WHERE r.created_at >= ${since}
+      ORDER BY r.created_at DESC
+      LIMIT ${requestsLimit}
+    `;
+    const byDay = await sql`
+      SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day, variant,
+             COUNT(*)::int AS count, COALESCE(SUM(credits_consumed), 0)::int AS credits
+      FROM generate_ab_requests WHERE created_at >= ${since}
+      GROUP BY 1, 2 ORDER BY 1, 2
+    `;
+    const toDateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : (d ? String(d).slice(0, 10) : ''));
+    const by_variant = (requestsByVariant.rows || []).map((r) => ({
+      variant: r.variant,
+      count: r.count ?? 0,
+      input_tokens: Number(r.input_tokens) || 0,
+      output_tokens: Number(r.output_tokens) || 0,
+      credits_consumed: r.credits_consumed ?? 0,
+      avg_latency_ms: r.avg_latency_ms != null ? Math.round(Number(r.avg_latency_ms)) : null,
+    }));
+    const t = totals.rows?.[0];
+    const total = {
+      count: t?.count ?? 0,
+      input_tokens: Number(t?.input_tokens) || 0,
+      output_tokens: Number(t?.output_tokens) || 0,
+      credits_consumed: t?.credits_consumed ?? 0,
+      avg_latency_ms: t?.avg_latency_ms != null ? Math.round(Number(t.avg_latency_ms)) : null,
+    };
+    const feedback_by_variant = {};
+    for (const r of feedbackByVariant.rows || []) {
+      const v = r.variant || '?';
+      if (!feedback_by_variant[v]) feedback_by_variant[v] = { up: 0, down: 0 };
+      feedback_by_variant[v][r.thumbs === 'up' ? 'up' : 'down'] = r.count ?? 0;
+    }
+    const requests_list = (requestsList.rows || []).map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_masked: maskEmail(r.email),
+      variant: r.variant,
+      input_tokens: r.input_tokens ?? 0,
+      output_tokens: r.output_tokens ?? 0,
+      credits_consumed: r.credits_consumed ?? 0,
+      latency_ms: r.latency_ms ?? null,
+      created_at: r.created_at,
+      feedback_thumbs: r.feedback_thumbs ?? null,
+      feedback_comment: r.feedback_comment ?? null,
+    }));
+    const timeline = {};
+    for (const r of byDay.rows || []) {
+      const d = toDateStr(r.day);
+      if (!timeline[d]) timeline[d] = { A: { count: 0, credits: 0 }, B: { count: 0, credits: 0 } };
+      const v = r.variant || 'A';
+      timeline[d][v].count = r.count ?? 0;
+      timeline[d][v].credits = r.credits ?? 0;
+    }
+    const costUsd = (total.input_tokens / 1e6) * KIMI_COST_INPUT_PER_1M + (total.output_tokens / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+    res.status(200).json({
+      period_days: period,
+      since,
+      total: { ...total, cost_usd: Math.round(costUsd * 1000) / 1000 },
+      by_variant,
+      feedback_by_variant,
+      requests_list,
+      timeline: Object.entries(timeline).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date)),
+    });
+  } catch (err) {
+    console.error('handleGenerateABStats', err);
     res.status(500).json({ error: 'Server error' });
   }
 }

@@ -43,6 +43,9 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/discounts" className={({ isActive }) => (isActive ? 'active' : '')}>
           Codici sconto
         </NavLink>
+        <NavLink to="/ab-tests" className={({ isActive }) => (isActive ? 'active' : '')}>
+          A/B Tests
+        </NavLink>
         <span className="sidebar-group" aria-hidden="true">Altro</span>
         <NavLink to="/weekly-updates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Aggiornamenti

@@ -166,6 +166,8 @@ code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
   padding-left: calc(1rem + 4px);
 }
 .sidebar-nav a.active:hover { background: #333; }
+.sub-nav a.active { background: var(--black); color: var(--white); }
+.sub-nav a.active:hover { background: #333; color: var(--white); }
 .sidebar-group {
   display: block;
   font-size: 0.65rem;

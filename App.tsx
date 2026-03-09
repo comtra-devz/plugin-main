@@ -566,6 +566,19 @@ export default function AppTest() {
     return data;
   }, [user?.authToken, handle503]);
 
+  const fetchGenerateFeedback = useCallback(async (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => {
+    if (!user?.authToken) return;
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/feedback/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      throw new Error(data.error || `Feedback failed (${r.status})`);
+    }
+  }, [user?.authToken]);
+
   const fetchGenerate = useCallback(async (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => {
     if (!user?.authToken) throw new Error('Unauthorized');
     const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/generate`, {
@@ -700,6 +713,7 @@ export default function AppTest() {
             initialPrompt={genPrompt}
             fetchGenerate={fetchGenerate}
             requestFileContext={requestFileContext}
+            fetchGenerateFeedback={fetchGenerateFeedback}
           />
         </div>
 
