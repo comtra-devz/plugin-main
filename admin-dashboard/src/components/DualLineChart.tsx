@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 const COST_PER_SCAN = 0.013;
-const TOOLTIP_LEAVE_DELAY_MS = 380;
+const TOOLTIP_LEAVE_DELAY_MS = 400;
 const TOOLTIP_EST_HEIGHT = 110;
-const TOOLTIP_GAP_ABOVE_POINT = 6;
+const TOOLTIP_GAP_RIGHT = 12;
+const TOOLTIP_WIDTH = 200;
 
 export interface TimelinePoint {
   date: string;
@@ -84,6 +85,8 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tooltipLeft, setTooltipLeft] = useState<number>(0);
   const [tooltipTop, setTooltipTop] = useState<number>(8);
+  const [pointXWrap, setPointXWrap] = useState<number>(0);
+  const [pointYWrap, setPointYWrap] = useState<number>(0);
   const leaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chartWrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -99,12 +102,14 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
     const pointY = pad.top + innerH - (maxVal / maxNice) * innerH;
     const xRatio = pointX / w;
     const yRatio = pointY / h;
-    let left = xRatio * svgRect.width + (svgRect.left - wrapRect.left);
-    const pointYPixel = yRatio * svgRect.height + (svgRect.top - wrapRect.top);
-    let top = pointYPixel - TOOLTIP_EST_HEIGHT - TOOLTIP_GAP_ABOVE_POINT;
-    const tooltipHalf = 100;
-    left = Math.max(tooltipHalf, Math.min(wrapRect.width - tooltipHalf, left));
-    top = Math.max(6, top);
+    const px = xRatio * svgRect.width + (svgRect.left - wrapRect.left);
+    const py = yRatio * svgRect.height + (svgRect.top - wrapRect.top);
+    setPointXWrap(px);
+    setPointYWrap(py);
+    let left = px + TOOLTIP_GAP_RIGHT;
+    let top = py - TOOLTIP_EST_HEIGHT / 2;
+    left = Math.max(8, Math.min(wrapRect.width - TOOLTIP_WIDTH - 8, left));
+    top = Math.max(6, Math.min(wrapRect.height - TOOLTIP_EST_HEIGHT - 6, top));
     setTooltipLeft(left);
     setTooltipTop(top);
   }, [hoverIdx, data.length, pad.left, pad.top, innerW, innerH, w, h, maxNice]);
@@ -272,23 +277,38 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
             </span>
           </div>
           {hover && hoverIdx != null && (
-            <div
-              className="brutal-card"
-              role="tooltip"
-              style={{
-                position: 'absolute',
-                top: tooltipTop,
-                left: tooltipLeft,
-                transform: 'translateX(-50%)',
-                minWidth: 180,
-                maxWidth: 200,
-                padding: '0.5rem 0.75rem',
-                zIndex: 9999,
-                pointerEvents: 'auto',
-              }}
-              onMouseEnter={handleTooltipEnter}
-              onMouseLeave={handleTooltipLeave}
-            >
+            <>
+              <div
+                role="presentation"
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: pointXWrap - 15,
+                  top: pointYWrap - 50,
+                  width: TOOLTIP_GAP_RIGHT + TOOLTIP_WIDTH + 35,
+                  height: 100,
+                  zIndex: 9998,
+                  pointerEvents: 'auto',
+                }}
+                onMouseEnter={handleTooltipEnter}
+                onMouseLeave={handlePointLeave}
+              />
+              <div
+                className="brutal-card"
+                role="tooltip"
+                style={{
+                  position: 'absolute',
+                  top: tooltipTop,
+                  left: tooltipLeft,
+                  minWidth: 180,
+                  maxWidth: TOOLTIP_WIDTH,
+                  padding: '0.5rem 0.75rem',
+                  zIndex: 9999,
+                  pointerEvents: 'auto',
+                }}
+                onMouseEnter={handleTooltipEnter}
+                onMouseLeave={handleTooltipLeave}
+              >
               <div style={{ fontWeight: 700, marginBottom: 4 }}>{new Date(hover.date).toLocaleDateString('it-IT')}</div>
               <div>Scan (audit/scan): <strong>{hover.scans}</strong></div>
               <div>Crediti totali: <strong>{hover.credits}</strong></div>
@@ -314,6 +334,7 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
                 Dettaglio crediti →
               </Link>
             </div>
+            </>
           )}
         </div>
       </div>
