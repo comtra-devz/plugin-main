@@ -57,18 +57,33 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid action' });
   }
 
-  if (!sql && action !== 'verify-magic-link') return res.status(503).json({ error: 'Database not configured' });
+  const allowedEmailFromEnv = (process.env.ALLOWED_ADMIN_EMAIL || '').trim().toLowerCase();
+
+  if (!sql && action !== 'verify-magic-link' && !(action === 'request-magic-link' && allowedEmailFromEnv)) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
 
   try {
     if (action === 'request-magic-link') {
       const email = (body.email || '').trim().toLowerCase();
       if (!email) return res.status(400).json({ error: 'Email richiesta' });
-      const user = await getAdminByEmail(email);
-      if (!user) {
+      let sub = null;
+      let emailToUse = null;
+      if (allowedEmailFromEnv && email === allowedEmailFromEnv) {
+        sub = 'admin';
+        emailToUse = email;
+      } else if (sql) {
+        const user = await getAdminByEmail(email);
+        if (user) {
+          sub = user.id;
+          emailToUse = user.email;
+        }
+      }
+      if (!sub || !emailToUse) {
         return res.status(200).json({ ok: true });
       }
-      const magicToken = await createMagicLinkToken({ sub: user.id, email: user.email });
-      const sent = await sendMagicLinkEmail(user.email, magicToken);
+      const magicToken = await createMagicLinkToken({ sub, email: emailToUse });
+      const sent = await sendMagicLinkEmail(emailToUse, magicToken);
       if (!sent.ok) {
         console.error('sendMagicLinkEmail', sent.error);
         return res.status(500).json({
