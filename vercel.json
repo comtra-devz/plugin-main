@@ -4,6 +4,7 @@
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },
     { "source": "/auth/figma/start", "destination": "/api/figma-oauth/start" },
     { "source": "/auth/figma/callback", "destination": "/api/figma-oauth/callback" },
-    { "source": "/auth/figma/poll", "destination": "/api/figma-oauth/poll" }
+    { "source": "/auth/figma/poll", "destination": "/api/figma-oauth/poll" },
+    { "source": "/auth/verify", "destination": "/index.html" }
   ]
 }
