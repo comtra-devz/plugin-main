@@ -23,12 +23,9 @@ export default function WeeklyUpdates() {
   const [source, setSource] = useState<'github' | 'placeholder'>('placeholder');
   const [categoryFilter, setCategoryFilter] = useState<UpdateCategory | 'ALL'>('ALL');
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+  const load = () => {
     fetchWeeklyUpdates(50)
       .then((r) => {
-        if (cancelled) return;
         if (r.updates?.length) {
           setUpdatesList(r.updates);
           setSource(r.source === 'github' ? 'github' : 'placeholder');
@@ -38,13 +35,23 @@ export default function WeeklyUpdates() {
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setUpdatesList(PLACEHOLDER_WEEKLY_UPDATES);
-          setSource('placeholder');
-        }
+        setUpdatesList(PLACEHOLDER_WEEKLY_UPDATES);
+        setSource('placeholder');
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    load();
+    const interval = setInterval(() => {
+      if (!cancelled) load();
+    }, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const updates =

@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs' });
 
   if (route === 'weekly-updates') {
     try {
@@ -74,6 +74,8 @@ export default async function handler(req, res) {
     if (route === 'discounts-level') return await handleDiscountsLevel(req, res);
     if (route === 'discounts-throttle') return await handleDiscountsThrottle(req, res);
     if (route === 'generate-ab-stats') return await handleGenerateABStats(req, res);
+    if (route === 'support-feedback') return await handleSupportFeedback(req, res);
+    if (route === 'plugin-logs') return await handlePluginLogs(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -690,6 +692,68 @@ async function handleGenerateABStats(req, res) {
   } catch (err) {
     console.error('handleGenerateABStats', err);
     res.status(500).json({ error: 'Server error' });
+  }
+}
+
+/** Supporto: feedback da A/B test Generate e altre fonti */
+async function handleSupportFeedback(req, res) {
+  const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 100));
+  try {
+    const rows = await sql`
+      SELECT f.id, f.request_id, f.variant, f.thumbs, f.comment, r.created_at, u.email
+      FROM generate_ab_feedback f
+      JOIN generate_ab_requests r ON r.id = f.request_id
+      LEFT JOIN users u ON u.id = r.user_id
+      ORDER BY r.created_at DESC
+      LIMIT ${limit}
+    `;
+    const items = (rows.rows || []).map((r) => ({
+      id: r.id,
+      source: 'A/B Generate',
+      variant: r.variant,
+      thumbs: r.thumbs,
+      comment: r.comment || null,
+      user_masked: maskEmail(r.email),
+      created_at: r.created_at,
+    }));
+    res.status(200).json({ items });
+  } catch (err) {
+    console.error('handleSupportFeedback', err);
+    res.status(500).json({ error: 'Server error', items: [] });
+  }
+}
+
+/** Plugin logs: throttle_events e altre problematiche lato plugin. Fix consigliato + risolto (smart detect) */
+async function handlePluginLogs(req, res) {
+  const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 100));
+  try {
+    const rows = await sql`
+      SELECT te.id, te.user_id, te.occurred_at, u.email,
+        EXISTS (
+          SELECT 1 FROM throttle_events te2
+          WHERE te2.user_id = te.user_id
+            AND te2.occurred_at > te.occurred_at
+            AND te2.occurred_at < te.occurred_at + INTERVAL '7 days'
+        ) AS ripetuto
+      FROM throttle_events te
+      LEFT JOIN users u ON u.id = te.user_id
+      ORDER BY te.occurred_at DESC
+      LIMIT ${limit}
+    `;
+    const items = (rows.rows || []).map((r) => ({
+      id: r.id,
+      date: r.occurred_at,
+      category: 'throttle',
+      category_label: 'Limite richieste',
+      description: 'Utente ha raggiunto il limite delle richieste (503).',
+      fix: 'Attendere 15 minuti o passare a piano superiore. In Cursor: verificare rate limit backend.',
+      risolto: !r.ripetuto,
+      user_masked: maskEmail(r.email),
+    }));
+    res.status(200).json({ items });
+  } catch (err) {
+    console.error('handlePluginLogs', err);
+    res.status(500).json({ error: 'Server error', items: [] });
   }
 }
 

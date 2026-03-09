@@ -368,12 +368,12 @@ export default function Home() {
         </section>
       )}
 
-      {/* Esecuzioni funzioni — anteprima + link approfondimento */}
+      {/* Storico utilizzo — anteprima + link approfondimento */}
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Esecuzioni funzioni</h2>
+        <h2 className="section-title">Storico utilizzo</h2>
         <div className="brutal-card">
           {loadingExecutions ? (
-            <p style={{ color: 'var(--muted)' }}>Caricamento esecuzioni…</p>
+            <p style={{ color: 'var(--muted)' }}>Caricamento…</p>
           ) : (
             <>
               {errorExecutions && (
@@ -383,7 +383,7 @@ export default function Home() {
                 </div>
               )}
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
-                Ultime esecuzioni (audit, scan, generate, sync…) con utente anonimizzato.
+                Ultime attività (audit, scan, generate, sync…) con utente anonimizzato.
               </p>
               {recentExecutions.length > 0 ? (
             <div className="brutal-table-wrap">
@@ -409,7 +409,7 @@ export default function Home() {
               </table>
             </div>
           ) : (
-            <p style={{ fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>Nessuna esecuzione recente.</p>
+            <p style={{ fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>Nessuna attività recente.</p>
           )}
           <Link to="/executions" className="brutal-btn primary" style={{ display: 'inline-block' }}>
                 Vedi tutto e filtra per utente / tipo / periodo →

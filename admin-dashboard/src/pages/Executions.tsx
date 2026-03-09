@@ -87,7 +87,7 @@ export default function Executions() {
 
   return (
     <>
-      <PageHeader title="Esecuzioni funzioni" />
+      <PageHeader title="Storico utilizzo" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
         Singole esecuzioni (credit_transactions) con filtri per tipo, periodo e utente (anonimizzato).
         {hasActiveFilters ? (

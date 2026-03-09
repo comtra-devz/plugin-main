@@ -35,7 +35,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           Crediti e costi
         </NavLink>
         <NavLink to="/executions" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Esecuzioni
+          Storico utilizzo
         </NavLink>
         <NavLink to="/affiliates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Affiliati

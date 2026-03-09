@@ -490,3 +490,46 @@ export async function fetchGenerateABStats(period = 30): Promise<GenerateABStats
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
+
+// --- Supporto (feedback A/B test e altre fonti)
+export interface SupportFeedbackItem {
+  id: string;
+  source: string;
+  variant: string;
+  thumbs: string;
+  comment: string | null;
+  user_masked: string;
+  created_at: string;
+}
+
+export interface SupportFeedbackResponse {
+  items: SupportFeedbackItem[];
+}
+
+export async function fetchSupportFeedback(limit = 100): Promise<SupportFeedbackResponse> {
+  const r = await fetch(apiUrl('support-feedback', { limit }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+// --- Sicurezza e log (throttle, problematiche plugin)
+export interface PluginLogItem {
+  id: string;
+  date: string;
+  category: string;
+  category_label: string;
+  description: string;
+  fix: string;
+  risolto: boolean;
+  user_masked: string;
+}
+
+export interface PluginLogsResponse {
+  items: PluginLogItem[];
+}
+
+export async function fetchPluginLogs(limit = 100): Promise<PluginLogsResponse> {
+  const r = await fetch(apiUrl('plugin-logs', { limit }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
