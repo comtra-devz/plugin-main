@@ -130,6 +130,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
+  const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' } | null>(null);
@@ -377,7 +378,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   // Listen for plugin messages
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      const msg = e.data?.pluginMessage ?? e.data;
+      let msg = e.data?.pluginMessage ?? e.data;
       if (!msg || typeof msg !== 'object') return;
       if (msg.type === 'pages-result' && msg.pages) {
         setDocumentPages(msg.pages);

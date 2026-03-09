@@ -25,7 +25,7 @@ I crediti effettivamente assegnati al pagamento sono definiti in **`auth-deploy/
 
 Ogni azione nel plugin **consuma** un certo numero di crediti (definito in **`constants.ts`** e in product: Scan DS, Generate, Code/Sync, future A11Y, ecc.). In questo documento non si decide *come* si consumano; si usa il **flusso di crediti** (erogati dal piano, consumati dall’uso) per costi e ricavi.
 
-Esempio — **Scan DS** (da `SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`): ad ogni scan vengono addebitati 2–11 crediti in base alla dimensione del file. Altre azioni hanno il loro mapping credito/azione (es. Generate 3, Sync 1).
+Esempio — **Scan DS** (da `SCAN_SIZE_TIERS`, `getScanCostAndSize(nodeCount)`): ad ogni scan vengono addebitati 2–11 crediti in base alla dimensione del file. Altre azioni hanno il loro mapping credito/azione (es. Generate 3; Deep Sync: Scan Project 15, Fix singolo 5, Sync All N×5).
 
 | Azione | Dimensione / parametro | Crediti consumati |
 |--------|------------------------|-------------------|

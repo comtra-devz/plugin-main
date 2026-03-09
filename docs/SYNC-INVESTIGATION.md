@@ -79,8 +79,8 @@ Priorità: prima **Storybook (lettura per drift + chiarire il canale di “scrit
 |--------|--------|-----------|
 | **UI (SyncTab)** | ✅ Placeholder completo | Gate PRO, tab SB/GH/BB, Connect → Scan → Lista drift → Sync Fix / Sync All, cooldown, crediti in UI |
 | **Stato e handler (Code.tsx)** | ✅ Solo locale | `handleSyncScan` → mock dopo 2s; `handleSyncItem` / `handleSyncAll` solo setState; nessuna chiamata API |
-| **Crediti (consume)** | ❌ Non collegati | Sync non chiama `consumeCredits`; costi -15 (scan), -5 (fix), -5 (rescan) solo in label |
-| **Backend crediti** | ✅ Pronto | `action_type: 'sync'` → 1 credito (estimate); XP per `sync_storybook` / `sync_github` / `sync_bitbucket` (25 ciascuno) |
+| **Crediti (consume)** | ✅ Collegati | `scan_sync` 15 crediti, `sync_fix` 5 crediti, `sync_storybook` (Sync All) N×5 crediti |
+| **Backend crediti** | ✅ Pronto | `scan_sync` → 15, `sync_fix` / `sync_storybook` → 5; XP per `sync_storybook` / `sync_github` / `sync_bitbucket` (25 ciascuno) |
 | **API Sync/Drift/Storybook** | ❌ Assenti | Nessun endpoint `/api/sync`, `/api/drift`, `/api/storybook`; nessuna integrazione Storybook/GitHub/Bitbucket |
 | **Contesto file Figma** | ❌ Non usato in Code | Tab Code non richiede `get-file-context` né `file_key`; solo Tokens usa `get-design-tokens` (Variables) |
 | **Statistiche sync (user.stats)** | ⚠️ Solo default 0 | Backend restituisce sempre `syncedStorybook: 0` (e GH/BB); nessuna colonna DB né logica che le aggiorni |
@@ -111,7 +111,8 @@ La **tab Code (Sync)** oggi non invia mai `get-file-context`. Per uno “scan dr
 ### 2.3 Backend: estimate e consume
 
 - **estimateCreditsByAction** (`auth-deploy/oauth-server/app.mjs`):
-  - `action_type === 'sync'` → **1 credito** (fisso).
+  - `action_type === 'scan_sync'` → **15 crediti** (Scan Project).
+  - `action_type === 'sync_fix'` o `'sync_storybook'` → **5 crediti** (Fix singolo o Sync All: N×5).
   - Non ci sono bande per `node_count` sulla sync (a differenza di `audit` / `a11y_audit`).
 - **XP_TABLE:** già definiti `sync_storybook`, `sync_github`, `sync_bitbucket`, `sync` (25 XP ciascuno); nessun codice che li usi ancora.
 
@@ -122,7 +123,7 @@ La **tab Code (Sync)** oggi non invia mai `get-file-context`. Per uno “scan dr
 ### 3.1 Plugin (UI + controller)
 
 - **Code.tsx / SyncTab:**
-  - Chiamare `estimateCredits` con `action_type: 'sync'` (o `'scan_sync'` se si distingue scan da fix) prima di Scan / Sync Fix / Sync All.
+  - Chiamare `estimateCredits` con `action_type: 'scan_sync'` (15) o `'sync_fix'`/`'sync_storybook'` (5) prima di Scan / Sync Fix / Sync All.
   - Chiamare `consumeCredits` con `action_type` appropriato e `credits_consumed` effettivo (15 per scan, 5 per fix, ecc.) quando l’azione va a buon fine.
 - **Contesto Figma per lo scan drift:**
   - Decidere se riusare `get-file-context` (come Audit) o introdurre un messaggio tipo `get-sync-context` che restituisca almeno `fileKey` (e opzionale `fileJson`).
@@ -144,8 +145,8 @@ La **tab Code (Sync)** oggi non invia mai `get-file-context`. Per uno “scan dr
 
 ### 3.3 Crediti e cooldown
 
-- **Placeholder:** scan -15, fix singolo -5, rescan -5, “Sync All” = N×5 crediti.
-- **Backend:** solo `sync` → 1 credito in estimate; non ci sono `scan_sync`, `sync_fix`, `sync_all`.
+- **Crediti Sync (implementati):** Scan Project 15 crediti (`scan_sync`), Fix singolo 5 crediti (`sync_fix`), Sync All N×5 crediti (`sync_storybook`). (Precedentemente: scan -15, fix singolo -5, rescan -5, “Sync All” = N×5 crediti.
+- **Backend:** `estimateCreditsByAction` supporta `scan_sync` (15), `sync_fix` e `sync_storybook` (5); `consumeCredits` accetta gli stessi `action_type`.
 - **Scelte da fare:**
   - Allineare le label UI ai valori che il backend accetta (es. introdurre `scan_sync`, `sync_fix`, `sync_storybook` in `estimateCreditsByAction` e in consume).
   - Oppure usare un unico `action_type: 'sync'` con `credits_consumed` variabile (15, 5, N×5) e lasciare la stima a 1 per “unità minima”; da definire con product.
@@ -174,7 +175,7 @@ Se lo “scan drift” richiederà solo `file_key` (e il backend farà GET file 
 | `views/Code/types.ts` | SyncTabProps |
 | `App.tsx` | estimateCredits, consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit; stats in user (syncedStorybook ecc.) |
 | `controller.ts` | get-file-context, get-design-tokens, select-layer; figma.fileKey in design-tokens |
-| `auth-deploy/oauth-server/app.mjs` | estimateCreditsByAction (sync → 1), consume, XP_TABLE (sync_*), GET /api/credits; nessun endpoint sync/drift |
+| `auth-deploy/oauth-server/app.mjs` | estimateCreditsByAction (scan_sync 15, sync_fix/sync_storybook 5), consume, XP_TABLE (sync_*), GET /api/credits; endpoint POST /api/agents/sync-scan |
 | `auth-deploy/schema.sql` | credit_transactions.action_type, users; nessuna colonna synced_* |
 | `views/Documentation.tsx` | Copy Deep Sync & Drift (Figma = source of truth, push to Storybook/GitHub) |
 | `docs/DESIGN-HANDOFF-DRIFT-RULESET.md` | Ruleset cluster tematici (handoff, drift, token, governance, ecc.) + severity + **consigli durante risultati Sync**; usare per arricchire messaggi e suggerimenti in output drift. |

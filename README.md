@@ -270,7 +270,7 @@ Costo per operazione:
   - **Large** (≤50.000): 8 crediti
   - **200k+** (>50.000 o conteggio fermato a 200k): 11 crediti
 - **Generate**: 3 crediti
-- **Code / Sync**: 1 credito (gratis con piano annuale)
+- **Deep Sync** (Code tab, PRO): Scan Project 15 crediti; Sync Fix (singolo) 5 crediti; Sync All N×5 crediti. Con piano annuale: illimitati (nessun cooldown)
 
 ---
 
