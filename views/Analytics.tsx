@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { BRUTAL, COLORS, AUTH_BACKEND_URL, LINKEDIN_TROPHY_SHARE_BASE, LINKEDIN_PLUGIN_LINK } from '../constants';
+import { BRUTAL, COLORS, AUTH_BACKEND_URL, LINKEDIN_TROPHY_SHARE_BASE, LINKEDIN_FOOTER_LINK } from '../constants';
 import { getCanonicalTrophyId, getLinkedInPostForTrophy } from '../linkedinTrophyPosts';
 import { User, UserStats, Trophy } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
@@ -295,7 +295,7 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
   const handleShareBadge = async (badgeId: string) => {
       const canonicalId = getCanonicalTrophyId(badgeId);
       const shareUrl = `${LINKEDIN_TROPHY_SHARE_BASE}${canonicalId}`;
-      const postText = getLinkedInPostForTrophy(badgeId, LINKEDIN_PLUGIN_LINK);
+      const postText = getLinkedInPostForTrophy(badgeId, LINKEDIN_FOOTER_LINK);
       try {
         await navigator.clipboard.writeText(postText);
         setShareCopyFeedback(true);

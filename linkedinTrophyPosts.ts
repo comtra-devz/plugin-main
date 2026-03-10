@@ -1,6 +1,6 @@
 /**
  * Pre-written LinkedIn posts per trophy (Comtra_LinkedIn_Trophy_Posts.pdf).
- * Placeholders: @[Comtra] → "Comtra", [PLUGIN_LINK] → injected at runtime.
+ * Placeholders: @[Comtra] → "Comtra", [PLUGIN_LINK] → link footer (landing Comtra con UTM, tracciabile; vedi LINKEDIN_FOOTER_LINK).
  */
 
 /** Canonical trophy IDs (schema). Fallback badge IDs (LEAF, ROCK, ...) map to these for share URL and post. */

@@ -135,10 +135,15 @@ export const LINKEDIN_TROPHY_SHARE_BASE =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LINKEDIN_TROPHY_SHARE_BASE) ||
   'https://comtra.dev/trophy/';
 
-/** Link plugin/sito usato nei post LinkedIn trofei (placeholder [PLUGIN_LINK]). */
+/** Link plugin/sito usato nei post LinkedIn trofei (placeholder [PLUGIN_LINK]). Preferire LINKEDIN_FOOTER_LINK per il footer. */
 export const LINKEDIN_PLUGIN_LINK =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LINKEDIN_PLUGIN_LINK) ||
   'https://comtra.dev';
+
+/** Link del footer nei post trophy: landing Comtra con UTM per tracciamento (Funnel touchpoint). Non punta alla pagina del plugin. */
+export const LINKEDIN_FOOTER_LINK =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LINKEDIN_FOOTER_LINK) ||
+  'https://comtra.dev?utm_source=linkedin&utm_medium=post_footer&utm_campaign=trophy_share';
 
 /** Lemon Squeezy: base checkout URL (store custom domain). Aggiungere ?aff=CODICE per attribuzione affiliato. */
 export const LEMON_SQUEEZY_CHECKOUT_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_SQUEEZY_CHECKOUT_BASE) || 'https://comtra.lemonsqueezy.com/checkout/buy';

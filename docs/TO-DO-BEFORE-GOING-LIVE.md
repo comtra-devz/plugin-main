@@ -8,8 +8,8 @@ Checklist di azioni e link da completare o verificare **prima di pubblicare il p
 
 - [ ] **comtra.dev** usato ovunque (già impostato in constants, docs, plugin).
 - [ ] **Pagine trophy** su comtra.dev: creare le 20 pagine `/trophy/{ID}` con og:image (1200×627) e meta tag — vedi [LINKEDIN-TROPHY-PAGES-FIGMA-MAKE.md](./LINKEDIN-TROPHY-PAGES-FIGMA-MAKE.md).
-- [ ] **Link plugin/sito** nei post LinkedIn: `LINKEDIN_PLUGIN_LINK` = `https://comtra.dev` (già in constants).
-- [ ] **Footer link** (quando presente sul sito): aggiornare eventuale URL e abilitare tracking click in Brand awareness (futuro).
+- [ ] **Link footer nei post trophy**: il testo copiato usa `LINKEDIN_FOOTER_LINK` = landing Comtra con UTM (`utm_source=linkedin&utm_medium=post_footer&utm_campaign=trophy_share`) — tracciabile in Funnel touchpoint quando la landing invia il beacon (vedi [TOUCHPOINT-FUNNEL.md](./TOUCHPOINT-FUNNEL.md)).
+- [ ] **Footer link** (altri contesti sul sito): aggiornare eventuale URL e abilitare tracking click in Brand awareness se serve.
 
 ---
 
