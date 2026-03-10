@@ -130,6 +130,16 @@ export function getPrototypeAuditCost(selectedFlowCount: number): { cost: number
 /** UX Logic Audit: flat cost (backend estimateCreditsByAction returns 4). See docs/COST-ESTIMATE-UX-AUDIT.md. */
 export const UX_AUDIT_CREDITS = 4;
 
+/** Base URL per share LinkedIn trofei: /trophy/{id} deve essere una pagina con og:image (1200x627) per mostrare la foto nel post. */
+export const LINKEDIN_TROPHY_SHARE_BASE =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LINKEDIN_TROPHY_SHARE_BASE) ||
+  'https://comtra.dev/trophy/';
+
+/** Link plugin/sito usato nei post LinkedIn trofei (placeholder [PLUGIN_LINK]). */
+export const LINKEDIN_PLUGIN_LINK =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LINKEDIN_PLUGIN_LINK) ||
+  'https://comtra.dev';
+
 /** Lemon Squeezy: base checkout URL (store custom domain). Aggiungere ?aff=CODICE per attribuzione affiliato. */
 export const LEMON_SQUEEZY_CHECKOUT_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_LEMON_SQUEEZY_CHECKOUT_BASE) || 'https://comtra.lemonsqueezy.com/checkout/buy';
 
@@ -200,6 +210,6 @@ export const PRIVACY_CONTENT = [
   },
   {
     title: "4. Contact",
-    text: "For any privacy concerns, please contact privacy@comtra.ai."
+    text: "For any privacy concerns, please contact privacy@comtra.dev."
   }
 ];

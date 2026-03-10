@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs' });
+  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs|brand-awareness|touchpoint-funnel' });
 
   if (route === 'weekly-updates') {
     try {
@@ -76,6 +76,8 @@ export default async function handler(req, res) {
     if (route === 'generate-ab-stats') return await handleGenerateABStats(req, res);
     if (route === 'support-feedback') return await handleSupportFeedback(req, res);
     if (route === 'plugin-logs') return await handlePluginLogs(req, res);
+    if (route === 'brand-awareness') return await handleBrandAwareness(req, res);
+    if (route === 'touchpoint-funnel') return await handleTouchpointFunnel(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -799,6 +801,186 @@ async function handleDiscountsThrottle(req, res) {
     res.status(200).json({ total, limit, offset, items });
   } catch (err) {
     console.error('handleDiscountsThrottle', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+/** Brand awareness: click Share on LinkedIn per trofeo. Futuro: post pubblicati (tag LinkedIn), click pagina/footer. */
+async function handleBrandAwareness(req, res) {
+  const limit = Math.min(500, Math.max(1, parseInt(req.query?.limit, 10) || 100));
+  const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+  const period = Math.min(365, Math.max(1, parseInt(req.query?.period, 10) || 30));
+  const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const countResult = await sql`
+      SELECT COUNT(*)::int AS c FROM linkedin_share_events WHERE created_at >= ${since}
+    `;
+    const total = countResult.rows?.[0]?.c ?? 0;
+    const rows = await sql`
+      SELECT lse.id, lse.user_id, lse.trophy_id, lse.created_at, u.email
+      FROM linkedin_share_events lse
+      LEFT JOIN users u ON u.id = lse.user_id
+      WHERE lse.created_at >= ${since}
+      ORDER BY lse.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+    const share_clicks = (rows.rows || []).map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_masked: maskEmail(r.email),
+      trophy_id: r.trophy_id,
+      created_at: r.created_at,
+    }));
+    const byTrophyResult = await sql`
+      SELECT trophy_id, COUNT(*)::int AS c
+      FROM linkedin_share_events WHERE created_at >= ${since}
+      GROUP BY trophy_id ORDER BY c DESC
+    `;
+    const by_trophy = (byTrophyResult.rows || []).reduce((acc, r) => {
+      acc[r.trophy_id] = r.c ?? 0;
+      return acc;
+    }, {});
+    const unique_users_result = await sql`
+      SELECT COUNT(DISTINCT user_id)::int AS c FROM linkedin_share_events WHERE created_at >= ${since}
+    `;
+    const unique_users = unique_users_result.rows?.[0]?.c ?? 0;
+    res.status(200).json({
+      period_days: period,
+      since,
+      share_clicks: { total, limit, offset, items: share_clicks },
+      by_trophy,
+      unique_users,
+      posts_published_note: 'Da integrare quando avremo i tag/metriche da LinkedIn (post effettivamente pubblicati).',
+      activity_note: 'Click su pagina trophy e click su link footer: da abilitare quando le pagine comtra.dev/trophy e il footer sono live (tracking UTM o beacon).',
+    });
+  } catch (err) {
+    if (/relation "linkedin_share_events" does not exist/i.test(String(err))) {
+      return res.status(200).json({
+        period_days: period,
+        since,
+        share_clicks: { total: 0, limit, offset, items: [] },
+        by_trophy: {},
+        unique_users: 0,
+        posts_published_note: 'Da integrare quando avremo i tag/metriche da LinkedIn.',
+        activity_note: 'Click pagina e footer: da abilitare quando le pagine e il footer sono live.',
+      });
+    }
+    console.error('handleBrandAwareness', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+}
+
+/** Funnel touchpoint: Landing, Plugin, LinkedIn, Instagram, TikTok. Ingressi → utilizzo → PRO → retention. */
+async function handleTouchpointFunnel(req, res) {
+  const period = Math.min(365, Math.max(1, parseInt(req.query?.period, 10) || 30));
+  const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
+  const SOURCES = ['landing', 'plugin', 'linkedin', 'instagram', 'tiktok'];
+  const SOURCE_LABELS = { landing: 'Landing page', plugin: 'Plugin Figma', linkedin: 'Pagina LinkedIn', instagram: 'Instagram', tiktok: 'TikTok' };
+
+  try {
+    const hasAttribution = await sql`
+      SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_attribution') AS ok
+    `;
+    const hasTouchpointEvents = await sql`
+      SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'touchpoint_events') AS ok
+    `;
+
+    const bySource = {};
+    for (const s of SOURCES) {
+      bySource[s] = {
+        label: SOURCE_LABELS[s],
+        visite: 0,
+        click: 0,
+        ingressi: 0,
+        primo_utilizzo: 0,
+        upgrade_pro: 0,
+        pro_attivi: 0,
+        note: s === 'landing' ? 'UTM sui link + beacon visit/click (opzionale).' : s === 'linkedin' ? 'Link pagina non ancora attivo.' : s === 'plugin' ? 'Default: utenti da OAuth Figma.' : '',
+      };
+    }
+
+    if (hasTouchpointEvents.rows?.[0]?.ok) {
+      const eventCounts = await sql`
+        SELECT source, event_type, COUNT(*)::int AS c
+        FROM touchpoint_events
+        WHERE created_at >= ${since}
+        GROUP BY source, event_type
+      `;
+      for (const r of eventCounts.rows || []) {
+        if (!bySource[r.source]) continue;
+        const c = r.c ?? 0;
+        if (r.event_type === 'visit') bySource[r.source].visite += c;
+        else if (r.event_type === 'click') bySource[r.source].click += c;
+        if (r.event_type === 'visit' || r.event_type === 'click') bySource[r.source].ingressi += c;
+      }
+    }
+
+    /* user_attribution used in loop below to assign each user to a source; ingressi = visite + click (above) + signups (loop) */
+
+    const firstUsage = await sql`
+      SELECT ct.user_id, MIN(ct.created_at) AS first_used
+      FROM credit_transactions ct
+      WHERE ct.created_at >= ${since}
+      GROUP BY ct.user_id
+    `;
+    const firstUsageByUser = (firstUsage.rows || []).reduce((acc, r) => {
+      acc[r.user_id] = r.first_used;
+      return acc;
+    }, {});
+
+    const proUsers = await sql`
+      SELECT u.id, u.plan_expires_at, u.created_at
+      FROM users u
+      WHERE u.plan = 'PRO' AND (u.plan_expires_at IS NULL OR u.plan_expires_at > NOW())
+    `;
+    const proUserIds = new Set((proUsers.rows || []).map((r) => r.id));
+
+    const upgradedInPeriod = await sql`
+      SELECT u.id FROM users u
+      WHERE u.plan = 'PRO' AND u.updated_at >= ${since}
+    `;
+    const upgradedIds = new Set((upgradedInPeriod.rows || []).map((r) => r.id));
+
+    let attrByUser = {};
+    if (hasAttribution.rows?.[0]?.ok) {
+      const attrs = await sql`SELECT user_id, source FROM user_attribution`;
+      for (const r of attrs.rows || []) attrByUser[r.user_id] = r.source;
+    }
+
+    const allUsersSince = await sql`
+      SELECT id FROM users WHERE created_at >= ${since}
+    `;
+    for (const u of allUsersSince.rows || []) {
+      const src = attrByUser[u.id] || 'plugin';
+      if (!bySource[src]) continue;
+      bySource[src].ingressi += 1;
+      if (firstUsageByUser[u.id]) bySource[src].primo_utilizzo += 1;
+      if (upgradedIds.has(u.id)) bySource[src].upgrade_pro += 1;
+      if (proUserIds.has(u.id)) bySource[src].pro_attivi += 1;
+    }
+
+    const linkedinShareCount = await sql`
+      SELECT COUNT(DISTINCT user_id)::int AS c FROM linkedin_share_events WHERE created_at >= ${since}
+    `;
+    const lc = linkedinShareCount.rows?.[0]?.c ?? 0;
+    if (lc > 0 && bySource.linkedin.ingressi === 0) bySource.linkedin.ingressi = lc;
+
+    res.status(200).json({
+      period_days: period,
+      since,
+      by_source: Object.entries(bySource).map(([k, v]) => ({ source: k, ...v })),
+      data_note: 'Plugin = default (OAuth Figma). Landing/LinkedIn: abilita tracking per dati completi.',
+    });
+  } catch (err) {
+    if (/relation "user_attribution" does not exist|relation "touchpoint_events" does not exist/i.test(String(err))) {
+      return res.status(200).json({
+        period_days: period,
+        since: new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString(),
+        by_source: SOURCES.map((s) => ({ source: s, label: SOURCE_LABELS[s], visite: 0, click: 0, ingressi: 0, primo_utilizzo: 0, upgrade_pro: 0, pro_attivi: 0, note: 'Esegui migration 005_touchpoint_funnel.sql' })),
+        data_note: 'Esegui la migration 005_touchpoint_funnel.sql sul DB.',
+      });
+    }
+    console.error('handleTouchpointFunnel', err);
     res.status(500).json({ error: 'Server error' });
   }
 }

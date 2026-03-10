@@ -6,7 +6,7 @@ interface Props { onClose: () => void; score: number }
 export const SuccessModal: React.FC<Props> = ({ onClose, score }) => {
   const handleShare = () => {
     const text = `I just reached a ${score}% Design System health score on Comtra! 🚀`;
-    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.ai')}&summary=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.dev')}&summary=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (

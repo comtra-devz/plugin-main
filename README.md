@@ -197,7 +197,7 @@ Sistema di gamification che traccia l'attività dell'utente.
 Pannello laterale top-right che si apre sopra il contenuto.
 
 - **Header**: email utente + badge piano (es. "FREE PLAN") + saldo crediti (es. `Credits: 23/30`)
-- **Become Partner**: pulsante giallo prominente con link esterno `comtra.ai/partner`
+- **Become Partner**: pulsante giallo prominente con link esterno `comtra.dev/partner`
 - **Voci di menu**:
   - Manage Subscription → view SUBSCRIPTION
   - Affiliate Program → view AFFILIATE

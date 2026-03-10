@@ -534,6 +534,62 @@ export async function fetchPluginLogs(limit = 100): Promise<PluginLogsResponse> 
   return r.json();
 }
 
+// --- Brand awareness (Share on LinkedIn, futuro: post pubblicati, click pagina/footer)
+export interface BrandAwarenessShareClick {
+  id: string;
+  user_id: string;
+  user_masked: string;
+  trophy_id: string;
+  created_at: string;
+}
+
+export interface BrandAwarenessResponse {
+  period_days: number;
+  since: string;
+  share_clicks: {
+    total: number;
+    limit: number;
+    offset: number;
+    items: BrandAwarenessShareClick[];
+  };
+  by_trophy: Record<string, number>;
+  unique_users: number;
+  posts_published_note?: string;
+  activity_note?: string;
+}
+
+export async function fetchBrandAwareness(period = 30, limit = 100, offset = 0): Promise<BrandAwarenessResponse> {
+  const r = await fetch(apiUrl('brand-awareness', { period, limit, offset }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+// --- Funnel touchpoint (Landing, Plugin, LinkedIn, Instagram, TikTok)
+export interface TouchpointSourceData {
+  source: string;
+  label: string;
+  visite: number;
+  click: number;
+  ingressi: number;
+  primo_utilizzo: number;
+  upgrade_pro: number;
+  pro_attivi: number;
+  note?: string;
+}
+
+export interface TouchpointFunnelResponse {
+  period_days: number;
+  since: string;
+  by_source: TouchpointSourceData[];
+  data_note?: string;
+}
+
+export async function fetchTouchpointFunnel(period = 30): Promise<TouchpointFunnelResponse> {
+  const r = await fetch(apiUrl('touchpoint-funnel', { period }), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
 // --- Content Management (Documentation CMS)
 export interface DocContentData {
   header: { title: string; subtitle: string };

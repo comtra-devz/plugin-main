@@ -102,6 +102,17 @@ CREATE TABLE IF NOT EXISTS user_level_discounts (
 );
 CREATE INDEX IF NOT EXISTS idx_user_level_discounts_user_id ON user_level_discounts(user_id);
 
+-- Brand awareness: click su "Share on LinkedIn" per trofeo (email celata in dashboard)
+CREATE TABLE IF NOT EXISTS linkedin_share_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  trophy_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_linkedin_share_events_user_id ON linkedin_share_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_linkedin_share_events_trophy_id ON linkedin_share_events(trophy_id);
+CREATE INDEX IF NOT EXISTS idx_linkedin_share_events_created_at ON linkedin_share_events(created_at);
+
 -- Colonne aggiuntive users per condizioni trofei (max_health_score, fix consecutivi, linkedin, ecc.)
 -- Migrazione: ALTER TABLE users ADD COLUMN IF NOT EXISTS max_health_score INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS fixes_accepted_total INTEGER NOT NULL DEFAULT 0;
@@ -201,6 +212,28 @@ CREATE TABLE IF NOT EXISTS generate_ab_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_generate_ab_feedback_request_id ON generate_ab_feedback(request_id);
 CREATE INDEX IF NOT EXISTS idx_generate_ab_feedback_variant ON generate_ab_feedback(variant);
+
+-- Funnel touchpoint: Landing, Plugin, LinkedIn, Instagram, TikTok (ingressi e conversioni)
+CREATE TABLE IF NOT EXISTS touchpoint_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source TEXT NOT NULL CHECK (source IN ('landing', 'plugin', 'linkedin', 'instagram', 'tiktok')),
+  event_type TEXT NOT NULL CHECK (event_type IN ('visit', 'click', 'signup', 'usage', 'upgrade')),
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_touchpoint_events_source ON touchpoint_events(source);
+CREATE INDEX IF NOT EXISTS idx_touchpoint_events_created_at ON touchpoint_events(created_at);
+
+CREATE TABLE IF NOT EXISTS user_attribution (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('landing', 'plugin', 'linkedin', 'instagram', 'tiktok')),
+  first_touch_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  utm_source TEXT, utm_medium TEXT, utm_campaign TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_attribution_source ON user_attribution(source);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_source TEXT CHECK (signup_source IN ('landing', 'plugin', 'linkedin', 'instagram', 'tiktok'));
 
 -- Support tickets from Documentation & Help (plugin)
 CREATE TABLE IF NOT EXISTS support_tickets (

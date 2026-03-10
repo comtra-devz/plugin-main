@@ -88,13 +88,33 @@ app.get('/auth/figma/init', async (req, res) => {
   const store = await getFlowStore();
   const flowId = randomBytes(16).toString('hex');
   await store.set(flowId, null);
-  const authUrl = `${BASE_URL}/auth/figma/start?flow_id=${flowId}`;
-  res.json({ authUrl, readKey: flowId });
+  let startUrl = `${BASE_URL}/auth/figma/start?flow_id=${flowId}`;
+  const utmSource = (req.query.utm_source || '').toString().trim();
+  const utmMedium = (req.query.utm_medium || '').toString().trim();
+  const utmCampaign = (req.query.utm_campaign || '').toString().trim();
+  if (utmSource || utmMedium || utmCampaign) {
+    const q = new URLSearchParams();
+    if (utmSource) q.set('utm_source', utmSource);
+    if (utmMedium) q.set('utm_medium', utmMedium);
+    if (utmCampaign) q.set('utm_campaign', utmCampaign);
+    startUrl += '&' + q.toString();
+  }
+  if (req.query.redirect === '1' || req.query.redirect === 'true') {
+    return res.redirect(302, startUrl);
+  }
+  res.json({ authUrl: startUrl, readKey: flowId });
 });
 
-app.get('/auth/figma/start', (req, res) => {
+app.get('/auth/figma/start', async (req, res) => {
   const flowId = req.query.flow_id;
   if (!flowId) return res.status(400).send('Invalid flow');
+  const utmSource = (req.query.utm_source || '').toString().trim();
+  const utmMedium = (req.query.utm_medium || '').toString().trim();
+  const utmCampaign = (req.query.utm_campaign || '').toString().trim();
+  if (utmSource || utmMedium || utmCampaign) {
+    const store = await getFlowStore();
+    await store.set(flowId, { utm: { utm_source: utmSource || null, utm_medium: utmMedium || null, utm_campaign: utmCampaign || null } });
+  }
   const isSecure = BASE_URL.startsWith('https://');
   res.cookie('figma_oauth_flow', flowId, {
     httpOnly: true,
@@ -116,9 +136,10 @@ app.get('/auth/figma/callback', async (req, res) => {
   if (!flowId) return res.status(400).send('Invalid state (missing)');
 
   const store = await getFlowStore();
-  const existing = await store.get(flowId);
+  let existing = await store.get(flowId);
   if (existing === undefined) return res.status(400).send('Expired flow');
   if (cookieFlow !== undefined && cookieFlow !== flowId) return res.status(400).send('Invalid state');
+  const utmFromStart = existing && typeof existing === 'object' && existing.utm ? existing.utm : null;
   if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return res.status(500).send('Server misconfigured');
 
   const redirectUri = `${BASE_URL}/auth/figma/callback`;
@@ -233,6 +254,22 @@ app.get('/auth/figma/callback', async (req, res) => {
     await store.set(flowId, { error: 'token_save_failed', message: txError?.message || 'Database error' });
     res.clearCookie('figma_oauth_flow');
     return res.status(500).send(getOAuthErrorHtml());
+  }
+
+  if (POSTGRES_URL && tokenSaved && utmFromStart && utmFromStart.utm_source) {
+    const sourceMap = { landing: 'landing', linkedin: 'linkedin', instagram: 'instagram', tiktok: 'tiktok' };
+    const touchpointSource = sourceMap[(utmFromStart.utm_source || '').toLowerCase()];
+    if (touchpointSource) {
+      try {
+        await dbSql`
+          INSERT INTO user_attribution (user_id, source, utm_source, utm_medium, utm_campaign)
+          VALUES (${user.id}, ${touchpointSource}, ${utmFromStart.utm_source || null}, ${utmFromStart.utm_medium || null}, ${utmFromStart.utm_campaign || null})
+          ON CONFLICT (user_id) DO NOTHING
+        `;
+      } catch (err) {
+        if (!/relation "user_attribution" does not exist/i.test(String(err))) console.error('user_attribution insert', err);
+      }
+    }
   }
 
   if (POSTGRES_URL && tokenSaved) {
@@ -1734,6 +1771,22 @@ app.post('/api/trophies/linkedin-shared', async (req, res) => {
     res.json({ linkedin_shared: true, new_trophies: newTrophies });
   } catch (err) {
     console.error('POST /api/trophies/linkedin-shared', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Brand awareness: tracciamento click "Share on LinkedIn" per trofeo (dashboard: Brand awareness)
+app.post('/api/tracking/linkedin-share', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const trophyId = (req.body && req.body.trophy_id) ? String(req.body.trophy_id).trim() : null;
+  if (!trophyId || trophyId.length > 64) return res.status(400).json({ error: 'trophy_id required' });
+  if (!POSTGRES_URL) return res.status(204).end();
+  try {
+    await dbSql`INSERT INTO linkedin_share_events (user_id, trophy_id) VALUES (${userId}, ${trophyId})`;
+    res.status(204).end();
+  } catch (err) {
+    console.error('POST /api/tracking/linkedin-share', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

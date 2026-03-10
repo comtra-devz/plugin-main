@@ -51,7 +51,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
       <div className="p-2 flex flex-col gap-1">
         <button 
           data-component="Profile: Partner Button"
-          onClick={() => window.open('https://comtra.ai/partner', '_blank')}
+          onClick={() => window.open('https://comtra.dev/partner', '_blank')}
           className="text-left text-sm font-bold bg-[#ffc900] hover:bg-yellow-400 p-2 border-2 border-black mb-2 flex justify-between items-center shadow-[2px_2px_0_0_#000]"
         >
           <span>Become Partner</span>

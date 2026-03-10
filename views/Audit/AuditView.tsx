@@ -868,7 +868,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   };
 
   const handleShare = () => {
-     window.open('https://www.linkedin.com/sharing/share-offsite/?url=https://comtra.ai', '_blank');
+     window.open('https://www.linkedin.com/sharing/share-offsite/?url=https://comtra.dev', '_blank');
   };
 
   const handleNavDeviation = (e: React.MouseEvent, issueId: string, layerIds: string[], direction: 'prev' | 'next') => {

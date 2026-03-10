@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import { BRUTAL, COLORS, AUTH_BACKEND_URL, LINKEDIN_TROPHY_SHARE_BASE, LINKEDIN_PLUGIN_LINK } from '../constants';
+import { getCanonicalTrophyId, getLinkedInPostForTrophy } from '../linkedinTrophyPosts';
 import { User, UserStats, Trophy } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
 import { Confetti } from '../components/Confetti';
@@ -239,6 +240,7 @@ function formatRelativeTime(iso: string): string {
 export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFromApi, recentTransactions = [], onLinkedInShare }) => {
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [shareCopyFeedback, setShareCopyFeedback] = useState(false);
 
   // Livello e XP: da backend (user) se presenti, altrimenti fallback da stats
   const level = user?.current_level ?? 1;
@@ -290,10 +292,23 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
 
   const currentBadge = BADGES.find(b => b.id === selectedBadge);
 
-  const handleShareBadge = (badgeName: string) => {
-      // TODO: aggiungere menzione alla pagina LinkedIn di Comtra (URL da definire) nel testo dello share
-      const shareText = `I just unlocked the ${badgeName} badge on Comtra! Level ${level} Design Engineer.`;
-      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.ai')}&summary=${encodeURIComponent(shareText)}`, '_blank');
+  const handleShareBadge = async (badgeId: string) => {
+      const canonicalId = getCanonicalTrophyId(badgeId);
+      const shareUrl = `${LINKEDIN_TROPHY_SHARE_BASE}${canonicalId}`;
+      const postText = getLinkedInPostForTrophy(badgeId, LINKEDIN_PLUGIN_LINK);
+      try {
+        await navigator.clipboard.writeText(postText);
+        setShareCopyFeedback(true);
+        setTimeout(() => setShareCopyFeedback(false), 4000);
+      } catch (_) {}
+      if (user?.authToken) {
+        fetch(`${AUTH_BACKEND_URL}/api/tracking/linkedin-share`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          body: JSON.stringify({ trophy_id: canonicalId }),
+        }).catch(() => {});
+      }
+      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`, '_blank');
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2000);
   };
@@ -306,7 +321,7 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
       const certId = `COMTRA-LVL${level}-${xp}`;
       const name = `Level ${level} Design Engineer`;
       const orgName = 'Comtra AI';
-      const url = `https://comtra.ai/verify/user`;
+      const url = `https://comtra.dev/verify/user`;
 
       const linkedinUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(name)}&organizationName=${encodeURIComponent(orgName)}&issueYear=${year}&issueMonth=${month}&certId=${certId}&certUrl=${encodeURIComponent(url)}`;
       window.open(linkedinUrl, '_blank');
@@ -370,22 +385,6 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
       {/* Stats Widget */}
       <UserStatsWidget stats={stats} />
 
-      {/* Recent activity */}
-      {recentTransactions.length > 0 && (
-        <div className={`${BRUTAL.card} bg-white`}>
-          <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2">Recent activity</h3>
-          <ul className="space-y-2 max-h-48 overflow-y-auto">
-            {recentTransactions.map((tx, i) => (
-              <li key={i} className="flex justify-between items-center text-[10px] border-b border-gray-100 pb-2 last:border-0 last:pb-0">
-                <span className="font-bold uppercase">{ACTION_LABELS[tx.action_type] ?? tx.action_type}</span>
-                <span className="text-gray-500 font-mono shrink-0 ml-2">{tx.credits_consumed} cr</span>
-                <span className="text-gray-400 shrink-0 ml-2">{formatRelativeTime(tx.created_at)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* Badges Grid */}
       <div className={`${BRUTAL.card} bg-white`}>
           <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2 flex justify-between items-center">
@@ -406,6 +405,22 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
               ))}
           </div>
       </div>
+
+      {/* Recent activity */}
+      {recentTransactions.length > 0 && (
+        <div className={`${BRUTAL.card} bg-white`}>
+          <h3 className="font-black uppercase text-sm mb-4 border-b-2 border-black pb-2">Recent activity</h3>
+          <ul className="space-y-2 max-h-48 overflow-y-auto">
+            {recentTransactions.map((tx, i) => (
+              <li key={i} className="flex justify-between items-center text-[10px] border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                <span className="font-bold uppercase">{ACTION_LABELS[tx.action_type] ?? tx.action_type}</span>
+                <span className="text-gray-500 font-mono shrink-0 ml-2">{tx.credits_consumed} cr</span>
+                <span className="text-gray-400 shrink-0 ml-2">{formatRelativeTime(tx.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Badge Modal */}
       {selectedBadge && currentBadge && (
@@ -428,12 +443,17 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
                   </p>
                   
                   {currentBadge.unlocked ? (
-                      <button 
-                        onClick={() => handleShareBadge(currentBadge.name)}
-                        className={`${BRUTAL.btn} w-full bg-[#0077b5] text-white border-black flex justify-center items-center gap-2`}
-                      >
+                      <>
+                        <button 
+                          onClick={() => handleShareBadge(currentBadge.id)}
+                          className={`${BRUTAL.btn} w-full bg-[#0077b5] text-white border-black flex justify-center items-center gap-2`}
+                        >
                           Share on LinkedIn
-                      </button>
+                        </button>
+                        {shareCopyFeedback && (
+                          <p className="text-[10px] text-gray-500 mt-2">Post text copied — paste it in the LinkedIn window (Ctrl+V / Cmd+V).</p>
+                        )}
+                      </>
                   ) : (
                       <div className="bg-gray-200 text-gray-500 font-bold p-3 text-[10px] uppercase border-2 border-dashed border-gray-400">
                           Locked • Complete task to unlock

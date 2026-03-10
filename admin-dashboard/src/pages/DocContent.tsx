@@ -1,8 +1,24 @@
 import { useEffect, useState } from 'react';
 import { fetchDocContent, saveDocContent, type DocContentData } from '../api';
 import PageHeader from '../components/PageHeader';
+import { simpleToHtml, htmlToSimple } from '../lib/docFormat';
 
 const TUTORIAL_KEYS = ['WORKFLOW', 'ASSETS', 'SYNC'] as const;
+
+/** Anteprima che replica lo stile del plugin */
+function DocPreview({ html, title }: { html: string; title: string }) {
+  return (
+    <div className="doc-preview">
+      <div className="doc-preview-card">
+        <h4 className="doc-preview-title">{title || 'Titolo'}</h4>
+        <div
+          className="doc-preview-content"
+          dangerouslySetInnerHTML={{ __html: html || '<p class="doc-preview-empty">Scrivi per vedere l’anteprima</p>' }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function DocContent() {
   const [data, setData] = useState<DocContentData | null>(null);
@@ -52,13 +68,27 @@ export default function DocContent() {
 
   const updateTutorial = (key: string, field: 'title' | 'content', value: string) => {
     if (!data) return;
+    const html = field === 'content' ? simpleToHtml(value) : value;
     setData({
       ...data,
       tutorials: {
         ...data.tutorials,
-        [key]: { ...(data.tutorials[key] || { title: '', content: '' }), [field]: value },
+        [key]: {
+          ...(data.tutorials[key] || { title: '', content: '' }),
+          [field]: field === 'content' ? html : value,
+        },
       },
     });
+  };
+
+  /** Contenuto in formato semplificato per l'editor (da HTML) */
+  const getTutorialSimple = (key: string): string => {
+    const raw = data?.tutorials?.[key]?.content ?? '';
+    try {
+      return htmlToSimple(raw) || raw;
+    } catch {
+      return raw;
+    }
   };
 
   const updateVideo = (index: number, field: string, value: string) => {
@@ -128,7 +158,7 @@ export default function DocContent() {
         }
       />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-        Contenuto della sezione Documentation & Help nel plugin. Supporta <strong>HTML</strong> per bold, code, liste. I moduli (tutorials, video, FAQ) sono esattamente come nel plugin.
+        Contenuto della sezione Documentation & Help nel plugin. Usa la sintassi semplificata: <strong>**grassetto**</strong>, <code>`codice`</code>, <em>*corsivo*</em>. L&apos;anteprima a destra mostra il risultato come nel plugin.
       </p>
 
       {/* Header */}
@@ -180,15 +210,25 @@ export default function DocContent() {
                 onChange={(e) => updateTutorial(key, 'title', e.target.value)}
               />
             </div>
-            <div className="form-group">
-              <label className="brutal-label">Contenuto HTML (usa &lt;strong&gt;, &lt;code&gt;, &lt;em&gt;, &lt;p&gt;, &lt;ol&gt;, &lt;li&gt;, &lt;div class="..."&gt;)</label>
-              <textarea
-                className="brutal-input"
-                rows={12}
-                style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
-                value={data.tutorials?.[key]?.content ?? ''}
-                onChange={(e) => updateTutorial(key, 'content', e.target.value)}
-              />
+            <div className="doc-editor-row">
+              <div className="doc-editor-col">
+                <label className="brutal-label">
+                  Contenuto — usa <strong>**grassetto**</strong>, <code>`codice`</code>, <em>*corsivo*</em>. Liste: <code>1. item</code> o <code>- item</code>. Callout: <code>:::yellow</code> e <code>:::gray</code>
+                </label>
+                <textarea
+                  className="brutal-input doc-editor-textarea"
+                  rows={14}
+                  value={getTutorialSimple(key)}
+                  onChange={(e) => updateTutorial(key, 'content', e.target.value)}
+                />
+              </div>
+              <div className="doc-editor-col doc-preview-col">
+                <label className="brutal-label">Anteprima (come nel plugin)</label>
+                <DocPreview
+                  html={data.tutorials?.[key]?.content ?? ''}
+                  title={data.tutorials?.[key]?.title ?? ''}
+                />
+              </div>
             </div>
           </div>
         ))}

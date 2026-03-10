@@ -46,14 +46,11 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/ab-tests" className={({ isActive }) => (isActive ? 'active' : '')}>
           A/B Tests
         </NavLink>
-        <span className="sidebar-group" aria-hidden="true">Content Management</span>
-        <NavLink to="/content/documentation" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Documentation
+        <span className="sidebar-group" aria-hidden="true">Altro</span>
+        <NavLink to="/brand-awareness" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Brand awareness
         </NavLink>
-        <NavLink to="/content/altro" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Altro
-        </NavLink>
-        <NavLink to="/content/aggiornamenti" className={({ isActive }) => (isActive ? 'active' : '')}>
+        <NavLink to="/weekly-updates" className={({ isActive }) => (isActive ? 'active' : '')}>
           Aggiornamenti
         </NavLink>
         <NavLink to="/health" className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -64,6 +61,11 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         </NavLink>
         <NavLink to="/security" className={({ isActive }) => (isActive ? 'active' : '')}>
           Sicurezza e log
+        </NavLink>
+        <hr className="sidebar-divider" aria-hidden="true" />
+        <span className="sidebar-group" aria-hidden="true">Content Management</span>
+        <NavLink to="/content/documentation" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Documentation
         </NavLink>
       </nav>
       <div style={{ marginTop: 'auto', padding: '1rem' }}>
