@@ -854,6 +854,7 @@ export default function AppTest() {
             user={user} 
             creditsLabel={creditsLabel}
             creditsFetchError={creditsFetchError}
+            onRetryCredits={fetchCredits}
             lowCreditsWarning={lowCreditsWarning}
             isTestUser={isTestUser}
             simulateFreeTier={simulateFreeTier}
