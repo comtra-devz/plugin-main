@@ -1,0 +1,4 @@
+#!/bin/sh
+# Dopo ogni commit invia un riassunto delle modifiche su Discord.
+# Installazione: vedi docs/DISCORD-CHANGELOG.md
+cd "$(git rev-parse --show-toplevel)" && node scripts/notify-discord.mjs 1
