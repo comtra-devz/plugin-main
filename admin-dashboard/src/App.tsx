@@ -18,6 +18,7 @@ import GenerateABTest from './pages/GenerateABTest';
 import DocContent from './pages/DocContent';
 import BrandAwareness from './pages/BrandAwareness';
 import TouchpointFunnel from './pages/TouchpointFunnel';
+import Notifications from './pages/Notifications';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/support" element={<SupportRequests />} />
           <Route path="/security" element={<SecurityLogs />} />
           <Route path="/health" element={<Health />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/executions" element={<Executions />} />
           <Route path="/discounts" element={<Discounts />} />
           <Route path="/ab-tests" element={<ABTests />}>

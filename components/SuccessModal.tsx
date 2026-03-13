@@ -4,9 +4,13 @@ import { BRUTAL, COLORS } from '../constants';
 interface Props { onClose: () => void; score: number }
 
 export const SuccessModal: React.FC<Props> = ({ onClose, score }) => {
-  const handleShare = () => {
+  const handleShare = async () => {
     const text = `I just reached a ${score}% Design System health score on Comtra! 🚀`;
-    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.dev')}&summary=${encodeURIComponent(text)}`, '_blank');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {}
+    // LinkedIn share-offsite accetta solo url; preview da og: sulla pagina. Il testo va incollato a mano (vedi docs/LINKEDIN-SHARE-LIMITS.md).
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://comtra.dev')}`, '_blank');
   };
 
   return (

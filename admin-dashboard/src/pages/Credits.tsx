@@ -50,7 +50,7 @@ export default function Credits() {
 
       {stats && (
         <section style={{ marginBottom: '2rem' }}>
-          <h2 className="section-title">Riepilogo</h2>
+          <h2 className="section-title">Salute economica (ultimi 30 giorni)</h2>
           <div className="grid grid-4">
             <div className="brutal-card">
               <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Scan (30d)</h3>
@@ -59,14 +59,35 @@ export default function Credits() {
             <div className="brutal-card">
               <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Crediti consumati (30d)</h3>
               <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{stats.credits.credits_consumed_30d}</div>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                ~{Math.round((stats.credits.credits_consumed_30d / 30) * 10) / 10} crediti/giorno
+              </p>
             </div>
             <div className="brutal-card">
               <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo Kimi stimato (30d)</h3>
               <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${stats.kimi.cost_30d_usd.toFixed(2)}</div>
+              {stats.credits.credits_consumed_30d > 0 && (
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                  ~${(stats.kimi.cost_30d_usd / stats.credits.credits_consumed_30d).toFixed(4)} per credito
+                </p>
+              )}
             </div>
             <div className="brutal-card">
-              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Cassa minima suggerita</h3>
+              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Cassa minima suggerita (30 gg)</h3>
               <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${stats.kimi.suggested_buffer_30d_usd.toFixed(2)}</div>
+              <p
+                style={{
+                  margin: '0.35rem 0 0',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  color: stats.kimi.cost_alert ? 'var(--alert)' : 'var(--ok)',
+                }}
+              >
+                Stato:{' '}
+                {stats.kimi.cost_alert
+                  ? '⚠ Verifica buffer / costo Kimi'
+                  : 'Ok (buffer e costo all’interno delle soglie)'}
+              </p>
             </div>
           </div>
         </section>

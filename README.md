@@ -302,16 +302,3 @@ Il flusso "Login with Figma" usa un server OAuth deployato separatamente (es. au
 3. Run the app:
    `npm run dev`
 
----
-
-## Ambienti disponibili (Launcher)
-
-All'avvio, il `Launcher.tsx` permette di scegliere l'ambiente:
-
-| Env | Descrizione |
-|---|---|
-| **PROD** | App di produzione |
-| **TEST** | Clone con badge "TEST ENV", DebugInspector e dati mock |
-| **MASTER** | Vista Master Plan (20 fasi di sviluppo con prompt AI copiabili) |
-| **COMM** | Communication Hub (Brand, USP, Competitors, Sustainability, Editorial) |
-| **ADMIN** | Admin Dashboard (gestione utenti, ruoli, richieste, sicurezza) |

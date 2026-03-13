@@ -150,6 +150,28 @@ function apiUrl(route: string, params?: Record<string, string | number>) {
   return `${BASE}/api/admin?${q.toString()}`;
 }
 
+// --- Notifiche admin
+export type NotificationSeverity = 'info' | 'warning' | 'critical';
+
+export interface AdminNotification {
+  id: string;
+  created_at: string;
+  title: string;
+  description: string;
+  severity: NotificationSeverity;
+  target_path: string;
+}
+
+export interface AdminNotificationsResponse {
+  items: AdminNotification[];
+}
+
+export async function fetchNotifications(): Promise<AdminNotificationsResponse> {
+  const r = await fetch(apiUrl('notifications'), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
 export async function fetchStats(): Promise<AdminStats> {
   const r = await fetch(apiUrl('stats'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);

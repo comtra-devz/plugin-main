@@ -2,6 +2,8 @@
 
 Istruzioni e prompt per creare sul sito comtra (comtra.dev) le **20 pagine** che servono a far comparire **titolo, descrizione e immagine** quando un utente condivide un trofeo su LinkedIn.
 
+**Nota:** LinkedIn con share-offsite permette solo di passare l’**url**; il **testo del post** non si può pre-compilare via link (viene copiato negli appunti e l’utente incolla). Dettagli: [LINKEDIN-SHARE-LIMITS.md](./LINKEDIN-SHARE-LIMITS.md).
+
 ---
 
 ## 1. Cosa servono

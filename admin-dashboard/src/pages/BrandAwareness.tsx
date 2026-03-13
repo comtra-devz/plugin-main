@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchBrandAwareness, type BrandAwarenessResponse } from '../api';
+import { fetchBrandAwareness, type BrandAwarenessResponse, type BrandAwarenessShareClick } from '../api';
 import PageHeader from '../components/PageHeader';
 
 const PERIOD_OPTIONS = [7, 14, 30, 90] as const;
@@ -29,7 +29,7 @@ export default function BrandAwareness() {
           <select
             className="brutal-input"
             value={period}
-            onChange={(e) => setPeriod(Number(e.target.value))}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPeriod(Number(e.target.value))}
             style={{ width: 'auto' }}
             aria-label="Periodo in giorni"
           >
@@ -72,7 +72,7 @@ export default function BrandAwareness() {
               <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Click per trofeo</h3>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem' }}>
                 {Object.entries(data.by_trophy)
-                  .sort(([, a], [, b]) => b - a)
+                  .sort(([, a]: [string, number], [, b]: [string, number]) => b - a)
                   .map(([trophyId, count]) => (
                     <li key={trophyId} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span className="mono" style={{ fontSize: '0.9rem' }}>{trophyId}</span>
@@ -102,7 +102,7 @@ export default function BrandAwareness() {
                       </td>
                     </tr>
                   ) : (
-                    data.share_clicks.items.map((row) => (
+                    data.share_clicks.items.map((row: BrandAwarenessShareClick) => (
                       <tr key={row.id}>
                         <td className="mono">{row.user_masked}</td>
                         <td className="mono" style={{ fontSize: '0.9rem' }}>{row.trophy_id}</td>

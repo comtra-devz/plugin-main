@@ -39,7 +39,12 @@ export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
 
   const route = (req.query?.route || '').toLowerCase().trim();
-  if (!route) return res.status(400).json({ error: 'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs|brand-awareness|touchpoint-funnel' });
+  if (!route) {
+    return res.status(400).json({
+      error:
+        'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs|brand-awareness|touchpoint-funnel|notifications',
+    });
+  }
 
   if (route === 'weekly-updates') {
     try {
@@ -54,6 +59,15 @@ export default async function handler(req, res) {
       return await handleHealth(req, res);
     } catch (err) {
       console.error('GET /api/admin health', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  }
+
+  if (route === 'notifications') {
+    try {
+      return await handleNotifications(req, res);
+    } catch (err) {
+      console.error('GET /api/admin notifications', err);
       return res.status(500).json({ error: 'Server error' });
     }
   }
@@ -200,6 +214,139 @@ async function handleStats(req, res) {
       conversion_free_to_pro_pct: freeActiveCount > 0 ? Math.round((proCount / (freeActiveCount + proCount)) * 100) : 0,
     },
   });
+}
+
+async function handleNotifications(req, res) {
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const notifications = [];
+
+  // --- PRO in scadenza (7 giorni)
+  try {
+    const expiring7d = await sql`
+      SELECT COUNT(*)::int AS c FROM users
+      WHERE plan = 'PRO' AND plan_expires_at IS NOT NULL AND plan_expires_at > NOW() AND plan_expires_at <= NOW() + INTERVAL '7 days'
+    `;
+    const count = expiring7d.rows[0]?.c ?? 0;
+    if (count > 0) {
+      notifications.push({
+        id: 'pro-expiring-7d',
+        created_at: now.toISOString(),
+        severity: 'info',
+        title: `${count} PRO in scadenza nei prossimi 7 giorni`,
+        description: 'Verifica se vuoi comunicare rinnovi o offerte mirate agli utenti PRO in scadenza.',
+        target_path: '/users',
+      });
+    }
+  } catch (_) {}
+
+  // --- Kimi: costo e buffer (stesse formule di handleStats)
+  try {
+    const scans30d = await sql`
+      SELECT COUNT(*)::int AS c FROM credit_transactions
+      WHERE action_type IN ('audit', 'scan') AND created_at >= ${thirtyDaysAgo}
+    `;
+    const scanCount30 = scans30d.rows[0]?.c ?? 0;
+    const avgScansPerDay = scanCount30 / 30 || 0;
+    let cost30dUsd = Math.round(scanCount30 * COST_PER_SCAN_USD * 1000) / 1000;
+    let token_usage_30d = null;
+    try {
+      const tokenTotals = await sql`
+        SELECT COUNT(*)::int AS count, COALESCE(SUM(input_tokens), 0)::bigint AS in_tok, COALESCE(SUM(output_tokens), 0)::bigint AS out_tok
+        FROM kimi_usage_log WHERE created_at >= ${thirtyDaysAgo}
+      `;
+      const tt = tokenTotals.rows?.[0];
+      if (tt && (tt.count ?? 0) > 0) {
+        const inTok = Number(tt.in_tok) || 0;
+        const outTok = Number(tt.out_tok) || 0;
+        const realCost = (inTok / 1e6) * KIMI_COST_INPUT_PER_1M + (outTok / 1e6) * KIMI_COST_OUTPUT_PER_1M;
+        token_usage_30d = { calls: tt.count ?? 0, cost_usd: Math.round(realCost * 1000) / 1000 };
+        cost30dUsd = token_usage_30d.cost_usd;
+      }
+    } catch (_) {}
+    const suggestedBufferUsd = Math.round(avgScansPerDay * BUFFER_DAYS * COST_PER_SCAN_USD * 1000) / 1000;
+    const costAlert = suggestedBufferUsd < ALERT_THRESHOLD_USD || cost30dUsd > ALERT_THRESHOLD_USD;
+    if (costAlert) {
+      notifications.push({
+        id: 'kimi-buffer-alert',
+        created_at: now.toISOString(),
+        severity: 'warning',
+        title: 'Verifica saldo Kimi e buffer di sicurezza',
+        description:
+          `Negli ultimi 30 giorni il costo Kimi è ~$${cost30dUsd.toFixed(2)}. Buffer suggerito per 30 gg: ~$${suggestedBufferUsd.toFixed(2)}. Controlla la pagina Crediti e costi.`,
+        target_path: '/credits',
+      });
+    }
+  } catch (_) {}
+
+  // --- Throttle events dal plugin (se ci sono spike recenti)
+  try {
+    const totalResult = await sql`SELECT COUNT(*)::int AS c FROM throttle_events`;
+    const total = totalResult.rows?.[0]?.c ?? 0;
+    if (total > 0) {
+      const sevenDaysResult = await sql`
+        SELECT COUNT(*)::int AS c FROM throttle_events WHERE occurred_at >= ${sevenDaysAgo}
+      `;
+      const last7 = sevenDaysResult.rows?.[0]?.c ?? 0;
+      if (last7 > 0) {
+        notifications.push({
+          id: 'throttle-last7',
+          created_at: now.toISOString(),
+          severity: 'info',
+          title: `Eventi throttle/503 negli ultimi 7 giorni: ${last7}`,
+          description: 'Ci sono stati errori di limite richieste segnalati dal plugin. Controlla Storico utilizzo o i log plugin.',
+          target_path: '/executions',
+        });
+      }
+    }
+  } catch (_) {}
+
+  // --- Codici sconto throttle vicini alla scadenza
+  try {
+    const soonExpiring = await sql`
+      SELECT COUNT(*)::int AS c
+      FROM user_throttle_discounts
+      WHERE expires_at > NOW() AND expires_at <= NOW() + INTERVAL '7 days'
+    `;
+    const count = soonExpiring.rows?.[0]?.c ?? 0;
+    if (count > 0) {
+      notifications.push({
+        id: 'discounts-throttle-expiring',
+        created_at: now.toISOString(),
+        severity: 'info',
+        title: `Codici throttle in scadenza (7 gg): ${count}`,
+        description: 'Alcuni codici sconto throttle scadranno a breve. Valuta se estenderli o lasciarli scadere.',
+        target_path: '/discounts',
+      });
+    }
+  } catch (_) {}
+
+  // --- Ticket supporto aperti da >48 ore (se la tabella esiste)
+  try {
+    const openResult = await sql`
+      SELECT COUNT(*)::int AS c FROM support_tickets
+      WHERE (status = 'open' OR status IS NULL) AND created_at <= NOW() - INTERVAL '48 hours'
+    `;
+    const count = openResult.rows?.[0]?.c ?? 0;
+    if (count > 0) {
+      notifications.push({
+        id: 'support-open-48h',
+        created_at: now.toISOString(),
+        severity: 'info',
+        title: `Ticket supporto aperti da oltre 48 ore: ${count}`,
+        description: 'Ci sono richieste di supporto in attesa da più di 48 ore. Controlla la pagina Supporto.',
+        target_path: '/support',
+      });
+    }
+  } catch (err) {
+    if (!/relation "support_tickets" does not exist/i.test(String(err))) {
+      console.error('handleNotifications support_tickets', err);
+    }
+  }
+
+  res.status(200).json({ items: notifications });
 }
 
 async function handleCreditsTimeline(req, res) {

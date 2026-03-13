@@ -450,8 +450,11 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
                         >
                           Share on LinkedIn
                         </button>
+                        <p className="text-[10px] text-gray-600 mt-2 leading-relaxed">
+                          We copy the post text for you — paste it in the LinkedIn window (Ctrl+V / Cmd+V). You can tag @Comtra in your post if you’d like.
+                        </p>
                         {shareCopyFeedback && (
-                          <p className="text-[10px] text-gray-500 mt-2">Post text copied — paste it in the LinkedIn window (Ctrl+V / Cmd+V).</p>
+                          <p className="text-[10px] font-bold text-green-700 mt-1">Copied! Paste in the LinkedIn window.</p>
                         )}
                       </>
                   ) : (

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExecutions, fetchThrottleEvents, fetchDiscountsStats, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem, type FunctionExecution, type ThrottleEventsResponse, type DiscountsStats } from '../api';
 import DualLineChart from '../components/DualLineChart';
 import HealthBadge from '../components/HealthBadge';
+import NotificationsBell from '../components/NotificationsBell';
 import { PLACEHOLDER_WEEKLY_UPDATES, type UpdateCategory } from '../data/weeklyUpdates';
 
 const WEEKLY_UPDATES_PREVIEW = 3;
@@ -139,7 +140,10 @@ export default function Home() {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
         <h1 className="page-title" style={{ margin: 0 }}>Dashboard</h1>
-        <HealthBadge />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <HealthBadge />
+          <NotificationsBell />
+        </div>
       </div>
 
       {/* Utenti e piani — KPI con link */}
