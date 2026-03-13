@@ -312,17 +312,39 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
      });
   };
 
-  // Tokens (CSS / JSON): always free, no PRO or credits required
-  const handleGenerateCss = () => {
+  // Tokens (CSS / JSON): tracked in activities (1 credit each); consume before requesting so activity is recorded
+  const handleGenerateCss = async () => {
     pendingTokenRequestRef.current = 'css';
     setIsGeneratingCss(true);
-    window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
+    try {
+      const result = await consumeCredits({ action_type: 'token_css', credits_consumed: 1 });
+      if (result?.error) {
+        setIsGeneratingCss(false);
+        pendingTokenRequestRef.current = null;
+        return;
+      }
+      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
+    } catch {
+      setIsGeneratingCss(false);
+      pendingTokenRequestRef.current = null;
+    }
   };
 
-  const handleGenerateJson = () => {
+  const handleGenerateJson = async () => {
     pendingTokenRequestRef.current = 'json';
     setIsGeneratingJson(true);
-    window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
+    try {
+      const result = await consumeCredits({ action_type: 'token_json', credits_consumed: 1 });
+      if (result?.error) {
+        setIsGeneratingJson(false);
+        pendingTokenRequestRef.current = null;
+        return;
+      }
+      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
+    } catch {
+      setIsGeneratingJson(false);
+      pendingTokenRequestRef.current = null;
+    }
   };
 
   const copyToClipboard = (text: string) => {

@@ -569,6 +569,7 @@ function estimateCreditsByAction(actionType, nodeCount) {
   if (actionType === 'sync') return 1;
   if (actionType === 'scan_sync') return 15;
   if (actionType === 'sync_fix' || actionType === 'sync_storybook') return 5;
+  if (actionType === 'token_css' || actionType === 'token_json') return 1;
   return 5;
 }
 

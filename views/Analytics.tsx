@@ -224,6 +224,8 @@ const ACTION_LABELS: Record<string, string> = {
   sync_bitbucket: 'Sync Bitbucket',
   scan_sync: 'Sync Scan',
   sync_fix: 'Sync Fix',
+  token_css: 'Token CSS',
+  token_json: 'Token JSON',
 };
 
 function formatRelativeTime(iso: string): string {
