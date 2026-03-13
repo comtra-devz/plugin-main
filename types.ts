@@ -44,6 +44,8 @@ export interface User {
   total_xp?: number;
   xp_for_next_level?: number;
   xp_for_current_level_start?: number;
+  /** Tag da backend (es. "enterprise"); clienti Enterprise inseriti manualmente, vedi docs/CONTACT-REQUESTS.md */
+  tags?: string[];
 }
 
 export interface AuditCategory {

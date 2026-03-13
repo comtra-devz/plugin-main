@@ -30,8 +30,11 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
       <div className={`bg-[${COLORS.primary}] p-4 border-b-2 border-black`}>
         <h3 data-component="Profile: User Email" className="font-black text-sm break-words">{user.email || '—'}</h3>
-        <div className="flex justify-between items-center mt-2 gap-1">
+        <div className="flex justify-between items-center mt-2 gap-1 flex-wrap">
             <span data-component="Profile: Plan Badge" className="inline-block bg-black text-white text-[10px] px-2 py-0.5 font-bold uppercase shrink-0">{user.plan} PLAN</span>
+            {user.tags?.includes('enterprise') && (
+              <span data-component="Profile: Enterprise Tag" className="inline-block bg-indigo-600 text-white text-[10px] px-2 py-0.5 font-bold uppercase shrink-0">Enterprise</span>
+            )}
             <span data-component="Profile: Credits Badge" className="text-[10px] font-bold uppercase border-2 border-black px-2 py-0.5 bg-white min-w-0">Credits: {creditsLabel}</span>
         </div>
         {lowCreditsWarning && (

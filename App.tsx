@@ -229,6 +229,7 @@ export default function AppTest() {
         if (data.stats != null && typeof data.stats === 'object') {
           updates.stats = { ...prev.stats, ...data.stats };
         }
+        if (Array.isArray(data.tags)) updates.tags = data.tags;
         if (Object.keys(updates).length === 0) return prev;
         return { ...prev, ...updates };
       });

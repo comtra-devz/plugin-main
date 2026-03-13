@@ -285,6 +285,13 @@ app.get('/auth/figma/callback', async (req, res) => {
         user.xp_for_next_level = info.xpForNextLevel;
         user.xp_for_current_level_start = info.xpForCurrentLevelStart;
       }
+      try {
+        const tagRow = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${user.id} LIMIT 1`;
+        if (tagRow.rows.length > 0) {
+          const rawTags = tagRow.rows[0].tags;
+          user.tags = Array.isArray(rawTags) ? rawTags : (rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags) ? [] : []);
+        }
+      } catch (_) { /* tags column may not exist before migration 006 */ }
       const productionStats = await getProductionStats(dbSql, user.id);
       if (productionStats) user.stats = productionStats;
     } catch (err) {
@@ -632,7 +639,7 @@ app.get('/api/credits', async (req, res) => {
     } catch (txErr) {
       console.error('GET /api/credits: recent_transactions failed (non-fatal)', txErr);
     }
-    res.json({
+    const out = {
       credits_remaining: remaining,
       credits_total: total,
       credits_used: used,
@@ -644,7 +651,15 @@ app.get('/api/credits', async (req, res) => {
       xp_for_current_level_start: info.xpForCurrentLevelStart ?? 0,
       ...(stats && { stats }),
       recent_transactions,
-    });
+    };
+    try {
+      const tr = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${userId} LIMIT 1`;
+      if (tr.rows.length > 0) {
+        const raw = tr.rows[0].tags;
+        out.tags = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) ? [] : []);
+      }
+    } catch (_) { /* tags column may not exist before migration 006 */ }
+    res.json(out);
   } catch (err) {
     console.error('GET /api/credits', err);
     res.status(500).json({ error: 'Server error' });
@@ -1600,6 +1615,7 @@ app.post('/api/agents/sync-scan', async (req, res) => {
   const fileJsonFromBody = body.file_json || body.fileJson;
   const storybookUrl = (body.storybook_url || body.storybookUrl || '').trim();
   const storybookToken = (body.storybook_token || body.storybookToken || '').trim() || undefined;
+  // Do not log body or storybookToken; token is used only for fetch and must not be persisted or logged.
 
   if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
   if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });

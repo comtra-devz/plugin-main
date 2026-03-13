@@ -177,6 +177,7 @@ Se lo “scan drift” richiederà solo `file_key` (e il backend farà GET file 
 | `views/Documentation.tsx` | Copy Deep Sync & Drift (Figma = source of truth, push to Storybook/GitHub) |
 | `docs/DESIGN-HANDOFF-DRIFT-RULESET.md` | Ruleset cluster tematici (handoff, drift, token, governance, ecc.) + severity + **consigli durante risultati Sync**; usare per arricchire messaggi e suggerimenti in output drift. |
 | `storybook-test/` | Storybook di test interno: Button, Input, Card. `npm run build && npm run serve` → server su :6006 con `/api/stories`. Per Comtra: esporre con ngrok e usare l'URL pubblico. Vedi `storybook-test/README.md`. |
+| `docs/SYNC-ENTERPRISE-SSO.md` | **Enterprise:** SSO e Storybook protetto — come risolverlo (bridge, export, token M2M) e cosa chiedere al cliente. |
 
 ---
 
@@ -217,6 +218,8 @@ Per **coprire i casi in cui è possibile** arrivare allo schermo del prototipo (
 ---
 
 ## 7. Prossimi passi suggeriti
+
+Per il **caso comune** (Storybook pubblico / privato con Bearer token, push via Git opzione A, requisito repo): vedi **`docs/SYNC-COMMON-CASE.md`**.
 
 1. **Storybook (priorità):** Validare in proof-of-concept: “Connect Storybook” = URL (+ auth se serve) → backend chiama API lettura (es. storybook-api) e confronta con file_key/file_json; output drift in formato SyncTab. Decidere se “Sync Fix” in v1 è solo export/copy o push via Git (GitHub/Bitbucket).
 2. **Crediti e stima:** Definire `action_type` per scan_sync / sync_fix / sync_all (o unico `sync` con `credits_consumed` variabile) e collegare in Code.tsx: stima prima dell’azione, consume dopo successo (stessa logica Audit).

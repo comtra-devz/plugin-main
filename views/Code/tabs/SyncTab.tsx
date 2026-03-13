@@ -28,7 +28,8 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 }) => {
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
   const [tokenInput, setTokenInput] = useState(storybookToken || '');
-  
+  const [usePrivateToken, setUsePrivateToken] = useState(!!storybookToken);
+
   const handleScanClick = () => {
     handleSyncScan();
   };
@@ -51,6 +52,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             Upgrade to Sync
             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
           </button>
+          <p className="text-[10px] text-gray-500 mt-4 leading-relaxed">
+            Deep Sync is an <strong className="text-gray-700">Enterprise feature</strong>: connect design and code at scale, including SSO and private Storybook.{' '}
+            <a
+              href="https://calendly.com/comtra-enterprise"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold underline hover:text-[#ff90e8]"
+            >
+              Book a call
+            </a>{' '}
+            to discuss your setup.
+          </p>
         </div>
       ) : (
         <div>
@@ -87,22 +100,35 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     onChange={(e) => setConnectInput(e.target.value)}
                     className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
                   />
-                  <div>
-                    <label className="text-[10px] text-gray-500 block mb-1">Access token (optional, for private Storybook)</label>
-                    <input
-                      type="password"
-                      placeholder="Bearer token if required"
-                      value={tokenInput}
-                      onChange={(e) => setTokenInput(e.target.value)}
-                      className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
-                    />
+                  <div className="flex items-center justify-between gap-2 border border-dashed border-gray-400 bg-gray-50 p-2">
+                    <span className="text-[10px] font-bold uppercase text-gray-700">Private Storybook (use access token)</span>
+                    <button
+                      type="button"
+                      onClick={() => setUsePrivateToken(!usePrivateToken)}
+                      className={`text-[10px] font-bold uppercase px-2 py-1 border-2 border-black shrink-0 ${usePrivateToken ? `bg-[${COLORS.primary}] text-black` : 'bg-white text-gray-600'}`}
+                    >
+                      {usePrivateToken ? 'ON' : 'OFF'}
+                    </button>
                   </div>
-                  <p className="text-[10px] text-gray-500">Deployed Storybook or storybook-api exposing /api/stories. Use ngrok for local.</p>
+                  {usePrivateToken && (
+                    <div>
+                      <label className="text-[10px] text-gray-500 block mb-1">Access token</label>
+                      <input
+                        type="password"
+                        placeholder="Bearer token"
+                        value={tokenInput}
+                        onChange={(e) => setTokenInput(e.target.value)}
+                        className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
+                      />
+                      <p className="text-[9px] text-gray-400 mt-0.5">Sent as <code className="bg-gray-100 px-0.5">Authorization: Bearer &lt;token&gt;</code> when fetching stories.</p>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-gray-500">Deployed Storybook or storybook-api with /api/stories. Use ngrok for local.</p>
                   <button
                     onClick={() => {
                       const url = connectInput.trim();
                       if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                        handleConnectSb(url, tokenInput.trim() || undefined);
+                        handleConnectSb(url, usePrivateToken ? tokenInput.trim() || undefined : undefined);
                       }
                     }}
                     disabled={!connectInput.trim()}
@@ -110,6 +136,11 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   >
                     Connect Storybook
                   </button>
+                  <div className="pt-2 mt-2 border-t border-gray-200">
+                    <p className="text-[9px] text-gray-500 leading-relaxed">
+                      <strong className="text-gray-700">Security:</strong> Your token is only sent over HTTPS to our backend for the scan and is not stored anywhere. We never log or persist it.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -212,15 +243,20 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       )}
 
                       {syncItems.length > 0 && (
-                        <button 
+                        <>
+                          <p className="text-[10px] text-gray-600 mb-2 px-1">
+                            To push changes to your code, connect a Git repository (GitHub or Bitbucket). Don&apos;t have a repo? Create one and link your Storybook to it.
+                          </p>
+                          <button 
                             onClick={handleSyncAll} 
                             className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black flex justify-center items-center gap-2 relative h-12`}
-                        >
-                          <span>Sync All</span>
-                          <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
-                             -{syncItems.length * 5} Credits
-                          </span>
-                        </button>
+                          >
+                            <span>Sync All</span>
+                            <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
+                               -{syncItems.length * 5} Credits
+                            </span>
+                          </button>
+                        </>
                       )}
 
                       {/* Rescan Button */}

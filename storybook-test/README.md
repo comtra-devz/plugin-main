@@ -2,6 +2,13 @@
 
 Storybook di test interno alla repo per verificare il flusso **Sync** (drift Figma ↔ Storybook). Contiene componenti standard: Button, Input, Card.
 
+**Requisiti per Comtra:** URL che espone **GET /api/stories** (o /api/components, /index.json). Questo server lo fornisce in opzione B (build + serve). Nessun token richiesto (Storybook pubblico per test).
+
+## URL di test
+
+- **Locale:** dopo `npm run build && npm run serve`, esponi la porta con ngrok: `ngrok http 6006`. Usa l’URL pubblico (es. `https://abc123.ngrok.io`) nel plugin: Code → Sync → incolla URL → Connect Storybook (toggle “Private” OFF) → Scan Project.
+- **Persistente:** deploy su Vercel/Netlify (vedi sotto); l’URL di deploy (es. `https://storybook-test-xxx.vercel.app`) è un URL riutilizzabile per i test.
+
 ## Setup
 
 ```bash
