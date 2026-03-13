@@ -508,7 +508,24 @@ export default function AppTest() {
       fetchTrophies();
     }
     return { credits_remaining: data.credits_remaining, level_up: data.level_up };
-  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies, handle503]);
+  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies, handle503, setNewTrophiesToast]);
+
+  // Log free (0-credit) actions into credit_transactions for activity tracking (Stats + dashboard), without modifying balance
+  const logFreeAction = React.useCallback(
+    async (actionType: string) => {
+      if (!user?.authToken) return;
+      try {
+        await fetch(`${AUTH_BACKEND_URL}/api/credits/log-free`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          body: JSON.stringify({ action_type: actionType }),
+        });
+      } catch {
+        // best-effort only
+      }
+    },
+    [AUTH_BACKEND_URL, user?.authToken]
+  );
 
   const fetchFigmaFile = React.useCallback(async (body: FetchFigmaFileBody) => {
     if (!user?.authToken) return;
@@ -607,11 +624,12 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken, handle503]);
 
-  const fetchSyncScan = React.useCallback(async (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => {
+  const fetchSyncScan = React.useCallback(async (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => {
     if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
+    const base = { storybook_url: body.storybook_url, storybook_token: body.storybook_token };
     const payload = body.file_json
-      ? { file_json: body.file_json, storybook_url: body.storybook_url }
-      : { file_key: body.file_key, storybook_url: body.storybook_url, scope: body.scope, page_id: body.page_id, page_ids: body.page_ids };
+      ? { ...base, file_json: body.file_json }
+      : { ...base, file_key: body.file_key, scope: body.scope, page_id: body.page_id, page_ids: body.page_ids };
     const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
@@ -787,6 +805,7 @@ export default function AppTest() {
             useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
+            logFreeAction={logFreeAction}
             fetchSyncScan={fetchSyncScan}
             onNavigateToStats={() => setView(ViewState.ANALYTICS)}
           />

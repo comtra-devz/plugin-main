@@ -51,7 +51,8 @@ export interface SyncTabProps {
   setActiveSyncTab: (tab: 'SB' | 'GH' | 'BB') => void;
   isSbConnected: boolean;
   storybookUrl: string | null;
-  handleConnectSb: (url: string) => void;
+  storybookToken: string | null;
+  handleConnectSb: (url: string, token?: string) => void;
   onDisconnectSb?: () => void;
   hasSyncScanned: boolean;
   handleSyncScan: () => void;

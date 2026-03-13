@@ -22,7 +22,9 @@ interface Props {
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
-  fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
+  /** Log free (0-credit) actions into activity stream (credit_transactions) without touching balance. */
+  logFreeAction?: (actionType: string) => Promise<void>;
+  fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
   onNavigateToStats?: () => void;
 }
 
@@ -36,7 +38,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, fetchSyncScan, onNavigateToStats }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, onNavigateToStats }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -74,6 +76,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [activeSyncTab, setActiveSyncTab] = useState<'SB' | 'GH' | 'BB'>('SB');
   const [isSbConnected, setIsSbConnected] = useState(false);
   const [storybookUrl, setStorybookUrl] = useState<string | null>(null);
+  const [storybookToken, setStorybookToken] = useState<string | null>(null);
   const [isSyncScanning, setIsSyncScanning] = useState(false);
   const [syncItems, setSyncItems] = useState<typeof SYNC_ITEMS_MOCK>([]);
   const [syncScanError, setSyncScanError] = useState<string | null>(null);
@@ -137,7 +140,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           (async () => {
             if (!fetchSyncScan || !storybookUrl) return;
             try {
-              const result = await fetchSyncScan({ file_json: fileJson, storybook_url: storybookUrl });
+            const result = await fetchSyncScan({ file_json: fileJson, storybook_url: storybookUrl, storybook_token: storybookToken ?? undefined });
               setSyncItems(result.items || []);
               setHasSyncScanned(true);
               setSyncScanError(null);
@@ -178,10 +181,11 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           if (!fetchSyncScan || !storybookUrl) return;
           try {
             const body = hasFileJson
-              ? { file_json: msg.fileJson as object, storybook_url: storybookUrl }
+              ? { file_json: msg.fileJson as object, storybook_url: storybookUrl, storybook_token: storybookToken ?? undefined }
               : {
                   file_key: msg.fileKey as string,
                   storybook_url: storybookUrl,
+                  storybook_token: storybookToken ?? undefined,
                   scope: msg.scope ?? 'all',
                   page_id: msg.pageId ?? undefined,
                   page_ids: msg.pageIds ?? undefined,
@@ -238,7 +242,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [storybookUrl, fetchSyncScan]);
+  }, [storybookUrl, storybookToken, fetchSyncScan]);
 
   const getRemainingTime = (key: string) => {
     const end = cooldowns[key];
@@ -312,39 +316,27 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
      });
   };
 
-  // Tokens (CSS / JSON): tracked in activities (1 credit each); consume before requesting so activity is recorded
+  // Tokens (CSS / JSON): always free (no credits consumed), but logged as 0-credit activities for Stats + dashboard
   const handleGenerateCss = async () => {
     pendingTokenRequestRef.current = 'css';
     setIsGeneratingCss(true);
     try {
-      const result = await consumeCredits({ action_type: 'token_css', credits_consumed: 1 });
-      if (result?.error) {
-        setIsGeneratingCss(false);
-        pendingTokenRequestRef.current = null;
-        return;
-      }
-      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
+      if (logFreeAction) await logFreeAction('token_css');
     } catch {
-      setIsGeneratingCss(false);
-      pendingTokenRequestRef.current = null;
+      // logging best-effort, ignore errors
     }
+    window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
   };
 
   const handleGenerateJson = async () => {
     pendingTokenRequestRef.current = 'json';
     setIsGeneratingJson(true);
     try {
-      const result = await consumeCredits({ action_type: 'token_json', credits_consumed: 1 });
-      if (result?.error) {
-        setIsGeneratingJson(false);
-        pendingTokenRequestRef.current = null;
-        return;
-      }
-      window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
+      if (logFreeAction) await logFreeAction('token_json');
     } catch {
-      setIsGeneratingJson(false);
-      pendingTokenRequestRef.current = null;
+      // logging best-effort, ignore errors
     }
+    window.parent.postMessage({ pluginMessage: { type: 'get-design-tokens' } }, '*');
   };
 
   const copyToClipboard = (text: string) => {
@@ -419,8 +411,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   // Sync Logic
-  const handleConnectSb = (url: string) => {
+  const handleConnectSb = (url: string, token?: string) => {
     setStorybookUrl(url);
+    setStorybookToken(token ?? null);
     setIsSbConnected(true);
     setSyncScanError(null);
   };
@@ -428,6 +421,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const handleDisconnectSb = () => {
     setIsSbConnected(false);
     setStorybookUrl(null);
+    setStorybookToken(null);
     setSyncScanError(null);
     setHasSyncScanned(false);
     setSyncItems([]);
@@ -616,6 +610,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             setActiveSyncTab={setActiveSyncTab}
             isSbConnected={isSbConnected}
             storybookUrl={storybookUrl}
+            storybookToken={storybookToken}
             handleConnectSb={handleConnectSb}
             onDisconnectSb={handleDisconnectSb}
             hasSyncScanned={hasSyncScanned}

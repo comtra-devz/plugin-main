@@ -569,7 +569,6 @@ function estimateCreditsByAction(actionType, nodeCount) {
   if (actionType === 'sync') return 1;
   if (actionType === 'scan_sync') return 15;
   if (actionType === 'sync_fix' || actionType === 'sync_storybook') return 5;
-  if (actionType === 'token_css' || actionType === 'token_json') return 1;
   return 5;
 }
 
@@ -804,6 +803,28 @@ app.post('/api/credits/consume', async (req, res) => {
     });
   } catch (err) {
     console.error('POST /api/credits/consume', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Log free actions (0-credit) in credit_transactions for activity tracking (Stats + dashboard) without touching balance
+app.post('/api/credits/log-free', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.status(204).end();
+  const body = req.body || {};
+  const rawType = body.action_type;
+  const actionType = typeof rawType === 'string' ? rawType.trim() : '';
+  if (!actionType) return res.status(400).json({ error: 'action_type required' });
+  if (actionType.length > 64) return res.status(400).json({ error: 'action_type too long' });
+  try {
+    await dbSql`
+      INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id)
+      VALUES (${userId}, ${actionType}, 0, null)
+    `;
+    res.status(204).end();
+  } catch (err) {
+    console.error('POST /api/credits/log-free', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1578,6 +1599,7 @@ app.post('/api/agents/sync-scan', async (req, res) => {
   const fileKey = (body.file_key || body.fileKey || '').trim();
   const fileJsonFromBody = body.file_json || body.fileJson;
   const storybookUrl = (body.storybook_url || body.storybookUrl || '').trim();
+  const storybookToken = (body.storybook_token || body.storybookToken || '').trim() || undefined;
 
   if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
   if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
@@ -1620,7 +1642,7 @@ app.post('/api/agents/sync-scan', async (req, res) => {
       return res.status(400).json({ error: 'file_json must include document' });
     }
 
-    const result = await runSyncScan(fileJson, storybookUrl);
+    const result = await runSyncScan(fileJson, storybookUrl, storybookToken);
 
     if (result.connectionStatus === 'unreachable' && result.error) {
       return res.status(400).json({ error: result.error, connectionStatus: 'unreachable' });

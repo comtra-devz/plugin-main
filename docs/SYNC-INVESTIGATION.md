@@ -180,7 +180,43 @@ Se lo “scan drift” richiederà solo `file_key` (e il backend farà GET file 
 
 ---
 
-## 6. Prossimi passi suggeriti
+## 6. Flusso utente: da link allo schermo Drift → correzione
+
+Per **coprire i casi in cui è possibile** arrivare allo schermo del prototipo (Deep Sync, tab Storybook, Drift Detected, N Violations, Sync All) e poi correggere:
+
+1. **Inserire il link (e opzionale token)**  
+   - Tab Code → Sync → tab Storybook.  
+   - URL: Storybook deployato (Vercel, Netlify, Chromatic, server interno) o esposto in locale con ngrok.  
+   - Token (opzionale): se lo Storybook è privato e richiede `Authorization: Bearer <token>`, l’utente lo inserisce nel campo “Access token (optional)”.  
+   - Clic su **Connect Storybook**.
+
+2. **Salvare il file Figma**  
+   - Il scan usa il contesto del file (file_key). Se il file non è salvato, compare l’errore “Save the file to run the scan.”.
+
+3. **Scan Project**  
+   - Clic su **Scan Project** (−15 crediti).  
+   - Il plugin chiede il contesto file a Figma (`get-file-context`, scope `all`), invia al backend `file_key` + `storybook_url` (+ `storybook_token` se presente).  
+   - Il backend recupera il file Figma e chiama lo Storybook (`/api/stories` o `/api/components` o `/index.json`); confronta componenti e restituisce gli item di drift.
+
+4. **Schermo “Drift Detected”**  
+   - Lista violazioni (nome componente, descrizione, “Select Layer” se c’è un layer Figma associato).  
+   - **Sync Fix** (singolo): −5 crediti, l’item viene rimosso dalla lista (correzione registrata lato Comtra; push reale verso repo/Storybook in fase successiva).  
+   - **Sync All**: −(N×5) crediti, tutti gli item vengono rimossi e si mostra “Everything Synchronized”.
+
+5. **Casi coperti**  
+   - Storybook **pubblico** (solo URL).  
+   - Storybook **privato** con token Bearer (URL + token opzionale).  
+   - File Figma **salvato** (file_key disponibile).  
+   - Crediti sufficienti e cooldown rispettato.
+
+6. **Casi non coperti (o parziali)**  
+   - Storybook solo in **localhost** senza ngrok/deploy → backend non raggiungibile.  
+   - Accesso Storybook con **solo SSO/login interattivo** → nessun token da inviare dal backend.  
+   - “Correzione” oggi = rimozione dalla lista e consumo crediti; **push verso repo/Storybook** (commit, PR) è step successivo.
+
+---
+
+## 7. Prossimi passi suggeriti
 
 1. **Storybook (priorità):** Validare in proof-of-concept: “Connect Storybook” = URL (+ auth se serve) → backend chiama API lettura (es. storybook-api) e confronta con file_key/file_json; output drift in formato SyncTab. Decidere se “Sync Fix” in v1 è solo export/copy o push via Git (GitHub/Bitbucket).
 2. **Crediti e stima:** Definire `action_type` per scan_sync / sync_fix / sync_all (o unico `sync` con `credits_consumed` variabile) e collegare in Code.tsx: stima prima dell’azione, consume dopo successo (stessa logica Audit).
@@ -192,4 +228,4 @@ Se lo “scan drift” richiederà solo `file_key` (e il backend farà GET file 
 
 ---
 
-Fine indagine. La **priorità** è la fattibilità della connessione con **Storybook** (lettura per drift; scrittura via repo o export); **GitHub/Bitbucket** seguono la stessa logica e sono non prioritarie per ora. Per domande su un punto specifico (schema API drift, crediti, messaggi plugin) si può espandere la sezione corrispondente.
+Fine indagine. Il flusso **link → Connect → Scan → Drift Detected → Sync Fix / Sync All** è implementato; token opzionale copre i casi di Storybook con accesso protetto da Bearer. La **priorità** è la fattibilità della connessione con **Storybook** (lettura per drift; scrittura via repo o export); **GitHub/Bitbucket** seguono la stessa logica e sono non prioritarie per ora. Per domande su un punto specifico (schema API drift, crediti, messaggi plugin) si può espandere la sezione corrispondente.

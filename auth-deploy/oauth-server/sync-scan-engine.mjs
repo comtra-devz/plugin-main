@@ -45,15 +45,20 @@ function extractFigmaComponents(node) {
  * - storybook-api: /api/stories, /api/components
  * - index.json (alcuni static export)
  * @param {string} baseUrl - URL base Storybook (es. https://storybook.example.com)
+ * @param {string} [authToken] - Token opzionale per Storybook privato (Authorization: Bearer)
  * @returns {Promise<{ stories?: any[], components?: any[], connectionStatus: string, error?: string }>}
  */
-async function fetchStorybookMetadata(baseUrl) {
+async function fetchStorybookMetadata(baseUrl, authToken) {
   const normalized = baseUrl.replace(/\/$/, '');
   const urlsToTry = [
     `${normalized}/api/stories`,
     `${normalized}/api/components`,
     `${normalized}/index.json`,
   ];
+  const headers = { Accept: 'application/json' };
+  if (authToken && typeof authToken === 'string' && authToken.trim()) {
+    headers['Authorization'] = `Bearer ${authToken.trim()}`;
+  }
 
   for (const url of urlsToTry) {
     let timeoutId;
@@ -61,7 +66,7 @@ async function fetchStorybookMetadata(baseUrl) {
       const controller = new AbortController();
       timeoutId = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(url, {
-        headers: { Accept: 'application/json' },
+        headers,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -123,9 +128,10 @@ function extractStorybookComponentNames(sbData) {
  * Genera drift items confrontando Figma e Storybook.
  * @param {object} fileJson - { document: { children: [...] } }
  * @param {string} storybookUrl
+ * @param {string} [storybookToken] - Token opzionale per Storybook con accesso protetto
  * @returns {Promise<{ items: Array<{id: string, name: string, status: string, lastEdited: string, desc: string}>, connectionStatus: string, error?: string }>}
  */
-export async function runSyncScan(fileJson, storybookUrl) {
+export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
   const doc = fileJson?.document || fileJson;
   const figma = extractFigmaComponents(doc);
   const figmaComponentNames = new Set([
@@ -133,7 +139,7 @@ export async function runSyncScan(fileJson, storybookUrl) {
     ...figma.instances.map((i) => i.mainName || i.name).filter(Boolean),
   ]);
 
-  const sbResult = await fetchStorybookMetadata(storybookUrl);
+  const sbResult = await fetchStorybookMetadata(storybookUrl, storybookToken);
   if (sbResult.connectionStatus !== 'ok') {
     return {
       items: [],

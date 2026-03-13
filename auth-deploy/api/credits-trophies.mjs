@@ -29,6 +29,11 @@ export default function handler(req, res) {
       req.url = '/api/credits/consume';
       return app(req, res);
     }
+    if (sub === 'log-free') {
+      if (req.method !== 'POST') return res.status(405).end();
+      req.url = '/api/credits/log-free';
+      return app(req, res);
+    }
     if (req.method !== 'GET') return res.status(405).end();
     req.url = '/api/credits' + qs;
     return app(req, res);

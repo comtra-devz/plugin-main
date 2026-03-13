@@ -9,6 +9,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   setActiveSyncTab,
   isSbConnected,
   storybookUrl,
+  storybookToken,
   handleConnectSb,
   onDisconnectSb,
   hasSyncScanned,
@@ -26,6 +27,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   lastSyncAllDate
 }) => {
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
+  const [tokenInput, setTokenInput] = useState(storybookToken || '');
   
   const handleScanClick = () => {
     handleSyncScan();
@@ -85,12 +87,22 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     onChange={(e) => setConnectInput(e.target.value)}
                     className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
                   />
-                  <p className="text-[10px] text-gray-500">Deployed Storybook or storybook-api (npm) exposing /api/stories.</p>
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Access token (optional, for private Storybook)</label>
+                    <input
+                      type="password"
+                      placeholder="Bearer token if required"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                      className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-500">Deployed Storybook or storybook-api exposing /api/stories. Use ngrok for local.</p>
                   <button
                     onClick={() => {
                       const url = connectInput.trim();
                       if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                        handleConnectSb(url);
+                        handleConnectSb(url, tokenInput.trim() || undefined);
                       }
                     }}
                     disabled={!connectInput.trim()}
