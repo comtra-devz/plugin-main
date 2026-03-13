@@ -69,7 +69,6 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/security" className={({ isActive }) => (isActive ? 'active' : '')}>
           Sicurezza e log
         </NavLink>
-        <hr className="sidebar-divider" aria-hidden="true" />
         <span className="sidebar-group" aria-hidden="true">Content Management</span>
         <NavLink to="/content/documentation" className={({ isActive }) => (isActive ? 'active' : '')}>
           Documentation
