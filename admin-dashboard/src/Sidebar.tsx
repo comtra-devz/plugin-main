@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { logout } from './AdminLogin';
-import NotificationsBell from './components/NotificationsBell';
 
 type SidebarProps = { open?: boolean; onClose?: () => void };
 
@@ -24,9 +23,8 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
 
   return (
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Navigazione">
-      <div className="sidebar-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-        <span>Comtra Admin</span>
-        <NotificationsBell />
+      <div className="sidebar-title">
+        Comtra Admin
       </div>
       <nav className="sidebar-nav">
         <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
