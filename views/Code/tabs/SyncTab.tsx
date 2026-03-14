@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { SyncTabProps, BRUTAL, COLORS } from '../types';
+import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 
 export const SyncTab: React.FC<SyncTabProps> = ({
   isPro,
@@ -11,6 +12,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   storybookUrl,
   storybookToken,
   handleConnectSb,
+  fetchCheckStorybook,
   onDisconnectSb,
   hasSyncScanned,
   handleSyncScan,
@@ -29,9 +31,32 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
   const [tokenInput, setTokenInput] = useState(storybookToken || '');
   const [usePrivateToken, setUsePrivateToken] = useState(!!storybookToken);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   const handleScanClick = () => {
     handleSyncScan();
+  };
+
+  const handleConnectClick = async () => {
+    const url = connectInput.trim();
+    if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return;
+    const token = usePrivateToken ? tokenInput.trim() || undefined : undefined;
+    setConnectError(null);
+    setIsConnecting(true);
+    try {
+      const result = fetchCheckStorybook ? await fetchCheckStorybook(url, token) : { ok: true };
+      if (result.ok) {
+        handleConnectSb(url, token);
+      } else {
+        setConnectError(result.error || 'Connection failed.');
+      }
+    } catch {
+      setConnectError('Could not reach the URL. Check it is deployed and reachable.');
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   return (
@@ -92,7 +117,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             <div className="p-4 animate-in slide-in-from-left-2">
               {!isSbConnected ? (
                 <div className="space-y-3">
-                  <p className="text-xs font-medium">Enter your Storybook URL to compare design vs code.</p>
+                  <p className="text-xs font-medium">Use your deployed Storybook URL (same one you open in the browser — e.g. Vercel, Chromatic, Netlify). We’ll check that it exposes the stories API.</p>
                   <input
                     type="url"
                     placeholder="https://your-storybook.example.com"
@@ -123,24 +148,35 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       <p className="text-[9px] text-gray-400 mt-0.5">Sent as <code className="bg-gray-100 px-0.5">Authorization: Bearer &lt;token&gt;</code> when fetching stories.</p>
                     </div>
                   )}
-                  <p className="text-[10px] text-gray-500">Deployed Storybook or storybook-api with /api/stories. Use ngrok for local.</p>
+                  <p className="text-[10px] text-gray-500">If your build doesn’t expose GET /api/stories yet, add <strong>storybook-api</strong> to your project (same URL will then work). Use ngrok for local.</p>
+                  {connectError && (
+                    <div className="p-2 bg-red-50 border border-red-200 text-[10px] text-red-700">
+                      {connectError}
+                    </div>
+                  )}
                   <button
-                    onClick={() => {
-                      const url = connectInput.trim();
-                      if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                        handleConnectSb(url, usePrivateToken ? tokenInput.trim() || undefined : undefined);
-                      }
-                    }}
-                    disabled={!connectInput.trim()}
+                    onClick={handleConnectClick}
+                    disabled={!connectInput.trim() || isConnecting}
                     className={`${BRUTAL.btn} w-full bg-pink-100 hover:bg-pink-200 disabled:bg-gray-200 disabled:cursor-not-allowed`}
                   >
-                    Connect Storybook
+                    {isConnecting ? 'Checking…' : 'Connect Storybook'}
                   </button>
                   <div className="pt-2 mt-2 border-t border-gray-200">
                     <p className="text-[9px] text-gray-500 leading-relaxed">
                       <strong className="text-gray-700">Security:</strong> Your token is only sent over HTTPS to our backend for the scan and is not stored anywhere. We never log or persist it.
                     </p>
                   </div>
+                  <div className="mt-3 p-2 border-2 border-dashed border-gray-300 bg-gray-50">
+                    <p className="text-[10px] text-gray-600 mb-1.5">Your URL doesn’t work yet?</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowGuideModal(true)}
+                      className="text-[10px] font-bold uppercase underline hover:text-pink-600"
+                    >
+                      How to expose the stories API →
+                    </button>
+                  </div>
+                  {showGuideModal && <SyncStorybookGuideModal onClose={() => setShowGuideModal(false)} />}
                 </div>
               ) : (
                 <div>

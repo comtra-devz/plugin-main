@@ -46,7 +46,20 @@ Obiettivo: minimizzare passi (una volta connessi Storybook + Git, il push è un 
 
 ---
 
-## 4. Cosa fare in prodotto (UI e copy)
+## 4. Come sapere se l’URL funziona — quale URL usare
+
+- **Quale URL inserire:** Lo **stesso URL** con cui il team apre lo Storybook nel browser (es. `https://design-system.vercel.app`, `https://main--xxx.chromatic.com`, oppure un URL ngrok per test in locale). Non serve un URL “speciale”: è l’indirizzo pubblico (o con token) dello Storybook deployato.
+- **Come facciamo a sapere se esistono gli endpoint:** Al clic su **Connect Storybook** il backend prova a chiamare quell’URL su **GET /api/stories**, poi **GET /api/components**, poi **GET /index.json**. Se una di queste risponde con JSON valido (elenco storie/componenti), la connessione è **ok** e l’utente vede “Connected”. Se nessuna risponde, mostriamo un messaggio chiaro (es. “Stories API not found at this URL”) così il team capisce subito che l’URL non espone ancora l’API.
+- **Come può un team ottenere un URL che funziona senza difficoltà:**
+  1. **Se usano già storybook-api (npm)** nello stesso progetto Storybook: l’URL che usano per aprire Storybook è già quello giusto; le route `/api/stories` e `/api/components` sono esposte dall’addon.
+  2. **Se non hanno l’API:** aggiungere **storybook-api** al progetto Storybook (o un server/export che esponga lo stesso formato). Dopo il deploy, lo stesso URL dello Storybook funziona in Comtra.
+  3. **Template di riferimento:** il progetto `storybook-test` in repo mostra un setup minimo (build + `/api/stories` su Vercel o in locale con server/ngrok). Qualsiasi team può copiare l’approccio o usare storybook-api.
+
+In sintesi: **non devono indovinare**. Inseriscono l’URL che già conoscono; noi verifichiamo al Connect e, se manca l’endpoint, lo diciamo chiaramente e indichiamo come aggiungerlo. Nel plugin, un box in fondo al form “Your URL doesn’t work yet?” apre una **modale guida** (“How to expose the stories API”) con le stesse istruzioni; la guida completa è in **`docs/SYNC-STORYBOOK-URL-GUIDE.md`**.
+
+---
+
+## 5. Cosa fare in prodotto (UI e copy)
 
 - **Storybook (tab):**
   - Chiarire in UI: **pubblico** = solo URL; **privato** = URL + “Access token” (spiegare in un hint: “We send it as Authorization: Bearer &lt;token&gt; when fetching your stories”).
@@ -56,8 +69,9 @@ Obiettivo: minimizzare passi (una volta connessi Storybook + Git, il push è un 
 
 ---
 
-## 5. Riferimenti
+## 6. Riferimenti
 
+- **Guida “Come esporre l’API Storybook”:** `docs/SYNC-STORYBOOK-URL-GUIDE.md` (cosa serve, formato JSON, opzioni A/B/C, test locale). Nel plugin: modale da box “Your URL doesn’t work yet?”.
 - **Flusso Sync:** `docs/SYNC-INVESTIGATION.md`
 - **Enterprise / SSO:** `docs/SYNC-ENTERPRISE-SSO.md`
 - **Storybook di test:** `storybook-test/README.md`

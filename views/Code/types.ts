@@ -53,6 +53,7 @@ export interface SyncTabProps {
   storybookUrl: string | null;
   storybookToken: string | null;
   handleConnectSb: (url: string, token?: string) => void;
+  fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string }>;
   onDisconnectSb?: () => void;
   hasSyncScanned: boolean;
   handleSyncScan: () => void;

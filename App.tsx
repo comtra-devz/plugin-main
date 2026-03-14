@@ -645,6 +645,18 @@ export default function AppTest() {
     return data;
   }, [user?.authToken, handle503]);
 
+  const fetchCheckStorybook = React.useCallback(async (storybookUrl: string, storybookToken?: string) => {
+    if (!user?.authToken) return { ok: false as const, error: 'Unauthorized' };
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-check-storybook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+      body: JSON.stringify({ storybook_url: storybookUrl, storybook_token: storybookToken || undefined }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false as const, error: (data.error as string) || 'Check failed' };
+    return { ok: data.ok === true, error: data.error as string | undefined };
+  }, [user?.authToken]);
+
   const fetchGenerateFeedback = useCallback(async (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => {
     if (!user?.authToken) return;
     const r = await fetch(`${AUTH_BACKEND_URL}/api/feedback/generate`, {
@@ -808,6 +820,7 @@ export default function AppTest() {
             consumeCredits={consumeCredits}
             logFreeAction={logFreeAction}
             fetchSyncScan={fetchSyncScan}
+            fetchCheckStorybook={fetchCheckStorybook}
             onNavigateToStats={() => setView(ViewState.ANALYTICS)}
           />
         </div>

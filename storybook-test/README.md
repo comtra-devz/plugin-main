@@ -48,18 +48,13 @@ Il backend Comtra deve poter raggiungere l’URL dello Storybook. Se il server �
 3. Copia l’URL pubblico (es. `https://abc123.ngrok.io`)
 4. Nel plugin Comtra: Code → Sync → incolla l’URL → Connect Storybook → Scan Project
 
-### Per test persistenti (deploy)
+### Per test persistenti (deploy su Vercel)
 
-Deploya `storybook-test` su Vercel/Netlify:
+1. In Vercel: **Import** il repo, poi in **Settings → General** imposta **Root Directory** su `storybook-test`.
+2. Il progetto include `vercel.json` (output: `storybook-static`) e `api/stories.js`: su Vercel **GET /api/stories** è serverless (non si usa `server.mjs`).
+3. Dopo il deploy, l’URL base (es. `https://storybook-test-xxx.vercel.app`) si usa in Comtra: Code → Sync → incolla URL → Connect Storybook (toggle Private OFF) → Scan Project.
 
-```bash
-# Esempio Vercel
-cd storybook-test
-npm run build
-npx vercel --prod
-```
-
-Oppure aggiungi uno script di deploy nel `package.json` del progetto principale. L’URL di deploy (es. `https://storybook-test-xxx.vercel.app`) può essere usato direttamente in Comtra.
+Da CLI (opzionale): `cd storybook-test && npm run build && npx vercel --prod`.
 
 ## Componenti
 

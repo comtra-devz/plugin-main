@@ -25,6 +25,7 @@ interface Props {
   /** Log free (0-credit) actions into activity stream (credit_transactions) without touching balance. */
   logFreeAction?: (actionType: string) => Promise<void>;
   fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
+  fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string }>;
   onNavigateToStats?: () => void;
 }
 
@@ -38,7 +39,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, onNavigateToStats }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, onNavigateToStats }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -612,6 +613,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             storybookUrl={storybookUrl}
             storybookToken={storybookToken}
             handleConnectSb={handleConnectSb}
+            fetchCheckStorybook={fetchCheckStorybook}
             onDisconnectSb={handleDisconnectSb}
             hasSyncScanned={hasSyncScanned}
             handleSyncScan={handleSyncScan}

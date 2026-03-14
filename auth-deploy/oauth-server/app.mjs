@@ -1604,8 +1604,26 @@ app.post('/api/agents/ux-audit', async (req, res) => {
   }
 });
 
-// --- Sync Scan (Figma vs Storybook drift detection)
-const { runSyncScan } = await import('./sync-scan-engine.mjs');
+// --- Sync: check Storybook URL (verifica che esponga /api/stories o equivalente)
+const { runSyncScan, fetchStorybookMetadata } = await import('./sync-scan-engine.mjs');
+
+app.post('/api/agents/sync-check-storybook', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const storybookUrl = (body.storybook_url || body.storybookUrl || '').trim();
+  const storybookToken = (body.storybook_token || body.storybookToken || '').trim() || undefined;
+  if (!storybookUrl) return res.status(400).json({ ok: false, error: 'storybook_url required' });
+  try {
+    const result = await fetchStorybookMetadata(storybookUrl, storybookToken);
+    if (result.connectionStatus === 'ok') {
+      return res.json({ ok: true });
+    }
+    return res.json({ ok: false, error: result.error || 'Stories API not found at this URL.' });
+  } catch (err) {
+    return res.json({ ok: false, error: err?.message || 'Connection failed.' });
+  }
+});
 
 app.post('/api/agents/sync-scan', async (req, res) => {
   const userId = getUserIdFromToken(req);

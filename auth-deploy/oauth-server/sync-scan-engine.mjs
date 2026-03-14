@@ -48,7 +48,7 @@ function extractFigmaComponents(node) {
  * @param {string} [authToken] - Token opzionale per Storybook privato (Authorization: Bearer)
  * @returns {Promise<{ stories?: any[], components?: any[], connectionStatus: string, error?: string }>}
  */
-async function fetchStorybookMetadata(baseUrl, authToken) {
+export async function fetchStorybookMetadata(baseUrl, authToken) {
   const normalized = baseUrl.replace(/\/$/, '');
   const urlsToTry = [
     `${normalized}/api/stories`,
