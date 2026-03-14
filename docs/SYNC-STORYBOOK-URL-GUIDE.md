@@ -4,6 +4,10 @@ Comtra Sync ha bisogno di **leggere** l’elenco di componenti/storie dal tuo St
 
 Questa guida spiega **cosa serve** e **come ottenerlo** in modo che qualsiasi team possa ricavare un link utilizzabile senza sforzo.
 
+**Come sono fatti di solito gli ambienti Storybook:** si esegue `storybook build` e si deploya la cartella `storybook-static/` (Vercel, Netlify, Chromatic). Il build genera già **index.json** nella root; un deploy normale espone quindi **GET /index.json** e Comtra può usarlo. L’URL con cui apri lo Storybook in browser risponde anche a `/index.json`.
+
+**Esempio di URL pubblico per test (funziona subito):** [Carbon Design System – React](https://react.carbondesignsystem.com) — `https://react.carbondesignsystem.com`. Espone `/index.json`; puoi usarlo in Comtra senza deployare nulla.
+
 ---
 
 ## 1. Cosa deve fare l’URL
@@ -68,8 +72,7 @@ Formati comuni che accettiamo: oggetto con `entries`, oppure array di storie. Se
 Se il tuo Storybook è solo build statico (HTML/JS) senza API:
 
 1. **In locale:** un server Node che serve la cartella statica e risponde a `GET /api/stories` con un JSON (generato a mano, da script o da un tool che legge le story).  
-2. **Su Vercel/Netlify:** una **serverless function** sullo stesso progetto che risponde a `GET /api/stories` con lo stesso JSON.  
-   - Esempio nel repo: cartella **storybook-test**: dopo il build, `api/stories.js` su Vercel diventa `GET /api/stories`. Lo stesso URL del deploy (es. `https://xxx.vercel.app`) funziona in Comtra.  
+2. **Su Vercel/Netlify:** una **serverless function** sullo stesso progetto che risponde a `GET /api/stories` con lo stesso JSON (es. `api/stories.js` su Vercel). Lo stesso URL del deploy (es. `https://xxx.vercel.app`) funziona in Comtra.  
 3. Puoi generare il JSON a build time (script che legge le story e scrive `stories.json`) e servirlo dalla function o come file statico esposto sotto `/api/stories` (rewrite se necessario).
 
 ### Opzione C — Build statico con index
@@ -93,4 +96,4 @@ Se il tuo Storybook è solo build statico (HTML/JS) senza API:
 - **Link da usare:** lo stesso URL dello Storybook (deploy o ngrok).  
 - **Cosa deve esserci:** almeno uno tra `GET /api/stories`, `GET /api/components`, `GET /index.json` che restituisca JSON nel formato sopra.  
 - **Se Connect fallisce:** Comtra ti avviserà; apri la guida “Come esporre l’API Storybook” (modale nel plugin) o questa doc per impostare uno degli endpoint.  
-- **Riferimenti in repo:** `storybook-test/` (server locale + `api/stories.js` per Vercel), `docs/SYNC-COMMON-CASE.md`, `docs/SYNC-INVESTIGATION.md`.
+- **Riferimenti:** `docs/SYNC-COMMON-CASE.md`, `docs/SYNC-INVESTIGATION.md`.

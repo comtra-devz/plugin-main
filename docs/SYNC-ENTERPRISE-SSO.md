@@ -1,15 +1,15 @@
-# Sync — SSO e Storybook protetto (funzione Enterprise)
+# Sync — SSO, Chromatic privato e Storybook protetto (funzione Enterprise)
 
-Documento per il **piano Enterprise**: supporto allo **Storybook (e in futuro altre sorgenti) protetto da SSO** (Single Sign-On aziendale). Definisce come potremmo risolvere il problema tecnico e **cosa chiediamo al cliente** (requisiti, accesso, setup).
+Documento per il **piano Enterprise**: supporto allo **Storybook (e in futuro altre sorgenti) protetto da SSO** (Single Sign-On aziendale) o hostato su **Chromatic con visibilità privata**. Definisce come potremmo risolvere il problema tecnico e **cosa chiediamo al cliente** (requisiti, accesso, setup).
 
 ---
 
-## 1. Perché SSO è un caso Enterprise
+## 1. Perché SSO e Chromatic privato sono casi Enterprise
 
-- **Pro/Team:** Lo Storybook è spesso deployato con URL **pubblico** o con **token/Basic auth**. Il backend Comtra può chiamare l’URL con un token; non serve niente di speciale lato cliente.
-- **Enterprise:** Lo Storybook (o il portale che lo serve) è dietro **login aziendale** (Okta, Azure AD, Google Workspace, SAML, ecc.). L’accesso avviene nel browser (cookie/sessione). Il backend Comtra **non** può fare login al posto dell’utente né riusare i cookie di sessione.
+- **Pro/Team:** Lo Storybook è spesso deployato con URL **pubblico** o con **token/Basic auth** (o Chromatic con **visibilità pubblica**). Il backend Comtra può chiamare l’URL con un token quando serve; non serve niente di speciale lato cliente.
+- **Enterprise:** (1) Lo Storybook (o il portale che lo serve) è dietro **login aziendale** (Okta, Azure AD, SAML, ecc.): accesso nel browser (cookie/sessione), il backend Comtra non può riusare i cookie. (2) Oppure lo Storybook è su **Chromatic privato**: accesso solo per collaboratori autenticati, senza token/API documentati per lettura da parte di un backend terzo.
 
-Quindi **SSO = scenario tipico Enterprise** (grandi aziende, design system interni, Storybook su dominio aziendale protetto). Trattarlo come **funzione Enterprise** ha senso: richiede setup dedicato e possibilmente un componente lato cliente.
+In entrambi i casi **il backend Comtra non può accedere con un semplice URL + token**. Trattarli come **funzione Enterprise** ha senso: richiede setup dedicato e possibilmente un componente lato cliente. Per Chromatic privato vedi anche `docs/SYNC-CHROMATIC-ACCESS.md`.
 
 ---
 
@@ -99,12 +99,12 @@ Indipendentemente dall’opzione scelta, documentare in offerta/onboarding:
 
 ## 5. Posizionamento prodotto
 
-- **Pro/Team:** Supporto Storybook con **URL pubblico** o **token Bearer** (già implementato). Niente SSO.
-- **Enterprise:** Supporto **Storybook protetto da SSO** tramite una delle soluzioni sopra (bridge, export, token M2M), con requisiti e checklist documentati. Venduto come **funzione Enterprise** con eventuale assistenza al setup (onboarding, doc, best practice).
+- **Pro/Team:** Supporto Storybook con **URL pubblico** o **token Bearer** (già implementato). Chromatic con **visibilità pubblica** (permalink). Niente SSO, niente Chromatic privato.
+- **Enterprise:** Supporto **Storybook protetto da SSO** o **Chromatic privato** tramite le stesse famiglie di soluzioni (bridge, export, token M2M / futura API Chromatic). Requisiti e checklist documentati; venduto come **funzione Enterprise** con eventuale assistenza al setup (onboarding, doc, best practice). Per il dettaglio Chromatic privato → `docs/SYNC-CHROMATIC-ACCESS.md`.
 
 ---
 
 ## 6. Riferimenti
 
 - **Flusso Sync attuale:** `docs/SYNC-INVESTIGATION.md` (flusso utente, casi coperti, token opzionale).
-- **Storybook di test:** `storybook-test/README.md`.
+- **Chromatic (pubblico vs privato, Enterprise):** `docs/SYNC-CHROMATIC-ACCESS.md`.

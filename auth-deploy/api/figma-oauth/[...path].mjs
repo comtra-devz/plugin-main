@@ -15,9 +15,11 @@ const VALID = ['init', 'plugin', 'start', 'callback', 'poll'];
 export default function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
-  const match = (req.url || '').match(/\/api\/figma-oauth\/([^/?]+)/);
+  const url = req.url || '';
+  // Rewrites can leave req.url as /auth/figma/start (original) or /api/figma-oauth/start (destination)
+  const match = url.match(/\/(?:api\/figma-oauth|auth\/figma)\/([^/?]+)/);
   const segment = match && VALID.includes(match[1]) ? match[1] : 'init';
-  const qs = (req.url || '').includes('?') ? (req.url || '').slice((req.url || '').indexOf('?')) : '';
+  const qs = url.includes('?') ? url.slice(url.indexOf('?')) : '';
   req.url = `/auth/figma/${segment}` + qs;
   return app(req, res);
 }

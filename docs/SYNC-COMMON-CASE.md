@@ -53,7 +53,7 @@ Obiettivo: minimizzare passi (una volta connessi Storybook + Git, il push è un 
 - **Come può un team ottenere un URL che funziona senza difficoltà:**
   1. **Se usano già storybook-api (npm)** nello stesso progetto Storybook: l’URL che usano per aprire Storybook è già quello giusto; le route `/api/stories` e `/api/components` sono esposte dall’addon.
   2. **Se non hanno l’API:** aggiungere **storybook-api** al progetto Storybook (o un server/export che esponga lo stesso formato). Dopo il deploy, lo stesso URL dello Storybook funziona in Comtra.
-  3. **Template di riferimento:** il progetto `storybook-test` in repo mostra un setup minimo (build + `/api/stories` su Vercel o in locale con server/ngrok). Qualsiasi team può copiare l’approccio o usare storybook-api.
+  3. **Setup minimo:** build Storybook + server o serverless che espone `/api/stories` (es. Vercel function `api/stories.js`), oppure usare **storybook-api** nel progetto Storybook.
 
 In sintesi: **non devono indovinare**. Inseriscono l’URL che già conoscono; noi verifichiamo al Connect e, se manca l’endpoint, lo diciamo chiaramente e indichiamo come aggiungerlo. Nel plugin, un box in fondo al form “Your URL doesn’t work yet?” apre una **modale guida** (“How to expose the stories API”) con le stesse istruzioni; la guida completa è in **`docs/SYNC-STORYBOOK-URL-GUIDE.md`**.
 
@@ -74,4 +74,3 @@ In sintesi: **non devono indovinare**. Inseriscono l’URL che già conoscono; n
 - **Guida “Come esporre l’API Storybook”:** `docs/SYNC-STORYBOOK-URL-GUIDE.md` (cosa serve, formato JSON, opzioni A/B/C, test locale). Nel plugin: modale da box “Your URL doesn’t work yet?”.
 - **Flusso Sync:** `docs/SYNC-INVESTIGATION.md`
 - **Enterprise / SSO:** `docs/SYNC-ENTERPRISE-SSO.md`
-- **Storybook di test:** `storybook-test/README.md`

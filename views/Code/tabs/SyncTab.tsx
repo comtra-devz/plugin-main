@@ -3,6 +3,16 @@ import React, { useState } from 'react';
 import { SyncTabProps, BRUTAL, COLORS } from '../types';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 
+const PRESET_STORYBOOKS: { label: string; value: string }[] = [
+  { label: 'Custom URL…', value: '' },
+  { label: 'Carbon Design System (IBM)', value: 'https://react.carbondesignsystem.com' },
+  { label: 'Chakra UI', value: 'https://chakra-ui.netlify.app' },
+  { label: 'SAP Fundamental Styles', value: 'https://sap.github.io/fundamental-styles' },
+  { label: 'Grafana UI', value: 'https://developers.grafana.com/ui/latest' },
+  { label: 'Ring UI (JetBrains)', value: 'https://jetbrains.github.io/ring-ui/master' },
+  { label: 'GitLab UI', value: 'https://gitlab-org.gitlab.io/gitlab/storybook' },
+];
+
 export const SyncTab: React.FC<SyncTabProps> = ({
   isPro,
   onUnlockRequest,
@@ -117,12 +127,29 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             <div className="p-4 animate-in slide-in-from-left-2">
               {!isSbConnected ? (
                 <div className="space-y-3">
-                  <p className="text-xs font-medium">Use your deployed Storybook URL (same one you open in the browser — e.g. Vercel, Chromatic, Netlify). We’ll check that it exposes the stories API.</p>
+                  <p className="text-xs font-medium">Pick a public Storybook or enter your own URL. We’ll check that it exposes the stories API.</p>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-bold uppercase text-gray-600">Quick pick</label>
+                    <select
+                      value={PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.value ?? ''}
+                      onChange={(e) => setConnectInput(e.target.value)}
+                      className="w-full border-2 border-black px-3 py-2 text-xs font-medium bg-white outline-none"
+                    >
+                      {PRESET_STORYBOOKS.map((p) => (
+                        <option key={p.value || 'custom'} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="text-[10px] font-bold uppercase text-gray-600 block mt-1">Or paste URL</label>
                   <input
                     type="url"
-                    placeholder="https://your-storybook.example.com"
+                    placeholder="https://react.carbondesignsystem.com"
                     value={connectInput}
-                    onChange={(e) => setConnectInput(e.target.value)}
+                    onChange={(e) => {
+                      setConnectInput(e.target.value);
+                    }}
                     className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
                   />
                   <div className="flex items-center justify-between gap-2 border border-dashed border-gray-400 bg-gray-50 p-2">

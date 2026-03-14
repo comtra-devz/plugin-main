@@ -48,7 +48,7 @@ export const SyncStorybookGuideModal: React.FC<Props> = ({ onClose }) => {
           <section>
             <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option B — Custom server or serverless</h4>
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              If you only have a static Storybook build: add a small server (or a serverless function) that responds to <code className="bg-gray-100 px-0.5">GET /api/stories</code> with the JSON. Our <strong>storybook-test</strong> folder in this repo shows the pattern: a Vercel function in <code className="bg-gray-100 px-0.5">api/stories.js</code> so the same deploy URL works. You can generate the JSON at build time and serve it from that route.
+              If you only have a static Storybook build: add a small server (or a serverless function) that responds to <code className="bg-gray-100 px-0.5">GET /api/stories</code> with the JSON. For example, a Vercel serverless function in <code className="bg-gray-100 px-0.5">api/stories.js</code> lets the same deploy URL work for both the Storybook UI and the stories API. You can generate the JSON at build time and serve it from that route.
             </p>
           </section>
 
