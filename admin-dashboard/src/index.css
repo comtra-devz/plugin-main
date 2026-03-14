@@ -79,6 +79,18 @@ code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
 }
 .brutal-input:focus { background: var(--yellow); }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
 .brutal-label {
   display: block;
   font-size: 10px;

@@ -92,3 +92,9 @@ Tutti i check devono essere **OK**. Poi prova **Login with Figma** dal plugin in
 - [ ] Redis collegato al progetto (o REDIS_URL impostata).
 - [ ] Figma: Redirect URL = `https://auth.comtra.dev/auth/figma/callback`.
 - [ ] `npm run check-auth` tutto OK → prova login dal plugin.
+
+---
+
+## Login funziona solo con un account / “altre email” no
+
+Se con un account Figma il login va a buon fine e con un altro (altra email) vedi "OAuth app with client id … doesn't exist", **il blocco è su Figma**, non nel nostro backend. Vedi **[FIGMA-OAUTH-OTHER-ACCOUNTS.md](./FIGMA-OAUTH-OTHER-ACCOUNTS.md)** per il flusso completo, perché succede e come verificarlo.

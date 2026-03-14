@@ -12,6 +12,7 @@ import { Affiliate } from './views/Affiliate';
 import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
 import { LevelUpModal } from './components/LevelUpModal';
+import { CreditGiftModal } from './components/CreditGiftModal';
 import { TrophiesModal } from './components/TrophiesModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
@@ -105,6 +106,8 @@ export default function AppTest() {
   const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
   const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number; discountCode?: string | null } | null>(null);
+  const [showCreditGiftModal, setShowCreditGiftModal] = useState(false);
+  const [creditGiftAmount, setCreditGiftAmount] = useState<number | null>(null);
   const [trophies, setTrophies] = useState<Trophy[] | null>(null);
   const [newTrophiesToast, setNewTrophiesToast] = useState<Array<{ id: string; name: string }>>([]);
   const [recentTransactions, setRecentTransactions] = useState<Array<{ action_type: string; credits_consumed: number; created_at: string }>>([]);
@@ -234,6 +237,10 @@ export default function AppTest() {
         return { ...prev, ...updates };
       });
       if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
+      if (data.gift && typeof data.gift.credits_added === 'number' && data.gift.credits_added > 0) {
+        setCreditGiftAmount(data.gift.credits_added);
+        setShowCreditGiftModal(true);
+      }
     } catch (e) {
       setCreditsFetchError('network');
       console.warn('[Comtra] GET /api/credits: network or parse error', e);
@@ -878,6 +885,26 @@ export default function AppTest() {
               setShowLevelUpModal(false);
               setLevelUpData(null);
               setView(ViewState.ANALYTICS);
+            }}
+          />
+        )}
+
+        {showCreditGiftModal && creditGiftAmount != null && (
+          <CreditGiftModal
+            creditsAdded={creditGiftAmount}
+            onClose={async () => {
+              if (user?.authToken) {
+                try {
+                  await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+                  });
+                } catch {
+                  // best-effort
+                }
+              }
+              setShowCreditGiftModal(false);
+              setCreditGiftAmount(null);
             }}
           />
         )}

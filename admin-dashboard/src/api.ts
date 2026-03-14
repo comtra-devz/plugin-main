@@ -192,6 +192,39 @@ export async function fetchUsers(limit = 50, offset = 0, country?: string): Prom
   return r.json();
 }
 
+/** Ricarica crediti admin: step 1 – richiedi PIN (inviato a admin@comtra.dev) */
+export async function rechargeRequest(userId: string, amount: number): Promise<{ ok: boolean; expires_at?: string }> {
+  const r = await fetch(`${BASE}/api/recharge`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ step: 'request', user_id: userId, amount }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 429) throw new Error(data.error || 'Ricarica consentita solo dopo 12 ore dall\'ultima');
+    throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
+}
+
+/** Ricarica crediti admin: step 2 – conferma con PIN */
+export async function rechargeConfirm(
+  userId: string,
+  amount: number,
+  pin: string
+): Promise<{ ok: boolean; credits_total: number; credits_remaining: number }> {
+  const r = await fetch(`${BASE}/api/recharge`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ step: 'confirm', user_id: userId, amount, pin: pin.trim() }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Errore ${r.status}`);
+  }
+  return r.json();
+}
+
 export async function fetchUsersCountries(): Promise<{ countries: string[] }> {
   const r = await fetch(apiUrl('users-countries'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
@@ -324,6 +357,8 @@ export interface AdminUser {
   credits_total: number;
   credits_used: number;
   credits_remaining: number;
+  /** Cooldown 12h: se impostato, la CTA Ricarica è disabilitata fino a 12h dopo questa data */
+  last_admin_recharge_at: string | null;
   country_code?: string | null;
   created_at: string;
 }

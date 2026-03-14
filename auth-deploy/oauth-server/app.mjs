@@ -162,6 +162,7 @@ app.get('/auth/figma/callback', async (req, res) => {
   });
   if (!meRes.ok) return res.status(400).send('Could not load user');
   const figmaUser = await meRes.json();
+  console.log('[OAuth] Callback: Figma user arrived', { figma_user_id: figmaUser.id, email: figmaUser.email || '(no email)', handle: figmaUser.handle });
 
   const user = {
     id: figmaUser.id,
@@ -302,6 +303,7 @@ app.get('/auth/figma/callback', async (req, res) => {
   const authToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '365d' });
   user.authToken = authToken;
 
+  if (tokenSaved) console.log('[OAuth] Login completato — questo log appare solo se la richiesta arriva al nostro callback', { user_id: user.id, email: user.email });
   await store.set(flowId, { user, tokenSaved });
   res.clearCookie('figma_oauth_flow');
   res.send(getReturnToFigmaHtml());
@@ -659,6 +661,17 @@ app.get('/api/credits', async (req, res) => {
         out.tags = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) ? [] : []);
       }
     } catch (_) { /* tags column may not exist before migration 006 */ }
+    try {
+      const giftRows = await dbSql`
+        SELECT credits_added, created_at FROM user_credit_gifts
+        WHERE user_id = ${userId} AND shown_at IS NULL ORDER BY created_at DESC
+      `;
+      if (giftRows.rows && giftRows.rows.length > 0) {
+        const totalAdded = giftRows.rows.reduce((s, r) => s + (Number(r.credits_added) || 0), 0);
+        const latest = giftRows.rows[0];
+        out.gift = { credits_added: totalAdded, created_at: latest.created_at };
+      }
+    } catch (_) { /* user_credit_gifts may not exist before migration 007 */ }
     res.json(out);
   } catch (err) {
     console.error('GET /api/credits', err);
@@ -672,6 +685,22 @@ app.post('/api/credits/estimate', async (req, res) => {
   const nodeCount = body.node_count != null ? Number(body.node_count) : undefined;
   const estimated = estimateCreditsByAction(actionType, nodeCount);
   res.json({ estimated_credits: estimated });
+});
+
+// --- Credit gift (admin recharge): mark as shown so plugin shows modal once
+app.post('/api/credit-gift-seen', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.json({ ok: true });
+  try {
+    await dbSql`
+      UPDATE user_credit_gifts SET shown_at = NOW() WHERE user_id = ${userId} AND shown_at IS NULL
+    `;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/credit-gift-seen', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // --- Level discount code (gamification): get current code for authenticated user

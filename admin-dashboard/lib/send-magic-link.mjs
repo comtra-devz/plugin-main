@@ -40,3 +40,34 @@ export async function sendMagicLinkEmail(toEmail, magicLinkToken) {
   }
   return { ok: true };
 }
+
+const ADMIN_RECHARGE_EMAIL = 'admin@comtra.dev';
+
+/**
+ * Invia il PIN per conferma ricarica crediti admin a admin@comtra.dev.
+ * Restituisce { ok: true } o { ok: false, error }.
+ */
+export async function sendRechargePinEmail(pin, amount, userEmailMasked, expiresAt) {
+  if (!resend) return { ok: false, error: 'RESEND_API_KEY non configurato' };
+
+  const expiresFormatted = expiresAt ? new Date(expiresAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '5 min';
+
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to: [ADMIN_RECHARGE_EMAIL],
+    subject: `[Comtra Admin] PIN ricarica crediti: ${amount} crediti – scade tra 5 min`,
+    html: `
+      <p>È stata richiesta una ricarica crediti da dashboard.</p>
+      <p><strong>Utente:</strong> ${userEmailMasked || '—'}</p>
+      <p><strong>Crediti:</strong> ${amount}</p>
+      <p><strong>PIN (valido 5 minuti):</strong> <code style="font-size:1.2em;background:#eee;padding:4px 8px;">${pin}</code></p>
+      <p>Scadenza: ${expiresFormatted}. Inserisci il PIN nella modale per confermare.</p>
+      <p>— Comtra Admin</p>
+    `,
+  });
+
+  if (error) {
+    return { ok: false, error: 'Impossibile inviare l\'email. Riprova più tardi.' };
+  }
+  return { ok: true };
+}

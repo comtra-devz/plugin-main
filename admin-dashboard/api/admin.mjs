@@ -129,7 +129,8 @@ async function handleStats(req, res) {
     WHERE action_type IN ('audit', 'scan') AND created_at >= ${thirtyDaysAgo}
   `;
   const creditsConsumed30d = await sql`
-    SELECT COALESCE(SUM(credits_consumed), 0)::int AS s FROM credit_transactions WHERE created_at >= ${thirtyDaysAgo}
+    SELECT COALESCE(SUM(credits_consumed), 0)::int AS s FROM credit_transactions
+    WHERE created_at >= ${thirtyDaysAgo} AND action_type != 'admin_recharge'
   `;
   const byActionType = await sql`
     SELECT action_type, COUNT(*)::int AS count, COALESCE(SUM(credits_consumed), 0)::int AS credits
@@ -423,7 +424,7 @@ async function handleUsers(req, res) {
     WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
   `;
   const rows = await sql`
-    SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, country_code, created_at
+    SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, last_admin_recharge_at, country_code, created_at
     FROM users
     WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
     ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
@@ -437,6 +438,7 @@ async function handleUsers(req, res) {
     credits_total: r.credits_total ?? 0,
     credits_used: r.credits_used ?? 0,
     credits_remaining: Math.max(0, (r.credits_total ?? 0) - (r.credits_used ?? 0)),
+    last_admin_recharge_at: r.last_admin_recharge_at ?? null,
     country_code: r.country_code ?? null,
     created_at: r.created_at,
   }));
@@ -1224,6 +1226,7 @@ async function handleHealth(req, res) {
     { id: 'auth', name: 'Auth API (root)', url: authUrl },
     { id: 'auth-credits', name: 'Auth API – GET /api/credits', url: null },
     { id: 'auth-oauth-init', name: 'Auth API – GET /api/figma-oauth/init', url: null },
+    { id: 'auth-figma-live', name: 'Figma OAuth – risposta Figma (app valida?)', url: null },
     { id: 'vercel', name: 'Vercel', url: 'https://www.vercel.com' },
   ];
 
@@ -1242,6 +1245,7 @@ async function handleHealth(req, res) {
     pingUrl(authUrl, 'auth'),
     pingApiGet(authUrl + '/api/credits', 'auth-credits', 401),
     pingApiGet(authUrl + '/api/figma-oauth/init', 'auth-oauth-init', 200),
+    pingFigmaOAuthLive(authUrl, 'auth-figma-live'),
     pingUrl('https://www.vercel.com', 'vercel'),
   ]);
 
@@ -1294,6 +1298,37 @@ async function pingApiGet(url, id, expectedStatus) {
     const ok = r.status === expectedStatus || (r.status < 500 && expectedStatus === 200);
     const message = ok ? null : `HTTP ${r.status} (expected ${expectedStatus})`;
     return { id, status: ok ? 'up' : r.status >= 500 ? 'down' : 'degraded', latencyMs: Date.now() - start, message };
+  } catch (e) {
+    return { id, status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Timeout o errore' };
+  }
+}
+
+/**
+ * Simula l’inizio del flusso OAuth: init → start (redirect) → richiesta a Figma.
+ * Se Figma risponde con "doesn't exist" / "does not exist" (app in review o client_id errato), segnala degraded.
+ * Così in dashboard si vede se il problema è lato Figma, non solo se i nostri endpoint rispondono.
+ */
+async function pingFigmaOAuthLive(authBaseUrl, id) {
+  const start = Date.now();
+  try {
+    const initRes = await fetch(authBaseUrl + '/api/figma-oauth/init', { method: 'GET', signal: AbortSignal.timeout(8000) });
+    if (!initRes.ok) return { id, status: 'down', latencyMs: Date.now() - start, message: `Init HTTP ${initRes.status}` };
+    const initData = await initRes.json();
+    const startUrl = initData?.authUrl;
+    if (!startUrl || typeof startUrl !== 'string') return { id, status: 'degraded', latencyMs: Date.now() - start, message: 'Init senza authUrl' };
+
+    const startRes = await fetch(startUrl, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    const figmaUrl = startRes.headers.get('location');
+    if (!figmaUrl || !figmaUrl.includes('figma.com')) return { id, status: 'degraded', latencyMs: Date.now() - start, message: 'Redirect a Figma non ricevuto' };
+
+    const figmaRes = await fetch(figmaUrl, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(10000) });
+    const body = await figmaRes.text();
+    const badMessage = body.includes("doesn't exist") || body.includes('does not exist') || body.includes('OAuth app with client id');
+    if (badMessage) {
+      const snippet = body.includes("doesn't exist") ? "Figma: OAuth app doesn't exist (app in review o client_id errato)" : (body.slice(0, 120).replace(/\s+/g, ' ').trim() || 'Figma: risposta di errore');
+      return { id, status: 'degraded', latencyMs: Date.now() - start, message: snippet };
+    }
+    return { id, status: 'up', latencyMs: Date.now() - start, message: null };
   } catch (e) {
     return { id, status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Timeout o errore' };
   }
