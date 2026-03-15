@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { SyncTabProps, BRUTAL, COLORS } from '../types';
+import { Button } from '../../../components/ui/Button';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 
 const PRESET_STORYBOOKS: { label: string; value: string }[] = [
@@ -277,13 +278,15 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       {connectError}
                     </div>
                   )}
-                  <button
+                  <Button
+                    variant="secondary"
+                    fullWidth
                     onClick={handleConnectClick}
                     disabled={!connectInput.trim() || isConnecting}
-                    className={`${BRUTAL.btn} w-full bg-pink-100 hover:bg-pink-200 disabled:bg-gray-200 disabled:cursor-not-allowed`}
+                    className="bg-pink-100 hover:bg-pink-200"
                   >
                     {isConnecting ? 'Checking…' : 'Connect Storybook'}
-                  </button>
+                  </Button>
                   <div className="pt-2 mt-2 border-t border-gray-200">
                     <p className="text-[9px] text-gray-500 leading-relaxed">
                       <strong className="text-gray-700">Security:</strong> Your token is only sent over HTTPS to our backend for the scan and is not stored anywhere. We never log or persist it.
@@ -323,14 +326,17 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   {!hasSyncScanned ? (
                     <div className="text-center">
                       <p className="text-[10px] text-gray-500 mb-2">Ready to inspect.</p>
-                      <button 
-                        onClick={handleScanClick} 
+                      <Button
+                        variant="black"
+                        fullWidth
+                        layout="row"
+                        onClick={handleScanClick}
                         disabled={isSyncScanning || !!getRemainingTime('scan_sync')}
-                        className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-gray-800 disabled:bg-gray-400 relative`}
+                        className="relative"
                       >
                         {isSyncScanning ? 'Scanning Drift...' : getRemainingTime('scan_sync') ? `Wait ${getRemainingTime('scan_sync')}` : `Scan Project`}
                         {(!getRemainingTime('scan_sync')) && <span className="absolute bottom-0.5 right-1 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">-15 Credits</span>}
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <div>
@@ -385,13 +391,16 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                             >
                                                 {layerSelectionFeedback === item.id ? 'SELECTED!' : item.layerId ? 'Select Layer' : 'No layer'}
                                             </button>
-                                            <button 
+                                            <Button
+                                                variant="primary"
+                                                layout="row"
+                                                size="sm"
                                                 onClick={(e) => handleSyncItem(item.id, e)}
-                                                className={`${BRUTAL.btn} flex-1 text-[10px] bg-[${COLORS.primary}] text-black hover:bg-white border-black relative h-12`}
+                                                className="flex-1 h-12 relative"
                                             >
                                                 Sync Fix
                                                 <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-5 Credits</span>
-                                            </button>
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
@@ -406,15 +415,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           <p className="text-[10px] text-gray-600 mb-2 px-1">
                             To push changes to your code, connect a Git repository (GitHub or Bitbucket). Don&apos;t have a repo? Create one and link your Storybook to it.
                           </p>
-                          <button 
-                            onClick={handleSyncAll} 
-                            className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black flex justify-center items-center gap-2 relative h-12`}
+                          <Button
+                            variant="primary"
+                            fullWidth
+                            layout="row"
+                            onClick={handleSyncAll}
+                            className="relative h-12"
                           >
                             <span>Sync All</span>
                             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
                                -{syncItems.length * 5} Credits
                             </span>
-                          </button>
+                          </Button>
                         </>
                       )}
 
@@ -443,18 +455,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           {activeSyncTab === 'GH' && (
             <div className="p-6 text-center animate-in slide-in-from-right-2">
               <p className="text-xs font-bold uppercase text-gray-400 mb-2">Integration In Progress</p>
-              <button disabled className={`${BRUTAL.btn} w-full bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed`}>
+              <Button variant="secondary" fullWidth disabled className="bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed">
                 Connect GitHub (Soon)
-              </button>
+              </Button>
             </div>
           )}
 
           {activeSyncTab === 'BB' && (
             <div className="p-6 text-center animate-in slide-in-from-right-2">
               <p className="text-xs font-bold uppercase text-gray-400 mb-2">Integration In Progress</p>
-              <button disabled className={`${BRUTAL.btn} w-full bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed`}>
+              <Button variant="secondary" fullWidth disabled className="bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed">
                 Connect Bitbucket (Soon)
-              </button>
+              </Button>
             </div>
           )}
 

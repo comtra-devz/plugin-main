@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import { BRUTAL } from '../constants';
+import { Button } from '../components/ui/Button';
 import { Confetti } from '../components/Confetti';
 import { AUTH_BACKEND_URL } from '../constants';
 import type { User } from '../types';
@@ -231,13 +232,14 @@ export const Documentation: React.FC<DocumentationProps> = ({ user }) => {
                           />
                       </div>
                       {supportError && <p className="text-[10px] font-bold text-red-600">{supportError}</p>}
-                      <button 
+                      <Button
+                        variant="primary"
+                        fullWidth
                         onClick={handleSubmitSupport}
                         disabled={wordCount < 2 || supportSending || !user?.authToken}
-                        className={`${BRUTAL.btn} w-full ${wordCount >= 2 && !supportSending && user?.authToken ? `bg-[${COLORS.primary}] text-black` : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
                           {supportSending ? 'Sending…' : 'Send Ticket'}
-                      </button>
+                      </Button>
                   </div>
               </div>
           </div>

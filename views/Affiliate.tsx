@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BRUTAL, COLORS, AUTH_BACKEND_URL, buildCheckoutUrl } from '../constants';
+import { AUTH_BACKEND_URL, buildCheckoutUrl } from '../constants';
+import { Button } from '../components/ui/Button';
 import { User } from '../types';
 
 interface Props {
@@ -121,13 +122,15 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
         ) : !affiliateCode ? (
           <div className="bg-[#f0f0f0] border-2 border-black p-4">
             <p className="text-xs text-gray-600 mb-2">You don't have an affiliate code yet. Sign up in one click.</p>
-            <button
+            <Button
+              variant="primary"
+              layout="row"
               onClick={handleGetCode}
               disabled={registering}
-              className={`${BRUTAL.btn} bg-[${COLORS.primary}] font-bold uppercase text-sm py-2 px-4 border-2 border-black disabled:opacity-60`}
+              className="font-bold uppercase text-sm"
             >
               {registering ? 'Registering…' : 'Get your affiliate code'}
-            </button>
+            </Button>
           </div>
         ) : (
           <>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 import { Confetti } from './Confetti.tsx';
 
 interface Props {
@@ -54,13 +55,15 @@ export const LevelUpModal: React.FC<Props> = ({ oldLevel, newLevel, discount, di
                   <code className="font-mono text-sm font-black bg-white px-2 py-1 border-2 border-black">
                     {discountCode}
                   </code>
-                  <button
+                  <Button
                     type="button"
+                    variant="black"
+                    size="sm"
                     onClick={handleCopyCode}
-                    className={`${BRUTAL.btn} text-[10px] px-2 py-1 border-2 border-black bg-black text-white hover:bg-[#ff90e8] hover:text-black transition-colors`}
+                    className="hover:bg-[#ff90e8] hover:text-black shrink-0"
                   >
                     {copied ? 'Copied!' : 'Copy'}
-                  </button>
+                  </Button>
                 </div>
                 <p className="text-[9px] text-gray-600 mt-1">Use at checkout for Annual plan</p>
               </div>
@@ -69,18 +72,12 @@ export const LevelUpModal: React.FC<Props> = ({ oldLevel, newLevel, discount, di
         )}
 
         <div className="flex flex-col gap-2">
-          <button
-            onClick={onViewStats}
-            className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-[#ff90e8] hover:text-black transition-colors`}
-          >
+          <Button variant="black" fullWidth onClick={onViewStats} className="hover:bg-[#ff90e8] hover:text-black">
             View in Stats
-          </button>
-          <button
-            onClick={onClose}
-            className={`${BRUTAL.btn} w-full border-2 border-black bg-white text-black hover:bg-gray-100 transition-colors`}
-          >
+          </Button>
+          <Button variant="secondary" fullWidth onClick={onClose}>
             Continue
-          </button>
+          </Button>
         </div>
       </div>
     </div>

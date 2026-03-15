@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BRUTAL, COLORS, AUTH_BACKEND_URL } from '../constants';
+import { BRUTAL, AUTH_BACKEND_URL } from '../constants';
+import { Button } from '../components/ui/Button';
 import { User } from '../types';
 import type { CreditsState } from '../App';
 
@@ -68,9 +69,9 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
               <p className="text-xs text-gray-600 mb-4 font-medium">
                  You've used all {totalCredits} credits in your current cycle. Upgrade to PRO to continue.
               </p>
-              <button data-component="Subscription: Warning Upgrade Button" onClick={onUpgrade} className={`${BRUTAL.btn} w-full bg-[#ffc900] mb-2`}>
+              <Button data-component="Subscription: Warning Upgrade Button" variant="secondary" fullWidth onClick={onUpgrade} className="!bg-[#ffc900] hover:!bg-[#ffb700] text-black mb-2">
                  Upgrade to PRO
-              </button>
+              </Button>
               <button data-component="Subscription: Warning Dismiss" onClick={() => setShowLimitWarning(false)} className="text-[10px] font-bold underline">
                  Close
               </button>
@@ -137,13 +138,15 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
             <code className="font-mono text-sm font-bold bg-white px-2 py-1 border-2 border-black flex-1 truncate">
               {levelDiscount.code}
             </code>
-            <button
+            <Button
               type="button"
+              variant="black"
+              size="sm"
               onClick={copyLevelCode}
-              className={`${BRUTAL.btn} text-[10px] px-2 py-1 shrink-0 border-2 border-black bg-black text-white hover:bg-[#ff90e8] hover:text-black`}
+              className="shrink-0 hover:bg-[#ff90e8] hover:text-black"
             >
               {discountCopied ? 'Copied!' : 'Copy'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -156,9 +159,9 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
             <li data-component="Subscription: Benefit 2">Full Code Export (React/Storybook)</li>
             <li data-component="Subscription: Benefit 3">Deep Fix e funzionalità sbloccate</li>
           </ul>
-          <button data-component="Subscription: Buy License Button" onClick={onUpgrade} className={`${BRUTAL.btn} bg-black text-white w-full`}>
+          <Button data-component="Subscription: Buy License Button" variant="black" fullWidth onClick={onUpgrade}>
             Acquista (da €7)
-          </button>
+          </Button>
         </div>
       )}
 

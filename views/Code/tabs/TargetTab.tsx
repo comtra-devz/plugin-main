@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { TargetTabProps, BRUTAL, COLORS } from '../types';
+import { TargetTabProps, BRUTAL } from '../types';
+import { Button } from '../../../components/ui/Button';
 
 const LANGUAGES = [
   { id: 'REACT', label: 'React + Tailwind' },
@@ -88,23 +89,26 @@ export const TargetTab: React.FC<TargetTabProps> = ({
             </div>
 
             {!generatedCode ? (
-              <button 
-                onClick={handleGenerate} 
-                className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 relative`}
+              <Button
+                variant="primary"
+                fullWidth
+                layout="row"
+                onClick={handleGenerate}
                 disabled={isGenerating}
+                className="relative"
               >
                 {isGenerating ? 'Generating...' : 'Generate Code'}
                 <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-40 Credits</span>
-              </button>
+              </Button>
             ) : (
               <div className="animate-in fade-in">
                 <div className={`${BRUTAL.card} font-mono text-[10px] bg-[#1a1a1a] text-gray-300 overflow-x-auto h-48 p-3 relative mb-2`}>
                   <div className="absolute top-2 right-2 text-[9px] text-gray-500 uppercase">{lang}</div>
                   <pre>{generatedCode}</pre>
                 </div>
-                <button onClick={handleCopy} className={`${BRUTAL.btn} bg-white w-full text-xs`}>
+                <Button variant="secondary" fullWidth onClick={handleCopy} className="text-xs">
                   {copied ? 'COPIED!' : 'COPY CODE'}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -125,10 +129,13 @@ export const TargetTab: React.FC<TargetTabProps> = ({
               </div>
             </div>
 
-            <button 
-              onClick={() => handleSyncComp('SB')} 
+            <Button
+              variant="primary"
+              fullWidth
+              layout="row"
+              onClick={() => handleSyncComp('SB')}
               disabled={isSyncingComp || !!getRemainingTime('comp_sync')}
-              className={`${BRUTAL.btn} w-full flex justify-center items-center gap-2 relative ${isSyncingComp || getRemainingTime('comp_sync') ? 'bg-gray-300 border-gray-400 text-gray-600' : `bg-[${COLORS.primary}]`}`}
+              className={`relative ${isSyncingComp || getRemainingTime('comp_sync') ? '!bg-gray-300 !border-gray-400 !text-gray-600 hover:!bg-gray-300' : ''}`}
             >
               {isSyncingComp ? (
                 <span>Weaving connection...</span>
@@ -141,7 +148,7 @@ export const TargetTab: React.FC<TargetTabProps> = ({
                 </>
               )}
               {(!getRemainingTime('comp_sync')) && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-40 Credits</span>}
-            </button>
+            </Button>
           </div>
         </>
       )}

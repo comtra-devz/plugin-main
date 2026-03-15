@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { TokensTabProps, BRUTAL, COLORS } from '../types';
+import { TokensTabProps, BRUTAL } from '../types';
+import { Button } from '../../../components/ui/Button';
 
 export const TokensTab: React.FC<TokensTabProps> = ({
   lastGeneratedCssDate,
@@ -48,14 +49,17 @@ export const TokensTab: React.FC<TokensTabProps> = ({
         </div>
         
         {!generatedCss ? (
-          <button 
-              onClick={handleGenerateCss} 
+          <Button
+              variant="primary"
+              fullWidth
+              layout="row"
+              onClick={handleGenerateCss}
               disabled={!!getRemainingTime('css_update') || isGeneratingCss}
-              className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 relative mt-2 hover:bg-white hover:border-black disabled:opacity-50 disabled:cursor-not-allowed`}
+              className="mt-2 relative"
             >
               {getRemainingTime('css_update') ? `Wait ${getRemainingTime('css_update')}` : (isGeneratingCss ? 'Updating...' : 'Generate CSS & Tokens')}
               {!getRemainingTime('css_update') && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">FREE</span>}
-            </button>
+            </Button>
         ) : (
           <div className="animate-in fade-in">
             <div className="bg-[#1a1a1a] border border-gray-700 p-2 font-mono text-[9px] text-[#ffc900] h-32 overflow-y-auto mb-3 custom-scrollbar">
@@ -64,18 +68,21 @@ export const TokensTab: React.FC<TokensTabProps> = ({
             
             {/* CSS Actions */}
             <div className="flex flex-col gap-2">
-                <button className={`${BRUTAL.btn} w-full text-[10px] bg-white text-black border-white hover:bg-gray-200`} onClick={handleCopyCss}>
+                <Button variant="secondary" fullWidth size="sm" onClick={handleCopyCss} className="border-white">
                   {copiedCss ? 'COPIED!' : 'Copy CSS'}
-                </button>
+                </Button>
                 
-                <button 
-                    onClick={handleGenerateCss} 
+                <Button
+                    variant="primary"
+                    fullWidth
+                    layout="row"
+                    onClick={handleGenerateCss}
                     disabled={!!getRemainingTime('css_update') || isGeneratingCss}
-                    className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 relative hover:bg-white hover:border-black disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className="relative"
                 >
                   {getRemainingTime('css_update') ? `Wait ${getRemainingTime('css_update')}` : (isGeneratingCss ? 'Updating...' : 'Update CSS')}
                   {!getRemainingTime('css_update') && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">FREE</span>}
-                </button>
+                </Button>
 
                 <button 
                     className={`${BRUTAL.btn} w-full h-12 text-[10px] border-white relative disabled:opacity-60 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${
@@ -114,14 +121,17 @@ export const TokensTab: React.FC<TokensTabProps> = ({
         </div>
         
         {!generatedJson ? (
-          <button 
-              onClick={handleGenerateJson} 
+          <Button
+              variant="primary"
+              fullWidth
+              layout="row"
+              onClick={handleGenerateJson}
               disabled={!!getRemainingTime('json_update') || isGeneratingJson}
-              className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 relative mt-2 hover:bg-white hover:border-black disabled:opacity-50 disabled:cursor-not-allowed`}
+              className="mt-2 relative"
             >
               {getRemainingTime('json_update') ? `Wait ${getRemainingTime('json_update')}` : (isGeneratingJson ? 'Generating...' : 'Generate JSON')}
               {!getRemainingTime('json_update') && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">FREE</span>}
-            </button>
+            </Button>
         ) : (
           <div className="animate-in fade-in">
             <div className="bg-[#1a1a1a] border border-gray-700 p-2 font-mono text-[9px] text-[#ffc900] h-32 overflow-y-auto mb-3 custom-scrollbar">
@@ -130,18 +140,21 @@ export const TokensTab: React.FC<TokensTabProps> = ({
             
             {/* JSON Actions */}
             <div className="flex flex-col gap-2">
-                <button className={`${BRUTAL.btn} w-full text-[10px] bg-white text-black border-white hover:bg-gray-200`} onClick={handleCopyJson}>
+                <Button variant="secondary" fullWidth size="sm" onClick={handleCopyJson} className="border-white">
                   {copiedJson ? 'COPIED!' : 'Copy JSON'}
-                </button>
+                </Button>
                 
-                <button 
-                    onClick={handleGenerateJson} 
+                <Button
+                    variant="primary"
+                    fullWidth
+                    layout="row"
+                    onClick={handleGenerateJson}
                     disabled={!!getRemainingTime('json_update') || isGeneratingJson}
-                    className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex justify-center items-center gap-2 relative hover:bg-white hover:border-black disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className="relative"
                 >
                   {getRemainingTime('json_update') ? `Wait ${getRemainingTime('json_update')}` : (isGeneratingJson ? 'Updating...' : 'Update JSON')}
                   {!getRemainingTime('json_update') && <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">FREE</span>}
-                </button>
+                </Button>
 
                 <button 
                     className={`${BRUTAL.btn} w-full h-12 text-[10px] border-white relative disabled:opacity-60 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${

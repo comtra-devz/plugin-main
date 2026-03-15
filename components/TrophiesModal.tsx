@@ -1,5 +1,6 @@
 import React from 'react';
 import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 import { Confetti } from './Confetti.tsx';
 
 interface Props {
@@ -37,18 +38,12 @@ export const TrophiesModal: React.FC<Props> = ({ trophies, onClose, onViewStats 
         </div>
 
         <div className="flex flex-col gap-2">
-          <button
-            onClick={onViewStats}
-            className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-[#ff90e8] hover:text-black transition-colors`}
-          >
+          <Button variant="black" fullWidth onClick={onViewStats} className="hover:bg-[#ff90e8] hover:text-black">
             View in Stats
-          </button>
-          <button
-            onClick={onClose}
-            className={`${BRUTAL.btn} w-full border-2 border-black bg-white text-black hover:bg-gray-100 transition-colors`}
-          >
+          </Button>
+          <Button variant="secondary" fullWidth onClick={onClose}>
             Continue
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 import type { ToastAction } from '../contexts/ToastContext';
 
 interface Props {
@@ -78,17 +78,17 @@ export const Toast: React.FC<Props> = ({
       {actions.length > 0 && (
         <div className={`flex flex-wrap items-center gap-2 mt-3 pt-2 border-t ${actionBorder}`}>
           {actions.map((a, i) => (
-            <button
+            <Button
               key={i}
-              type="button"
+              variant="black"
+              size="sm"
               onClick={() => {
                 a.onClick();
                 onDismiss();
               }}
-              className={`${BRUTAL.btn} text-[10px] py-1.5 px-2 bg-black text-white hover:bg-gray-800`}
             >
               {a.label}
-            </button>
+            </Button>
           ))}
           {dismissible && (
             <button

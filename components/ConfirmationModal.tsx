@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 
 interface Props {
   title: string;
@@ -26,12 +27,14 @@ export const ConfirmationModal: React.FC<Props> = ({ title, message, onConfirm, 
         </p>
 
         <div className="flex flex-col gap-2">
-            <button 
+            <Button
+                variant={isWarning ? 'danger' : 'black'}
+                fullWidth
                 onClick={onConfirm}
-                className={`${BRUTAL.btn} w-full ${isWarning ? 'bg-red-600 text-white border-red-800 hover:bg-red-700' : 'bg-black text-white hover:bg-gray-800'} active:translate-y-1 active:shadow-none`}
+                className="active:translate-y-1 active:shadow-none"
             >
                 {confirmLabel}
-            </button>
+            </Button>
             <button 
                 onClick={onCancel}
                 className="text-[10px] font-bold uppercase underline text-gray-500 hover:text-black text-center py-2"

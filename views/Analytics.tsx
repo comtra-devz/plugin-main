@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { BRUTAL, COLORS, AUTH_BACKEND_URL, LINKEDIN_TROPHY_SHARE_BASE, LINKEDIN_FOOTER_LINK } from '../constants';
+import { BRUTAL, AUTH_BACKEND_URL, LINKEDIN_TROPHY_SHARE_BASE, LINKEDIN_FOOTER_LINK } from '../constants';
+import { Button } from '../components/ui/Button';
 import { getCanonicalTrophyId, getLinkedInPostForTrophy } from '../linkedinTrophyPosts';
 import { User, UserStats, Trophy } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
@@ -446,12 +447,15 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
                   
                   {currentBadge.unlocked ? (
                       <>
-                        <button 
+                        <Button
+                          variant="black"
+                          fullWidth
+                          layout="row"
                           onClick={() => handleShareBadge(currentBadge.id)}
-                          className={`${BRUTAL.btn} w-full bg-[#0077b5] text-white border-black flex justify-center items-center gap-2`}
+                          className="!bg-[#0077b5] hover:!bg-[#006097]"
                         >
                           Share on LinkedIn
-                        </button>
+                        </Button>
                         <p className="text-[10px] text-gray-600 mt-2 leading-relaxed">
                           We copy the post text for you — paste it in the LinkedIn window (Ctrl+V / Cmd+V). You can tag @Comtra in your post if you’d like.
                         </p>

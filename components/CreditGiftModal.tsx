@@ -1,5 +1,6 @@
 import React from 'react';
 import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 import { Confetti } from './Confetti.tsx';
 
 interface Props {
@@ -26,12 +27,9 @@ export const CreditGiftModal: React.FC<Props> = ({ creditsAdded, onClose }) => {
           <p className="text-3xl font-black">+{creditsAdded}</p>
         </div>
 
-        <button
-          onClick={onClose}
-          className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-[#ff90e8] hover:text-black transition-colors`}
-        >
+        <Button variant="black" fullWidth onClick={onClose} className="hover:bg-[#ff90e8] hover:text-black">
           Continua
-        </button>
+        </Button>
       </div>
     </div>
   );

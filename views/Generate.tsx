@@ -556,18 +556,17 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
 
             {/* Action Buttons */}
             <div className="flex gap-2">
-                <button 
-                    onClick={() => setShowReport(false)}
-                    className={`${BRUTAL.btn} flex-1 bg-white text-black text-xs`}
-                >
+                <Button variant="secondary" onClick={() => setShowReport(false)} className="flex-1 text-xs">
                     Back
-                </button>
-                <button 
+                </Button>
+                <Button
+                    variant={conversionSelected ? 'black' : 'primary'}
+                    layout="row"
                     onClick={handleViewFigma}
-                    className={`${BRUTAL.btn} flex-[2] text-xs ${conversionSelected ? 'bg-black text-white' : `bg-[${COLORS.primary}] text-black`}`}
+                    className="flex-[2] text-xs"
                 >
                     {conversionSelected ? 'View Component in Figma' : 'Apply Changes'}
-                </button>
+                </Button>
             </div>
         </div>
       )}
@@ -586,12 +585,12 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
               autoFocus
             />
             <div className="flex gap-2">
-              <button onClick={() => { setShowFeedbackModal(false); setFeedbackComment(''); }} className={`${BRUTAL.btn} flex-1 bg-white text-black text-xs`}>
+              <Button variant="secondary" onClick={() => { setShowFeedbackModal(false); setFeedbackComment(''); }} className="flex-1 text-xs">
                 Cancel
-              </button>
-              <button onClick={handleFeedbackSubmit} className={`${BRUTAL.btn} flex-1 bg-black text-white text-xs`}>
+              </Button>
+              <Button variant="black" onClick={handleFeedbackSubmit} className="flex-1 text-xs">
                 Send feedback
-              </button>
+              </Button>
             </div>
           </div>
         </div>
