@@ -64,11 +64,24 @@ export default async function handler(req, res) {
   if (!userId) return res.status(400).json({ error: 'user_id required' });
   if (amount <= 0) return res.status(400).json({ error: 'amount must be positive' });
 
+  function isMigrationError(err) {
+    const msg = err?.message != null ? String(err.message) : '';
+    return /does not exist|relation.*does not exist|column.*last_admin_recharge|admin_recharge_pins|user_credit_gifts/i.test(msg);
+  }
+
   if (step === 'request') {
     // Cooldown 12h: non creare nuovo PIN se ultima ricarica < 12h fa
-    const userRow = await sql`
-      SELECT last_admin_recharge_at, email FROM users WHERE id = ${userId} LIMIT 1
-    `;
+    let userRow;
+    try {
+      userRow = await sql`
+        SELECT last_admin_recharge_at, email FROM users WHERE id = ${userId} LIMIT 1
+      `;
+    } catch (err) {
+      if (isMigrationError(err)) {
+        return res.status(503).json({ error: 'Ricarica non disponibile: eseguire la migration 007 sul database (auth-deploy/migrations/007_admin_recharge.sql)' });
+      }
+      throw err;
+    }
     const u = userRow?.rows?.[0];
     if (!u) return res.status(404).json({ error: 'User not found' });
     const lastAt = u.last_admin_recharge_at ? new Date(u.last_admin_recharge_at) : null;
@@ -86,10 +99,17 @@ export default async function handler(req, res) {
     const pinHash = hashPin(pin);
     const expiresAt = new Date(Date.now() + PIN_TTL_MINUTES * 60 * 1000);
 
-    await sql`
-      INSERT INTO admin_recharge_pins (user_id, amount, pin_hash, expires_at)
-      VALUES (${userId}, ${amount}, ${pinHash}, ${expiresAt})
-    `;
+    try {
+      await sql`
+        INSERT INTO admin_recharge_pins (user_id, amount, pin_hash, expires_at)
+        VALUES (${userId}, ${amount}, ${pinHash}, ${expiresAt})
+      `;
+    } catch (err) {
+      if (isMigrationError(err)) {
+        return res.status(503).json({ error: 'Ricarica non disponibile: eseguire la migration 007 sul database (auth-deploy/migrations/007_admin_recharge.sql)' });
+      }
+      throw err;
+    }
 
     const emailResult = await sendRechargePinEmail(
       pin,
@@ -111,11 +131,19 @@ export default async function handler(req, res) {
     const pinHash = hashPin(pin);
     const now = new Date();
 
-    const pins = await sql`
-      SELECT id, user_id, amount FROM admin_recharge_pins
-      WHERE user_id = ${userId} AND amount = ${amount} AND pin_hash = ${pinHash} AND expires_at > ${now}
-      LIMIT 1
-    `;
+    let pins;
+    try {
+      pins = await sql`
+        SELECT id, user_id, amount FROM admin_recharge_pins
+        WHERE user_id = ${userId} AND amount = ${amount} AND pin_hash = ${pinHash} AND expires_at > ${now}
+        LIMIT 1
+      `;
+    } catch (err) {
+      if (isMigrationError(err)) {
+        return res.status(503).json({ error: 'Ricarica non disponibile: eseguire la migration 007 sul database (auth-deploy/migrations/007_admin_recharge.sql)' });
+      }
+      throw err;
+    }
     const row = pins?.rows?.[0];
     if (!row) {
       return res.status(400).json({ error: 'PIN non valido o scaduto' });
@@ -129,15 +157,22 @@ export default async function handler(req, res) {
     const used = Number(user.credits_used) || 0;
     const creditsRemaining = Math.max(0, newTotal - used);
 
-    await sql`UPDATE users SET credits_total = ${newTotal}, last_admin_recharge_at = NOW(), updated_at = NOW() WHERE id = ${userId}`;
-    await sql`
-      INSERT INTO credit_transactions (user_id, action_type, credits_consumed)
-      VALUES (${userId}, 'admin_recharge', ${-amount})
-    `;
-    await sql`
-      INSERT INTO user_credit_gifts (user_id, credits_added) VALUES (${userId}, ${amount})
-    `;
-    await sql`DELETE FROM admin_recharge_pins WHERE id = ${row.id}`;
+    try {
+      await sql`UPDATE users SET credits_total = ${newTotal}, last_admin_recharge_at = NOW(), updated_at = NOW() WHERE id = ${userId}`;
+      await sql`
+        INSERT INTO credit_transactions (user_id, action_type, credits_consumed)
+        VALUES (${userId}, 'admin_recharge', ${-amount})
+      `;
+      await sql`
+        INSERT INTO user_credit_gifts (user_id, credits_added) VALUES (${userId}, ${amount})
+      `;
+      await sql`DELETE FROM admin_recharge_pins WHERE id = ${row.id}`;
+    } catch (err) {
+      if (isMigrationError(err)) {
+        return res.status(503).json({ error: 'Ricarica non disponibile: eseguire la migration 007 sul database (auth-deploy/migrations/007_admin_recharge.sql)' });
+      }
+      throw err;
+    }
 
     return res.status(200).json({
       ok: true,

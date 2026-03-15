@@ -34,6 +34,7 @@ Checklist di azioni e link da completare o verificare **prima di pubblicare il p
 - [ ] **Store e variant ID**: confermare che `LEMON_SQUEEZY_CHECKOUT_BASE` e `LEMON_SQUEEZY_VARIANT_IDS` (1w, 1m, 6m, 1y) puntino allo store e ai prodotti corretti.
 - [ ] **Webhook**: URL webhook Lemon Squeezy impostato sul backend auth per aggiornare `plan` e `plan_expires_at` dopo acquisto.
 - [ ] **Sconti livello**: `LEMON_SQUEEZY_API_KEY` e `LEMON_SQUEEZY_STORE_ID` configurati per creare/disattivare codici sconto gamification (livello 5/10/15/20).
+- [ ] **Ripristinare PRO su Deep Sync**: quando lo store Lemon Squeezy è attivo, ripristinare il gate PRO nella tab Sync (`views/Code/tabs/SyncTab.tsx`). Cercare il commento `TEMPORARY: PRO gate disabled for Deep Sync` per il blocco da ripristinare e il copy da usare (private Storybook / SSO → Book a call for enterprise setup).
 
 ---
 

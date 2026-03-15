@@ -75,33 +75,8 @@ export const SyncTab: React.FC<SyncTabProps> = ({
         <h3 className="font-bold uppercase text-xs">Deep Sync</h3>
       </div>
 
-      {!isPro ? (
-        <div className="p-6 text-center">
-          <p className="text-xs font-medium text-gray-500 mb-4">
-            Unlock Deep Sync to connect Storybook, GitHub & BitBucket and detect design drift automatically.
-          </p>
-          <button 
-            onClick={onUnlockRequest} 
-            className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black relative flex justify-center items-center gap-2`}
-          >
-            Upgrade to Sync
-            <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
-          </button>
-          <p className="text-[10px] text-gray-500 mt-4 leading-relaxed">
-            Deep Sync is an <strong className="text-gray-700">Enterprise feature</strong>: connect design and code at scale, including SSO and private Storybook.{' '}
-            <a
-              href="https://calendly.com/comtra-enterprise"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-bold underline hover:text-[#ff90e8]"
-            >
-              Book a call
-            </a>{' '}
-            to discuss your setup.
-          </p>
-        </div>
-      ) : (
-        <div>
+      {/* TEMPORARY: PRO gate disabled for Deep Sync until Lemon Squeezy store is live — see docs/TO-DO-BEFORE-GOING-LIVE.md "Restore PRO gate for Deep Sync". When restoring, show upgrade block when !isPro with copy: "Need to connect a private Storybook or one behind SSO? Book a call for an enterprise setup." (Calendly link: https://calendly.com/comtra-enterprise) */}
+      <div>
           <div className="grid grid-cols-3 border-b-2 border-black">
             <button 
               onClick={() => setActiveSyncTab('SB')}
@@ -361,8 +336,20 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               </button>
             </div>
           )}
+
+          <p className="text-[10px] text-gray-500 px-4 pb-3 pt-2 border-t border-gray-100 mt-2 leading-relaxed">
+            Need to connect a private Storybook or one behind SSO?{' '}
+            <a
+              href="https://calendly.com/comtra-enterprise"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold underline hover:text-[#ff90e8]"
+            >
+              Book a call
+            </a>{' '}
+            for an enterprise setup.
+          </p>
         </div>
-      )}
     </div>
   );
 };

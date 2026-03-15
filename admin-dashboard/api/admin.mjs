@@ -32,6 +32,12 @@ function maskEmail(email) {
   return local.slice(0, 2) + '***' + domain;
 }
 
+/** True se l'errore indica tabella/colonna mancante (migration non eseguita). */
+function isMissingTableError(err) {
+  const msg = err?.message != null ? String(err.message) : '';
+  return /relation .* does not exist|table .* does not exist|column .* does not exist/i.test(msg);
+}
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -423,12 +429,27 @@ async function handleUsers(req, res) {
     SELECT COUNT(*)::int AS c FROM users
     WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
   `;
-  const rows = await sql`
-    SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, last_admin_recharge_at, country_code, created_at
-    FROM users
-    WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
-    ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, last_admin_recharge_at, country_code, created_at
+      FROM users
+      WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+    `;
+  } catch (err) {
+    if (err?.message && /last_admin_recharge_at|column.*does not exist/i.test(err.message)) {
+      rows = await sql`
+        SELECT id, email, name, plan, plan_expires_at, credits_total, credits_used, country_code, created_at
+        FROM users
+        WHERE (country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+        ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+      `;
+      rows.rows = (rows.rows || []).map(r => ({ ...r, last_admin_recharge_at: null }));
+    } else {
+      throw err;
+    }
+  }
   const users = (rows.rows || []).map(r => ({
     id: r.id,
     email_masked: maskEmail(r.email),
@@ -702,6 +723,12 @@ async function handleDiscountsStats(req, res) {
     });
   } catch (err) {
     console.error('handleDiscountsStats', err);
+    if (isMissingTableError(err)) {
+      return res.status(200).json({
+        level: { total: 0, by_level: { 5: 0, 10: 0, 15: 0, 20: 0 } },
+        throttle: { total: 0, valid: 0, expired: 0 },
+      });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 }
@@ -736,6 +763,7 @@ async function handleDiscountsLevel(req, res) {
     res.status(200).json({ total, limit, offset, items });
   } catch (err) {
     console.error('handleDiscountsLevel', err);
+    if (isMissingTableError(err)) return res.status(200).json({ total: 0, limit, offset, items: [] });
     res.status(500).json({ error: 'Server error' });
   }
 }
@@ -842,6 +870,19 @@ async function handleGenerateABStats(req, res) {
     });
   } catch (err) {
     console.error('handleGenerateABStats', err);
+    if (isMissingTableError(err)) {
+      const period = Math.min(365, Math.max(1, parseInt(req.query?.period, 10) || 30));
+      const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
+      return res.status(200).json({
+        period_days: period,
+        since,
+        total: { count: 0, input_tokens: 0, output_tokens: 0, credits_consumed: 0, avg_latency_ms: null, cost_usd: 0 },
+        by_variant: [],
+        feedback_by_variant: {},
+        requests_list: [],
+        timeline: [],
+      });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 }
@@ -850,12 +891,17 @@ async function handleGenerateABStats(req, res) {
 async function handleSupportFeedback(req, res) {
   const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 100));
   try {
-    const abRows = await sql`
-      SELECT f.id::text, 'A/B Generate' AS source, f.variant, f.thumbs, f.comment, r.created_at, u.email
-      FROM generate_ab_feedback f
-      JOIN generate_ab_requests r ON r.id = f.request_id
-      LEFT JOIN users u ON u.id = r.user_id
-    `;
+    let abRows = { rows: [] };
+    try {
+      abRows = await sql`
+        SELECT f.id::text, 'A/B Generate' AS source, f.variant, f.thumbs, f.comment, r.created_at, u.email
+        FROM generate_ab_feedback f
+        JOIN generate_ab_requests r ON r.id = f.request_id
+        LEFT JOIN users u ON u.id = r.user_id
+      `;
+    } catch (e) {
+      if (!isMissingTableError(e)) throw e;
+    }
     let ticketRows = { rows: [] };
     try {
       ticketRows = await sql`
@@ -864,7 +910,7 @@ async function handleSupportFeedback(req, res) {
         LEFT JOIN users u ON u.id = st.user_id
       `;
     } catch (e) {
-      if (!/relation "support_tickets" does not exist/i.test(String(e))) throw e;
+      if (!isMissingTableError(e)) throw e;
     }
     const combined = [...(abRows.rows || []), ...(ticketRows.rows || [])]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -881,6 +927,7 @@ async function handleSupportFeedback(req, res) {
     res.status(200).json({ items });
   } catch (err) {
     console.error('handleSupportFeedback', err);
+    if (isMissingTableError(err)) return res.status(200).json({ items: [] });
     res.status(500).json({ error: 'Server error', items: [] });
   }
 }
@@ -915,6 +962,7 @@ async function handlePluginLogs(req, res) {
     res.status(200).json({ items });
   } catch (err) {
     console.error('handlePluginLogs', err);
+    if (isMissingTableError(err)) return res.status(200).json({ items: [] });
     res.status(500).json({ error: 'Server error', items: [] });
   }
 }
@@ -950,6 +998,7 @@ async function handleDiscountsThrottle(req, res) {
     res.status(200).json({ total, limit, offset, items });
   } catch (err) {
     console.error('handleDiscountsThrottle', err);
+    if (isMissingTableError(err)) return res.status(200).json({ total: 0, limit, offset, items: [] });
     res.status(500).json({ error: 'Server error' });
   }
 }
