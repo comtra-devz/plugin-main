@@ -12,15 +12,18 @@ Questa guida spiega **cosa serve** e **come ottenerlo** in modo che qualsiasi te
 
 ## 1. Cosa deve fare l’URL
 
-Comtra prova, in ordine, questi endpoint sull’URL base che inserisci:
+Comtra prova, in ordine, questi endpoint sull’URL base che inserisci (non esiste uno standard unico, quindi proviamo più varianti):
 
-| Endpoint           | Descrizione |
-|--------------------|-------------|
-| **GET /api/stories**   | Preferito. Restituisce un JSON con l’elenco delle storie. |
-| **GET /api/components**| Alternativa. Restituisce un JSON con l’elenco dei componenti. |
-| **GET /index.json**    | Alcuni build statici di Storybook espongono un index in questo path. |
+| Endpoint | Descrizione |
+|----------|-------------|
+| **GET /api/stories** | storybook-api (npm), server custom. |
+| **GET /api/components** | storybook-api. |
+| **GET /index.json** | Build statici Storybook, Chromatic, GitHub Pages, ecc. |
+| **GET /stories.json** | Alcuni generatori / setup custom. |
+| **GET /storybook/index.json** | Export in subpath. |
+| **GET /api/storybook/stories** | Varianti API. |
 
-L’URL base è quello che usi in browser (es. `https://design-system.vercel.app`). Comtra chiamerà quindi `https://design-system.vercel.app/api/stories` (e, se non va, `/api/components`, poi `/index.json`).
+L’URL base è quello che usi in browser (es. `https://design-system.vercel.app`); query e hash (es. `?path=/docs/...`) vengono ignorati. Accettiamo più strutture JSON: `stories[]`, `components[]`, `entries{}`, oggetto con `v2.entries`, array alla root.
 
 ---
 

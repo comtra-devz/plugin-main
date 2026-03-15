@@ -57,53 +57,69 @@ function normalizeStorybookBaseUrl(input) {
 }
 
 /**
- * Prova a fetchare Storybook API. Supporta:
- * - storybook-api: /api/stories, /api/components
- * - index.json (alcuni static export)
- * @param {string} baseUrl - URL base Storybook (es. https://storybook.example.com, può contenere ?path=... che verrà rimosso)
- * @param {string} [authToken] - Token opzionale per Storybook privato (Authorization: Bearer)
+ * Path comuni dove gli Storybook (static export, addon, Chromatic, GitHub Pages, ecc.) espongono la lista stories.
+ * Non esiste uno standard unico: proviamo più varianti per massimizzare compatibilità.
+ */
+const STORYBOOK_LIST_PATHS = [
+  '/api/stories',           // storybook-api (npm), vari server custom
+  '/api/components',       // storybook-api
+  '/index.json',            // static export Storybook, Chromatic, molti host
+  '/stories.json',          // alcuni generatori / custom
+  '/storybook/index.json',  // export in subpath
+  '/api/storybook/stories', // varianti API
+];
+
+/**
+ * Da una risposta JSON grezza estrae un array di "storie/componenti" se la struttura è riconosciuta.
+ * @param {any} data - corpo JSON della risposta
+ * @returns {{ stories?: any[], components?: any[] } | null}
+ */
+function parseStorybookListResponse(data) {
+  if (!data || typeof data !== 'object') return null;
+  if (Array.isArray(data.stories)) return { stories: data.stories };
+  if (Array.isArray(data.components)) return { components: data.components };
+  if (Array.isArray(data)) return { stories: data };
+  if (data.entries && typeof data.entries === 'object' && !Array.isArray(data.entries)) {
+    const list = Object.values(data.entries).filter(Boolean);
+    return list.length ? { stories: list } : null;
+  }
+  if (data.stories && typeof data.stories === 'object' && !Array.isArray(data.stories)) {
+    const list = Object.values(data.stories).filter(Boolean);
+    return list.length ? { stories: list } : null;
+  }
+  if (data.v2?.entries && typeof data.v2.entries === 'object') {
+    const list = Object.values(data.v2.entries).filter(Boolean);
+    return list.length ? { stories: list } : null;
+  }
+  return null;
+}
+
+/**
+ * Prova a fetchare Storybook API. Prova tutti i path in STORYBOOK_LIST_PATHS e accetta
+ * più strutture JSON (stories[], components[], entries{}, ecc.).
+ * @param {string} baseUrl - URL base Storybook (query/hash rimossi)
+ * @param {string} [authToken] - Token opzionale (Authorization: Bearer)
  * @returns {Promise<{ stories?: any[], components?: any[], connectionStatus: string, error?: string }>}
  */
 export async function fetchStorybookMetadata(baseUrl, authToken) {
   const normalized = normalizeStorybookBaseUrl(baseUrl);
-  const urlsToTry = [
-    `${normalized}/api/stories`,
-    `${normalized}/api/components`,
-    `${normalized}/index.json`,
-  ];
   const headers = { Accept: 'application/json' };
   if (authToken && typeof authToken === 'string' && authToken.trim()) {
     headers['Authorization'] = `Bearer ${authToken.trim()}`;
   }
 
-  for (const url of urlsToTry) {
+  for (const path of STORYBOOK_LIST_PATHS) {
+    const url = normalized + path;
     let timeoutId;
     try {
       const controller = new AbortController();
       timeoutId = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(url, {
-        headers,
-        signal: controller.signal,
-      });
+      const res = await fetch(url, { headers, signal: controller.signal });
       clearTimeout(timeoutId);
       if (!res.ok) continue;
       const data = await res.json();
-
-      // storybook-api: { stories: [...] } o { components: [...] }
-      if (Array.isArray(data.stories)) {
-        return { stories: data.stories, connectionStatus: 'ok' };
-      }
-      if (Array.isArray(data.components)) {
-        return { components: data.components, connectionStatus: 'ok' };
-      }
-      // index.json: spesso { entries: { ... } } o struttura simile
-      if (data.entries && typeof data.entries === 'object') {
-        const stories = Object.values(data.entries).filter(Boolean);
-        return { stories, connectionStatus: 'ok' };
-      }
-      if (Array.isArray(data)) {
-        return { stories: data, connectionStatus: 'ok' };
-      }
+      const parsed = parseStorybookListResponse(data);
+      if (parsed) return { ...parsed, connectionStatus: 'ok' };
     } catch (err) {
       if (timeoutId) clearTimeout(timeoutId);
       continue;
@@ -112,7 +128,7 @@ export async function fetchStorybookMetadata(baseUrl, authToken) {
 
   return {
     connectionStatus: 'unreachable',
-    error: 'Could not connect to Storybook. Ensure it is deployed and publicly accessible. If using storybook-api (npm), ensure /api/stories is exposed.',
+    error: 'Could not connect to Storybook. Ensure it is deployed and that the URL exposes a story list (e.g. /index.json, /api/stories, or see the guide in the plugin).',
   };
 }
 

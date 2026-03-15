@@ -26,30 +26,46 @@ function normalizeStorybookUrl(input: string): string {
   }
 }
 
-/** Check Storybook lato client (browser): prova /api/stories, /api/components, /index.json. Per URL pubblici evita il backend. */
+/** Path comuni per la lista stories (allineati al backend): più varianti = meno rigidità. */
+const STORYBOOK_LIST_PATHS = [
+  '/api/stories',
+  '/api/components',
+  '/index.json',
+  '/stories.json',
+  '/storybook/index.json',
+  '/api/storybook/stories',
+];
+
+/** Verifica se il JSON di risposta contiene una lista stories/componenti in formato riconosciuto. */
+function isStorybookListResponse(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  if (Array.isArray(d.stories)) return true;
+  if (Array.isArray(d.components)) return true;
+  if (Array.isArray(data)) return true;
+  if (d.entries && typeof d.entries === 'object' && !Array.isArray(d.entries)) return Object.keys(d.entries as object).length > 0;
+  if (d.stories && typeof d.stories === 'object' && !Array.isArray(d.stories)) return true;
+  if (d.v2?.entries && typeof (d.v2 as Record<string, unknown>).entries === 'object') return true;
+  return false;
+}
+
+/** Check Storybook lato client (browser): prova tutti i path comuni e accetta più strutture JSON. Per URL pubblici evita il backend. */
 async function checkStorybookFromClient(
   baseUrl: string,
   token?: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const urlsToTry = [
-    `${baseUrl}/api/stories`,
-    `${baseUrl}/api/components`,
-    `${baseUrl}/index.json`,
-  ];
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (token?.trim()) headers['Authorization'] = `Bearer ${token.trim()}`;
 
-  for (const url of urlsToTry) {
+  for (const path of STORYBOOK_LIST_PATHS) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(url, { headers, signal: controller.signal });
+      const res = await fetch(baseUrl + path, { headers, signal: controller.signal });
       clearTimeout(timeoutId);
       if (!res.ok) continue;
       const data = await res.json();
-      if (Array.isArray(data.stories)) return { ok: true };
-      if (Array.isArray(data.components)) return { ok: true };
-      if (data.entries && typeof data.entries === 'object') return { ok: true };
+      if (isStorybookListResponse(data)) return { ok: true };
     } catch {
       // CORS, network, timeout: try next URL
     }
@@ -128,7 +144,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
         setConnectError(result.error || 'Connection failed.');
       }
     } catch {
-      setConnectError('Could not reach the URL. Check it is deployed and reachable.');
+      setConnectError('Connection failed. If your Storybook URL is correct, check your internet connection and try again.');
     } finally {
       setIsConnecting(false);
     }
@@ -199,13 +215,15 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   </div>
                   <label className="text-[10px] font-bold uppercase text-gray-600 block mt-1">Or paste URL</label>
                   <input
-                    type="url"
-                    placeholder="https://react.carbondesignsystem.com"
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    placeholder="https://jetbrains.github.io/ring-ui/master"
                     value={connectInput}
                     onChange={(e) => {
                       setConnectInput(e.target.value);
                     }}
-                    className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
+                    className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none min-w-0"
                   />
                   <div className="flex items-center justify-between gap-2 border border-dashed border-gray-400 bg-gray-50 p-2">
                     <span className="text-[10px] font-bold uppercase text-gray-700">Private Storybook (use access token)</span>
