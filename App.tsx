@@ -88,32 +88,29 @@ function SessionLoader() {
   );
 }
 
-/** Skeleton che simula il layout dell'app (header + content + nav). Durata minima 2s. */
+/** Skeleton: solo rettangoli e forme con pulse, niente bordi né ombre scure. Durata minima 2s. */
 function CreditsLoader() {
   return (
     <div className="min-h-screen w-full bg-[#fdfdfd] flex flex-col" aria-live="polite" aria-busy="true">
-      {/* Header skeleton */}
-      <header className="border-b-2 border-black bg-[#ff90e8] p-4 flex items-center justify-between shrink-0">
+      <header className="bg-[#ff90e8] p-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="h-7 w-24 bg-black/20 animate-pulse" />
-          <div className="h-5 w-28 bg-black/20 animate-pulse" />
+          <div className="h-7 w-24 bg-white/40 animate-pulse" />
+          <div className="h-5 w-28 bg-white/40 animate-pulse" />
         </div>
-        <div className="h-8 w-8 rounded-full bg-black/20 animate-pulse" />
+        <div className="h-8 w-8 rounded-full bg-white/40 animate-pulse" />
       </header>
-      {/* Main content skeleton */}
       <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-4">
-        <div className="h-32 w-full border-2 border-black bg-white shadow-[4px_4px_0_0_#000] animate-pulse" />
-        <div className="h-10 w-full border-2 border-black bg-gray-100 animate-pulse" />
+        <div className="h-32 w-full bg-gray-200/80 animate-pulse" />
+        <div className="h-10 w-full bg-gray-200/80 animate-pulse" />
         <div className="space-y-2">
-          <div className="h-16 w-full border-2 border-gray-200 bg-gray-50 animate-pulse" />
-          <div className="h-16 w-full border-2 border-gray-200 bg-gray-50 animate-pulse" />
-          <div className="h-12 w-[75%] border-2 border-gray-200 bg-gray-50 animate-pulse" />
+          <div className="h-16 w-full bg-gray-100 animate-pulse" />
+          <div className="h-16 w-full bg-gray-100 animate-pulse" />
+          <div className="h-12 w-[75%] bg-gray-100 animate-pulse" />
         </div>
       </main>
-      {/* Nav skeleton */}
-      <nav className="border-t-2 border-black p-2 flex justify-around bg-white shrink-0">
+      <nav className="p-2 flex justify-around bg-gray-100 shrink-0">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-10 w-16 bg-gray-200 animate-pulse" />
+          <div key={i} className="h-10 w-16 bg-gray-200/80 animate-pulse" />
         ))}
       </nav>
     </div>
@@ -329,10 +326,13 @@ export default function AppTest() {
   }, [user]);
 
   useEffect(() => {
-    if (user && credits === null && !creditsLoadGaveUp) {
-      const t = setTimeout(() => setCreditsLoaderMinElapsed(true), 2000);
-      return () => clearTimeout(t);
+    if (credits !== null || creditsLoadGaveUp) {
+      setCreditsLoaderMinElapsed(true);
+      return;
     }
+    if (!user) return;
+    const t = setTimeout(() => setCreditsLoaderMinElapsed(true), 2000);
+    return () => clearTimeout(t);
   }, [user, credits, creditsLoadGaveUp]);
 
   const fetchTrophies = React.useCallback(async () => {
