@@ -1,33 +1,33 @@
-# Trophy Case — Elenco trofei e descrizioni
+# Trophy Case — List and descriptions
 
-Lista completa dei **20 trofei** della gamification Comtra. Definizione ufficiale: seed in `auth-deploy/schema.sql` (tabella `trophies`). Logica di sblocco: backend `evaluateTrophyCondition` in `auth-deploy/oauth-server/app.mjs`. Riferimenti: [GAMIFICATION.md](./GAMIFICATION.md).
+Complete list of the **20 trophies** for Comtra gamification. Official definition: seed in `auth-deploy/schema.sql` (table `trophies`). Unlock logic: backend `evaluateTrophyCondition` in `auth-deploy/oauth-server/app.mjs`. See [GAMIFICATION.md](./GAMIFICATION.md).
 
 ---
 
-## Tabella trofei
+## Trophy table
 
-| # | ID | Nome | Descrizione | Condizione di sblocco |
+| # | ID | Name | Description | Unlock condition |
 |---|-----|------|-------------|------------------------|
-| 1 | NOVICE_SPROUT | Novice Sprout | Prima azione completata (qualsiasi). | ≥ 1 XP |
-| 2 | SOLID_ROCK | Solid Rock | 10 audit completati. | ≥ 10 audit (A11Y + UX + Proto) |
-| 3 | IRON_FRAME | Iron Frame | 50 wireframe generati. | ≥ 50 wireframe generati |
-| 4 | BRONZE_AUDITOR | Bronze Auditor | 100 audit completati. | ≥ 100 audit |
-| 5 | DIAMOND_PARSER | Diamond Parser | Health Score 95%+ su un file. | max_health_score ≥ 95 |
-| 6 | SILVER_SURFER | Silver Surfer | 500 XP totali accumulati. | ≥ 500 XP |
-| 7 | GOLDEN_STANDARD | Golden Standard | 50 fix accettati consecutivi senza scartare. | consecutive_fixes ≥ 50 |
-| 8 | PLATINUM_PRODUCER | Platinum Producer | 2.000 XP totali accumulati. | ≥ 2.000 XP |
-| 9 | OBSIDIAN_MODE | Obsidian Mode | 100 proto scan completati. | ≥ 100 proto scan |
-| 10 | PIXEL_PERFECT | Pixel Perfect | Health Score 100% su un file. | max_health_score = 100 |
-| 11 | TOKEN_MASTER | Token Master | 200 token/variabili corretti via audit. | token_fixes_total ≥ 200 |
-| 12 | SYSTEM_LORD | System Lord | 5.000 XP totali accumulati. | ≥ 5.000 XP |
-| 13 | BUG_HUNTER | Bug Hunter | 50 segnalazioni bug/errore inviate. | bug_reports_total ≥ 50 |
-| 14 | THE_FIXER | The Fixer | 500 fix accettati totali. | fixes_accepted_total ≥ 500 |
-| 15 | SPEED_DEMON | Speed Demon | 10 audit completati in un singolo giorno. | ≥ 10 audit in un giorno |
-| 16 | HARMONIZER | Harmonizer | Usate tutte e 3 le sync (Storybook + GitHub + Bitbucket). | Tutte e 3 le sync usate |
-| 17 | SOCIALITE | Socialite | Condiviso il profilo su LinkedIn. | linkedin_shared = true |
-| 18 | INFLUENCER | Influencer | 5 referral affiliate completati con successo. | total_referrals ≥ 5 |
-| 19 | DESIGN_LEGEND | Design Legend | 10.000 XP totali accumulati. | ≥ 10.000 XP |
-| 20 | GOD_MODE | God Mode | Tutti gli altri 19 trofei sbloccati. | Altri 19 trofei sbloccati |
+| 1 | NOVICE_SPROUT | Novice Sprout | First action completed (any). | ≥ 1 XP |
+| 2 | SOLID_ROCK | Solid Rock | 10 audits completed. | ≥ 10 audits (A11Y + UX + Proto) |
+| 3 | IRON_FRAME | Iron Frame | 50 wireframes generated. | ≥ 50 wireframes generated |
+| 4 | BRONZE_AUDITOR | Bronze Auditor | 100 audits completed. | ≥ 100 audits |
+| 5 | DIAMOND_PARSER | Diamond Parser | Health Score 95%+ on a file. | max_health_score ≥ 95 |
+| 6 | SILVER_SURFER | Silver Surfer | 500 total XP earned. | ≥ 500 XP |
+| 7 | GOLDEN_STANDARD | Golden Standard | 50 consecutive fixes accepted without dismissing. | consecutive_fixes ≥ 50 |
+| 8 | PLATINUM_PRODUCER | Platinum Producer | 2,000 total XP earned. | ≥ 2,000 XP |
+| 9 | OBSIDIAN_MODE | Obsidian Mode | 100 proto scans completed. | ≥ 100 proto scans |
+| 10 | PIXEL_PERFECT | Pixel Perfect | Health Score 100% on a file. | max_health_score = 100 |
+| 11 | TOKEN_MASTER | Token Master | 200 tokens/variables fixed via audit. | token_fixes_total ≥ 200 |
+| 12 | SYSTEM_LORD | System Lord | 5,000 total XP earned. | ≥ 5,000 XP |
+| 13 | BUG_HUNTER | Bug Hunter | 50 bug/error reports submitted. | bug_reports_total ≥ 50 |
+| 14 | THE_FIXER | The Fixer | 500 total fixes accepted. | fixes_accepted_total ≥ 500 |
+| 15 | SPEED_DEMON | Speed Demon | 10 audits completed in a single day. | ≥ 10 audits in one day |
+| 16 | HARMONIZER | Harmonizer | Used all 3 sync targets (Storybook + GitHub + Bitbucket). | All 3 syncs used |
+| 17 | SOCIALITE | Socialite | Shared profile on LinkedIn. | linkedin_shared = true |
+| 18 | INFLUENCER | Influencer | 5 successful affiliate referrals. | total_referrals ≥ 5 |
+| 19 | DESIGN_LEGEND | Design Legend | 10,000 total XP earned. | ≥ 10,000 XP |
+| 20 | GOD_MODE | God Mode | All other 19 trophies unlocked. | All other 19 trophies unlocked |
 
 ---
 

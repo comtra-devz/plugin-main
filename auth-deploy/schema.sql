@@ -129,28 +129,28 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS token_fixes_total INTEGER NOT NULL DE
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bug_reports_total INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_shared BOOLEAN NOT NULL DEFAULT false;
 
--- Seed dei 20 trofei (id, name, description, unlock_condition, icon_id, sort_order)
+-- Seed of 20 trophies (id, name, description in English, unlock_condition, icon_id, sort_order)
 INSERT INTO trophies (id, name, description, unlock_condition, icon_id, sort_order) VALUES
-  ('NOVICE_SPROUT', 'Novice Sprout', 'Prima azione completata (qualsiasi).', '{"type":"xp_min","value":1}', 'SPROUT', 1),
-  ('SOLID_ROCK', 'Solid Rock', '10 audit completati.', '{"type":"audits_min","value":10}', 'ROCK', 2),
-  ('IRON_FRAME', 'Iron Frame', '50 wireframe generati.', '{"type":"wireframes_gen_min","value":50}', 'IRON', 3),
-  ('BRONZE_AUDITOR', 'Bronze Auditor', '100 audit completati.', '{"type":"audits_min","value":100}', 'BRONZE', 4),
-  ('DIAMOND_PARSER', 'Diamond Parser', 'Health Score 95%+ su un file.', '{"type":"health_min","value":95}', 'DIAMOND', 5),
-  ('SILVER_SURFER', 'Silver Surfer', '500 XP totali accumulati.', '{"type":"xp_min","value":500}', 'SILVER', 6),
-  ('GOLDEN_STANDARD', 'Golden Standard', '50 fix accettati consecutivi senza scartare.', '{"type":"consecutive_fixes_min","value":50}', 'GOLD', 7),
-  ('PLATINUM_PRODUCER', 'Platinum Producer', '2.000 XP totali accumulati.', '{"type":"xp_min","value":2000}', 'PLATINUM', 8),
-  ('OBSIDIAN_MODE', 'Obsidian Mode', '100 proto scan completati.', '{"type":"proto_scans_min","value":100}', 'OBSIDIAN', 9),
-  ('PIXEL_PERFECT', 'Pixel Perfect', 'Health Score 100% su un file.', '{"type":"health_min","value":100}', 'PIXEL', 10),
-  ('TOKEN_MASTER', 'Token Master', '200 token/variabili corretti via audit.', '{"type":"token_fixes_min","value":200}', 'TOKEN', 11),
-  ('SYSTEM_LORD', 'System Lord', '5.000 XP totali accumulati.', '{"type":"xp_min","value":5000}', 'SYSTEM', 12),
-  ('BUG_HUNTER', 'Bug Hunter', '50 segnalazioni bug/errore inviate.', '{"type":"bug_reports_min","value":50}', 'BUG', 13),
-  ('THE_FIXER', 'The Fixer', '500 fix accettati totali.', '{"type":"fixes_accepted_min","value":500}', 'FIXER', 14),
-  ('SPEED_DEMON', 'Speed Demon', '10 audit completati in un singolo giorno.', '{"type":"audits_today_min","value":10}', 'SPEED', 15),
-  ('HARMONIZER', 'Harmonizer', 'Usate tutte e 3 le sync (Storybook + GitHub + Bitbucket).', '{"type":"all_syncs_used"}', 'HARMONY', 16),
-  ('SOCIALITE', 'Socialite', 'Condiviso il profilo su LinkedIn.', '{"type":"linkedin_shared"}', 'SOCIAL', 17),
-  ('INFLUENCER', 'Influencer', '5 referral affiliate completati con successo.', '{"type":"affiliate_referrals_min","value":5}', 'INFLUENCER', 18),
-  ('DESIGN_LEGEND', 'Design Legend', '10.000 XP totali accumulati.', '{"type":"xp_min","value":10000}', 'LEGEND', 19),
-  ('GOD_MODE', 'God Mode', 'Tutti gli altri 19 trofei sbloccati.', '{"type":"all_other_trophies"}', 'GOD', 20)
+  ('NOVICE_SPROUT', 'Novice Sprout', 'First action completed (any).', '{"type":"xp_min","value":1}', 'SPROUT', 1),
+  ('SOLID_ROCK', 'Solid Rock', '10 audits completed.', '{"type":"audits_min","value":10}', 'ROCK', 2),
+  ('IRON_FRAME', 'Iron Frame', '50 wireframes generated.', '{"type":"wireframes_gen_min","value":50}', 'IRON', 3),
+  ('BRONZE_AUDITOR', 'Bronze Auditor', '100 audits completed.', '{"type":"audits_min","value":100}', 'BRONZE', 4),
+  ('DIAMOND_PARSER', 'Diamond Parser', 'Health Score 95%+ on a file.', '{"type":"health_min","value":95}', 'DIAMOND', 5),
+  ('SILVER_SURFER', 'Silver Surfer', '500 total XP earned.', '{"type":"xp_min","value":500}', 'SILVER', 6),
+  ('GOLDEN_STANDARD', 'Golden Standard', '50 consecutive fixes accepted without dismissing.', '{"type":"consecutive_fixes_min","value":50}', 'GOLD', 7),
+  ('PLATINUM_PRODUCER', 'Platinum Producer', '2,000 total XP earned.', '{"type":"xp_min","value":2000}', 'PLATINUM', 8),
+  ('OBSIDIAN_MODE', 'Obsidian Mode', '100 proto scans completed.', '{"type":"proto_scans_min","value":100}', 'OBSIDIAN', 9),
+  ('PIXEL_PERFECT', 'Pixel Perfect', 'Health Score 100% on a file.', '{"type":"health_min","value":100}', 'PIXEL', 10),
+  ('TOKEN_MASTER', 'Token Master', '200 tokens/variables fixed via audit.', '{"type":"token_fixes_min","value":200}', 'TOKEN', 11),
+  ('SYSTEM_LORD', 'System Lord', '5,000 total XP earned.', '{"type":"xp_min","value":5000}', 'SYSTEM', 12),
+  ('BUG_HUNTER', 'Bug Hunter', '50 bug/error reports submitted.', '{"type":"bug_reports_min","value":50}', 'BUG', 13),
+  ('THE_FIXER', 'The Fixer', '500 total fixes accepted.', '{"type":"fixes_accepted_min","value":500}', 'FIXER', 14),
+  ('SPEED_DEMON', 'Speed Demon', '10 audits completed in a single day.', '{"type":"audits_today_min","value":10}', 'SPEED', 15),
+  ('HARMONIZER', 'Harmonizer', 'Used all 3 sync targets (Storybook + GitHub + Bitbucket).', '{"type":"all_syncs_used"}', 'HARMONY', 16),
+  ('SOCIALITE', 'Socialite', 'Shared profile on LinkedIn.', '{"type":"linkedin_shared"}', 'SOCIAL', 17),
+  ('INFLUENCER', 'Influencer', '5 successful affiliate referrals.', '{"type":"affiliate_referrals_min","value":5}', 'INFLUENCER', 18),
+  ('DESIGN_LEGEND', 'Design Legend', '10,000 total XP earned.', '{"type":"xp_min","value":10000}', 'LEGEND', 19),
+  ('GOD_MODE', 'God Mode', 'All other 19 trophies unlocked.', '{"type":"all_other_trophies"}', 'GOD', 20)
 ON CONFLICT (id) DO NOTHING;
 
 -- Telemetria uso token Kimi (anonima: nessun user_id/file_key). Vedi docs/TOKEN-USAGE-TELEMETRY.md

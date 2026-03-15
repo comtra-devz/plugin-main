@@ -44,10 +44,16 @@ export function Button({
     layout === 'row'
       ? 'flex flex-row items-center justify-center gap-2'
       : 'flex flex-col justify-center items-center gap-0';
+  // Rosa CTA: stile inline fallback così il primary è sempre visibile (non dipende dalla purge)
+  const style =
+    variant === 'primary' && !disabled
+      ? { backgroundColor: '#ff90e8' }
+      : undefined;
   return (
     <button
       type="button"
       disabled={disabled}
+      style={style}
       className={`${BRUTAL.btn} ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? 'w-full' : ''} ${layoutClass} relative overflow-hidden ${className}`.trim()}
       {...rest}
     >
