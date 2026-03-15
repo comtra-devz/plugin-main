@@ -88,6 +88,34 @@ function SessionLoader() {
   );
 }
 
+/** Skeleton / loader finché non abbiamo i crediti dal server (dopo login). Evita di mostrare "—" in badge. */
+function CreditsLoader() {
+  return (
+    <div className="min-h-screen w-full bg-[#fdfdfd] flex flex-col items-center justify-center p-6 border-t-2 border-black" aria-live="polite" aria-busy="true">
+      <div className="flex gap-1.5 mb-4" role="presentation">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="w-2 h-2 bg-black"
+            style={{
+              animation: 'sessionLoaderPulse 0.6s ease-in-out infinite',
+              animationDelay: `${i * 0.12}s`,
+            }}
+          />
+        ))}
+      </div>
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Loading your credits…</p>
+      <p className="text-[10px] text-gray-400 mt-1">If this takes too long, check your connection.</p>
+      <style>{`
+        @keyframes sessionLoaderPulse {
+          0%, 100% { opacity: 0.35; transform: scale(0.95); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 const THROTTLE_DISCOUNT_WINDOW_MS = 15 * 60 * 1000; // 15 min
 
 export default function AppTest() {
@@ -193,8 +221,9 @@ export default function AppTest() {
     });
   }, [showToast, user?.authToken]);
 
-  const fetchCredits = React.useCallback(async () => {
-    if (!user?.authToken) return;
+  /** Returns true if credits were set, false on error (caller can retry). */
+  const fetchCredits = React.useCallback(async (): Promise<boolean> => {
+    if (!user?.authToken) return false;
     setCreditsFetchError(null);
     try {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
@@ -204,13 +233,13 @@ export default function AppTest() {
         handle503();
         setCreditsFetchError('503');
         console.warn('[Comtra] GET /api/credits: 503 Service Unavailable');
-        return;
+        return false;
       }
       if (!r.ok) {
         const err = `${r.status}`;
         setCreditsFetchError(err);
         console.warn('[Comtra] GET /api/credits failed:', r.status, r.statusText);
-        return;
+        return false;
       }
       const data = await r.json();
       setCredits({
@@ -238,7 +267,6 @@ export default function AppTest() {
       });
       if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
       if (data.gift && typeof data.gift.credits_added === 'number' && data.gift.credits_added > 0 && user?.authToken) {
-        // Segna sul server come "visto" PRIMA di mostrare la modale, così al prossimo GET/ricarica non torna più
         try {
           const r = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
             method: 'POST',
@@ -249,37 +277,46 @@ export default function AppTest() {
             setShowCreditGiftModal(true);
           }
         } catch {
-          // POST fallito: non mostriamo la modale ora; al prossimo accesso riproverà (GET ridarà il gift)
+          // POST fallito: al prossimo accesso riproverà
         }
       }
+      return true;
     } catch (e) {
       setCreditsFetchError('network');
       console.warn('[Comtra] GET /api/credits: network or parse error', e);
+      return false;
     }
   }, [user?.authToken, handle503]);
 
-  const creditsRetryRef = useRef(false);
+  /** True after we gave up loading credits (all retries failed). Reset on logout. */
+  const [creditsLoadGaveUp, setCreditsLoadGaveUp] = useState(false);
+
+  const CREDITS_MAX_ATTEMPTS = 5;
+  const CREDITS_RETRY_DELAYS_MS = [2000, 3000, 4000, 5000]; // delays between attempt 0→1, 1→2, 2→3, 3→4
+
   useEffect(() => {
-    if (user?.authToken) {
-      creditsRetryRef.current = false;
-      fetchCredits();
-    } else {
+    if (!user?.authToken) {
       setCredits(null);
       setRecentTransactions([]);
       setCreditsFetchError(null);
-      creditsRetryRef.current = false;
+      setCreditsLoadGaveUp(false);
+      return;
     }
+    let cancelled = false;
+    (async () => {
+      for (let attempt = 0; attempt < CREDITS_MAX_ATTEMPTS && !cancelled; attempt++) {
+        const ok = await fetchCredits();
+        if (cancelled) return;
+        if (ok) return;
+        if (attempt < CREDITS_MAX_ATTEMPTS - 1) {
+          const delay = CREDITS_RETRY_DELAYS_MS[attempt] ?? 3000;
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+      if (!cancelled) setCreditsLoadGaveUp(true);
+    })();
+    return () => { cancelled = true; };
   }, [user?.authToken, user?.id, fetchCredits]);
-
-  // Retry credits fetch once if we have auth but credits never loaded (e.g. first request failed or was too early)
-  useEffect(() => {
-    if (!user?.authToken || credits !== null || creditsRetryRef.current) return;
-    const t = setTimeout(() => {
-      creditsRetryRef.current = true;
-      fetchCredits();
-    }, 3000);
-    return () => clearTimeout(t);
-  }, [user?.authToken, credits, fetchCredits]);
 
   const fetchTrophies = React.useCallback(async () => {
     if (!user?.authToken) return;
@@ -762,6 +799,11 @@ export default function AppTest() {
           onDismissToast={() => setLogoutToast(null)}
         />
       );
+  }
+
+  // Non mostrare l'app con badge "—": skeleton finché non abbiamo i crediti (o abbiamo rinunciato dopo i retry)
+  if (user && credits === null && !creditsLoadGaveUp) {
+    return <CreditsLoader />;
   }
 
   return (
