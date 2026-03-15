@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import { BRUTAL } from '../constants';
+import { Button } from '../components/ui/Button';
 import { UserPlan } from '../types';
 import { getSystemToastOptions } from '../lib/errorCopy';
 
@@ -434,19 +435,22 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                 />
             </div>
             
-            <button 
-                data-component="Generate: Generate Button"
-                onClick={handleGen} 
-                disabled={!hasContent || loading || (!canGenerate && !isPro)}
-                className={`${BRUTAL.btn} ${canGenerate && hasContent ? `bg-[${COLORS.primary}] text-black hover:bg-white hover:border-black` : 'bg-gray-300 text-gray-500 cursor-not-allowed'} w-full flex justify-center items-center gap-2 relative`}
+            <Button
+              data-component="Generate: Generate Button"
+              variant="primary"
+              fullWidth
+              layout="row"
+              onClick={handleGen}
+              disabled={!hasContent || loading || (!canGenerate && !isPro)}
+              className="relative"
             >
-                {loading ? 'Weaving Magic...' : knownZeroCredits ? 'Unlock Unlimited AI' : (
-                    selectedLayer ? 'Modify Component' : 'Create Wireframes'
-                )}
-                {!loading && canGenerate && (
-                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-3 Credits</span>
-                )}
-            </button>
+              {loading ? 'Weaving Magic...' : knownZeroCredits ? 'Unlock Unlimited AI' : (
+                selectedLayer ? 'Modify Component' : 'Create Wireframes'
+              )}
+              {!loading && canGenerate && (
+                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-3 Credits</span>
+              )}
+            </Button>
 
             <div className="mt-2">
                 <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Try asking the stars:</p>

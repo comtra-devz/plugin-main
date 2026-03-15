@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { BRUTAL, COLORS } from '../../../constants';
+import { BRUTAL } from '../../../constants';
+import { Button } from '../../../components/ui/Button';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
@@ -152,21 +153,22 @@ export const DesignSystemTab: React.FC<Props> = ({
           </div>
 
           <div className="px-4">
-            <button 
-                onClick={handleScanClick} 
-                disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
-                className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex flex-col justify-center items-center gap-0 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait relative overflow-hidden`}
+            <Button
+              variant="primary"
+              fullWidth
+              onClick={handleScanClick}
+              disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
             >
-                {isCalculating && (
-                  <div
-                    className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out"
-                    style={{ width: `${scanProgress.percent}%` }}
-                  />
-                )}
-                <span className="relative z-10">
-                  {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Design'}
-                </span>
-            </button>
+              {isCalculating && (
+                <div
+                  className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out"
+                  style={{ width: `${scanProgress.percent}%` }}
+                />
+              )}
+              <span className="relative z-10">
+                {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Design'}
+              </span>
+            </Button>
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
               No credits will be deducted at this point yet.
             </p>
@@ -272,21 +274,22 @@ export const DesignSystemTab: React.FC<Props> = ({
       </div>
 
       {/* Scan Again Button (Moved Here) */}
-      <button
-          onClick={handleScanClick}
-          disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
-          className={`${BRUTAL.btn} w-full bg-white text-black border-black flex flex-col justify-center items-center gap-0 relative overflow-hidden shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
+      <Button
+        variant="primary"
+        fullWidth
+        onClick={handleScanClick}
+        disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
       >
-          {isCalculating && (
-            <div
-              className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out"
-              style={{ width: `${scanProgress.percent}%` }}
-            />
-          )}
-          <span className="relative z-10">
-            {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}
-          </span>
-      </button>
+        {isCalculating && (
+          <div
+            className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out"
+            style={{ width: `${scanProgress.percent}%` }}
+          />
+        )}
+        <span className="relative z-10">
+          {isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}
+        </span>
+      </Button>
 
       {/* Categories */}
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>

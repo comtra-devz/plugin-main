@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../../../constants';
+import { Button } from '../../../components/ui/Button';
 import { IssueList } from '../components/IssueList';
 import { AuditIssue } from '../../../types';
 
@@ -71,13 +71,16 @@ export const DeepAnalysisTab: React.FC<DeepAnalysisTabProps> = ({
       {selectedLayer ? (
          !hasDeepScanned ? (
             <div className="animate-in fade-in mt-4">
-                <button 
-                    onClick={handleScanClick}
-                    className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black flex justify-center items-center gap-2 h-12 disabled:bg-gray-200 disabled:cursor-wait`}
-                    disabled={isDeepScanning || isCalculating}
+                <Button
+                  variant="primary"
+                  fullWidth
+                  layout="row"
+                  onClick={handleScanClick}
+                  disabled={isDeepScanning || isCalculating}
+                  className="h-12"
                 >
-                    {isCalculating ? 'CALCULATING NODES...' : (isDeepScanning ? 'Scanning...' : 'Scan Wireframe')}
-                </button>
+                  {isCalculating ? 'CALCULATING NODES...' : (isDeepScanning ? 'Scanning...' : 'Scan Wireframe')}
+                </Button>
             </div>
          ) : (
             <div className="flex flex-col animate-in fade-in">

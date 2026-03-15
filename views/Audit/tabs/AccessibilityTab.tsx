@@ -1,5 +1,6 @@
 import React from 'react';
-import { BRUTAL, COLORS } from '../../../constants';
+import { BRUTAL } from '../../../constants';
+import { Button } from '../../../components/ui/Button';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
@@ -144,16 +145,17 @@ export const AccessibilityTab: React.FC<Props> = ({
           </div>
 
           <div className="px-4">
-            <button
+            <Button
+              variant="primary"
+              fullWidth
               onClick={handleScanClick}
               disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
-              className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex flex-col justify-center items-center gap-0 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-wait relative overflow-hidden`}
             >
               {isCalculating && (
                 <div className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out" style={{ width: `${scanProgress.percent}%` }} />
               )}
               <span className="relative z-10">{isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Run A11Y Audit'}</span>
-            </button>
+            </Button>
             <p className="text-[10px] text-gray-500 mt-2 text-center px-2">Credits scale by file/page size. No deduction until you confirm.</p>
           </div>
         </div>
@@ -230,14 +232,15 @@ export const AccessibilityTab: React.FC<Props> = ({
         )}
       </div>
 
-      <button
+      <Button
+        variant="primary"
+        fullWidth
         onClick={handleScanClick}
         disabled={isCalculating || scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)}
-        className={`${BRUTAL.btn} w-full bg-white text-black border-black flex flex-col justify-center items-center gap-0 relative overflow-hidden shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
       >
         {isCalculating && <div className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out" style={{ width: `${scanProgress.percent}%` }} />}
         <span className="relative z-10">{isCalculating ? `CALCULATING... ${scanProgress.percent}%` : 'Scan Again'}</span>
-      </button>
+      </Button>
 
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
         <div className="p-3 border-b-2 border-black bg-gray-50 flex justify-between items-center">

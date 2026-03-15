@@ -6,8 +6,8 @@ interface Props {
 }
 
 /**
- * Modale guida: come esporre l'API Storybook (GET /api/stories o equivalente)
- * per far funzionare Connect in Deep Sync. Contenuto allineato a docs/SYNC-STORYBOOK-URL-GUIDE.md.
+ * Modale guida per utenti: come far funzionare Connect quando l’URL non espone ancora la lista delle stories.
+ * Contenuto autosufficiente, senza riferimenti a file di repo.
  */
 export const SyncStorybookGuideModal: React.FC<Props> = ({ onClose }) => {
   return (
@@ -28,47 +28,43 @@ export const SyncStorybookGuideModal: React.FC<Props> = ({ onClose }) => {
         </div>
         <div className="p-4 overflow-y-auto text-left space-y-4 flex-1">
           <p className="text-xs text-gray-700 leading-relaxed">
-            Comtra needs to read your list of components/stories from the same URL you use in the browser. We call <strong>GET /api/stories</strong>, then <strong>GET /api/components</strong>, then <strong>GET /index.json</strong>. If one returns valid JSON, the connection works.
+            To connect, Comtra needs to read the list of your components from the same address you use to open Storybook in the browser. We look for a small “API” that returns that list in a standard format. If your build doesn’t provide it yet, use one of the options below.
           </p>
 
           <section>
-            <h4 className="text-[10px] font-bold uppercase text-black mb-1">What we need</h4>
+            <h4 className="text-[10px] font-bold uppercase text-black mb-1">What we look for</h4>
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              Your Storybook URL must expose one of these endpoints with a JSON like <code className="bg-gray-100 px-0.5 text-[10px]">{`{ "stories": [ { "component": "Button", "title": "Components/Button", "id": "..." } ] }`}</code> (or <code className="bg-gray-100 px-0.5 text-[10px]">components</code> array). Same URL you open in the browser — nothing else.
+              We try, in order: <code className="bg-gray-100 px-0.5 text-[10px]">/api/stories</code>, <code className="bg-gray-100 px-0.5 text-[10px]">/api/components</code>, and <code className="bg-gray-100 px-0.5 text-[10px]">/index.json</code>. If any of these returns a JSON list of your stories or components, the connection works. You don’t need all three — just one is enough.
             </p>
           </section>
 
           <section>
-            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option A — Add a REST API package</h4>
+            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option A — Add an addon</h4>
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              Search npm for packages that add a REST API to Storybook (e.g. “storybook api”, “storybook rest api”). After setup, your existing Storybook URL will also serve <code className="bg-gray-100 px-0.5">/api/stories</code>. Deploy as usual; use that URL in Comtra.
+              Install a Storybook addon that adds a small REST API (search npm for “storybook api” or similar). Once configured, your usual Storybook URL will also expose the list we need. Deploy as you normally do and paste that URL in Comtra.
             </p>
           </section>
 
           <section>
-            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option B — Custom server or serverless</h4>
+            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option B — Add a small endpoint</h4>
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              If you only have a static Storybook build: add a small server (or a serverless function) that responds to <code className="bg-gray-100 px-0.5">GET /api/stories</code> with the JSON. For example, a Vercel serverless function in <code className="bg-gray-100 px-0.5">api/stories.js</code> lets the same deploy URL work for both the Storybook UI and the stories API. You can generate the JSON at build time and serve it from that route.
+              If you only have a static build (no addon): add one route that returns the story list as JSON. For example, on Vercel you can add a serverless function (e.g. in <code className="bg-gray-100 px-0.5">api/stories.js</code>) that responds to requests to <code className="bg-gray-100 px-0.5">/api/stories</code> with that JSON. You can generate the JSON at build time. The same URL will then work for both viewing Storybook and connecting in Comtra.
             </p>
           </section>
 
           <section>
-            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option C — Static index</h4>
+            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Option C — You might already have it</h4>
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              Some Storybook builds or addons expose <code className="bg-gray-100 px-0.5">/index.json</code> with the story list. If your URL already serves that with a compatible structure, Comtra will use it.
+              Some Storybook setups already expose <code className="bg-gray-100 px-0.5">/index.json</code> with the story list. If your deployed URL already serves that file with a compatible structure, Comtra will use it automatically — no extra setup.
             </p>
           </section>
 
           <section>
-            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Test locally</h4>
+            <h4 className="text-[10px] font-bold uppercase text-black mb-1">Testing from your machine</h4>
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              Run your Storybook (with one of the options above), then expose the port with <strong>ngrok</strong> (e.g. <code className="bg-gray-100 px-0.5">ngrok http 6006</code>). Use the ngrok URL in Comtra; if <code className="bg-gray-100 px-0.5">https://your-subdomain.ngrok.io/api/stories</code> returns the JSON, Connect will succeed.
+              Run Storybook locally, then use a tool like <strong>ngrok</strong> to get a public URL (e.g. <code className="bg-gray-100 px-0.5">ngrok http 6006</code>). Paste the ngrok URL in Comtra. If opening <code className="bg-gray-100 px-0.5">https://your-subdomain.ngrok.io/api/stories</code> (or <code className="bg-gray-100 px-0.5">/index.json</code>) in the browser shows the list in JSON format, Connect will work.
             </p>
           </section>
-
-          <p className="text-[10px] text-gray-500 border-t border-gray-200 pt-3">
-            Full guide: <code className="bg-gray-100 px-0.5">docs/SYNC-STORYBOOK-URL-GUIDE.md</code> in the repo.
-          </p>
         </div>
       </div>
     </div>

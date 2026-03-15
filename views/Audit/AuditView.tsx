@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, COLORS, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP } from '../../constants';
+import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
+import { Button } from '../../components/ui/Button';
 import { CircularScore } from '../../components/widgets/CircularScore';
 import { Confetti } from '../../components/Confetti';
 import { SuccessModal } from '../../components/SuccessModal';
@@ -1007,13 +1008,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                           You accept to send data to improve the plugin quality and the <button onClick={() => setShowPrivacyModal(true)} className="underline cursor-pointer hover:text-black">Privacy & Policy</button>.
                       </p>
                   </div>
-                  <button 
-                    onClick={handleSubmitFeedback} 
+                  <Button
+                    variant="primary"
+                    fullWidth
+                    onClick={handleSubmitFeedback}
                     disabled={!canSubmitFeedback}
-                    className={`${BRUTAL.btn} bg-[${COLORS.primary}] w-full disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                      Send Feedback
-                  </button>
+                    Send Feedback
+                  </Button>
               </div>
           </div>
       )}

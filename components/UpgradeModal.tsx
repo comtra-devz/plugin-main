@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 
 const TIERS = [
   { id: '1w', label: '1 Week', price: '€7', sub: 'Just trying', limit: '20 credits' },
@@ -58,10 +59,10 @@ export const UpgradeModal: React.FC<{ onClose: () => void; onUpgrade: (tier: str
             />
         </div>
 
-        <button onClick={() => onUpgrade(sel, affiliateCode.trim() || undefined)} className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] flex justify-center items-center gap-2`}>
+        <Button variant="primary" fullWidth layout="row" onClick={() => onUpgrade(sel, affiliateCode.trim() || undefined)}>
           <span>Pay now</span>
           <span className="text-xs">→</span>
-        </button>
+        </Button>
         <p className="text-[10px] text-center mt-3 text-gray-500">Secure checkout via Lemon Squeezy. Cancel anytime.</p>
         <p className="text-[10px] text-center mt-1 text-gray-500">After payment, come back here and refresh the plugin to see your PRO credits.</p>
       </div>

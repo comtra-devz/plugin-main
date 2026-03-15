@@ -1,5 +1,6 @@
 import React from 'react';
 import { BRUTAL, COLORS } from '../constants';
+import { Button } from './ui/Button';
 
 interface Props {
   onLoginWithFigma: () => void;
@@ -31,10 +32,13 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
             Open the browser to sign in with Figma, then come back here.
           </p>
         ) : (
-          <button 
+          <Button
+            variant="black"
+            fullWidth
+            layout="row"
             onClick={onLoginWithFigma}
             data-component="Login: Figma Button"
-            className={`${BRUTAL.btn} w-full bg-black text-white hover:bg-gray-800 flex items-center justify-center gap-3 py-3 border-white`}
+            className="gap-3 py-3 border-white"
           >
             <svg width="18" height="27" viewBox="0 0 18 27" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4.5 27C6.98528 27 9 24.9853 9 22.5V18H4.5C2.01472 18 0 20.0147 0 22.5C0 24.9853 2.01472 27 4.5 27Z" fill="#0ACF83"/>
@@ -44,7 +48,7 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
               <path d="M18 13.5C18 15.9853 15.9853 18 13.5 18H9V9H13.5C15.9853 9 18 11.0147 18 13.5Z" fill="#1ABCFE"/>
             </svg>
             Login with Figma
-          </button>
+          </Button>
         )}
       </div>
 

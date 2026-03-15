@@ -1,5 +1,6 @@
 import React from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import { BRUTAL } from '../constants';
+import { Button } from './ui/Button';
 
 interface Props { onClose: () => void; score: number }
 
@@ -24,9 +25,9 @@ export const SuccessModal: React.FC<Props> = ({ onClose, score }) => {
         <div className="text-5xl font-black mb-6 bg-[#ffc900] inline-block px-2 border-2 border-black transform -rotate-2">
           {score}%
         </div>
-        <button onClick={handleShare} className={`${BRUTAL.btn} bg-[${COLORS.primary}] w-full mb-3`}>
+        <Button variant="primary" fullWidth onClick={handleShare} className="mb-3">
           Share the Magic (LinkedIn)
-        </button>
+        </Button>
         <button onClick={onClose} className="text-[10px] font-bold underline text-gray-400 uppercase">
           Continue fixing
         </button>

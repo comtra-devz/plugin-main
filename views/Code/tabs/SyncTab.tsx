@@ -26,6 +26,37 @@ function normalizeStorybookUrl(input: string): string {
   }
 }
 
+/** Check Storybook lato client (browser): prova /api/stories, /api/components, /index.json. Per URL pubblici evita il backend. */
+async function checkStorybookFromClient(
+  baseUrl: string,
+  token?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const urlsToTry = [
+    `${baseUrl}/api/stories`,
+    `${baseUrl}/api/components`,
+    `${baseUrl}/index.json`,
+  ];
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (token?.trim()) headers['Authorization'] = `Bearer ${token.trim()}`;
+
+  for (const url of urlsToTry) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(url, { headers, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data.stories)) return { ok: true };
+      if (Array.isArray(data.components)) return { ok: true };
+      if (data.entries && typeof data.entries === 'object') return { ok: true };
+    } catch {
+      // CORS, network, timeout: try next URL
+    }
+  }
+  return { ok: false, error: 'Stories API not found at this URL. Add an endpoint (see guide below) or check the URL.' };
+}
+
 export const SyncTab: React.FC<SyncTabProps> = ({
   isPro,
   onUnlockRequest,
@@ -84,7 +115,12 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     setConnectError(null);
     setIsConnecting(true);
     try {
-      const result = fetchCheckStorybook ? await fetchCheckStorybook(url, token) : { ok: true };
+      // Prima prova dal browser (nessun backend): per URL pubblici basta leggere da qui
+      let result = await checkStorybookFromClient(url, token);
+      // Se il client fallisce (es. CORS), fallback al backend (può funzionare con token o reti diverse)
+      if (!result.ok && fetchCheckStorybook) {
+        result = await fetchCheckStorybook(url, token);
+      }
       if (result.ok) {
         handleConnectSb(url, token);
         if (url !== raw) setConnectInput(url);

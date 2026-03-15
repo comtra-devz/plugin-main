@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { BRUTAL, COLORS } from '../../../constants';
+import { BRUTAL } from '../../../constants';
+import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/Badge';
 import { AuditIssue } from '../../../types';
 
@@ -218,13 +219,15 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 </button>
                             )}
                             
-                            <button 
-                                onClick={(e) => onFix(e, i.id)} 
-                                className={`${BRUTAL.btn} flex-1 text-[10px] bg-[${COLORS.primary}] text-black hover:bg-white border-black relative h-12`}
+                            <Button
+                                variant="primary"
+                                layout="row"
+                                onClick={(e) => onFix(e, i.id)}
+                                className="flex-1 text-[10px] h-12 relative"
                             >
                                 {isWireframeIssue ? 'Create Wireframe' : 'Auto-Fix Layer'}
                                 <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
-                            </button>
+                            </Button>
                             </div>
                         </div>
                         )}
@@ -236,29 +239,34 @@ export const IssueList: React.FC<IssueListProps> = ({
       ))}
 
       {isPro && fixAllCost > 0 && activeTab !== 'PROTOTYPE' && (
-          <button 
+          <Button
+            variant="primary"
+            fullWidth
             onClick={onFixAll}
-            className={`${BRUTAL.btn} w-full bg-[${COLORS.primary}] text-black border-black mt-4 flex justify-center items-center relative animate-in slide-in-from-bottom-2 hover:bg-white`}
+            className="mt-4 relative animate-in slide-in-from-bottom-2"
           >
             <span>AUTO-FIX ALL ISSUES</span>
             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
                 -{fixAllCost} Credits
             </span>
-          </button>
+          </Button>
       )}
 
       {!isPro && totalHiddenCount > 0 && (
           <div className="mt-4 animate-in slide-in-from-bottom-2">
-              <button 
+              <Button
+                  variant="primary"
+                  fullWidth
+                  layout="row"
                   onClick={onUnlockRequest}
-                  className={`${BRUTAL.btn} w-full flex justify-center items-center gap-2 relative bg-[${COLORS.primary}] shadow-[6px_6px_0_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[4px_4px_0_0_#000] transition-all`}
+                  className="gap-2 relative shadow-[6px_6px_0_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[4px_4px_0_0_#000]"
               >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 2C9.243 2 7 4.243 7 7V10H6C4.895 10 4 10.895 4 12V20C4 21.105 4.895 22 6 22H18C19.105 22 20 21.105 20 20V12C20 10.895 19.105 10 18 10H17V7C17 4.243 14.757 2 12 2ZM12 4C13.657 4 15 5.343 15 7V10H9V7C9 5.343 10.343 4 12 4Z" fill="black"/>
                   </svg>
                   <span>Unlock {totalHiddenCount} Hidden Issues</span>
                   <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
-              </button>
+              </Button>
           </div>
       )}
     </div>

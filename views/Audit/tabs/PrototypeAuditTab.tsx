@@ -1,5 +1,6 @@
 import React from 'react';
-import { BRUTAL, COLORS, getPrototypeAuditCost } from '../../../constants';
+import { BRUTAL, getPrototypeAuditCost } from '../../../constants';
+import { Button } from '../../../components/ui/Button';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
@@ -152,10 +153,11 @@ export const PrototypeAuditTab: React.FC<Props> = ({
                     {cost} credit{cost !== 1 ? 's' : ''} ({sizeLabel})
                   </p>
                 )}
-                <button
+                <Button
+                  variant="primary"
+                  fullWidth
                   onClick={onRunProtoAudit}
                   disabled={!canRun}
-                  className={`${BRUTAL.btn} bg-[${COLORS.primary}] text-black w-full flex flex-col justify-center items-center gap-0 hover:bg-white hover:border-black disabled:bg-gray-200 disabled:cursor-not-allowed relative overflow-hidden`}
                 >
                   {isCalculating && (
                     <div className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out" style={{ width: `${scanProgress.percent}%` }} />
@@ -163,7 +165,7 @@ export const PrototypeAuditTab: React.FC<Props> = ({
                   <span className="relative z-10">
                     {isCalculating ? `AUDITING... ${scanProgress.percent}%` : 'Run Prototype Audit'}
                   </span>
-                </button>
+                </Button>
                 <p className="text-[10px] text-gray-500 mt-2 text-center px-2">
                   No credits will be deducted until you confirm.
                 </p>
@@ -240,10 +242,11 @@ export const PrototypeAuditTab: React.FC<Props> = ({
         )}
       </div>
 
-      <button
+      <Button
+        variant="primary"
+        fullWidth
         onClick={onRunProtoAudit}
         disabled={!canRun || isCalculating}
-        className={`${BRUTAL.btn} w-full bg-white text-black border-black flex flex-col justify-center items-center gap-0 relative overflow-hidden shadow-[4px_4px_0_0_rgba(0,0,0,0.1)] disabled:bg-gray-200 disabled:cursor-wait`}
       >
         {isCalculating && (
           <div className="absolute inset-0 bg-[#ffc900] transition-all duration-150 ease-out" style={{ width: `${scanProgress.percent}%` }} />
@@ -251,7 +254,7 @@ export const PrototypeAuditTab: React.FC<Props> = ({
         <span className="relative z-10">
           {isCalculating ? `AUDITING... ${scanProgress.percent}%` : 'Scan Again'}
         </span>
-      </button>
+      </Button>
 
       {/* Categories */}
       <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
