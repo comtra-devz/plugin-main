@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { SyncTabProps, BRUTAL, COLORS } from '../types';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 
@@ -12,6 +12,19 @@ const PRESET_STORYBOOKS: { label: string; value: string }[] = [
   { label: 'Ring UI (JetBrains)', value: 'https://jetbrains.github.io/ring-ui/master' },
   { label: 'GitLab UI', value: 'https://gitlab-org.gitlab.io/gitlab/storybook' },
 ];
+
+/** Normalizza URL Storybook: rimuove query e hash così il check usa la base corretta (es. .../master/?path=... → .../master). */
+function normalizeStorybookUrl(input: string): string {
+  const s = (input || '').trim();
+  if (!s) return s;
+  try {
+    const u = new URL(s);
+    const pathname = u.pathname.replace(/\/$/, '') || '';
+    return u.origin + pathname;
+  } catch {
+    return s.replace(/\/$/, '');
+  }
+}
 
 export const SyncTab: React.FC<SyncTabProps> = ({
   isPro,
@@ -44,14 +57,29 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [isPresetOpen, setIsPresetOpen] = useState(false);
+  const presetDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (presetDropdownRef.current && !presetDropdownRef.current.contains(e.target as Node)) {
+        setIsPresetOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
 
   const handleScanClick = () => {
     handleSyncScan();
   };
 
   const handleConnectClick = async () => {
-    const url = connectInput.trim();
-    if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return;
+    const raw = connectInput.trim();
+    if (!raw || (!raw.startsWith('http://') && !raw.startsWith('https://'))) return;
+    const url = normalizeStorybookUrl(raw);
     const token = usePrivateToken ? tokenInput.trim() || undefined : undefined;
     setConnectError(null);
     setIsConnecting(true);
@@ -59,6 +87,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       const result = fetchCheckStorybook ? await fetchCheckStorybook(url, token) : { ok: true };
       if (result.ok) {
         handleConnectSb(url, token);
+        if (url !== raw) setConnectInput(url);
       } else {
         setConnectError(result.error || 'Connection failed.');
       }
@@ -103,19 +132,34 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               {!isSbConnected ? (
                 <div className="space-y-3">
                   <p className="text-xs font-medium">Pick a public Storybook or enter your own URL. We’ll check that it exposes the stories API.</p>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 relative z-20" ref={presetDropdownRef}>
                     <label className="text-[10px] font-bold uppercase text-gray-600">Quick pick</label>
-                    <select
-                      value={PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.value ?? ''}
-                      onChange={(e) => setConnectInput(e.target.value)}
-                      className="w-full border-2 border-black px-3 py-2 text-xs font-medium bg-white outline-none"
+                    <div
+                      onClick={() => setIsPresetOpen(!isPresetOpen)}
+                      className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2`}
                     >
-                      {PRESET_STORYBOOKS.map((p) => (
-                        <option key={p.value || 'custom'} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
+                      <span className="text-xs font-bold uppercase truncate min-w-0" title={selectedPresetLabel}>
+                        {selectedPresetLabel}
+                      </span>
+                      <span className="shrink-0 text-[10px]">{isPresetOpen ? '▲' : '▼'}</span>
+                    </div>
+                    {isPresetOpen && (
+                      <div className="absolute top-full left-0 right-0 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
+                        {PRESET_STORYBOOKS.map((p) => (
+                          <div
+                            key={p.value || 'custom'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConnectInput(p.value);
+                              setIsPresetOpen(false);
+                            }}
+                            className={`p-2 text-xs cursor-pointer border-b border-gray-100 last:border-0 ${p.value === connectInput ? 'bg-black text-white' : 'hover:bg-[#ff90e8]'}`}
+                          >
+                            {p.label}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <label className="text-[10px] font-bold uppercase text-gray-600 block mt-1">Or paste URL</label>
                   <input

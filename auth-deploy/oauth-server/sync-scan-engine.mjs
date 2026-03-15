@@ -41,15 +41,31 @@ function extractFigmaComponents(node) {
 }
 
 /**
+ * Normalizza URL Storybook: rimuove query string e hash così /api/stories viene provato sulla base corretta.
+ * Es.: https://example.com/storybook/?path=/docs/foo → https://example.com/storybook
+ */
+function normalizeStorybookBaseUrl(input) {
+  const s = (input || '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    const pathname = u.pathname.replace(/\/$/, '') || '';
+    return u.origin + pathname;
+  } catch {
+    return s.replace(/\/$/, '');
+  }
+}
+
+/**
  * Prova a fetchare Storybook API. Supporta:
  * - storybook-api: /api/stories, /api/components
  * - index.json (alcuni static export)
- * @param {string} baseUrl - URL base Storybook (es. https://storybook.example.com)
+ * @param {string} baseUrl - URL base Storybook (es. https://storybook.example.com, può contenere ?path=... che verrà rimosso)
  * @param {string} [authToken] - Token opzionale per Storybook privato (Authorization: Bearer)
  * @returns {Promise<{ stories?: any[], components?: any[], connectionStatus: string, error?: string }>}
  */
 export async function fetchStorybookMetadata(baseUrl, authToken) {
-  const normalized = baseUrl.replace(/\/$/, '');
+  const normalized = normalizeStorybookBaseUrl(baseUrl);
   const urlsToTry = [
     `${normalized}/api/stories`,
     `${normalized}/api/components`,
