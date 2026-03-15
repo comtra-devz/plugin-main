@@ -13,6 +13,20 @@ const PRESET_STORYBOOKS: { label: string; value: string }[] = [
   { label: 'GitLab UI', value: 'https://gitlab-org.gitlab.io/gitlab/storybook' },
 ];
 
+/**
+ * Host per cui il plugin può fare fetch diretto (devono essere in manifest.json networkAccess.allowedDomains).
+ * Per URL con altri host usiamo solo il backend, così non scattano errori CSP e il server fa la richiesta.
+ */
+const CLIENT_ALLOWED_STORYBOOK_ORIGINS = new Set([
+  'https://jetbrains.github.io',
+  'https://react.carbondesignsystem.com',
+  'https://chakra-ui.netlify.app',
+  'https://sap.github.io',
+  'https://developers.grafana.com',
+  'https://gitlab-org.gitlab.io',
+  'https://chromatic.com',
+]);
+
 /** Normalizza URL Storybook: rimuove query e hash così il check usa la base corretta (es. .../master/?path=... → .../master). */
 function normalizeStorybookUrl(input: string): string {
   const s = (input || '').trim();
@@ -131,11 +145,20 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     setConnectError(null);
     setIsConnecting(true);
     try {
-      // Prima prova dal browser (nessun backend): per URL pubblici basta leggere da qui
-      let result = await checkStorybookFromClient(url, token);
-      // Se il client fallisce (es. CORS), fallback al backend (può funzionare con token o reti diverse)
-      if (!result.ok && fetchCheckStorybook) {
-        result = await fetchCheckStorybook(url, token);
+      let result: { ok: boolean; error?: string };
+      let origin: string;
+      try {
+        origin = new URL(url).origin;
+      } catch {
+        origin = '';
+      }
+      const canFetchFromClient = CLIENT_ALLOWED_STORYBOOK_ORIGINS.has(origin);
+      if (canFetchFromClient) {
+        result = await checkStorybookFromClient(url, token);
+        if (!result.ok && fetchCheckStorybook) result = await fetchCheckStorybook(url, token);
+      } else {
+        // URL custom: il dominio non è in manifest → solo backend (il server fa fetch allo Storybook)
+        result = fetchCheckStorybook ? await fetchCheckStorybook(url, token) : { ok: false, error: 'Backend not available.' };
       }
       if (result.ok) {
         handleConnectSb(url, token);

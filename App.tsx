@@ -237,9 +237,20 @@ export default function AppTest() {
         return { ...prev, ...updates };
       });
       if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
-      if (data.gift && typeof data.gift.credits_added === 'number' && data.gift.credits_added > 0) {
-        setCreditGiftAmount(data.gift.credits_added);
-        setShowCreditGiftModal(true);
+      if (data.gift && typeof data.gift.credits_added === 'number' && data.gift.credits_added > 0 && user?.authToken) {
+        // Segna sul server come "visto" PRIMA di mostrare la modale, così al prossimo GET/ricarica non torna più
+        try {
+          const r = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          });
+          if (r.ok) {
+            setCreditGiftAmount(data.gift.credits_added);
+            setShowCreditGiftModal(true);
+          }
+        } catch {
+          // POST fallito: non mostriamo la modale ora; al prossimo accesso riproverà (GET ridarà il gift)
+        }
       }
     } catch (e) {
       setCreditsFetchError('network');
@@ -892,17 +903,7 @@ export default function AppTest() {
         {showCreditGiftModal && creditGiftAmount != null && (
           <CreditGiftModal
             creditsAdded={creditGiftAmount}
-            onClose={async () => {
-              if (user?.authToken) {
-                try {
-                  await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-                  });
-                } catch {
-                  // best-effort
-                }
-              }
+            onClose={() => {
               setShowCreditGiftModal(false);
               setCreditGiftAmount(null);
             }}

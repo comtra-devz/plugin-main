@@ -69,7 +69,15 @@ In sintesi: **non devono indovinare**. Inseriscono l’URL che già conoscono; n
 
 ---
 
-## 6. Riferimenti
+## 6. URL custom vs manifest Figma
+
+Gli URL **non** in elenco preset (es. Storybook su Vercel/Netlify dell’utente) non possono essere raggiunti con una fetch **dal plugin** (Figma consente solo i domini in `manifest.json` → `networkAccess.allowedDomains`). Per questi URL il plugin chiama **solo il backend** (`auth.comtra.dev`), che fa la richiesta allo Storybook da server (nessun blocco CSP). Quindi gli URL custom funzionano senza aggiungerli al manifest; va solo garantito che il backend sia raggiungibile e che risponda con CORS adeguato (origin `null` per iframe Figma).
+
+**Se aggiungi un nuovo preset Storybook:** aggiungi l’**origin** (es. `https://nuovo-host.com`) in due posti: `manifest.json` → `allowedDomains` e `views/Code/tabs/SyncTab.tsx` → `CLIENT_ALLOWED_STORYBOOK_ORIGINS`, così il check può essere fatto anche da client per quel preset.
+
+---
+
+## 7. Riferimenti
 
 - **Guida “Come esporre l’API Storybook”:** `docs/SYNC-STORYBOOK-URL-GUIDE.md` (cosa serve, formato JSON, opzioni A/B/C, test locale). Nel plugin: modale da box “Your URL doesn’t work yet?”.
 - **Flusso Sync:** `docs/SYNC-INVESTIGATION.md`

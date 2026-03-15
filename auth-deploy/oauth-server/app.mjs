@@ -76,7 +76,7 @@ app.use(cookieParser());
 app.use(cors({
   origin: (origin, cb) => {
     if (origin == null || origin === '' || origin === 'null') {
-      cb(null, '*');
+      cb(null, 'null');
     } else {
       cb(null, true);
     }

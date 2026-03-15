@@ -38,6 +38,32 @@ async function getStoredUser(): Promise<any> {
 // Invalidated when scope or pageId changes; not used for scope 'current' (selection-dependent).
 let nodeCountCache: { scope: string; pageId: string | undefined; count: number; target: string } | null = null;
 
+/**
+ * Switch to the page containing the node, select it, and reveal it in the viewport.
+ * Works regardless of which page is currently active (Audit, Code/Sync, apply-fix, undo-fix).
+ */
+async function selectLayerAndReveal(layerId: string): Promise<boolean> {
+  const node = await figma.getNodeByIdAsync(layerId);
+  if (!node || !('id' in node)) return false;
+  const sceneNode = node as SceneNode;
+  let current: BaseNode | null = node;
+  while (current) {
+    if (current.type === 'PAGE') {
+      if (figma.currentPage !== current) {
+        figma.currentPage = current as PageNode;
+      }
+      break;
+    }
+    current = current.parent;
+  }
+  figma.currentPage.selection = [sceneNode];
+  // Defer viewport update so the page switch is applied before scrolling
+  setTimeout(() => {
+    figma.viewport.scrollAndZoomIntoView([sceneNode]);
+  }, 0);
+  return true;
+}
+
 /** Prototype Audit: P-01–P-04 (flow integrity). In-plugin, deterministic. */
 async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Promise<Array<{ id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string }>> {
   const pageName = page.name || 'Current page';
@@ -577,25 +603,7 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'select-layer') {
     const layerId = msg.layerId;
-    if (layerId) {
-      const node = await figma.getNodeByIdAsync(layerId);
-      if (node && 'id' in node) {
-        const sceneNode = node as SceneNode;
-        // Switch to the page containing the node (audit can span multiple pages)
-        let current: BaseNode | null = node;
-        while (current) {
-          if (current.type === 'PAGE') {
-            if (figma.currentPage !== current) {
-              figma.currentPage = current as PageNode;
-            }
-            break;
-          }
-          current = current.parent;
-        }
-        figma.currentPage.selection = [sceneNode];
-        figma.viewport.scrollAndZoomIntoView([sceneNode]);
-      }
-    }
+    if (layerId) await selectLayerAndReveal(layerId);
   }
 
   if (msg.type === 'apply-fix') {
@@ -605,6 +613,7 @@ figma.ui.onmessage = async (raw: any) => {
       // but usually we just set the property.
       // Saving state for undo would happen here in a real app.
       figma.notify("Fix applied to " + node.name);
+      await selectLayerAndReveal(msg.layerId);
     } else {
       figma.notify("Layer not found", { error: true });
     }
@@ -615,6 +624,7 @@ figma.ui.onmessage = async (raw: any) => {
     if (node) {
       figma.notify("Changes reverted");
       // Logic to revert specific properties would go here
+      await selectLayerAndReveal(msg.layerId);
     }
   }
 

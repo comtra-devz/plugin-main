@@ -181,7 +181,16 @@ export const IssueList: React.FC<IssueListProps> = ({
                                         Discard
                                     </button>
                                 )}
-                                <span className="text-[10px] font-bold underline hover:text-[#ff90e8]" onClick={(e) => { e.stopPropagation(); onSelectLayer(e, i.layerId); }}>{expanded ? 'CLOSE' : 'VIEW'}</span>
+                                <span
+                                    className="text-[10px] font-bold underline hover:text-[#ff90e8]"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (expanded) setExpandedIssue(null);
+                                      else setExpandedIssue(i.id);
+                                    }}
+                                  >
+                                    {expanded ? 'CLOSE' : 'VIEW'}
+                                  </span>
                             </div>
                         )}
                         </div>
@@ -213,7 +222,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                             ) : (
                                 <button 
                                     onClick={(e) => onSelectLayer(e, i.layerId)}
-                                    className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === i.id ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'}`}
+                                    className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === i.layerId ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'}`}
                                 >
                                     {layerSelectionFeedback === i.layerId ? 'SELECTED!' : 'Select Layer'}
                                 </button>

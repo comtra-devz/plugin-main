@@ -259,13 +259,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   if (activeTab === 'UX') currentIssues = hasUxAudited && uxAuditIssues != null ? uxAuditIssues : [];
   if (activeTab === 'PROTOTYPE') currentIssues = hasProtoAudited && protoAuditIssues ? protoAuditIssues : [];
 
-  // Filter out excluded pages
-  let filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
-  // A11Y: filter by WCAG level (AA = hide AAA, AAA = show all)
-  if (activeTab === 'A11Y' && wcagLevelFilter === 'AA') {
-    filteredIssues = filteredIssues.filter(i => i.wcag_level !== 'AAA');
-  }
-  const activeIssues = activeCat ? filteredIssues.filter(i => i.categoryId === activeCat) : filteredIssues;
+  // Filter out excluded pages (categories and list both use this base)
+  const filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
+  // A11Y: apply WCAG filter only to the list; categories always show full counts
+  const listIssues =
+    activeTab === 'A11Y' && wcagLevelFilter === 'AA'
+      ? filteredIssues.filter(i => i.wcag_level !== 'AAA')
+      : filteredIssues;
+  const activeIssues = activeCat ? listIssues.filter(i => i.categoryId === activeCat) : listIssues;
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
   const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
 
@@ -277,7 +278,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const dsScore = activeTab === 'DS' ? computeDsScoreFromIssues(dsFullForScore) : score;
   const dsScoreCopy = activeTab === 'DS' ? getDsScoreCopy(dsScore) : { status: '', target: '' };
 
-  // A11Y tab: score from full audit result (not scope-filtered), so changing selection/page doesn't change score until next scan
+  // A11Y tab: categories from full filtered set (ignore AA/AAA filter so totals stay fixed)
   const a11yFullForScore = activeTab === 'A11Y' && a11yAuditIssues != null
     ? a11yAuditIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
     : [];

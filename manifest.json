@@ -8,7 +8,21 @@
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["https://generativelanguage.googleapis.com","https://api.figma.com","https://comtra.dev","https://auth.comtra.dev","https://fonts.googleapis.com","https://fonts.gstatic.com"],
+    "allowedDomains": [
+      "https://generativelanguage.googleapis.com",
+      "https://api.figma.com",
+      "https://comtra.dev",
+      "https://auth.comtra.dev",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://jetbrains.github.io",
+      "https://react.carbondesignsystem.com",
+      "https://chakra-ui.netlify.app",
+      "https://sap.github.io",
+      "https://developers.grafana.com",
+      "https://gitlab-org.gitlab.io",
+      "https://chromatic.com"
+    ],
     "reasoning": "Uses Google Gemini API for AI-powered design system analysis, wireframe generation and code export",
     "devAllowedDomains": ["http://localhost:3000","http://localhost:3456"]
   }
