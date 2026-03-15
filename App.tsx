@@ -88,30 +88,34 @@ function SessionLoader() {
   );
 }
 
-/** Skeleton / loader finché non abbiamo i crediti dal server (dopo login). Evita di mostrare "—" in badge. */
+/** Skeleton che simula il layout dell'app (header + content + nav). Durata minima 2s. */
 function CreditsLoader() {
   return (
-    <div className="min-h-screen w-full bg-[#fdfdfd] flex flex-col items-center justify-center p-6 border-t-2 border-black" aria-live="polite" aria-busy="true">
-      <div className="flex gap-1.5 mb-4" role="presentation">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="w-2 h-2 bg-black"
-            style={{
-              animation: 'sessionLoaderPulse 0.6s ease-in-out infinite',
-              animationDelay: `${i * 0.12}s`,
-            }}
-          />
+    <div className="min-h-screen w-full bg-[#fdfdfd] flex flex-col" aria-live="polite" aria-busy="true">
+      {/* Header skeleton */}
+      <header className="border-b-2 border-black bg-[#ff90e8] p-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="h-7 w-24 bg-black/20 animate-pulse" />
+          <div className="h-5 w-28 bg-black/20 animate-pulse" />
+        </div>
+        <div className="h-8 w-8 rounded-full bg-black/20 animate-pulse" />
+      </header>
+      {/* Main content skeleton */}
+      <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-4">
+        <div className="h-32 w-full border-2 border-black bg-white shadow-[4px_4px_0_0_#000] animate-pulse" />
+        <div className="h-10 w-full border-2 border-black bg-gray-100 animate-pulse" />
+        <div className="space-y-2">
+          <div className="h-16 w-full border-2 border-gray-200 bg-gray-50 animate-pulse" />
+          <div className="h-16 w-full border-2 border-gray-200 bg-gray-50 animate-pulse" />
+          <div className="h-12 w-[75%] border-2 border-gray-200 bg-gray-50 animate-pulse" />
+        </div>
+      </main>
+      {/* Nav skeleton */}
+      <nav className="border-t-2 border-black p-2 flex justify-around bg-white shrink-0">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-10 w-16 bg-gray-200 animate-pulse" />
         ))}
-      </div>
-      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Loading your credits…</p>
-      <p className="text-[10px] text-gray-400 mt-1">If this takes too long, check your connection.</p>
-      <style>{`
-        @keyframes sessionLoaderPulse {
-          0%, 100% { opacity: 0.35; transform: scale(0.95); }
-          50% { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
+      </nav>
     </div>
   );
 }
@@ -290,6 +294,8 @@ export default function AppTest() {
 
   /** True after we gave up loading credits (all retries failed). Reset on logout. */
   const [creditsLoadGaveUp, setCreditsLoadGaveUp] = useState(false);
+  /** Skeleton mostrato almeno 2s per dare l’idea di caricamento; poi si passa all’app. */
+  const [creditsLoaderMinElapsed, setCreditsLoaderMinElapsed] = useState(false);
 
   const CREDITS_MAX_ATTEMPTS = 5;
   const CREDITS_RETRY_DELAYS_MS = [2000, 3000, 4000, 5000]; // delays between attempt 0→1, 1→2, 2→3, 3→4
@@ -317,6 +323,17 @@ export default function AppTest() {
     })();
     return () => { cancelled = true; };
   }, [user?.authToken, user?.id, fetchCredits]);
+
+  useEffect(() => {
+    if (!user) setCreditsLoaderMinElapsed(false);
+  }, [user]);
+
+  useEffect(() => {
+    if (user && credits === null && !creditsLoadGaveUp) {
+      const t = setTimeout(() => setCreditsLoaderMinElapsed(true), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [user, credits, creditsLoadGaveUp]);
 
   const fetchTrophies = React.useCallback(async () => {
     if (!user?.authToken) return;
@@ -801,8 +818,10 @@ export default function AppTest() {
       );
   }
 
-  // Non mostrare l'app con badge "—": skeleton finché non abbiamo i crediti (o abbiamo rinunciato dopo i retry)
-  if (user && credits === null && !creditsLoadGaveUp) {
+  // Skeleton almeno 2s, poi app solo quando crediti arrivati (o gave up)
+  const showCreditsSkeleton =
+    user && ((credits === null && !creditsLoadGaveUp) || !creditsLoaderMinElapsed);
+  if (showCreditsSkeleton) {
     return <CreditsLoader />;
   }
 
