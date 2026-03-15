@@ -136,6 +136,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
   const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
+  /** When user clicks Auto-Fix on a contrast issue we request a preview; this holds pending data until we get the response. */
+  const pendingContrastFixRef = useRef<{ issueId: string; layerId: string; cost: number } | null>(null);
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' | 'UX' } | null>(null);
@@ -449,6 +451,45 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         setScanProgress({ percent: 0, count: msg.count ?? 0 });
         console.error('[count-nodes-error]', msg.error, 'count so far:', msg.count);
       }
+      if (msg.type === 'contrast-fix-preview') {
+        const pending = pendingContrastFixRef.current;
+        if (pending && pending.layerId === msg.layerId) {
+          const preview = msg.preview as { source: string; message: string; variableId?: string; styleId?: string; r?: number; g?: number; b?: number } | null;
+          const err = msg.error as string | undefined;
+          if (err || !preview) {
+            setAuditFixError(err || 'Could not get fix suggestion.');
+            pendingContrastFixRef.current = null;
+            return;
+          }
+          const cost = pending.cost;
+          setConfirmConfig({
+            isOpen: true,
+            title: 'Confirm Auto-Fix',
+            message: `${preview.message}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            confirmLabel: `Apply Fix (-${cost} Credits)`,
+            onConfirm: async () => {
+              const result = await consumeCredits({ action_type: ACTION_AUTO_FIX, credits_consumed: cost });
+              if (result.error) {
+                setAuditFixError(result.error === 'Insufficient credits' ? 'Insufficient credits. Upgrade or try again later.' : result.error);
+                return;
+              }
+              applySingleFix(pending.issueId);
+              setAuditFixError(null);
+              setConfirmConfig(null);
+              pendingContrastFixRef.current = null;
+              window.parent.postMessage({
+                pluginMessage: {
+                  type: 'apply-fix',
+                  layerId: pending.layerId,
+                  categoryId: 'contrast',
+                  fixPreview: { source: preview.source, variableId: preview.variableId, styleId: preview.styleId, r: preview.r, g: preview.g, b: preview.b },
+                },
+              }, '*');
+            },
+          });
+          pendingContrastFixRef.current = null;
+        }
+      }
       if (msg.type === 'file-context-chunked-start') {
         chunkedRef.current = {
           totalChunks: msg.totalChunks ?? 0,
@@ -730,6 +771,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     setAuditFixError(null);
     const issue = activeIssues.find(i => i.id === id);
     const cost = issue ? getCreditsForIssue(issue) : 2;
+    const layerId = issue?.layerIds?.[deviationNavIndex[id] ?? 0] ?? issue?.layerId;
+
+    if (issue?.categoryId === 'contrast' && layerId) {
+      pendingContrastFixRef.current = { issueId: id, layerId, cost };
+      window.parent.postMessage({ pluginMessage: { type: 'get-contrast-fix-preview', layerId } }, '*');
+      return;
+    }
+
     setConfirmConfig({
         isOpen: true,
         title: "Confirm Auto-Fix",
@@ -747,6 +796,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             applySingleFix(id);
             setAuditFixError(null);
             setConfirmConfig(null);
+            if (layerId) {
+              window.parent.postMessage({ pluginMessage: { type: 'apply-fix', layerId } }, '*');
+            }
         }
     });
   };

@@ -5,3 +5,27 @@
 body {
   font-family: 'Space Grotesk', sans-serif;
 }
+
+/* Scrollbar custom: stile unico per tutta l’UI (brutal: nero su grigio chiaro) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #000 #e5e5e5;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #e5e5e5;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #000;
+  border: 2px solid #e5e5e5;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #333;
+}

@@ -64,6 +64,241 @@ async function selectLayerAndReveal(layerId: string): Promise<boolean> {
   return true;
 }
 
+// --- Contrast fix: same-hue, meet WCAG AA (4.5:1). Variables → styles → hardcoded.
+const CONTRAST_AA_MIN = 4.5;
+
+function rgbToLuminance(r: number, g: number, b: number): number {
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(L1: number, L2: number): number {
+  if (L1 <= 0 && L2 <= 0) return 0;
+  const l1 = Math.max(L1, L2);
+  const l2 = Math.min(L1, L2);
+  return (l1 + 0.05) / (l2 + 0.05);
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return { h: h * 360, s, l };
+}
+
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+  h = h / 360;
+  let r: number, g: number, b: number;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  return { r, g, b };
+}
+
+function hue2rgb(p: number, q: number, t: number): number {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1 / 6) return p + (q - p) * 6 * t;
+  if (t < 1 / 2) return q;
+  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+  return p;
+}
+
+/** Same hue, adjust L so contrast vs background meets minRatio. Assume we darken text on light bg or lighten on dark bg. */
+function adjustForContrast(
+  r: number, g: number, b: number,
+  backgroundLuminance: number,
+  minRatio: number
+): { r: number; g: number; b: number } {
+  const fgLum = rgbToLuminance(r, g, b);
+  const cr = contrastRatio(fgLum, backgroundLuminance);
+  if (cr >= minRatio) return { r, g, b };
+  const { h, s, l } = rgbToHsl(r, g, b);
+  const bgDark = backgroundLuminance < 0.5;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    const newRgb = hslToRgb(h, s, mid);
+    const lum = rgbToLuminance(newRgb.r, newRgb.g, newRgb.b);
+    const ratio = contrastRatio(lum, backgroundLuminance);
+    if (ratio >= minRatio) {
+      if (bgDark) lo = mid;
+      else hi = mid;
+    } else {
+      if (bgDark) hi = mid;
+      else lo = mid;
+    }
+  }
+  const L = (lo + hi) / 2;
+  return hslToRgb(h, s, L);
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (x: number) => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0');
+  return '#' + toHex(r) + toHex(g) + toHex(b);
+}
+
+async function resolveVariableToRgb(variableId: string, modeId?: string): Promise<{ r: number; g: number; b: number } | null> {
+  const variable = await figma.variables.getVariableByIdAsync(variableId);
+  if (!variable || variable.resolvedType !== 'COLOR') return null;
+  const mode = modeId || variable.variableCollectionId ? (await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId!))?.defaultModeId : undefined;
+  const raw = mode ? (variable.valuesByMode as Record<string, unknown>)[mode] : Object.values(variable.valuesByMode)[0];
+  if (!raw || typeof raw !== 'object') return null;
+  const alias = raw as { type?: string; id?: string };
+  if (alias.type === 'VARIABLE_ALIAS' && alias.id) return resolveVariableToRgb(alias.id, modeId);
+  const c = raw as { r?: number; g?: number; b?: number };
+  if (typeof c.r === 'number' && typeof c.g === 'number' && typeof c.b === 'number')
+    return { r: c.r, g: c.g, b: c.b };
+  return null;
+}
+
+function getFillFromNode(node: SceneNode): { r: number; g: number; b: number; variableId?: string; styleId?: string } | null {
+  const fills = (node as any).fills;
+  if (!Array.isArray(fills)) return null;
+  const bound = (node as any).boundVariables?.fills;
+  for (let i = 0; i < fills.length; i++) {
+    const f = fills[i];
+    if (f.type === 'SOLID' && f.visible !== false) {
+      const color = (f as SolidPaint).color;
+      const r = color.r, g = color.g, b = color.b;
+      const alias = bound?.[i]?.color ?? (f as any).boundVariables?.color;
+      const variableId = alias?.id ?? undefined;
+      const styleId = (node as any).fillStyleId && typeof (node as any).fillStyleId === 'string' ? (node as any).fillStyleId : undefined;
+      return { r, g, b, variableId, styleId };
+    }
+  }
+  return null;
+}
+
+function getBackgroundLuminanceFromNode(node: SceneNode): number {
+  let parent = node.parent;
+  while (parent && parent.type !== 'PAGE') {
+    const p = parent as SceneNode;
+    const fill = getFillFromNode(p);
+    if (fill && (fill.r !== undefined)) {
+      return rgbToLuminance(fill.r, fill.g, fill.b);
+    }
+    parent = parent.parent;
+  }
+  return 1; // white
+}
+
+async function getContrastFixPreview(layerId: string): Promise<{ source: 'variable' | 'style' | 'hardcoded'; label: string; message: string; variableId?: string; styleId?: string; r?: number; g?: number; b?: number } | null> {
+  const node = await figma.getNodeByIdAsync(layerId) as SceneNode | null;
+  if (!node || !('fills' in node)) return null;
+  const fill = getFillFromNode(node);
+  if (!fill) return null;
+  const bgLum = getBackgroundLuminanceFromNode(node);
+  const target = adjustForContrast(fill.r, fill.g, fill.b, bgLum, CONTRAST_AA_MIN);
+  const targetHex = rgbToHex(target.r, target.g, target.b);
+
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const defaultModeByColl: Record<string, string> = {};
+  const primitives: { id: string; name: string; r: number; g: number; b: number }[] = [];
+  for (const coll of collections) {
+    defaultModeByColl[coll.id] = coll.defaultModeId;
+    for (const variableId of coll.variableIds) {
+      const variable = await figma.variables.getVariableByIdAsync(variableId);
+      if (!variable || variable.resolvedType !== 'COLOR') continue;
+      const rgb = await resolveVariableToRgb(variableId);
+      if (rgb) primitives.push({ id: variableId, name: variable.name, ...rgb });
+    }
+  }
+
+  const { h: targetH } = rgbToHsl(target.r, target.g, target.b);
+  const hueDist = (r: number, g: number, b: number) => {
+    const { h } = rgbToHsl(r, g, b);
+    let d = Math.abs(h - targetH);
+    if (d > 180) d = 360 - d;
+    return d;
+  };
+
+  if (primitives.length > 0) {
+    let best: { id: string; name: string; d: number } | null = null;
+    for (const p of primitives) {
+      const ratio = contrastRatio(rgbToLuminance(p.r, p.g, p.b), bgLum);
+      if (ratio >= CONTRAST_AA_MIN && hueDist(p.r, p.g, p.b) < 30) {
+        const d = hueDist(p.r, p.g, p.b);
+        if (!best || d < best.d) best = { id: p.id, name: p.name, d };
+      }
+    }
+    if (best) {
+      return { source: 'variable', label: best.name, message: `We'll use your variable «${best.name}» (same tone) to meet WCAG AA contrast.`, variableId: best.id };
+    }
+  }
+
+  const paintStyles = await figma.getLocalPaintStylesAsync();
+  if (fill.styleId || paintStyles.length > 0) {
+    const withSameHue: { id: string; name: string; r: number; g: number; b: number }[] = [];
+    for (const style of paintStyles) {
+      const paints = style.paints;
+      if (Array.isArray(paints) && paints[0]?.type === 'SOLID') {
+        const c = (paints[0] as SolidPaint).color;
+        if (contrastRatio(rgbToLuminance(c.r, c.g, c.b), bgLum) >= CONTRAST_AA_MIN && hueDist(c.r, c.g, c.b) < 30)
+          withSameHue.push({ id: style.id, name: style.name, r: c.r, g: c.g, b: c.b });
+      }
+    }
+    if (withSameHue.length > 0) {
+      const chosen = withSameHue[0];
+      return { source: 'style', label: chosen.name, message: `We'll apply the style «${chosen.name}» (same tone) to meet WCAG AA.`, styleId: chosen.id };
+    }
+  }
+
+  return { source: 'hardcoded', label: targetHex, message: `No variables or styles found. We'll set this color (same tone) to meet WCAG AA: ${targetHex}.`, r: target.r, g: target.g, b: target.b };
+}
+
+async function applyContrastFix(
+  layerId: string,
+  strategy: { source: 'variable' | 'style' | 'hardcoded'; variableId?: string; styleId?: string; r?: number; g?: number; b?: number }
+): Promise<boolean> {
+  const node = await figma.getNodeByIdAsync(layerId) as SceneNode | null;
+  if (!node || !('fills' in node)) return false;
+  const fills = (node as any).fills as Paint[];
+  if (!Array.isArray(fills) || fills.length === 0) return false;
+
+  if (strategy.source === 'variable' && strategy.variableId) {
+    const variable = await figma.variables.getVariableByIdAsync(strategy.variableId);
+    if (variable) {
+      const newFills = fills.map((f, i) => {
+        if (f.type !== 'SOLID') return f;
+        const alias = figma.variables.createVariableAlias(variable);
+        return { ...f, boundVariables: { color: alias } } as SolidPaint;
+      });
+      (node as any).fills = newFills;
+      return true;
+    }
+  }
+
+  if (strategy.source === 'style' && strategy.styleId) {
+    (node as any).fillStyleId = strategy.styleId;
+    return true;
+  }
+
+  if (strategy.source === 'hardcoded' && typeof strategy.r === 'number' && typeof strategy.g === 'number' && typeof strategy.b === 'number') {
+    const newFills = fills.map(f => {
+      if (f.type !== 'SOLID') return f;
+      return { ...f, color: { r: strategy.r!, g: strategy.g!, b: strategy.b! }, opacity: (f as SolidPaint).opacity ?? 1 } as SolidPaint;
+    });
+    (node as any).fills = newFills;
+    return true;
+  }
+
+  return false;
+}
+
 /** Prototype Audit: P-01–P-04 (flow integrity). In-plugin, deterministic. */
 async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Promise<Array<{ id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string }>> {
   const pageName = page.name || 'Current page';
@@ -606,14 +841,47 @@ figma.ui.onmessage = async (raw: any) => {
     if (layerId) await selectLayerAndReveal(layerId);
   }
 
+  if (msg.type === 'get-contrast-fix-preview') {
+    const layerId = msg.layerId;
+    if (layerId) {
+      try {
+        const preview = await getContrastFixPreview(layerId);
+        figma.ui.postMessage({ type: 'contrast-fix-preview', layerId, preview });
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        figma.ui.postMessage({ type: 'contrast-fix-preview', layerId, preview: null, error: errMsg });
+      }
+    }
+  }
+
   if (msg.type === 'apply-fix') {
-    const node = await figma.getNodeByIdAsync(msg.layerId);
+    const layerId = msg.layerId;
+    const categoryId = msg.categoryId;
+    const fixPreview = msg.fixPreview;
+
+    if (categoryId === 'contrast' && fixPreview && (fixPreview.source === 'variable' || fixPreview.source === 'style' || fixPreview.source === 'hardcoded')) {
+      const ok = await applyContrastFix(layerId, {
+        source: fixPreview.source,
+        variableId: fixPreview.variableId,
+        styleId: fixPreview.styleId,
+        r: fixPreview.r,
+        g: fixPreview.g,
+        b: fixPreview.b
+      });
+      if (ok) {
+        const node = await figma.getNodeByIdAsync(layerId);
+        figma.notify("Contrast fix applied — " + (node ? node.name : 'layer'));
+        await selectLayerAndReveal(layerId);
+      } else {
+        figma.notify("Could not apply contrast fix", { error: true });
+      }
+      return;
+    }
+
+    const node = await figma.getNodeByIdAsync(layerId);
     if (node && 'fills' in node) {
-      // Example fix: Clone to support undo implicitly if needed, 
-      // but usually we just set the property.
-      // Saving state for undo would happen here in a real app.
       figma.notify("Fix applied to " + node.name);
-      await selectLayerAndReveal(msg.layerId);
+      await selectLayerAndReveal(layerId);
     } else {
       figma.notify("Layer not found", { error: true });
     }

@@ -9,10 +9,12 @@ interface Props {
   onCancel: () => void;
 }
 
+/** Four bands aligned with cost tiers; user-friendly names (trophy-style). */
 function getComplexityLabel(nodes: number): string {
-  if (nodes < 100) return 'LOW';
-  if (nodes < 500) return 'STD (Regular)';
-  return 'HIGH (Enterprise)';
+  if (nodes <= 500) return 'Chill';
+  if (nodes <= 5_000) return 'Hustle';
+  if (nodes <= 50_000) return 'Beast';
+  return 'Legend';
 }
 
 function roundTo3SigFigs(n: number): number {

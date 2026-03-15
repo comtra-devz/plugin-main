@@ -23,6 +23,10 @@ const INTERACTIVE_NAMES = /button|btn|link|icon|cta|submit|toggle|tab|menu|dropd
 const GENERIC_ALT_NAMES = /^(icon|image|img|rectangle|rect|shape|vector|group|frame)$/i;
 const FOCUS_VARIANT_NAMES = /focus|focused|keyboard|focus-visible/i;
 const EXEMPT_CONTRAST_NAMES = /logo|brand|decoration|decorative|divider|background/i;
+/** Node or ancestor name suggests disabled state — contrast requirement is relaxed (WCAG 2.2). */
+const DISABLED_STATE_NAMES = /disabled|disabilitato/i;
+/** Ancestor name suggests a small/library component (checkbox, button, etc.) — heading hierarchy not expected. */
+const SMALL_COMPONENT_NAMES = /checkbox|button|btn|input|toggle|radio|select|tab|menu-item|nav-item|icon|label|chip|badge|tooltip|dropdown|accordion|_checkbox|#checkbox/i;
 
 // --- Helpers
 function* walkNodes(node, ancestors = [], pageName = '') {
@@ -100,6 +104,16 @@ function getTextThresholds(classification) {
   return { thresholdAA: CONTRAST_AA_NORMAL, thresholdAAA: CONTRAST_AAA_NORMAL };
 }
 
+/** True if node or any ancestor name indicates disabled state (contrast exception). */
+function isDisabledContext(node, ancestors) {
+  const name = (node.name || '');
+  if (DISABLED_STATE_NAMES.test(name)) return true;
+  for (const a of ancestors) {
+    if (DISABLED_STATE_NAMES.test(a.name || '')) return true;
+  }
+  return false;
+}
+
 // --- 1. Contrast (WCAG 2.2: normal/large, no rounding, rule_id)
 function collectContrastIssues(fileJson, issues, idGen) {
   const document = fileJson?.document;
@@ -120,6 +134,7 @@ function collectContrastIssues(fileJson, issues, idGen) {
       const { thresholdAA, thresholdAAA } = getTextThresholds(classification);
 
       if (ratio < thresholdAA) {
+        if (isDisabledContext(node, ancestors)) continue;
         const ruleId = classification === 'normal' ? 'CTR-001' : 'CTR-002';
         const wcagSc = classification === 'normal' ? '1.4.3' : '1.4.3';
         const required = classification === 'normal' ? CONTRAST_AA_NORMAL : CONTRAST_AA_LARGE;
@@ -150,6 +165,7 @@ function collectContrastIssues(fileJson, issues, idGen) {
           passes: false,
         });
       } else if (ratio < thresholdAAA) {
+        if (isDisabledContext(node, ancestors)) continue;
         const ruleId = classification === 'normal' ? 'CTR-003' : 'CTR-004';
         issues.push({
           id: idGen(),
@@ -174,6 +190,8 @@ function collectContrastIssues(fileJson, issues, idGen) {
 }
 
 // --- 2. Touch target (24×24 AA, only interactive, spacing exception, rule_id)
+// If an undersized interactive node (e.g. 16×16 icon) is contained in a larger interactive ancestor (≥24×24),
+// we do not report it: the real touch target is the parent (e.g. checkbox + label frame).
 function isInteractiveNode(node) {
   const name = (node.name || '').toLowerCase();
   if (node.type === 'TEXT') return false;
@@ -188,14 +206,25 @@ function getInteractiveNodesWithBox(fileJson) {
   if (!document || !document.children) return list;
   for (const page of document.children) {
     const pageName = page.name || '';
-    for (const { node } of walkNodes(page)) {
+    for (const { node, ancestors } of walkNodes(page)) {
       if (!isInteractiveNode(node)) continue;
       const box = node.absoluteBoundingBox;
       if (!box || typeof box.width !== 'number' || typeof box.height !== 'number') continue;
-      list.push({ node, box, pageName });
+      list.push({ node, box, pageName, ancestors: ancestors || [] });
     }
   }
   return list;
+}
+
+/** True if this undersized node is inside a larger interactive ancestor (≥24×24). The real touch target is the parent, so we skip reporting the inner one. */
+function isContainedInLargerInteractiveAncestor(ancestors, candidateIdSet) {
+  for (const a of ancestors) {
+    if (!candidateIdSet.has(a.id)) continue;
+    const box = a.absoluteBoundingBox;
+    if (!box || typeof box.width !== 'number' || typeof box.height !== 'number') continue;
+    if (box.width >= TOUCH_MIN_AA && box.height >= TOUCH_MIN_AA) return true;
+  }
+  return false;
 }
 
 function distance(cx1, cy1, cx2, cy2) {
@@ -204,13 +233,13 @@ function distance(cx1, cy1, cx2, cy2) {
 
 function collectTouchIssues(fileJson, issues, idGen) {
   const candidates = getInteractiveNodesWithBox(fileJson);
-  const undersized = candidates.filter(({ box }) => box.width < TOUCH_MIN_AA || box.height < TOUCH_MIN_AA);
+  const candidateIdSet = new Set(candidates.map(({ node }) => node.id));
   const centers = new Map();
   for (const { node, box } of candidates) {
     centers.set(node.id, { cx: box.x + box.width / 2, cy: box.y + box.height / 2, box });
   }
 
-  for (const { node, box, pageName } of candidates) {
+  for (const { node, box, pageName, ancestors } of candidates) {
     const w = box.width;
     const h = box.height;
     const minSide = Math.min(w, h);
@@ -222,6 +251,7 @@ function collectTouchIssues(fileJson, issues, idGen) {
     const cy = box.y + h / 2;
 
     if (isUndersizedAA) {
+      if (isContainedInLargerInteractiveAncestor(ancestors || [], candidateIdSet)) continue;
       let spacingOk = true;
       for (const { node: other, box: ob } of candidates) {
         if (other.id === node.id) continue;
@@ -266,6 +296,7 @@ function collectTouchIssues(fileJson, issues, idGen) {
         });
       }
     } else if (minSide < TOUCH_MIN_AAA) {
+      if (isContainedInLargerInteractiveAncestor(ancestors || [], candidateIdSet)) continue;
       issues.push({
         id: idGen(),
         categoryId: 'touch',
@@ -340,25 +371,36 @@ function collectAltIssues(fileJson, issues, idGen) {
   }
 }
 
+/** True if node is inside a small/library component (e.g. checkbox, button) where heading hierarchy is not expected. */
+function isInsideSmallComponentOrLibrary(node, ancestors) {
+  for (const a of ancestors) {
+    if (a.type !== 'COMPONENT' && a.type !== 'INSTANCE') continue;
+    const name = (a.name || '').toLowerCase();
+    if (SMALL_COMPONENT_NAMES.test(name)) return true;
+  }
+  return false;
+}
+
 // --- 5. Semantics (heading structure heuristic)
+// Skip when the "main" text is inside a library/small component (checkbox, button, etc.) — no hierarchy expected there.
 function collectSemanticsIssues(fileJson, issues, idGen) {
   const document = fileJson?.document;
   if (!document || !document.children) return;
   for (const page of document.children) {
     const pageName = page.name || '';
     const textNodes = [];
-    for (const { node } of walkNodes(page)) {
+    for (const { node, ancestors } of walkNodes(page)) {
       if (node.type !== 'TEXT') continue;
       const style = node.style || {};
       const size = typeof style.fontSize === 'number' ? style.fontSize : 16;
-      textNodes.push({ node, size, name: node.name || '' });
+      textNodes.push({ node, size, name: node.name || '', ancestors: ancestors || [] });
     }
     const sizes = textNodes.map((t) => t.size).filter((s) => s > 0);
     const maxSize = sizes.length ? Math.max(...sizes) : 0;
     const hasHeadingLike = textNodes.some((t) => /heading|title|h1|h2|h3/i.test(t.name));
     if (textNodes.length > 2 && maxSize > 0 && !hasHeadingLike) {
       const main = textNodes.find((t) => t.size === maxSize);
-      if (main) {
+      if (main && !isInsideSmallComponentOrLibrary(main.node, main.ancestors)) {
         issues.push({
           id: idGen(),
           categoryId: 'semantics',
