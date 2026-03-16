@@ -170,6 +170,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [discardedIds, setDiscardedIds] = useState<Set<string>>(new Set());
   const [feedbackSentIds, setFeedbackSentIds] = useState<Set<string>>(new Set());
   const [wcagLevelFilter, setWcagLevelFilter] = useState<'AA' | 'AAA'>('AA');
+  const [showHiddenLayers, setShowHiddenLayers] = useState(false);
   
   // Feedback Modal State
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -248,9 +249,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
-  // A11Y: filter by scope (all vs page) when we have results
+  // A11Y: filter by scope (all vs page/current) when we have results
   const a11yIssuesRaw = a11yAuditIssues != null ? a11yAuditIssues : A11Y_ISSUES;
-  const selectedPageName = scanScope === 'page' && selectedPageId ? documentPages.find(p => p.id === selectedPageId)?.name : null;
+  // When scope is "page" OR "current selection", we still know which page we're on,
+  // so treat both as "page-scoped" for purposes of grouping/filtering issues by pageName.
+  const isPageScoped = (scanScope === 'page' || scanScope === 'current') && !!selectedPageId;
+  const selectedPageName = isPageScoped && selectedPageId
+    ? documentPages.find(p => p.id === selectedPageId)?.name
+    : null;
   const a11yIssuesScoped = activeTab === 'A11Y' && a11yAuditIssues != null && selectedPageName
     ? a11yAuditIssues.filter(i => i.pageName === selectedPageName)
     : activeTab === 'A11Y' ? a11yIssuesRaw : [];
@@ -263,10 +269,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
   // Filter out excluded pages (categories and list both use this base)
   const filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
-  // A11Y: apply WCAG filter only to the list; categories always show full counts
+  // A11Y: when "Show hidden layers" is off (default), exclude issues on hidden layers
+  const a11yVisibleIssues =
+    activeTab === 'A11Y'
+      ? (showHiddenLayers ? filteredIssues : filteredIssues.filter(i => i.isOnHiddenLayer !== true))
+      : filteredIssues;
+  // A11Y: apply WCAG filter only to the list; categories use a11yVisibleIssues
   const listIssues =
-    activeTab === 'A11Y' && wcagLevelFilter === 'AA'
-      ? filteredIssues.filter(i => i.wcag_level !== 'AAA')
+    activeTab === 'A11Y'
+      ? (wcagLevelFilter === 'AA' ? a11yVisibleIssues.filter(i => i.wcag_level !== 'AAA') : a11yVisibleIssues)
       : filteredIssues;
   const activeIssues = activeCat ? listIssues.filter(i => i.categoryId === activeCat) : listIssues;
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
@@ -277,15 +288,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const dsFullForScore = activeTab === 'DS' && dsAuditIssues != null
     ? dsAuditIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
     : filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
-  const dsScore = activeTab === 'DS' ? computeDsScoreFromIssues(dsFullForScore) : score;
+  const dsScore = activeTab === 'DS'
+    ? (dsFullForScore.length === 0 ? 100 : computeDsScoreFromIssues(dsFullForScore))
+    : score;
   const dsScoreCopy = activeTab === 'DS' ? getDsScoreCopy(dsScore) : { status: '', target: '' };
 
-  // A11Y tab: categories from full filtered set (ignore AA/AAA filter so totals stay fixed)
+  // A11Y tab: categories and score from visible set when "Show hidden layers" is off
   const a11yFullForScore = activeTab === 'A11Y' && a11yAuditIssues != null
-    ? a11yAuditIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
+    ? a11yVisibleIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
     : [];
-  const a11yScore = activeTab === 'A11Y' ? (a11yAuditIssues != null ? computeDsScoreFromIssues(a11yFullForScore) : 100) : 100;
-  const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(filteredIssues) : [];
+  const a11yScore = activeTab === 'A11Y'
+    ? (a11yAuditIssues != null ? (a11yFullForScore.length === 0 ? 100 : computeDsScoreFromIssues(a11yFullForScore)) : 100)
+    : 100;
+  const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(a11yVisibleIssues) : [];
   const a11yScoreCopy = activeTab === 'A11Y' ? getDsScoreCopy(a11yScore) : { status: '', target: '' };
 
   // UX tab: categories and score from UX Logic ruleset (no scope / no "All Pages")
@@ -964,6 +979,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     totalHiddenCount: totalHiddenCount,
     wcagLevelFilter,
     setWcagLevelFilter,
+    showHiddenLayers,
+    setShowHiddenLayers,
   };
 
   const wordCount = feedbackText.trim().split(/\s+/).filter(w => w.length > 0).length;

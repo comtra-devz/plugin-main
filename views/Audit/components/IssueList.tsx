@@ -38,6 +38,9 @@ interface IssueListProps {
   /** A11Y only: filter by WCAG level. AA = hide AAA, AAA = show all */
   wcagLevelFilter?: 'AA' | 'AAA';
   setWcagLevelFilter?: (level: 'AA' | 'AAA') => void;
+  /** A11Y only: show issues on hidden layers. Off by default. */
+  showHiddenLayers?: boolean;
+  setShowHiddenLayers?: (value: boolean) => void;
 }
 
 export const IssueList: React.FC<IssueListProps> = ({
@@ -68,6 +71,8 @@ export const IssueList: React.FC<IssueListProps> = ({
   getCreditsForIssue: getCreditsForIssueProp,
   wcagLevelFilter,
   setWcagLevelFilter,
+  showHiddenLayers = false,
+  setShowHiddenLayers,
 }) => {
   const remainingIssues = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id));
   const getCredits = getCreditsForIssueProp ?? (() => 2);
@@ -87,22 +92,43 @@ export const IssueList: React.FC<IssueListProps> = ({
   return (
     <div className="space-y-6">
       {activeTab === 'A11Y' && setWcagLevelFilter && (
-        <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-black/10">
-          <span className="text-[10px] font-bold uppercase text-gray-600">WCAG level:</span>
-          <div className="flex border-2 border-black">
-            <button
-              onClick={() => setWcagLevelFilter('AA')}
-              className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${wcagLevelFilter === 'AA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
-            >
-              AA
-            </button>
-            <button
-              onClick={() => setWcagLevelFilter('AAA')}
-              className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${wcagLevelFilter === 'AAA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
-            >
-              AAA
-            </button>
+        <div className="flex items-center justify-between gap-4 mb-3 pb-2 border-b-2 border-black/10 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase text-gray-600">WCAG level:</span>
+            <div className="flex border-2 border-black">
+              <button
+                onClick={() => setWcagLevelFilter('AA')}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${wcagLevelFilter === 'AA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+              >
+                AA
+              </button>
+              <button
+                onClick={() => setWcagLevelFilter('AAA')}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${wcagLevelFilter === 'AAA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+              >
+                AAA
+              </button>
+            </div>
           </div>
+          {setShowHiddenLayers && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase text-gray-600">Show hidden layers:</span>
+              <div className="flex border-2 border-black">
+                <button
+                  onClick={() => setShowHiddenLayers(false)}
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${!showHiddenLayers ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+                >
+                  Off
+                </button>
+                <button
+                  onClick={() => setShowHiddenLayers(true)}
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${showHiddenLayers ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+                >
+                  On
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {Object.entries(groupedIssues).map(([pageName, issues]) => (
@@ -200,6 +226,26 @@ export const IssueList: React.FC<IssueListProps> = ({
                             <p className="text-xs font-medium mb-4 leading-relaxed">
                             Problem: {i.msg}.<br/>Suggestion: {i.fix}.
                             </p>
+                            {i.categoryId === 'contrast' && (i.foregroundHex || i.backgroundHex) && (
+                              <div className="flex flex-wrap items-center gap-3 mb-4 p-2 bg-gray-50 border border-black/10 rounded">
+                                <span className="text-[10px] font-bold uppercase text-gray-600 shrink-0">Colors:</span>
+                                {i.foregroundHex && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-5 h-5 rounded border-2 border-black shrink-0" style={{ backgroundColor: i.foregroundHex }} title={i.foregroundHex} />
+                                    <span className="text-[10px] font-mono">{i.foregroundHex}</span>
+                                    {i.foregroundVariable && <span className="text-[9px] text-gray-500">({i.foregroundVariable})</span>}
+                                  </div>
+                                )}
+                                {i.foregroundHex && i.backgroundHex && <span className="text-gray-400">/</span>}
+                                {i.backgroundHex && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-5 h-5 rounded border-2 border-black shrink-0" style={{ backgroundColor: i.backgroundHex }} title={i.backgroundHex} />
+                                    <span className="text-[10px] font-mono">{i.backgroundHex}</span>
+                                    {i.backgroundVariable && <span className="text-[9px] text-gray-500">({i.backgroundVariable})</span>}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             <div className="flex gap-2">
                             {isDeviationGroup ? (
                                 <div className="flex-1 flex border-2 border-black h-12 bg-gray-50">
@@ -273,7 +319,9 @@ export const IssueList: React.FC<IssueListProps> = ({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 2C9.243 2 7 4.243 7 7V10H6C4.895 10 4 10.895 4 12V20C4 21.105 4.895 22 6 22H18C19.105 22 20 21.105 20 20V12C20 10.895 19.105 10 18 10H17V7C17 4.243 14.757 2 12 2ZM12 4C13.657 4 15 5.343 15 7V10H9V7C9 5.343 10.343 4 12 4Z" fill="black"/>
                   </svg>
-                  <span>Unlock {totalHiddenCount} Hidden Issues</span>
+                  <span>
+                    Unlock {totalHiddenCount} Hidden Issue{totalHiddenCount === 1 ? '' : 's'}
+                  </span>
                   <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
               </Button>
           </div>

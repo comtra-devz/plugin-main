@@ -71,6 +71,11 @@ function rgbToLuminance(r, g, b) {
   return 0.2126 * R + 0.7152 * G + 0.0722 * B;
 }
 
+function rgbToHex(r, g, b) {
+  const toHex = (x) => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, '0');
+  return '#' + toHex(r) + toHex(g) + toHex(b);
+}
+
 /** Do not round: 2.999:1 does NOT pass 3:1 (ruleset). */
 function contrastRatio(L1, L2) {
   const l1 = Math.max(L1, L2);
@@ -163,6 +168,9 @@ function collectContrastIssues(fileJson, issues, idGen) {
           measured_value: ratio,
           required_value: required,
           passes: false,
+          foregroundHex: rgbToHex(textColor.r, textColor.g, textColor.b),
+          backgroundHex: rgbToHex(bg.r, bg.g, bg.b),
+          isOnHiddenLayer: node.visible === false,
         });
       } else if (ratio < thresholdAAA) {
         if (isDisabledContext(node, ancestors)) continue;
@@ -183,6 +191,9 @@ function collectContrastIssues(fileJson, issues, idGen) {
           measured_value: ratio,
           required_value: thresholdAAA,
           passes: false,
+          foregroundHex: rgbToHex(textColor.r, textColor.g, textColor.b),
+          backgroundHex: rgbToHex(bg.r, bg.g, bg.b),
+          isOnHiddenLayer: node.visible === false,
         });
       }
     }
@@ -280,6 +291,7 @@ function collectTouchIssues(fileJson, issues, idGen) {
           measured_value: minSide,
           required_value: TOUCH_MIN_AA,
           passes: false,
+          isOnHiddenLayer: node.visible === false,
         });
       } else {
         issues.push({
@@ -293,6 +305,7 @@ function collectTouchIssues(fileJson, issues, idGen) {
           measured_value: minSide,
           required_value: TOUCH_MIN_AA,
           passes: true,
+          isOnHiddenLayer: node.visible === false,
         });
       }
     } else if (minSide < TOUCH_MIN_AAA) {
@@ -311,6 +324,7 @@ function collectTouchIssues(fileJson, issues, idGen) {
         measured_value: minSide,
         required_value: TOUCH_MIN_AAA,
         passes: false,
+        isOnHiddenLayer: node.visible === false,
       });
     }
   }
@@ -341,6 +355,7 @@ function collectFocusIssues(fileJson, issues, idGen) {
         layerId: node.id,
         fix: 'Add a visible focus state (e.g. outline or ring) for keyboard navigation.',
         pageName,
+        isOnHiddenLayer: node.visible === false,
       });
     }
   }
@@ -366,6 +381,7 @@ function collectAltIssues(fileJson, issues, idGen) {
         layerId: node.id,
         fix: 'Rename layer or add description (e.g. "Close dialog", "Submit form").',
         pageName,
+        isOnHiddenLayer: node.visible === false,
       });
     }
   }
@@ -409,6 +425,7 @@ function collectSemanticsIssues(fileJson, issues, idGen) {
           layerId: main.node.id,
           fix: 'Use a clear heading hierarchy (e.g. one H1 per page) and semantic names for sections.',
           pageName,
+          isOnHiddenLayer: main.node.visible === false,
         });
       }
     }
@@ -438,6 +455,7 @@ function collectColorIssues(fileJson, issues, idGen) {
         layerId: node.id,
         fix: 'Add icon, label or pattern in addition to color so information is clear for color-blind users.',
         pageName,
+        isOnHiddenLayer: node.visible === false,
       });
     }
   }

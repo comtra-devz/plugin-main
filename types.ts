@@ -83,6 +83,14 @@ export interface AuditIssue {
   autoFixAvailable?: boolean;
   /** Prototype Audit: flow name (e.g. "Checkout Flow") */
   flowName?: string;
+  /** Contrast: foreground color hex (e.g. "#6b7280") for swatch + variable name if bound */
+  foregroundHex?: string;
+  foregroundVariable?: string;
+  /** Contrast: background color hex */
+  backgroundHex?: string;
+  backgroundVariable?: string;
+  /** True if the issue is on a hidden (invisible) layer in Figma. */
+  isOnHiddenLayer?: boolean;
 }
 
 export interface NavProps {
