@@ -190,6 +190,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     setA11yAuditError(prev => (prev != null && isFigmaConnectionError(prev) ? null : prev));
   }, [tokenVerifiedAt]);
 
+  // Reset WCAG filter to AA whenever page or scope changes (Nielsen: consistent system state)
+  useEffect(() => {
+    setWcagLevelFilter('AA');
+  }, [selectedPageId, scanScope]);
+
   /** One surface per error: file not saved = banner only; connection/Figma = toast only; others = toast only (no duplicate banner). */
   const showAuditError = useCallback(
     (message: string, isA11y: boolean, isUx?: boolean) => {
@@ -617,6 +622,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               const data = await fetchA11yAudit(auditBody);
               setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
               setLastA11yAuditDate(new Date());
+              if (msg.scope === 'page' && msg.pageId) {
+                window.parent.postMessage({ pluginMessage: { type: 'switch-to-page', pageId: msg.pageId } }, '*');
+              }
             } else if (fetchDsAudit) {
               setDsAuditError(null);
               setDsAuditLoading(true);

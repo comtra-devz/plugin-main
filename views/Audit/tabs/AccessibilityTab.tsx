@@ -172,7 +172,7 @@ export const AccessibilityTab: React.FC<Props> = ({
         </div>
       )}
       <div className={`${BRUTAL.card} bg-white p-3 flex items-start gap-3 relative min-h-[140px]`}>
-        <div className="shrink-0 mt-1"><CircularScore score={score} size="sm" /></div>
+        <div className="shrink-0 mt-1"><CircularScore score={score} size="sm" inactive={a11yAuditLoading} /></div>
         <div className="flex flex-col flex-1 w-full">
           <div className="flex justify-between items-start">
             <div>

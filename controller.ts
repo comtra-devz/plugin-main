@@ -551,20 +551,37 @@ figma.ui.onmessage = async (raw: any) => {
   const SERIALIZE_CHUNK = 20;
   const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
 
+  function serializeFills(fills: readonly Paint[]): { type: 'SOLID'; color?: { r: number; g: number; b: number; a: number }; opacity?: number }[] {
+    const arr = Array.isArray(fills) ? fills : [];
+    const out = arr.filter((p: any) => p.type === 'SOLID').map((p: any) => ({
+      type: 'SOLID' as const,
+      color: p.color ? { r: p.color.r, g: p.color.g, b: p.color.b, a: p.color.a ?? 1 } : undefined,
+      opacity: p.opacity,
+    })).filter((p: any) => p.color);
+    return out;
+  }
+
   function serializeNodeShallow(node: BaseNode): any {
     const out: any = { id: node.id, name: node.name, type: node.type, children: [] };
     if ('absoluteBoundingBox' in node && node.absoluteBoundingBox) {
       const b = node.absoluteBoundingBox;
       out.absoluteBoundingBox = { x: b.x, y: b.y, width: b.width, height: b.height };
     }
-    if ('fills' in node && node.fills !== figma.mixed) {
-      const fills = Array.isArray(node.fills) ? node.fills : [];
-      out.fills = fills.filter((p: any) => p.type === 'SOLID').map((p: any) => ({
-        type: 'SOLID',
-        color: p.color ? { r: p.color.r, g: p.color.g, b: p.color.b, a: p.color.a ?? 1 } : undefined,
-        opacity: p.opacity,
-      })).filter((p: any) => p.color);
-      if (out.fills.length === 0) delete out.fills;
+    if ('fills' in node) {
+      let fillsToSerialize: readonly Paint[] | null = null;
+      if (node.fills !== figma.mixed && Array.isArray(node.fills)) {
+        fillsToSerialize = node.fills;
+      } else if (node.type === 'TEXT') {
+        try {
+          const segments = (node as TextNode).getStyledTextSegments?.(['fills']);
+          const first = segments?.[0];
+          if (first?.fills && Array.isArray(first.fills)) fillsToSerialize = first.fills;
+        } catch (_) { /* ignore */ }
+      }
+      if (fillsToSerialize && fillsToSerialize.length > 0) {
+        const serialized = serializeFills(fillsToSerialize);
+        if (serialized.length > 0) out.fills = serialized;
+      }
     }
     if (node.type === 'TEXT') {
       const tn = node as any;
@@ -572,6 +589,7 @@ figma.ui.onmessage = async (raw: any) => {
       if (typeof tn.fontSize === 'number') out.style.fontSize = tn.fontSize;
       if (typeof tn.fontWeight === 'number') out.style.fontWeight = tn.fontWeight;
     }
+    if ('visible' in node && node.visible === false) out.visible = false;
     return out;
   }
 
@@ -839,6 +857,14 @@ figma.ui.onmessage = async (raw: any) => {
   if (msg.type === 'select-layer') {
     const layerId = msg.layerId;
     if (layerId) await selectLayerAndReveal(layerId);
+  }
+
+  if (msg.type === 'switch-to-page') {
+    const pageId = msg.pageId as string | undefined;
+    if (pageId) {
+      const page = (await figma.getNodeByIdAsync(pageId)) as PageNode | null;
+      if (page && page.type === 'PAGE') figma.currentPage = page;
+    }
   }
 
   if (msg.type === 'get-contrast-fix-preview') {
