@@ -1420,7 +1420,8 @@ app.post('/api/support/ticket', async (req, res) => {
   const type = (body.type || 'BUG').toUpperCase();
   const message = (body.message || '').trim().slice(0, 2000);
 
-  if (!['BUG', 'FEATURE', 'LOVE'].includes(type)) return res.status(400).json({ error: 'type must be BUG, FEATURE or LOVE' });
+  const ALLOWED_TYPES = ['BUG', 'FEATURE', 'LOVE', 'AUDIT'];
+  if (!ALLOWED_TYPES.includes(type)) return res.status(400).json({ error: `type must be one of ${ALLOWED_TYPES.join(', ')}` });
   if (message.length < 2) return res.status(400).json({ error: 'message must be at least 2 characters' });
 
   if (!dbSql) return res.status(503).json({ error: 'Database required' });

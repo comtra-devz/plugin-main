@@ -88,6 +88,7 @@ export const UxAuditTab: React.FC<Props> = ({
   const handleScanClick = () => onRunUxAudit();
   const scopeLabel = getUxScopeLabel(scanScope, selectedPage);
   const canRun = scanScope !== 'unselected' && !(scanScope === 'page' && !selectedPageId);
+  const hasIssues = (displayIssues?.length ?? 0) > 0;
 
   if (!hasUxResult) {
     return (
@@ -240,64 +241,80 @@ export const UxAuditTab: React.FC<Props> = ({
         </span>
       </Button>
 
-      {/* Categories */}
-      <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
-        <div className="border-b-2 border-black bg-gray-50 flex justify-between items-center px-2 py-1.5">
-          <h3 className="font-bold uppercase text-xs">Categories</h3>
-          <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
-            {categories.reduce((acc, c) => acc + c.issuesCount, 0)} Issues
-          </span>
+      {score === 100 && !uxAuditLoading && !hasIssues ? (
+        <div className={`${BRUTAL.card} bg-white p-6 flex flex-col items-center justify-center text-center gap-4`}>
+          <div className="w-24 h-24 border-4 border-black bg-gray-100 flex items-center justify-center shadow-[6px_6px_0_0_#000]">
+            <span className="text-3xl">💬</span>
+          </div>
+          <div className="max-w-xs">
+            <h3 className="font-black uppercase text-xs mb-1">Flows feel just right</h3>
+            <p className="text-[10px] text-gray-600 font-medium">
+              States, labels and feedback are lining up with UX best practices. Keep iterating — we&apos;ll flag anything that starts to feel off.
+            </p>
+          </div>
         </div>
-        <div>
-          {(() => {
-            const totalIssues = categories.reduce((acc, c) => acc + c.issuesCount, 0);
-            return categories.map(cat => {
-              const isActive = activeCat === cat.id;
-              const pctOfTotal = totalIssues > 0 ? Math.round((cat.issuesCount / totalIssues) * 100) : 0;
-              return (
-                <div
-                  key={cat.id}
-                  onClick={() => setActiveCat(isActive ? null : cat.id)}
-                  className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>
-                      {cat.icon}
+      ) : (
+        <>
+          {/* Categories */}
+          <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
+            <div className="border-b-2 border-black bg-gray-50 flex justify-between items-center px-2 py-1.5">
+              <h3 className="font-bold uppercase text-xs">Categories</h3>
+              <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
+                {categories.reduce((acc, c) => acc + c.issuesCount, 0)} Issues
+              </span>
+            </div>
+            <div>
+              {(() => {
+                const totalIssues = categories.reduce((acc, c) => acc + c.issuesCount, 0);
+                return categories.map(cat => {
+                  const isActive = activeCat === cat.id;
+                  const pctOfTotal = totalIssues > 0 ? Math.round((cat.issuesCount / totalIssues) * 100) : 0;
+                  return (
+                    <div
+                      key={cat.id}
+                      onClick={() => setActiveCat(isActive ? null : cat.id)}
+                      className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>
+                          {cat.icon}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold uppercase">{cat.label}</span>
+                          <span className="text-[9px] font-medium opacity-70">{cat.desc}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-mono ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>{pctOfTotal}%</span>
+                        {cat.issuesCount > 0 && (
+                          <span className="size-7 min-w-7 bg-white text-black border border-black flex items-center justify-center text-[9px] font-bold rounded-full">
+                            {formatIssueCount(cat.issuesCount)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold uppercase">{cat.label}</span>
-                      <span className="text-[9px] font-medium opacity-70">{cat.desc}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-mono ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>{pctOfTotal}%</span>
-                    {cat.issuesCount > 0 && (
-                      <span className="size-7 min-w-7 bg-white text-black border border-black flex items-center justify-center text-[9px] font-bold rounded-full">
-                        {formatIssueCount(cat.issuesCount)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            });
-          })()}
-        </div>
-      </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
 
-      {/* Issues List */}
-      <div className="flex flex-col">
-        <div className="flex justify-between items-center mb-2 px-1 py-2 border-b-2 border-black/10">
-          <h3 className="font-black uppercase text-xs">{activeCat ? `${activeCat} Issues` : 'All Issues'}</h3>
-          {highSeverityCount > 0 && (
-            <span className="text-[10px] font-bold bg-[#ffc900] text-black px-1.5 py-0.5 rounded-sm border border-black">{highSeverityCount} High</span>
-          )}
-        </div>
-        <IssueList
-          displayIssues={displayIssues}
-          activeIssues={activeIssues}
-          {...issueListProps}
-        />
-      </div>
+          {/* Issues List */}
+          <div className="flex flex-col">
+            <div className="flex justify-between items-center mb-2 px-1 py-2 border-b-2 border-black/10">
+              <h3 className="font-black uppercase text-xs">{activeCat ? `${activeCat} Issues` : 'All Issues'}</h3>
+              {highSeverityCount > 0 && (
+                <span className="text-[10px] font-bold bg-[#ffc900] text-black px-1.5 py-0.5 rounded-sm border border-black">{highSeverityCount} High</span>
+              )}
+            </div>
+            <IssueList
+              displayIssues={displayIssues}
+              activeIssues={activeIssues}
+              {...issueListProps}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 };

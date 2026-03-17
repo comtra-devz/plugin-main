@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP } from '../../constants';
+import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP, AUTH_BACKEND_URL } from '../../constants';
 import { UserPlan, AuditIssue } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CircularScore } from '../../components/widgets/CircularScore';
@@ -62,13 +62,15 @@ interface Props {
   fetchA11yAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
   /** UX Audit agent: fetch issues from backend (Kimi). Called after confirm when fileKey/fileJson is available. */
   fetchUxAudit?: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>;
+  /** JWT for auth backend, used for audit feedback tickets. */
+  authToken?: string | null;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
 import { getSystemToastOptions, isFileNotSavedError, isFigmaConnectionError } from '../../lib/errorCopy';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, authToken }) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
@@ -926,10 +928,60 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               const newSent = new Set(feedbackSentIds);
               newSent.add(feedbackTargetId);
               setFeedbackSentIds(newSent);
+              // Send audit feedback ticket to admin dashboard (notifications + support view)
+              const comment = feedbackText.trim();
+              if (authToken && comment.length >= 2) {
+                const tabLabel =
+                  activeTab === 'DS' ? 'Design System' :
+                  activeTab === 'A11Y' ? 'Accessibility' :
+                  activeTab === 'UX' ? 'UX Logic' :
+                  activeTab === 'PROTOTYPE' ? 'Prototype' :
+                  'Audit';
+                const scope =
+                  auditScopeIsCurrent ? `Scope: Current selection (${auditScopeName || auditScopeLabel})` :
+                  `Scope: ${auditScopeLabel}${auditScopeName ? ` – ${auditScopeName}` : ''}`;
+                const payload = {
+                  type: 'AUDIT',
+                  message: `[DISCARD] Tab: ${tabLabel}. ${scope}. IssueId: ${feedbackTargetId}. Comment: ${comment}`,
+                };
+                // Fire-and-forget; errors are logged in backend / Network tab, no UI noise
+                fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${authToken}`,
+                  },
+                  body: JSON.stringify(payload),
+                }).catch(() => {});
+              }
           } else if (feedbackType === 'BAD_FIX') {
               const newSent = new Set(feedbackSentIds);
               newSent.add(feedbackTargetId);
               setFeedbackSentIds(newSent);
+              const comment = feedbackText.trim();
+              if (authToken && comment.length >= 2) {
+                const tabLabel =
+                  activeTab === 'DS' ? 'Design System' :
+                  activeTab === 'A11Y' ? 'Accessibility' :
+                  activeTab === 'UX' ? 'UX Logic' :
+                  activeTab === 'PROTOTYPE' ? 'Prototype' :
+                  'Audit';
+                const scope =
+                  auditScopeIsCurrent ? `Scope: Current selection (${auditScopeName || auditScopeLabel})` :
+                  `Scope: ${auditScopeLabel}${auditScopeName ? ` – ${auditScopeName}` : ''}`;
+                const payload = {
+                  type: 'AUDIT',
+                  message: `[BAD_FIX] Tab: ${tabLabel}. ${scope}. IssueId: ${feedbackTargetId}. Comment: ${comment}`,
+                };
+                fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${authToken}`,
+                  },
+                  body: JSON.stringify(payload),
+                }).catch(() => {});
+              }
           }
       }
       setShowConfetti(true);

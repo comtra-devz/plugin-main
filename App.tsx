@@ -865,6 +865,7 @@ export default function AppTest() {
             fetchDsAudit={fetchDsAudit}
             fetchA11yAudit={fetchA11yAudit}
             fetchUxAudit={fetchUxAudit}
+            authToken={user?.authToken}
             onNavigateToGenerate={(prompt) => {
               setGenPrompt(prompt);
               setView(ViewState.GENERATE);
