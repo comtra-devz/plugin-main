@@ -25,6 +25,7 @@ export default function Executions() {
   const [dateTo, setDateTo] = useState('');
   const [userId, setUserId] = useState('');
   const [country, setCountry] = useState('');
+  const [plan, setPlan] = useState<'' | 'PRO' | 'FREE'>('');
   const [countries, setCountries] = useState<string[]>([]);
 
   useEffect(() => {
@@ -37,16 +38,16 @@ export default function Executions() {
 
   useEffect(() => {
     setOffset(0);
-  }, [actionType, dateFrom, dateTo, userId, country]);
+  }, [actionType, dateFrom, dateTo, userId, country, plan]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchExecutionsUsers(dateFrom || undefined, dateTo || undefined, country.trim() || undefined)
+    fetchExecutionsUsers(dateFrom || undefined, dateTo || undefined, country.trim() || undefined, plan || undefined)
       .then((r) => { if (!cancelled) setUsers(r.users); })
       .catch(() => { if (!cancelled) setUsers([]); });
     return () => { cancelled = true; };
-  }, [dateFrom, dateTo, country]);
+  }, [dateFrom, dateTo, country, plan]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +58,7 @@ export default function Executions() {
     if (dateTo) f.date_to = dateTo;
     if (userId) f.user_id = userId;
     if (country.trim()) f.country = country.trim();
+    if (plan === 'PRO' || plan === 'FREE') f.plan = plan;
     fetchFunctionExecutions(PAGE_SIZE, offset, Object.keys(f).length ? f : undefined)
       .then((r) => {
         if (!cancelled) {
@@ -68,12 +70,12 @@ export default function Executions() {
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [offset, actionType, dateFrom, dateTo, userId, country]);
+  }, [offset, actionType, dateFrom, dateTo, userId, country, plan]);
 
   const hasMore = offset + PAGE_SIZE < total;
   const hasPrev = offset > 0;
   const hasActiveFilters = !!(
-    actionType.trim() || dateFrom || dateTo || userId || country.trim()
+    actionType.trim() || dateFrom || dateTo || userId || country.trim() || plan
   );
 
   const clearFilters = () => {
@@ -82,6 +84,7 @@ export default function Executions() {
     setDateTo('');
     setUserId('');
     setCountry('');
+    setPlan('');
     setOffset(0);
   };
 
@@ -89,7 +92,7 @@ export default function Executions() {
     <>
       <PageHeader title="Storico utilizzo" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-        Singole esecuzioni (credit_transactions) con filtri per tipo, periodo e utente (anonimizzato).
+        Singole esecuzioni (credit_transactions) con filtri per tipo, periodo, piano (PRO/FREE) e utente (anonimizzato).
         {hasActiveFilters ? (
           <> Totale risultati (con filtri): <strong>{total}</strong></>
         ) : (
@@ -136,6 +139,19 @@ export default function Executions() {
               {countries.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="brutal-label">Piano utente</label>
+            <select
+              className="brutal-input"
+              value={plan}
+              onChange={(e) => setPlan((e.target.value as '' | 'PRO' | 'FREE') || '')}
+              style={{ width: '100%' }}
+            >
+              <option value="">Tutti</option>
+              <option value="PRO">PRO</option>
+              <option value="FREE">FREE</option>
             </select>
           </div>
           <div>

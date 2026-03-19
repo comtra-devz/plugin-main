@@ -61,9 +61,11 @@ interface DualLineChartProps {
   onPeriodChange?: (p: number) => void;
   /** Dettaglio crediti per tipo azione per giorno (opzionale, per tooltip). */
   byActionPerDay?: ByActionPerDay;
+  /** Nota sotto il grafico (es. filtro piano + Kimi anonimo). */
+  planNote?: string | null;
 }
 
-export default function DualLineChart({ timeline, period, onPeriodChange, byActionPerDay }: DualLineChartProps) {
+export default function DualLineChart({ timeline, period, onPeriodChange, byActionPerDay, planNote }: DualLineChartProps) {
   const data = [...timeline].reverse();
   const scansMax = Math.max(...data.map((d) => d.scans), 1);
   const creditsMax = Math.max(...data.map((d) => d.credits), 1);
@@ -158,6 +160,11 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
       <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.75rem', marginTop: 0 }}>
         <strong>Scan</strong> = n° operazioni audit/scan · <strong>Crediti</strong> = crediti consumati nel giorno (tutte le funzioni: audit, a11y_audit, generate, sync, …). Puoi avere crediti senza scan se hai usato altre funzioni.
       </p>
+      {planNote ? (
+        <p style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.75rem', marginTop: '-0.5rem', fontStyle: 'italic' }}>
+          {planNote}
+        </p>
+      ) : null}
       <div style={{ position: 'relative', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div ref={chartWrapRef} style={{ flex: '1 1 320px', minWidth: 0, position: 'relative', isolation: 'isolate' }}>
           <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} style={{ maxWidth: '100%', height: 'auto', display: 'block' }}>

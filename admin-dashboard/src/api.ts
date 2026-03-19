@@ -178,8 +178,10 @@ export async function fetchStats(): Promise<AdminStats> {
   return r.json();
 }
 
-export async function fetchCreditsTimeline(period = 30): Promise<CreditsTimeline> {
-  const r = await fetch(apiUrl('credits-timeline', { period }), { headers: headers() });
+export async function fetchCreditsTimeline(period = 30, plan?: 'PRO' | 'FREE'): Promise<CreditsTimeline> {
+  const params: Record<string, string | number> = { period };
+  if (plan === 'PRO' || plan === 'FREE') params.plan = plan;
+  const r = await fetch(apiUrl('credits-timeline', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -322,6 +324,10 @@ export interface AdminStats {
     scans_7d: number;
     scans_30d: number;
     credits_consumed_30d: number;
+    /** Consumi (30d) solo utenti con plan PRO al momento della query */
+    credits_consumed_30d_pro: number;
+    /** Consumi (30d) solo utenti FREE */
+    credits_consumed_30d_free: number;
     by_action_type: { action_type: string; count: number; credits: number }[];
   };
   kimi: {
@@ -346,6 +352,8 @@ export interface CreditsTimeline {
   since: string;
   timeline: { date: string; credits: number; scans: number; kimi_calls?: number; kimi_cost_usd?: number }[];
   by_action_per_day: Record<string, Record<string, { count: number; credits: number }>>;
+  plan_filter?: 'PRO' | 'FREE' | null;
+  kimi_note?: string | null;
 }
 
 export interface AdminUser {
@@ -414,6 +422,8 @@ export interface FunctionExecutionsFilters {
   date_to?: string;
   user_id?: string;
   country?: string;
+  /** Filtra per piano utente corrente in DB (PRO / FREE) */
+  plan?: 'PRO' | 'FREE';
 }
 
 export async function fetchFunctionExecutions(
@@ -427,16 +437,23 @@ export async function fetchFunctionExecutions(
   if (filters?.date_to) params.date_to = filters.date_to;
   if (filters?.user_id) params.user_id = filters.user_id;
   if (filters?.country) params.country = filters.country.trim().toUpperCase().slice(0, 2);
+  if (filters?.plan === 'PRO' || filters?.plan === 'FREE') params.plan = filters.plan;
   const r = await fetch(apiUrl('function-executions', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
-export async function fetchExecutionsUsers(dateFrom?: string, dateTo?: string, country?: string): Promise<ExecutionsUsersResponse> {
+export async function fetchExecutionsUsers(
+  dateFrom?: string,
+  dateTo?: string,
+  country?: string,
+  plan?: 'PRO' | 'FREE'
+): Promise<ExecutionsUsersResponse> {
   const params: Record<string, string> = {};
   if (dateFrom) params.date_from = dateFrom;
   if (dateTo) params.date_to = dateTo;
   if (country && country.trim()) params.country = country.trim().toUpperCase().slice(0, 2);
+  if (plan === 'PRO' || plan === 'FREE') params.plan = plan;
   const r = await fetch(apiUrl('executions-users', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
@@ -673,4 +690,40 @@ export async function saveDocContent(data: DocContentData): Promise<{ ok: boolea
   });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
+}
+
+// --- Notion: fonti per migliorie prodotto (ruleset / docs)
+export interface NotionProductSourcesLink {
+  url: string;
+  contexts: string[];
+}
+
+export interface NotionProductSourcesResponse {
+  ok: boolean;
+  mode: 'page' | 'database';
+  sourceId: string;
+  linkCount: number;
+  links: NotionProductSourcesLink[];
+  markdown: string;
+  stats: {
+    ignoredBlocks: number;
+    blockOrPageCount?: number;
+  };
+}
+
+export async function scanNotionProductSources(body: {
+  pageId?: string;
+  databaseId?: string;
+  ignoreTokens?: string[];
+}): Promise<NotionProductSourcesResponse> {
+  const r = await fetch(`${BASE}/api/notion-product-sources`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as NotionProductSourcesResponse;
 }

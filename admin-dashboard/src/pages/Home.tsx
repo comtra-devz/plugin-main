@@ -25,6 +25,8 @@ export default function Home() {
   const [throttleEvents, setThrottleEvents] = useState<ThrottleEventsResponse | null>(null);
   const [discountsStats, setDiscountsStats] = useState<DiscountsStats | null>(null);
   const [chartPeriod, setChartPeriod] = useState(30);
+  /** Filtro piano per il grafico timeline (scan/crediti per giorno). Kimi resta globale solo con “Tutti”. */
+  const [timelinePlan, setTimelinePlan] = useState<'' | 'PRO' | 'FREE'>('');
   const [loading, setLoading] = useState(true);
   const [errorStats, setErrorStats] = useState<string | null>(null);
   const [errorTimeline, setErrorTimeline] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function Home() {
   const loadTimeline = () => {
     setErrorTimeline(null);
     setLoadingTimeline(true);
-    fetchCreditsTimeline(chartPeriod)
+    fetchCreditsTimeline(chartPeriod, timelinePlan || undefined)
       .then((t) => setTimeline(t))
       .catch((e) => setErrorTimeline(e.message || 'Errore timeline'))
       .finally(() => setLoadingTimeline(false));
@@ -65,12 +67,12 @@ export default function Home() {
     let cancelled = false;
     setErrorTimeline(null);
     setLoadingTimeline(true);
-    fetchCreditsTimeline(chartPeriod)
+    fetchCreditsTimeline(chartPeriod, timelinePlan || undefined)
       .then((t) => { if (!cancelled) setTimeline(t); })
       .catch((e) => { if (!cancelled) setErrorTimeline(e.message || 'Errore timeline'); })
       .finally(() => { if (!cancelled) setLoadingTimeline(false); });
     return () => { cancelled = true; };
-  }, [chartPeriod, data]);
+  }, [chartPeriod, data, timelinePlan]);
 
   const loadWeeklyUpdates = () => {
     setErrorWeeklyUpdates(null);
@@ -204,6 +206,39 @@ export default function Home() {
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{credits.credits_consumed_30d}</div>
           </div>
         </div>
+        <div className="grid grid-2" style={{ marginTop: '0.75rem' }}>
+          <div className="brutal-card accent-black">
+            <h3 className="section-title" style={{ marginBottom: '0.25rem', color: 'var(--white)' }}>Consumi PRO (30d)</h3>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--white)' }}>
+              {credits.credits_consumed_30d_pro ?? 0}
+            </div>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', opacity: 0.9, color: 'var(--white)' }}>
+              Crediti consumati da utenti con piano PRO (oggi in DB).
+            </p>
+          </div>
+          <div className="brutal-card">
+            <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Consumi FREE (30d)</h3>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{credits.credits_consumed_30d_free ?? 0}</div>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--muted)' }}>
+              Crediti consumati da utenti FREE.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginTop: '0.75rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Grafico per piano:</span>
+          {(['', 'PRO', 'FREE'] as const).map((p) => (
+            <button
+              key={p || 'all'}
+              type="button"
+              className={`brutal-btn ${timelinePlan === p ? 'primary' : ''}`}
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+              onClick={() => setTimelinePlan(p)}
+            >
+              {p === '' ? 'Tutti' : p}
+            </button>
+          ))}
+        </div>
 
         {loadingTimeline ? (
           <p style={{ marginTop: '1rem', color: 'var(--muted)' }}>Caricamento grafico…</p>
@@ -221,6 +256,7 @@ export default function Home() {
               period={chartPeriod}
               onPeriodChange={setChartPeriod}
               byActionPerDay={timeline.by_action_per_day}
+              planNote={timeline.kimi_note ?? null}
             />
             <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
               Passa il mouse su un punto per il dettaglio.

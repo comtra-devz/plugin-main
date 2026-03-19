@@ -71,6 +71,9 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/content/documentation" className={({ isActive }) => (isActive ? 'active' : '')}>
           Documentation
         </NavLink>
+        <NavLink to="/content/product-improvement" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Migliorie prodotto (Notion)
+        </NavLink>
       </nav>
       <div style={{ marginTop: 'auto', padding: '1rem' }}>
         {logoutMessage ? (

@@ -12,13 +12,14 @@ export default function Credits() {
   const [timeline, setTimeline] = useState<CreditsTimeline | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsageResponse | null>(null);
   const [period, setPeriod] = useState(30);
+  const [timelinePlan, setTimelinePlan] = useState<'' | 'PRO' | 'FREE'>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchStats(), fetchCreditsTimeline(period), fetchTokenUsage(period)])
+    Promise.all([fetchStats(), fetchCreditsTimeline(period, timelinePlan || undefined), fetchTokenUsage(period)])
       .then(([s, t, k]) => {
         if (!cancelled) {
           setStats(s);
@@ -30,7 +31,7 @@ export default function Credits() {
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [period]);
+  }, [period, timelinePlan]);
 
   if (loading && !stats) return <p className="loading">Caricamento…</p>;
   if (error) return <p className="error">{error}</p>;
@@ -63,6 +64,18 @@ export default function Credits() {
                 ~{Math.round((stats.credits.credits_consumed_30d / 30) * 10) / 10} crediti/giorno
               </p>
             </div>
+            <div className="brutal-card accent-black">
+              <h3 className="section-title" style={{ marginBottom: '0.25rem', color: 'var(--white)' }}>PRO (30d)</h3>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--white)' }}>
+                {stats.credits.credits_consumed_30d_pro ?? 0}
+              </div>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', opacity: 0.9, color: 'var(--white)' }}>Consumi utenti PRO</p>
+            </div>
+            <div className="brutal-card">
+              <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>FREE (30d)</h3>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{stats.credits.credits_consumed_30d_free ?? 0}</div>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--muted)' }}>Consumi utenti FREE</p>
+            </div>
             <div className="brutal-card">
               <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo Kimi stimato (30d)</h3>
               <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${stats.kimi.cost_30d_usd.toFixed(2)}</div>
@@ -94,7 +107,7 @@ export default function Credits() {
       )}
 
       <section style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           <h2 className="section-title" style={{ marginBottom: 0 }}>Timeline consumo</h2>
           <select
             value={period}
@@ -106,7 +119,25 @@ export default function Credits() {
             <option value={30}>30 giorni</option>
             <option value={90}>90 giorni</option>
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
+            Piano
+            <select
+              className="brutal-input"
+              style={{ width: 'auto', minWidth: 120 }}
+              value={timelinePlan}
+              onChange={(e) => setTimelinePlan((e.target.value as '' | 'PRO' | 'FREE') || '')}
+            >
+              <option value="">Tutti</option>
+              <option value="PRO">PRO</option>
+              <option value="FREE">FREE</option>
+            </select>
+          </label>
         </div>
+        {timeline?.kimi_note && (
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '-0.5rem', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+            {timeline.kimi_note}
+          </p>
+        )}
 
         {timeline?.timeline?.length ? (
           <div className="brutal-card">

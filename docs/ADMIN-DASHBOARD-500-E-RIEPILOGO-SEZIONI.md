@@ -82,3 +82,11 @@ Riferimento: [GAMIFICATION-DISCOUNT-FINANCIAL.md](./GAMIFICATION-DISCOUNT-FINANC
 4. **Ricarica crediti admin:** Eseguire la migration `007_admin_recharge.sql` e configurare Resend per l’email del PIN (vedi [ADMIN-RECHARGE-CREDITS.md](./ADMIN-RECHARGE-CREDITS.md)).
 
 Dopo questi passi, le stesse route che prima potevano dare 500 restituiranno dati pieni (e la dashboard mostrerà risultati reali invece di zeri).
+
+---
+
+## Consumi per piano (PRO vs FREE)
+
+- **Stats (`GET /api/admin?route=stats`):** in `credits` compaiono `credits_consumed_30d` (tutti), `credits_consumed_30d_pro` e `credits_consumed_30d_free` (join `credit_transactions` → `users`, escluso `admin_recharge`, solo `GREATEST(credits_consumed, 0)`).  
+- **Timeline (`GET /api/admin?route=credits-timeline&period=…&plan=PRO|FREE`):** opzionale `plan` per filtrare scan/crediti giornalieri per piano. Con `plan` attivo le serie **Kimi** (telemetria anonima) non sono attribuibili al piano: restano a 0 e la risposta include `kimi_note`.  
+- **Storico utilizzo (`function-executions`, `executions-users`):** query opzionale `plan=PRO|FREE` per elenchi e conteggi solo utenti con quel `users.plan` attuale.

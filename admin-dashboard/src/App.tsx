@@ -16,6 +16,7 @@ import Discounts from './pages/Discounts';
 import ABTests from './pages/ABTests';
 import GenerateABTest from './pages/GenerateABTest';
 import DocContent from './pages/DocContent';
+import ProductImprovement from './pages/ProductImprovement';
 import BrandAwareness from './pages/BrandAwareness';
 import TouchpointFunnel from './pages/TouchpointFunnel';
 import Notifications from './pages/Notifications';
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="generate" element={<GenerateABTest />} />
           </Route>
           <Route path="/content/documentation" element={<DocContent />} />
+          <Route path="/content/product-improvement" element={<ProductImprovement />} />
           <Route path="/brand-awareness" element={<BrandAwareness />} />
           <Route path="/brand-awareness/funnel" element={<TouchpointFunnel />} />
         </Routes>

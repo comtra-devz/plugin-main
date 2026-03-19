@@ -135,12 +135,25 @@ async function handleStats(req, res) {
     WHERE action_type IN ('audit', 'scan') AND created_at >= ${thirtyDaysAgo}
   `;
   const creditsConsumed30d = await sql`
-    SELECT COALESCE(SUM(credits_consumed), 0)::int AS s FROM credit_transactions
+    SELECT COALESCE(SUM(GREATEST(credits_consumed, 0)), 0)::int AS s FROM credit_transactions
     WHERE created_at >= ${thirtyDaysAgo} AND action_type != 'admin_recharge'
   `;
+  const creditsConsumed30dPro = await sql`
+    SELECT COALESCE(SUM(GREATEST(ct.credits_consumed, 0)), 0)::int AS s
+    FROM credit_transactions ct
+    INNER JOIN users u ON u.id = ct.user_id
+    WHERE ct.created_at >= ${thirtyDaysAgo} AND ct.action_type != 'admin_recharge' AND u.plan = 'PRO'
+  `;
+  const creditsConsumed30dFree = await sql`
+    SELECT COALESCE(SUM(GREATEST(ct.credits_consumed, 0)), 0)::int AS s
+    FROM credit_transactions ct
+    INNER JOIN users u ON u.id = ct.user_id
+    WHERE ct.created_at >= ${thirtyDaysAgo} AND ct.action_type != 'admin_recharge' AND u.plan = 'FREE'
+  `;
   const byActionType = await sql`
-    SELECT action_type, COUNT(*)::int AS count, COALESCE(SUM(credits_consumed), 0)::int AS credits
-    FROM credit_transactions WHERE created_at >= ${thirtyDaysAgo}
+    SELECT action_type, COUNT(*)::int AS count, COALESCE(SUM(GREATEST(credits_consumed, 0)), 0)::int AS credits
+    FROM credit_transactions
+    WHERE created_at >= ${thirtyDaysAgo} AND action_type != 'admin_recharge'
     GROUP BY action_type ORDER BY credits DESC
   `;
 
@@ -200,6 +213,8 @@ async function handleStats(req, res) {
       scans_7d: scans7d.rows[0]?.c ?? 0,
       scans_30d: scanCount30,
       credits_consumed_30d: creditsConsumed30d.rows[0]?.s ?? 0,
+      credits_consumed_30d_pro: creditsConsumed30dPro.rows[0]?.s ?? 0,
+      credits_consumed_30d_free: creditsConsumed30dFree.rows[0]?.s ?? 0,
       by_action_type: (byActionType.rows || []).map(r => ({ action_type: r.action_type, count: r.count, credits: r.credits })),
     },
     kimi: {
@@ -359,22 +374,46 @@ async function handleNotifications(req, res) {
 async function handleCreditsTimeline(req, res) {
   const period = Math.min(90, Math.max(1, parseInt(req.query?.period, 10) || 30));
   const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
+  const planRaw = (req.query?.plan || '').toUpperCase().trim();
+  const planFilter = planRaw === 'PRO' || planRaw === 'FREE' ? planRaw : null;
 
-  const creditsByDay = await sql`
-    SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
-           -- Mostriamo "crediti consumati": i "regali" additivi (admin_recharge) sono negativi e fuorvianti nel grafico
-           SUM(GREATEST(credits_consumed, 0))::int FILTER (WHERE action_type != 'admin_recharge') AS credits,
-           COUNT(*) FILTER (WHERE action_type IN ('audit', 'scan'))::int AS scans
-    FROM credit_transactions WHERE created_at >= ${since}
-    GROUP BY 1 ORDER BY 1
-  `;
-  const byActionByDay = await sql`
-    SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
-           action_type, COUNT(*)::int AS count, SUM(GREATEST(credits_consumed, 0))::int AS credits
-    FROM credit_transactions WHERE created_at >= ${since}
-      AND action_type != 'admin_recharge'
-    GROUP BY 1, 2 ORDER BY 1, 3 DESC
-  `;
+  let creditsByDay;
+  let byActionByDay;
+  if (!planFilter) {
+    creditsByDay = await sql`
+      SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
+             SUM(GREATEST(credits_consumed, 0))::int FILTER (WHERE action_type != 'admin_recharge') AS credits,
+             COUNT(*) FILTER (WHERE action_type IN ('audit', 'scan'))::int AS scans
+      FROM credit_transactions WHERE created_at >= ${since}
+      GROUP BY 1 ORDER BY 1
+    `;
+    byActionByDay = await sql`
+      SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
+             action_type, COUNT(*)::int AS count, SUM(GREATEST(credits_consumed, 0))::int AS credits
+      FROM credit_transactions WHERE created_at >= ${since}
+        AND action_type != 'admin_recharge'
+      GROUP BY 1, 2 ORDER BY 1, 3 DESC
+    `;
+  } else {
+    creditsByDay = await sql`
+      SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
+             SUM(GREATEST(ct.credits_consumed, 0))::int FILTER (WHERE ct.action_type != 'admin_recharge') AS credits,
+             COUNT(*) FILTER (WHERE ct.action_type IN ('audit', 'scan'))::int AS scans
+      FROM credit_transactions ct
+      INNER JOIN users u ON u.id = ct.user_id
+      WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
+      GROUP BY 1 ORDER BY 1
+    `;
+    byActionByDay = await sql`
+      SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
+             ct.action_type, COUNT(*)::int AS count, SUM(GREATEST(ct.credits_consumed, 0))::int AS credits
+      FROM credit_transactions ct
+      INNER JOIN users u ON u.id = ct.user_id
+      WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
+        AND ct.action_type != 'admin_recharge'
+      GROUP BY 1, 2 ORDER BY 1, 3 DESC
+    `;
+  }
 
   const toDateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : (d ? String(d).slice(0, 10) : ''));
   const days = (creditsByDay.rows || []).map(r => ({
@@ -413,13 +452,22 @@ async function handleCreditsTimeline(req, res) {
     kimiByDate[r.day] = { kimi_calls: r.count, kimi_cost_usd: r.cost_usd };
   }
   for (const d of days) {
-    if (kimiByDate[d.date]) {
+    if (!planFilter && kimiByDate[d.date]) {
       d.kimi_calls = kimiByDate[d.date].kimi_calls;
       d.kimi_cost_usd = kimiByDate[d.date].kimi_cost_usd;
     }
   }
 
-  res.status(200).json({ period_days: period, since, timeline: days, by_action_per_day: byAction });
+  res.status(200).json({
+    period_days: period,
+    since,
+    timeline: days,
+    by_action_per_day: byAction,
+    plan_filter: planFilter,
+    kimi_note: planFilter
+      ? 'Kimi (rosa/verde) non filtrato per piano: la telemetria token è anonima. Solo scan/crediti sono per piano selezionato.'
+      : null,
+  });
 }
 
 async function handleUsers(req, res) {
@@ -598,12 +646,16 @@ async function handleFunctionExecutions(req, res) {
   if (dateFrom && !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) dateFrom = null;
   if (dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) dateTo = null;
 
+  const planExec = (req.query?.plan || '').toUpperCase().trim();
+  const planFilterExec = planExec === 'PRO' || planExec === 'FREE' ? planExec : null;
+
   const countResult = await sql`
     SELECT COUNT(*)::int AS c FROM credit_transactions ct
     INNER JOIN users u ON u.id = ct.user_id
     WHERE (ct.action_type = ${actionType} OR ${actionType}::text IS NULL)
       AND (ct.user_id = ${userId} OR ${userId}::text IS NULL)
       AND (u.country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      AND (u.plan = ${planFilterExec} OR ${planFilterExec}::text IS NULL)
       AND (ct.created_at >= ${dateFrom}::date OR ${dateFrom}::text IS NULL)
       AND (ct.created_at <= (${dateTo}::date + INTERVAL '1 day') OR ${dateTo}::text IS NULL)
   `;
@@ -616,6 +668,7 @@ async function handleFunctionExecutions(req, res) {
     WHERE (ct.action_type = ${actionType} OR ${actionType}::text IS NULL)
       AND (ct.user_id = ${userId} OR ${userId}::text IS NULL)
       AND (u.country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      AND (u.plan = ${planFilterExec} OR ${planFilterExec}::text IS NULL)
       AND (ct.created_at >= ${dateFrom}::date OR ${dateFrom}::text IS NULL)
       AND (ct.created_at <= (${dateTo}::date + INTERVAL '1 day') OR ${dateTo}::text IS NULL)
     ORDER BY ct.created_at DESC
@@ -640,12 +693,15 @@ async function handleExecutionsUsers(req, res) {
   let dateTo = (req.query?.date_to || '').trim() || null;
   if (dateFrom && !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) dateFrom = null;
   if (dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) dateTo = null;
+  const planRaw = (req.query?.plan || '').toUpperCase().trim();
+  const planFilterUsers = planRaw === 'PRO' || planRaw === 'FREE' ? planRaw : null;
 
   const rows = await sql`
     SELECT DISTINCT ct.user_id, u.email, u.country_code
     FROM credit_transactions ct
     INNER JOIN users u ON u.id = ct.user_id
     WHERE (u.country_code = ${countryCode} OR ${countryCode}::text IS NULL)
+      AND (u.plan = ${planFilterUsers} OR ${planFilterUsers}::text IS NULL)
       AND (ct.created_at >= ${dateFrom}::date OR ${dateFrom}::text IS NULL)
       AND (ct.created_at <= (${dateTo}::date + INTERVAL '1 day') OR ${dateTo}::text IS NULL)
     ORDER BY u.email
