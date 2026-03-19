@@ -299,11 +299,108 @@ async function applyContrastFix(
   return false;
 }
 
-/** Prototype Audit: P-01–P-04 (flow integrity). In-plugin, deterministic. */
-async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Promise<Array<{ id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string }>> {
+/** Keywords in frame name that suggest label/section/doc rather than a prototype screen (case-insensitive). */
+const PROTO_LABEL_NAME_PATTERN = /\b(label|section|header|title|doc|note|indicator|legend|caption|placeholder|divider|spacer|rules\s+with|tiers?|group\s*\d*)\b/i;
+
+/**
+ * Heuristic: frame likely used as label, section header, or doc block — not a prototype screen.
+ * Skip P-02 (orphan) for these to reduce noise. Criteria: name keywords, banner-like size, or only text child.
+ */
+function isLikelyNonPrototypeFrame(frame: FrameNode | ComponentNode): boolean {
+  const name = (frame.name || '').toLowerCase();
+  if (PROTO_LABEL_NAME_PATTERN.test(name)) return true;
+
+  const w = 'width' in frame ? (frame as { width: number }).width : 0;
+  const h = 'height' in frame ? (frame as { height: number }).height : 0;
+  if (w <= 0 || h <= 0) return false;
+  const aspect = w / h;
+  if (aspect > 5 || aspect < 1 / 5) return true;
+  if (h < 120 && w > 300) return true;
+
+  const children = 'children' in frame ? (frame as ChildrenMixin).children : [];
+  if (children.length === 1 && children[0].type === 'TEXT') return true;
+
+  return false;
+}
+
+type ProtoIssue = { id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string; isOnHiddenLayer?: boolean; hideLayerActions?: boolean };
+
+/** Yield to event loop so UI (loader, messages) can update during long prototype audit. */
+const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
+
+/** Semantic context per frame: nomi, keyword e testi per affinare le regole (es. schermate terminali, pulsanti Back). */
+export interface FlowFrameContext {
+  frameName: string;
+  keywords: string[];
+  hotspotNames: string[];
+  textSnippets: string[];
+}
+
+const TERMINAL_FRAME_KEYWORDS = /\b(success|thank|grazie|confirmato|confirmed|done|complete|completo|finale|end|submitted|ordine\s*ricevuto|concluso|final|done|successo)\b/i;
+const BACK_LIKE_BUTTON_NAMES = /\b(back|indietro|return|torna|prev|previous|anterior|close|chiudi)\b/i;
+
+function tokenizeForSemantics(s: string): string[] {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function looksLikeTerminalFrame(keywords: string[], frameName: string): boolean {
+  if (TERMINAL_FRAME_KEYWORDS.test(frameName)) return true;
+  return keywords.some((k) => TERMINAL_FRAME_KEYWORDS.test(k));
+}
+
+/** Raccolta contesto semantico da nomi frame, hotspot e testi (base per audit semantico). */
+function collectFlowSemanticContext(topFrames: readonly (FrameNode | ComponentNode)[]): Map<string, FlowFrameContext> {
+  const map = new Map<string, FlowFrameContext>();
+  for (const frame of topFrames) {
+    const frameName = frame.name || '';
+    const keywords = tokenizeForSemantics(frameName);
+    const hotspotNames: string[] = [];
+    const textSnippets: string[] = [];
+    function walk(n: BaseNode) {
+      if ('reactions' in n && Array.isArray((n as SceneNode & { reactions?: unknown[] }).reactions) && (n as SceneNode & { reactions: unknown[] }).reactions.length > 0)
+        hotspotNames.push((n as BaseNode & { name?: string }).name || '');
+      if (n.type === 'TEXT' && 'characters' in n)
+        textSnippets.push(String((n as TextNode).characters).slice(0, 80));
+      if ('children' in n)
+        for (const c of (n as ChildrenMixin).children as BaseNode[]) walk(c);
+    }
+    walk(frame);
+    map.set(frame.id, { frameName, keywords, hotspotNames, textSnippets: textSnippets.slice(0, 5) });
+  }
+  return map;
+}
+
+/** Cached check: node or any ancestor has visible === false. */
+async function isNodeHidden(nodeId: string, cache: Map<string, boolean>): Promise<boolean> {
+  if (cache.has(nodeId)) return cache.get(nodeId)!;
+  const node = await figma.getNodeByIdAsync(nodeId);
+  let hidden = false;
+  if (node) {
+    let n: BaseNode | null = node;
+    while (n) {
+      if ('visible' in n && (n as SceneNode).visible === false) {
+        hidden = true;
+        break;
+      }
+      n = n.parent;
+    }
+  }
+  cache.set(nodeId, hidden);
+  return hidden;
+}
+
+/** Prototype Audit: P-01–P-20. In-plugin, deterministic. */
+async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Promise<ProtoIssue[]> {
   const pageName = page.name || 'Current page';
-  const issues: Array<{ id: string; rule_id: string; categoryId: string; msg: string; severity: 'HIGH' | 'MED' | 'LOW'; layerId: string; fix: string; pageName?: string; flowName?: string }> = [];
-  let p01Count = 0, p02Count = 0, p03Count = 0, p04Count = 0;
+  const issues: ProtoIssue[] = [];
+  const hiddenCache = new Map<string, boolean>();
+  let p01Count = 0, p02Count = 0, p03Count = 0, p04Count = 0, p05Count = 0, p06Count = 0, p07Count = 0;
+  let p08Count = 0, p09Count = 0, p10Count = 0, p11Count = 0, p12Count = 0, p13Count = 0;
+  let p14Count = 0, p15Count = 0, p16Count = 0, p17Count = 0, p18Count = 0, p19Count = 0, p20Count = 0;
 
   const flows = (page as any).flowStartingPoints != null
     ? Array.from((page as any).flowStartingPoints as ReadonlyArray<{ nodeId: string; name: string }>)
@@ -324,47 +421,106 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
     return null;
   }
 
+  /** All FRAME/COMPONENT ancestor ids from node up to page (so flow starting points that are nested frames get marked). */
+  function getAncestorFrameIds(node: BaseNode): string[] {
+    const ids: string[] = [];
+    let n: BaseNode | null = node;
+    while (n && n.type !== 'PAGE') {
+      if (n.type === 'FRAME' || n.type === 'COMPONENT') ids.push(n.id);
+      n = n.parent;
+    }
+    return ids;
+  }
+
   const outgoingByFrame = new Map<string, boolean>();
   const destinationFrameIds = new Set<string>();
   const brokenReactions: Array<{ nodeId: string; nodeName: string; destId: string; flowName: string }> = [];
+  const hasBackByFrame = new Map<string, boolean>();
+  const outgoingTargetByFrame = new Map<string, Set<string>>();
+  const incomingEdges: Array<{ to: string; from: string; navigation: string; triggerType: string }> = [];
+  const reactionDetails: Array<{ rootFrameId: string; nodeId: string; nodeName: string; triggerType: string; actions: Array<{ type: string; destinationId?: string | null; navigation?: string; transition?: { type?: string; duration?: number; easing?: { type?: string } } }> }> = [];
+  const overlayTargetFrameIds = new Set<string>();
 
-  function walkReactions(node: BaseNode, rootFrameId: string | null, flowName: string) {
-    const r = (node as SceneNode & { reactions?: ReadonlyArray<{ actions?: Array<{ type: string; destinationId?: string | null }> }> }).reactions;
+  function addOutgoingTarget(frameId: string, targetFrameId: string) {
+    if (!outgoingTargetByFrame.has(frameId)) outgoingTargetByFrame.set(frameId, new Set());
+    outgoingTargetByFrame.get(frameId)!.add(targetFrameId);
+  }
+
+  function markFrameOutgoing(frameId: string) {
+    outgoingByFrame.set(frameId, true);
+  }
+
+  async function walkReactions(node: BaseNode, rootFrameId: string | null, flowName: string) {
+    const r = (node as SceneNode & { reactions?: ReadonlyArray<{ trigger?: { type?: string }; actions?: Array<{ type: string; destinationId?: string | null; navigation?: string }> }> }).reactions;
     if (!Array.isArray(r)) return;
+    const ancestorFrameIds = getAncestorFrameIds(node);
+    let reactIndex = 0;
     for (const reaction of r) {
+      if (++reactIndex % 8 === 0) await yieldToMain();
+      const triggerType = (reaction as any).trigger?.type ?? '';
       const actions = reaction.actions ?? (reaction as any).action ? [(reaction as any).action] : [];
+      const actionsForDetail = actions.map((a: any) => ({
+        type: a?.type,
+        destinationId: a?.destinationId,
+        navigation: a?.navigation,
+        transition: a?.transition,
+      }));
+      if (rootFrameId && actionsForDetail.length) {
+        reactionDetails.push({ rootFrameId, nodeId: node.id, nodeName: node.name || 'Node', triggerType, actions: actionsForDetail });
+      }
       for (const a of actions) {
         if (!a || typeof a !== 'object') continue;
-        if (a.type === 'NODE' && a.destinationId) {
-          const dest = figma.getNodeById(a.destinationId);
+        if (a.destinationId) {
+          const dest = await figma.getNodeByIdAsync(a.destinationId);
+          const nav = (a as any).navigation ?? 'NAVIGATE';
+          if (nav === 'OVERLAY' && dest) {
+            const destRoot = getRootFrameId(dest);
+            if (destRoot) overlayTargetFrameIds.add(destRoot);
+          }
           if (!dest) {
             brokenReactions.push({ nodeId: node.id, nodeName: node.name || 'Node', destId: a.destinationId, flowName });
           } else {
             const destRoot = getRootFrameId(dest);
+            const destAncestorFrames = getAncestorFrameIds(dest);
             if (destRoot) {
               destinationFrameIds.add(destRoot);
-              outgoingByFrame.set(rootFrameId || destRoot, true);
+              incomingEdges.push({ to: destRoot, from: rootFrameId || destRoot, navigation: nav, triggerType });
+              if (rootFrameId) addOutgoingTarget(rootFrameId, destRoot);
+              ancestorFrameIds.forEach((fid) => addOutgoingTarget(fid, destRoot));
             }
+            destAncestorFrames.forEach((id) => destinationFrameIds.add(id));
+            const outKey = rootFrameId || destRoot;
+            if (outKey) markFrameOutgoing(outKey);
+            ancestorFrameIds.forEach(markFrameOutgoing);
           }
         } else if (a.type === 'BACK' || a.type === 'CLOSE') {
-          if (rootFrameId) outgoingByFrame.set(rootFrameId, true);
+          if (rootFrameId) {
+            markFrameOutgoing(rootFrameId);
+            if (a.type === 'BACK') hasBackByFrame.set(rootFrameId, true);
+          }
+          ancestorFrameIds.forEach((fid) => {
+            markFrameOutgoing(fid);
+            if (a.type === 'BACK') hasBackByFrame.set(fid, true);
+          });
         }
       }
     }
   }
 
-  function walk(node: BaseNode, rootFrameId: string | null, flowName: string) {
-    if ('reactions' in node && node.reactions) walkReactions(node, rootFrameId, flowName);
+  async function walk(node: BaseNode, rootFrameId: string | null, flowName: string) {
+    if ('reactions' in node && node.reactions) await walkReactions(node, rootFrameId, flowName);
     if ('children' in node && Array.isArray((node as ChildrenMixin).children)) {
       for (const c of (node as ChildrenMixin).children as BaseNode[]) {
-        walk(c, rootFrameId || getRootFrameId(c), flowName);
+        await walk(c, rootFrameId || getRootFrameId(c), flowName);
       }
     }
   }
 
-  for (const frame of topFrames) {
-    const rid = getRootFrameId(frame) || frame.id;
-    walk(frame, rid, flowStartNames[frame.id] || '');
+  for (const child of page.children) {
+    await yieldToMain();
+    const rid = topFrameIds.has(child.id) ? (getRootFrameId(child) || child.id) : null;
+    const flowName = topFrameIds.has(child.id) ? (flowStartNames[child.id] || '') : '';
+    await walk(child, rid, flowName);
   }
 
   for (const br of brokenReactions) {
@@ -393,27 +549,30 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
       layerId: page.id,
       fix: 'Set at least one frame as flow starting point so the prototype can be previewed.',
       pageName,
+      hideLayerActions: true,
     });
   }
 
   const reachable = new Set<string>();
   const toVisit = [...selectedFlowNodeIds];
   const visited = new Set<string>();
+  let visitCount = 0;
   while (toVisit.length > 0) {
+    if (++visitCount % 5 === 0) await yieldToMain();
     const fid = toVisit.pop()!;
     if (visited.has(fid)) continue;
     visited.add(fid);
-    const node = figma.getNodeById(fid);
+    const node = await figma.getNodeByIdAsync(fid);
     if (node && (topFrameIds.has(fid) || flowStartIds.has(fid))) reachable.add(fid);
     if (node && 'children' in node) {
-      function collectDests(n: BaseNode) {
+      const collectDests = async (n: BaseNode) => {
         const r = (n as SceneNode & { reactions?: ReadonlyArray<{ actions?: Array<{ type: string; destinationId?: string | null }> }> }).reactions;
         if (Array.isArray(r)) {
           for (const re of r) {
             const acts = re.actions ?? (re as any).action ? [(re as any).action] : [];
             for (const a of acts) {
-              if (a?.type === 'NODE' && a.destinationId) {
-                const dest = figma.getNodeById(a.destinationId);
+              if (a?.destinationId) {
+                const dest = await figma.getNodeByIdAsync(a.destinationId);
                 if (dest) {
                   const destRoot = getRootFrameId(dest);
                   if (destRoot && !visited.has(destRoot)) toVisit.push(destRoot);
@@ -422,9 +581,9 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
             }
           }
         }
-        if ('children' in n) for (const c of (n as ChildrenMixin).children as BaseNode[]) collectDests(c);
-      }
-      collectDests(node);
+        if ('children' in n) for (const c of (n as ChildrenMixin).children as BaseNode[]) await collectDests(c);
+      };
+      await collectDests(node);
     }
   }
 
@@ -464,7 +623,8 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
 
   for (const frame of topFrames) {
     const fid = frame.id;
-    if (!flowStartIds.has(fid) && !destinationFrameIds.has(fid)) {
+    if (isLikelyNonPrototypeFrame(frame)) continue;
+    if (!flowStartIds.has(fid) && !destinationFrameIds.has(fid) && !outgoingByFrame.get(fid)) {
       p02Count++;
       issues.push({
         id: `P-02-${String(p02Count).padStart(3, '0')}`,
@@ -479,6 +639,440 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
     }
   }
 
+  // P-06: Unreachable frame (has incoming but not reachable from any flow start)
+  for (const fid of topFrameIds) {
+    if (flowStartIds.has(fid)) continue;
+    if (destinationFrameIds.has(fid) && !reachable.has(fid)) {
+      p06Count++;
+      issues.push({
+        id: `P-06-${String(p06Count).padStart(3, '0')}`,
+        rule_id: 'P-06',
+        categoryId: 'navigation-coverage',
+        msg: 'Frame has incoming connections but is not reachable from any flow start',
+        severity: 'HIGH',
+        layerId: fid,
+        fix: 'Reconnect the flow or add a path from a starting frame.',
+        pageName,
+      });
+    }
+  }
+
+  // P-05: Missing back navigation (reached via NAVIGATE but no BACK nor Navigate to source)
+  const navigateInByFrame = new Map<string, Set<string>>();
+  for (const e of incomingEdges) {
+    if (e.navigation !== 'NAVIGATE') continue;
+    if (!navigateInByFrame.has(e.to)) navigateInByFrame.set(e.to, new Set());
+    navigateInByFrame.get(e.to)!.add(e.from);
+  }
+  for (const fid of reachable) {
+    if (flowStartIds.has(fid)) continue;
+    const fromFrames = navigateInByFrame.get(fid);
+    if (!fromFrames?.size) continue;
+    const hasBack = hasBackByFrame.get(fid);
+    const canNavigateTo = outgoingTargetByFrame.get(fid);
+    const canReturn = hasBack || Array.from(fromFrames).some((fromId) => canNavigateTo?.has(fromId));
+    if (!canReturn) {
+      p05Count++;
+      issues.push({
+        id: `P-05-${String(p05Count).padStart(3, '0')}`,
+        rule_id: 'P-05',
+        categoryId: 'navigation-coverage',
+        msg: 'Missing back navigation: no way to return from this screen',
+        severity: 'HIGH',
+        layerId: fid,
+        fix: 'Add a Back action or a button that navigates to the previous screen so users can go back.',
+        pageName,
+      });
+    }
+  }
+
+  // P-07: Circular loop with only AFTER_TIMEOUT (no user exit)
+  const timeoutEdges: Array<[string, string]> = [];
+  for (const e of incomingEdges) {
+    if (e.triggerType === 'AFTER_TIMEOUT') timeoutEdges.push([e.from, e.to]);
+  }
+  const timeoutAdj = new Map<string, string[]>();
+  for (const [from, to] of timeoutEdges) {
+    if (!topFrameIds.has(from) || !topFrameIds.has(to)) continue;
+    if (!timeoutAdj.has(from)) timeoutAdj.set(from, []);
+    timeoutAdj.get(from)!.push(to);
+  }
+  const cycleVisited = new Set<string>();
+  const cycleStack = new Set<string>();
+  const cyclePath: string[] = [];
+  const cycleStart = new Map<string, number>();
+  function findTimeoutCycles(nodeId: string): string[] | null {
+    if (cycleStack.has(nodeId)) {
+      const idx = cycleStart.get(nodeId) ?? cyclePath.indexOf(nodeId);
+      return cyclePath.slice(idx);
+    }
+    if (cycleVisited.has(nodeId)) return null;
+    cycleVisited.add(nodeId);
+    cycleStack.add(nodeId);
+    cycleStart.set(nodeId, cyclePath.length);
+    cyclePath.push(nodeId);
+    const nextIds = timeoutAdj.get(nodeId) ?? [];
+    for (const nextId of nextIds) {
+      const cycle = findTimeoutCycles(nextId);
+      if (cycle?.length) {
+        cycleStack.delete(nodeId);
+        cyclePath.pop();
+        return cycle;
+      }
+    }
+    cycleStack.delete(nodeId);
+    cyclePath.pop();
+    return null;
+  }
+  const reportedCycles = new Set<string>();
+  for (const fid of topFrameIds) {
+    const cycle = findTimeoutCycles(fid);
+    if (!cycle?.length) continue;
+    const key = [...cycle].sort().join(',');
+    if (reportedCycles.has(key)) continue;
+    reportedCycles.add(key);
+    p07Count++;
+    issues.push({
+      id: `P-07-${String(p07Count).padStart(3, '0')}`,
+      rule_id: 'P-07',
+      categoryId: 'navigation-coverage',
+      msg: 'Circular loop with only automatic transitions (After delay) and no user exit',
+      severity: 'HIGH',
+      layerId: cycle[0],
+      fix: 'Add an On click path out of the loop or reduce to a single loading frame.',
+      pageName,
+    });
+  }
+
+  // P-08: Duplicate trigger on same layer (same type twice) — Figma also warns; we mirror for audit.
+  // Do NOT group by parent: siblings (e.g. two links) may legitimately use different triggers (Hover + Key).
+  const triggerCountsByNode = new Map<string, Map<string, number>>();
+  for (const rd of reactionDetails) {
+    const t = rd.triggerType || 'ON_CLICK';
+    if (!triggerCountsByNode.has(rd.nodeId)) triggerCountsByNode.set(rd.nodeId, new Map());
+    const m = triggerCountsByNode.get(rd.nodeId)!;
+    m.set(t, (m.get(t) ?? 0) + 1);
+  }
+  for (const [nodeId, counts] of triggerCountsByNode) {
+    for (const [triggerType, count] of counts) {
+      if (count > 1) {
+        p08Count++;
+        issues.push({
+          id: `P-08-${String(p08Count).padStart(3, '0')}`,
+          rule_id: 'P-08',
+          categoryId: 'interaction-quality',
+          msg: `Duplicate "${triggerType}" interactions on the same layer (${count})`,
+          severity: 'HIGH',
+          layerId: nodeId,
+          fix: 'Merge into one interaction or use different layers. Figma warns when two identical triggers compete on the same hotspot.',
+          pageName,
+        });
+      }
+    }
+  }
+
+  // P-09: Smart Animate — layer name/hierarchy match (source frame vs destination frame)
+  let detailIndex = 0;
+  for (const rd of reactionDetails) {
+    if (++detailIndex % 12 === 0) await yieldToMain();
+    for (const a of rd.actions) {
+      if ((a as any).transition?.type !== 'SMART_ANIMATE' || !a.destinationId) continue;
+      const destNode = await figma.getNodeByIdAsync(a.destinationId);
+      if (!destNode) continue;
+      const destRootId = getRootFrameId(destNode);
+      const srcFrame = await figma.getNodeByIdAsync(rd.rootFrameId);
+      const destFrame = destRootId ? await figma.getNodeByIdAsync(destRootId) : null;
+      if (!srcFrame || !destFrame || !('children' in srcFrame) || !('children' in destFrame)) continue;
+      const srcNames = new Set((srcFrame as ChildrenMixin).children.map((c) => c.name));
+      const destNames = new Set((destFrame as ChildrenMixin).children.map((c) => c.name));
+      const onlyInSrc = [...srcNames].filter((n) => !destNames.has(n));
+      const onlyInDest = [...destNames].filter((n) => !srcNames.has(n));
+      if (onlyInSrc.length || onlyInDest.length) {
+        p09Count++;
+        issues.push({
+          id: `P-09-${String(p09Count).padStart(3, '0')}`,
+          rule_id: 'P-09',
+          categoryId: 'interaction-quality',
+          msg: 'Smart Animate: layer names differ between source and destination frame',
+          severity: 'HIGH',
+          layerId: rd.nodeId,
+          fix: 'Match layer names and hierarchy between frames so Smart Animate can interpolate correctly.',
+          pageName,
+        });
+        break;
+      }
+    }
+  }
+
+  // P-10: Duration boundaries (e.g. Navigate 200–500 ms)
+  const DURATION_MIN_MS = 150;
+  const DURATION_MAX_MS = 800;
+  for (const rd of reactionDetails) {
+    for (const a of rd.actions) {
+      const t = (a as any).transition;
+      if (!t?.duration) continue;
+      const ms = t.duration * 1000;
+      if (ms < DURATION_MIN_MS || ms > DURATION_MAX_MS) {
+        p10Count++;
+        issues.push({
+          id: `P-10-${String(p10Count).padStart(3, '0')}`,
+          rule_id: 'P-10',
+          categoryId: 'interaction-quality',
+          msg: `Transition duration ${Math.round(ms)}ms outside recommended range (${DURATION_MIN_MS}–${DURATION_MAX_MS}ms)`,
+          severity: 'MED',
+          layerId: rd.nodeId,
+          fix: 'Set duration within 200–500ms for navigation so the transition feels clear but not sluggish.',
+          pageName,
+        });
+        break;
+      }
+    }
+  }
+
+  // P-11: Easing consistency per navigation type
+  const easingByNav = new Map<string, Set<string>>();
+  for (const rd of reactionDetails) {
+    for (const a of rd.actions) {
+      const nav = (a as any).navigation ?? 'NAVIGATE';
+      const easing = (a as any).transition?.easing?.type ?? 'LINEAR';
+      if (!easingByNav.has(nav)) easingByNav.set(nav, new Set());
+      easingByNav.get(nav)!.add(easing);
+    }
+  }
+  for (const [nav, easings] of easingByNav) {
+    if (easings.size > 2) {
+      p11Count++;
+      issues.push({
+        id: `P-11-${String(p11Count).padStart(3, '0')}`,
+        rule_id: 'P-11',
+        categoryId: 'interaction-quality',
+        msg: `Inconsistent easing for ${nav} transitions`,
+        severity: 'MED',
+        layerId: topFrames[0]?.id ?? page.id,
+        fix: 'Use a consistent easing (e.g. Ease Out for entrances) across the flow.',
+        pageName,
+      });
+    }
+  }
+
+  // P-12: Overlay configuration (target frames should have close path)
+  for (const fid of overlayTargetFrameIds) {
+    if (!topFrameIds.has(fid)) continue;
+    const hasClose = hasBackByFrame.get(fid) || outgoingByFrame.get(fid);
+    if (!hasClose) {
+      p12Count++;
+      issues.push({
+        id: `P-12-${String(p12Count).padStart(3, '0')}`,
+        rule_id: 'P-12',
+        categoryId: 'overlay-scroll',
+        msg: 'Overlay frame has no close path (Back or Close overlay)',
+        severity: 'MED',
+        layerId: fid,
+        fix: 'Set overlay position, background, and ensure at least one Close overlay or close when clicking outside.',
+        pageName,
+      });
+    }
+  }
+
+  // P-13: Scroll overflow — heuristic: frame with overflow scroll should have content
+  for (const frame of topFrames) {
+    const overflow = (frame as any).overflowDirection;
+    if (overflow === 'NONE' || !overflow) continue;
+    const children = 'children' in frame ? (frame as ChildrenMixin).children : [];
+    const hasContent = children.length > 0;
+    if (!hasContent) {
+      p13Count++;
+      issues.push({
+        id: `P-13-${String(p13Count).padStart(3, '0')}`,
+        rule_id: 'P-13',
+        categoryId: 'overlay-scroll',
+        msg: 'Frame has scroll direction set but no child content',
+        severity: 'MED',
+        layerId: frame.id,
+        fix: 'Enable scroll only when content extends beyond bounds, or add content.',
+        pageName,
+      });
+    }
+  }
+
+  // P-14: Interactive component (simplified: component with CHANGE_TO should have variants)
+  for (const rd of reactionDetails) {
+    for (const a of rd.actions) {
+      if ((a as any).navigation !== 'CHANGE_TO') continue;
+      p14Count++;
+      issues.push({
+        id: `P-14-${String(p14Count).padStart(3, '0')}`,
+        rule_id: 'P-14',
+        categoryId: 'component-advanced',
+        msg: 'Verify component has required variants (Default, Hover, Pressed, Disabled) for Change to',
+        severity: 'HIGH',
+        layerId: rd.nodeId,
+        fix: 'Edit the main component: add missing state variants (Default, Hover, Pressed, Disabled) and wire interactions (e.g. Hover → Default on Mouse leave). States are defined on the main component, not on the instance.',
+        pageName,
+      });
+      break;
+    }
+  }
+
+  // P-15: Variable usage (SET_VARIABLE — variable should exist)
+  if (typeof figma.variables?.getVariableByIdAsync === 'function') {
+    for (const rd of reactionDetails) {
+      for (const a of rd.actions) {
+        if (a.type !== 'SET_VARIABLE') continue;
+        const vid = (a as any).variableId;
+        if (!vid) continue;
+        try {
+          const v = await figma.variables.getVariableByIdAsync(vid);
+          if (!v) {
+            p15Count++;
+            issues.push({
+              id: `P-15-${String(p15Count).padStart(3, '0')}`,
+              rule_id: 'P-15',
+              categoryId: 'component-advanced',
+              msg: 'Set variable references a variable that may not exist',
+              severity: 'MED',
+              layerId: rd.nodeId,
+              fix: 'Create the variable in a collection or fix the variable ID.',
+              pageName,
+            });
+          }
+        } catch {
+          p15Count++;
+          issues.push({
+            id: `P-15-${String(p15Count).padStart(3, '0')}`,
+            rule_id: 'P-15',
+            categoryId: 'component-advanced',
+            msg: 'Set variable references an invalid or missing variable',
+            severity: 'MED',
+            layerId: rd.nodeId,
+            fix: 'Create the variable in a collection and ensure set/read usage match.',
+            pageName,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  // P-16: Conditional logic (both branches should have actions)
+  for (const rd of reactionDetails) {
+    for (const a of rd.actions) {
+      if (a.type !== 'CONDITIONAL') continue;
+      const blocks = (a as any).conditionalBlocks;
+      if (!Array.isArray(blocks) || blocks.length < 2) continue;
+      const empty = blocks.some((b: any) => !Array.isArray(b.actions) || b.actions.length === 0);
+      if (empty) {
+        p16Count++;
+        issues.push({
+          id: `P-16-${String(p16Count).padStart(3, '0')}`,
+          rule_id: 'P-16',
+          categoryId: 'component-advanced',
+          msg: 'Conditional has an empty branch (no actions)',
+          severity: 'MED',
+          layerId: rd.nodeId,
+          fix: 'Ensure both IF and ELSE branches have the intended actions.',
+          pageName,
+        });
+      }
+      break;
+    }
+  }
+
+  // P-17: Multiple actions order (multiple Navigate to same trigger)
+  for (const rd of reactionDetails) {
+    const navigateCount = rd.actions.filter((a: any) => a.type === 'NODE' && a.navigation === 'NAVIGATE').length;
+    if (navigateCount > 1) {
+      p17Count++;
+      issues.push({
+        id: `P-17-${String(p17Count).padStart(3, '0')}`,
+        rule_id: 'P-17',
+        categoryId: 'component-advanced',
+        msg: 'Multiple Navigate actions on same trigger — only the last will run',
+        severity: 'MED',
+        layerId: rd.nodeId,
+        fix: 'Keep a single Navigate per trigger or reorder so Set variable runs before Navigate.',
+        pageName,
+      });
+    }
+  }
+
+  // P-18: Flow naming (default names)
+  const defaultFlowName = /^flow\s*\d+$/i;
+  for (const f of flows) {
+    if (defaultFlowName.test(f.name || '')) {
+      p18Count++;
+      issues.push({
+        id: `P-18-${String(p18Count).padStart(3, '0')}`,
+        rule_id: 'P-18',
+        categoryId: 'documentation-coverage',
+        msg: 'Flow has default name (e.g. "Flow 1"). Use a descriptive name.',
+        severity: 'LOW',
+        layerId: f.nodeId,
+        fix: "Rename the flow (e.g. 'Onboarding', 'Checkout') and add a short description.",
+        pageName,
+      });
+    }
+  }
+
+  // P-19: Hotspot coverage — leaf-like nodes that look interactive but have no reactions
+  /** Groups and multi-child frames are layout containers, not a single interactive block. */
+  function isLikelyLayoutContainer(n: BaseNode): boolean {
+    if (n.type === 'GROUP') return true;
+    if (n.type === 'FRAME' || n.type === 'COMPONENT') {
+      const ch = 'children' in n ? ((n as ChildrenMixin).children as BaseNode[]) : [];
+      if (ch.length > 1) return true;
+    }
+    return false;
+  }
+
+  function collectInteractiveLikelyNodes(n: BaseNode, acc: BaseNode[]) {
+    const name = (n.name || '').toLowerCase();
+    const nameLooksInteractive =
+      /^(btn|button|cta|link|icon-)/.test(name) || name.includes('button') || name.includes('link');
+    if (nameLooksInteractive) {
+      const hasReactions =
+        'reactions' in n && Array.isArray((n as any).reactions) && (n as any).reactions.length > 0;
+      if (!hasReactions && !isLikelyLayoutContainer(n)) acc.push(n);
+    }
+    if ('children' in n) for (const c of (n as ChildrenMixin).children as BaseNode[]) collectInteractiveLikelyNodes(c, acc);
+  }
+  const interactiveLikely: BaseNode[] = [];
+  for (const child of page.children) collectInteractiveLikelyNodes(child, interactiveLikely);
+  for (const node of interactiveLikely.slice(0, 10)) {
+    p19Count++;
+    issues.push({
+      id: `P-19-${String(p19Count).padStart(3, '0')}`,
+      rule_id: 'P-19',
+      categoryId: 'documentation-coverage',
+      msg: 'Element looks interactive but has no prototype interaction',
+      severity: 'MED',
+      layerId: node.id,
+      fix: 'Add a prototype interaction (e.g. On click → Navigate to or Open overlay).',
+      pageName,
+    });
+  }
+
+  // P-20: Presentation (simplified: advisory)
+  const startCount = flows.length;
+  if (startCount > 5) {
+    p20Count++;
+    issues.push({
+      id: `P-20-${String(p20Count).padStart(3, '0')}`,
+      rule_id: 'P-20',
+      categoryId: 'documentation-coverage',
+      msg: 'More than 5 flows on this page — consider splitting or naming clearly',
+      severity: 'LOW',
+      layerId: page.id,
+      fix: 'Consider splitting this prototype into smaller sections/pages (<= 5 flows each) or rename flows clearly so each flow can be tested independently. Many flows on one page makes navigation and test planning harder.',
+      pageName,
+      hideLayerActions: true,
+    });
+  }
+
+  for (let i = 0; i < issues.length; i++) {
+    if (i % 15 === 0) await yieldToMain();
+    issues[i].isOnHiddenLayer = await isNodeHidden(issues[i].layerId, hiddenCache);
+  }
   return issues;
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { BRUTAL, getPrototypeAuditCost } from '../../../constants';
 import { Button } from '../../../components/ui/Button';
 import { CircularScore } from '../../../components/widgets/CircularScore';
@@ -36,12 +36,17 @@ interface Props {
   protoAuditError?: string | null;
 }
 
-/** Label for flow selector: "N flows" or "All flows" or "Select flows" */
+/** Label for flow selector: single selection = flow name (like other audits); multiple = count; all = "All flows". */
 function getFlowSelectorLabel(selectedIds: string[], flows: FlowStartingPoint[]): string {
   if (flows.length === 0) return 'No flows on this page';
   if (selectedIds.length === 0) return 'Select flows';
   if (selectedIds.length === flows.length) return 'All flows';
-  return `${selectedIds.length} flow${selectedIds.length === 1 ? '' : 's'}`;
+  if (selectedIds.length === 1) {
+    const f = flows.find((fl) => fl.nodeId === selectedIds[0]);
+    const name = f?.name?.trim();
+    return name || '1 flow';
+  }
+  return `${selectedIds.length} flows`;
 }
 
 /**
@@ -96,9 +101,26 @@ export const PrototypeAuditTab: React.FC<Props> = ({
     setIsFlowDropdownOpen(false);
   };
 
+  const flowDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isFlowDropdownOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (flowDropdownRef.current && !flowDropdownRef.current.contains(e.target as Node)) {
+        setIsFlowDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [isFlowDropdownOpen, setIsFlowDropdownOpen]);
+
   if (!hasProtoResult) {
     return (
-      <div className="p-4 h-[60vh] flex flex-col items-center justify-center">
+      <div className="p-4 h-[60vh] flex flex-col gap-4 items-center justify-center">
+        {protoAuditError && (
+          <div className="flex items-center gap-2 py-2 px-3 bg-red-100 border-2 border-red-600 text-[10px] font-bold w-full max-w-md">
+            {protoAuditError}
+          </div>
+        )}
         <div className={`${BRUTAL.card} bg-white py-8 w-full text-center`}>
           <CircularScore score={0} label="Ready" size="sm" />
           <p className="text-xs font-medium text-gray-500 mt-4 px-4 mb-4">
@@ -110,7 +132,7 @@ export const PrototypeAuditTab: React.FC<Props> = ({
             </p>
           ) : (
             <>
-              <div className="relative z-20 text-left mb-2 px-4">
+              <div ref={flowDropdownRef} className="relative z-20 text-left mb-2 px-4">
                 <div
                   onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
                   className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white ${flowStartingPoints.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -210,7 +232,7 @@ export const PrototypeAuditTab: React.FC<Props> = ({
       </div>
 
       {/* Flow multi-select */}
-      <div className="relative z-20">
+      <div ref={flowDropdownRef} className="relative z-20">
         <div
           onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
           className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10`}
@@ -291,16 +313,16 @@ export const PrototypeAuditTab: React.FC<Props> = ({
                       onClick={() => setActiveCat(isActive ? null : cat.id)}
                       className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>
+                      <div className="flex items-center gap-3 mr-6 min-w-0">
+                        <div className={`size-8 shrink-0 ${cat.color} border-2 border-black flex items-center justify-center text-sm leading-none shadow-[2px_2px_0_0_#000] text-black`}>
                           {cat.icon}
                         </div>
-                        <div className="flex flex-col">
+                        <div className="flex flex-col min-w-0">
                           <span className="text-[10px] font-bold uppercase">{cat.label}</span>
                           <span className="text-[9px] font-medium opacity-70">{cat.desc}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className={`text-[10px] font-mono ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>{pctOfTotal}%</span>
                         {cat.issuesCount > 0 && (
                           <span className="size-7 min-w-7 bg-white text-black border border-black flex items-center justify-center text-[9px] font-bold rounded-full">

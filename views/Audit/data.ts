@@ -256,6 +256,15 @@ export const A11Y_LOADING_MSGS = [
   "Observing contrast ratios and labels..."
 ];
 
+/** Loader messages for Prototype audit (flows, connections, dead-ends). Same ToV. */
+export const PROTO_LOADING_MSGS = [
+  "Following the flows...",
+  "Checking connections and back navigation...",
+  "Tracing dead-ends and orphans...",
+  "Reading prototype arrows...",
+  "Whispering to the prototype..."
+];
+
 /** Legacy list (includes a11y for any non-DS use). For DS tab use buildDsCategoriesFromIssues instead. */
 export const CATEGORIES: ExtendedAuditCategory[] = [
   { id: 'adoption', label: 'Adoption Rate', desc: 'DS Components vs. Detached Layers', score: 92, icon: '❖', color: 'bg-[#ff90e8]', issuesCount: 3 },

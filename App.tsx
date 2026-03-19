@@ -145,6 +145,18 @@ export default function AppTest() {
   const [credits, setCredits] = useState<CreditsState | null>(null);
   /** Diagnostic: why credits fetch failed (e.g. "401", "503", "network"). Cleared on success. */
   const [creditsFetchError, setCreditsFetchError] = useState<string | null>(null);
+  /** When true, keep retrying credits without spamming UI/toast/error state. */
+  const creditsFetchSilentRef = useRef(false);
+  const creditsValueRef = useRef<CreditsState | null>(null);
+  const creditsFetchAttemptSeqRef = useRef(0);
+  const creditsFetchLastLogAtRef = useRef(0);
+
+  const shouldLogCreditsDebug = () => {
+    const now = Date.now();
+    if (now - creditsFetchLastLogAtRef.current < 2500) return false;
+    creditsFetchLastLogAtRef.current = now;
+    return true;
+  };
   const [simulateFreeTier, setSimulateFreeTier] = useState(getSimulateFreeTierFromStorage);
   /** Per utenti di test con "Simula Free Tier" ON quando l'API non restituisce crediti: simulazione locale (25 crediti, consumo in localStorage). */
   const [simulatedCredits, setSimulatedCredits] = useState<CreditsState | null>(null);
@@ -160,6 +172,10 @@ export default function AppTest() {
     setSimulatedCredits(initial);
     if (!stored) setSimulatedCreditsInStorage(user.email, initial);
   }, [user?.email, isTestUser, simulateFreeTier, credits, simulatedCredits]);
+
+  useEffect(() => {
+    creditsValueRef.current = credits;
+  }, [credits]);
 
   const effectiveCredits: CreditsState | null = credits !== null
     ? credits
@@ -222,25 +238,54 @@ export default function AppTest() {
     });
   }, [showToast, user?.authToken]);
 
-  /** Returns true if credits were set, false on error (caller can retry). */
-  const fetchCredits = React.useCallback(async (): Promise<boolean> => {
-    if (!user?.authToken) return false;
-    setCreditsFetchError(null);
+  /** Fetch credits.
+   *  @returns { ok, retryable } where ok=credits were set, retryable=worth retrying.
+   */
+  const fetchCredits = React.useCallback(async (): Promise<{ ok: boolean; retryable: boolean }> => {
+    if (!user?.authToken) return { ok: false, retryable: false };
+    if (!creditsFetchSilentRef.current) setCreditsFetchError(null);
     try {
+      const controller = new AbortController();
+      // Timeout 12s: al primo carico il backend può essere lento; 4s causava AbortError e crediti mai caricati
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const attemptId = ++creditsFetchAttemptSeqRef.current;
       const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
         headers: { Authorization: `Bearer ${user.authToken}` },
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
       if (r.status === 503) {
-        handle503();
-        setCreditsFetchError('503');
-        console.warn('[Comtra] GET /api/credits: 503 Service Unavailable');
-        return false;
+        if (shouldLogCreditsDebug()) {
+          console.warn(`[CreditsDebug] #${attemptId} GET /api/credits status=503 retryable=true`);
+        }
+        if (!creditsFetchSilentRef.current) {
+          handle503();
+          setCreditsFetchError('503');
+          console.warn('[Comtra] GET /api/credits: 503 Service Unavailable');
+        }
+        return { ok: false, retryable: true };
       }
       if (!r.ok) {
         const err = `${r.status}`;
-        setCreditsFetchError(err);
-        console.warn('[Comtra] GET /api/credits failed:', r.status, r.statusText);
-        return false;
+        const retryable = ![400, 401, 403].includes(r.status);
+        let bodySnippet: string | null = null;
+        try {
+          const text = await r.text();
+          bodySnippet = text ? text.slice(0, 240) : null;
+        } catch {
+          bodySnippet = null;
+        }
+        if (shouldLogCreditsDebug()) {
+          console.warn(
+            `[CreditsDebug] #${attemptId} GET /api/credits status=${r.status} retryable=${retryable} ${r.statusText ? `statusText=${r.statusText}` : ''}`,
+            bodySnippet ? `body=${bodySnippet}` : 'body=<empty>'
+          );
+        }
+        if (!creditsFetchSilentRef.current) {
+          setCreditsFetchError(err);
+          console.warn('[Comtra] GET /api/credits failed:', r.status, r.statusText);
+        }
+        // 4xx: molto spesso token/permessi/contract errato -> non serve riprovare a vuoto
+        return { ok: false, retryable };
       }
       const data = await r.json();
       setCredits({
@@ -281,11 +326,19 @@ export default function AppTest() {
           // POST fallito: al prossimo accesso riproverà
         }
       }
-      return true;
+      return { ok: true, retryable: false };
     } catch (e) {
-      setCreditsFetchError('network');
-      console.warn('[Comtra] GET /api/credits: network or parse error', e);
-      return false;
+      if (!creditsFetchSilentRef.current) {
+        setCreditsFetchError('network');
+        console.warn('[Comtra] GET /api/credits: network or parse error', e);
+      }
+      if (shouldLogCreditsDebug()) {
+        const name = e instanceof Error ? e.name : 'unknown';
+        const msg = e instanceof Error ? e.message : String(e);
+        const hint = name === 'AbortError' ? ' (timeout after 12s)' : '';
+        console.warn(`[CreditsDebug] GET /api/credits exception name=${name} message=${msg.slice(0, 200)}${hint}`);
+      }
+      return { ok: false, retryable: true };
     }
   }, [user?.authToken, handle503]);
 
@@ -293,6 +346,8 @@ export default function AppTest() {
   const [creditsLoadGaveUp, setCreditsLoadGaveUp] = useState(false);
   /** Skeleton mostrato almeno 2s per dare l’idea di caricamento; poi si passa all’app. */
   const [creditsLoaderMinElapsed, setCreditsLoaderMinElapsed] = useState(false);
+  /** Timestamp del primo rendering dello skeleton crediti: evita reset continui del timer. */
+  const creditsSkeletonStartAtRef = useRef<number | null>(null);
 
   const CREDITS_MAX_ATTEMPTS = 5;
   const CREDITS_RETRY_DELAYS_MS = [2000, 3000, 4000, 5000]; // delays between attempt 0→1, 1→2, 2→3, 3→4
@@ -308,9 +363,10 @@ export default function AppTest() {
     let cancelled = false;
     (async () => {
       for (let attempt = 0; attempt < CREDITS_MAX_ATTEMPTS && !cancelled; attempt++) {
-        const ok = await fetchCredits();
+        const res = await fetchCredits();
         if (cancelled) return;
-        if (ok) return;
+        if (res.ok) return;
+        if (!res.retryable) break;
         if (attempt < CREDITS_MAX_ATTEMPTS - 1) {
           const delay = CREDITS_RETRY_DELAYS_MS[attempt] ?? 3000;
           await new Promise(r => setTimeout(r, delay));
@@ -321,19 +377,64 @@ export default function AppTest() {
     return () => { cancelled = true; };
   }, [user?.authToken, user?.id, fetchCredits]);
 
+  // Aggressive (but silent) background recovery: se dopo i retry iniziali i crediti sono ancora null,
+  // continuiamo a riprovare finché arrivano, senza bloccare UI e senza spam UI/toast.
   useEffect(() => {
-    if (!user) setCreditsLoaderMinElapsed(false);
-  }, [user]);
+    if (!user?.authToken) return;
+    if (!creditsLoadGaveUp) return;
+    if (creditsValueRef.current !== null) return;
+    const skipRecovery = user?.plan === 'PRO' || (isTestUser && simulateFreeTier);
+    if (skipRecovery) return;
+
+    let cancelled = false;
+    let attempt = 0;
+
+    (async () => {
+      while (!cancelled && creditsValueRef.current === null && !skipRecovery) {
+        creditsFetchSilentRef.current = true;
+        try {
+          const res = await fetchCredits();
+          if (res.ok) return;
+        } finally {
+          creditsFetchSilentRef.current = false;
+        }
+
+        attempt++;
+        // Aggressivo ma con cap: parte subito, poi cresce fino a 30s.
+        const delay = Math.min(30000, 2000 + attempt * 2000);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      creditsFetchSilentRef.current = false;
+    };
+  }, [user?.authToken, user?.id, user?.plan, creditsLoadGaveUp, isTestUser, simulateFreeTier, fetchCredits]);
 
   useEffect(() => {
+    if (!user) {
+      creditsSkeletonStartAtRef.current = null;
+      setCreditsLoaderMinElapsed(false);
+      return;
+    }
+
     if (credits !== null || creditsLoadGaveUp) {
+      creditsSkeletonStartAtRef.current = null;
       setCreditsLoaderMinElapsed(true);
       return;
     }
-    if (!user) return;
-    const t = setTimeout(() => setCreditsLoaderMinElapsed(true), 2000);
-    return () => clearTimeout(t);
-  }, [user, credits, creditsLoadGaveUp]);
+
+    // credits ancora null e non abbiamo dato up: aspettiamo almeno 2s dal primo ingresso
+    if (!creditsLoaderMinElapsed) {
+      const startAt = creditsSkeletonStartAtRef.current ?? Date.now();
+      creditsSkeletonStartAtRef.current = startAt;
+      const elapsed = Date.now() - startAt;
+      const remaining = Math.max(0, 2000 - elapsed);
+      const t = window.setTimeout(() => setCreditsLoaderMinElapsed(true), remaining);
+      return () => clearTimeout(t);
+    }
+  }, [user, credits, creditsLoadGaveUp, creditsLoaderMinElapsed]);
 
   const fetchTrophies = React.useCallback(async () => {
     if (!user?.authToken) return;
@@ -788,7 +889,7 @@ export default function AppTest() {
     : user?.plan === 'PRO'
       ? '∞'
       : effectiveCredits === null
-        ? (user?.authToken ? '—' : '— (re-login to sync)')
+        ? (user?.authToken ? '...' : '— (re-login to sync)')
         : `${effectiveCredits.remaining}/${effectiveCredits.total}${usingSimulatedCredits ? ' (simulated)' : ''}`;
   const hasZeroCredits = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && effectiveCreditsRemaining !== null && effectiveCreditsRemaining <= 0;
   const lowCreditsWarning = !useInfiniteCreditsForTest && user?.plan !== 'PRO' && effectiveCreditsRemaining !== null && effectiveCreditsRemaining > 0 && effectiveCreditsRemaining <= 5;
@@ -818,9 +919,8 @@ export default function AppTest() {
       );
   }
 
-  // Skeleton almeno 2s, poi app solo quando crediti arrivati (o gave up)
-  const showCreditsSkeleton =
-    user && ((credits === null && !creditsLoadGaveUp) || !creditsLoaderMinElapsed);
+  // Skeleton: max 2s per evitare flash sotto e non bloccare mai il plugin.
+  const showCreditsSkeleton = user && !creditsLoaderMinElapsed;
   if (showCreditsSkeleton) {
     return <CreditsLoader />;
   }
@@ -847,7 +947,7 @@ export default function AppTest() {
            setView(v);
         }} 
         user={user}
-        onOpenProfile={() => setShowProfile(true)}
+        onOpenProfile={() => setShowProfile(prev => !prev)}
       >
         <div className={view === ViewState.AUDIT ? '' : 'hidden'} aria-hidden={view !== ViewState.AUDIT}>
           <Audit

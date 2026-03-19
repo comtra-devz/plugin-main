@@ -91,6 +91,8 @@ export interface AuditIssue {
   backgroundVariable?: string;
   /** True if the issue is on a hidden (invisible) layer in Figma. */
   isOnHiddenLayer?: boolean;
+  /** When true, hide Select layer + Auto-fix (e.g. page-level prototype advisories with no actionable layer). */
+  hideLayerActions?: boolean;
 }
 
 export interface NavProps {

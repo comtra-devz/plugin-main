@@ -91,25 +91,27 @@ export const IssueList: React.FC<IssueListProps> = ({
 
   return (
     <div className="space-y-6">
-      {activeTab === 'A11Y' && setWcagLevelFilter && (
+      {((activeTab === 'A11Y' && (setWcagLevelFilter || setShowHiddenLayers)) || (activeTab === 'PROTOTYPE' && setShowHiddenLayers)) && (
         <div className="flex items-center justify-between gap-4 mb-3 pb-2 border-b-2 border-black/10 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase text-gray-600">WCAG level:</span>
-            <div className="flex border-2 border-black">
-              <button
-                onClick={() => setWcagLevelFilter('AA')}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${wcagLevelFilter === 'AA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
-              >
-                AA
-              </button>
-              <button
-                onClick={() => setWcagLevelFilter('AAA')}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${wcagLevelFilter === 'AAA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
-              >
-                AAA
-              </button>
+          {activeTab === 'A11Y' && setWcagLevelFilter && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase text-gray-600">WCAG level:</span>
+              <div className="flex border-2 border-black">
+                <button
+                  onClick={() => setWcagLevelFilter('AA')}
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${wcagLevelFilter === 'AA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+                >
+                  AA
+                </button>
+                <button
+                  onClick={() => setWcagLevelFilter('AAA')}
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${wcagLevelFilter === 'AAA' ? 'bg-black text-white' : 'bg-white hover:bg-gray-100'}`}
+                >
+                  AAA
+                </button>
+              </div>
             </div>
-          </div>
+          )}
           {setShowHiddenLayers && (
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase text-gray-600">Show hidden layers:</span>
@@ -246,6 +248,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 )}
                               </div>
                             )}
+                            {!i.hideLayerActions && (
                             <div className="flex gap-2">
                             {isDeviationGroup ? (
                                 <div className="flex-1 flex border-2 border-black h-12 bg-gray-50">
@@ -284,6 +287,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
                             </Button>
                             </div>
+                            )}
                         </div>
                         )}
                     </div>

@@ -15,7 +15,7 @@ Tabella master e logica di detection per ogni regola. Severity: Critical / High 
 | P-05 | Missing Back Navigation | High | navigation-coverage |
 | P-06 | Unreachable Frame Detection | High | navigation-coverage |
 | P-07 | Circular Loop Detection | High | navigation-coverage |
-| P-08 | Interaction Trigger Consistency | High | interaction-quality |
+| P-08 | Duplicate trigger on same layer | High | interaction-quality |
 | P-09 | Smart Animate Layer Matching | High | interaction-quality |
 | P-10 | Animation Duration Boundaries | Medium | interaction-quality |
 | P-11 | Easing Consistency | Medium | interaction-quality |
@@ -43,6 +43,7 @@ Tabella master e logica di detection per ogni regola. Severity: Critical / High 
 
 - **Definizione:** Frame top-level sulla pagina con zero connessioni in ingresso e che non è flow starting point. Completamente disconnesso.
 - **Detection:** Insieme di tutti i frame top-level; sottrarre (a) flow starting points e (b) frame referenziati come destinationId in qualche reaction. I rimanenti sono orfani. I frame usati solo come destinazione overlay non sono orfani.
+- **Skip heuristic (noise reduction):** Non segnalare come orfani i frame che con alta probabilità sono label, titoli di sezione o blocchi doc (non schermate del prototipo). Criteri: nome con keyword (label, section, header, title, doc, note, indicator, legend, caption, placeholder, divider, spacer, "rules with", tiers); proporzioni da “banner” (aspect ratio >5 o <1/5, oppure altezza <120px e larghezza >300px); oppure un solo figlio di tipo TEXT. Vedi `isLikelyNonPrototypeFrame` in controller.
 - **Severity modulation:** Se gli orfani sono >30% dei frame della pagina → avviso a livello flusso (prototipo incompleto).
 - **Suggested fix:** "Connect this frame to a flow (add a Navigate to or Open overlay from another frame) or remove it if unused."
 
@@ -85,11 +86,11 @@ Tabella master e logica di detection per ogni regola. Severity: Critical / High 
 
 ## Interaction Quality (P-08 – P-11)
 
-### P-08: Interaction Trigger Consistency [HIGH]
+### P-08: Duplicate trigger on same layer [HIGH]
 
-- **Definizione:** Stesso tipo di elemento (stesso componente / stesso ruolo) dovrebbe usare lo stesso trigger nel flusso (es. pulsante sempre On click, non mix con While hovering).
-- **Detection:** Raggruppare hotspot per component name o ruolo; per gruppo, raccogliere trigger usati; se incoerenti → flag con lista trigger in conflitto. Eccezione: varianti con While hovering per hover e On click per azione sono pattern attesi.
-- **Suggested fix:** "Use the same trigger type (e.g. On click) for this element across the flow to avoid confusing users."
+- **Definizione:** Due o più interazioni con lo **stesso** tipo di trigger (es. due On click, due While hovering) sullo **stesso** layer — stesso caso che Figma segnala in editor.
+- **Detection:** Per ogni `nodeId`, contare le reaction per `trigger.type`; se count > 1 per un tipo → flag. **Non** raggruppare per parent: componenti fratelli (es. “Documentation” vs “Tips”) possono avere trigger diversi (Hover + Key, ecc.) senza essere “incoerenti”.
+- **Suggested fix:** "Merge into one interaction or use different layers. Figma warns when two identical triggers compete on the same hotspot."
 
 ### P-09: Smart Animate Layer Matching [HIGH]
 
@@ -133,7 +134,7 @@ Tabella master e logica di detection per ogni regola. Severity: Critical / High 
 
 - **Definizione:** Component set usati con Change to devono coprire stati attesi (Button: Default, Hover, Pressed, Disabled; Toggle: Off/On; Checkbox: Unchecked/Checked; ecc.) e Disabled senza reactions.
 - **Detection:** Per component con Change to: verificare copertura varianti minime e direzioni (es. Hover → Default su Mouse leave). Disabled con reactions → flag.
-- **Suggested fix:** "Add missing variants or interactions (e.g. Hover → Default on Mouse leave). Remove interactions from Disabled variant."
+- **Suggested fix:** "Edit the main component: add missing state variants (Default, Hover, Pressed, Disabled) and wire interactions (e.g. Hover → Default on Mouse leave). Remove interactions from Disabled variant. States are defined on the main component, not on the instance."
 
 ### P-15: Variable Usage Validation [MEDIUM]
 
@@ -167,11 +168,12 @@ Tabella master e logica di detection per ogni regola. Severity: Critical / High 
 
 - **Definizione:** Elementi che sembrano interattivi (bottoni, link, icone con naming "btn-*", "cta-*") dovrebbero avere almeno una reaction.
 - **Detection:** Euristiche su nome componente, stile (underline, colore link), naming; nodi senza reactions → MEDIUM. Istanze di componenti interattivi: controllare reactions sul main component.
+- **Skip (container):** Non segnalare **GROUP** né **FRAME/COMPONENT** con **più di un figlio diretto** — sono contenitori (es. sezione con più righe “Documentation” / “Tips”); l’interazione va sui singoli figli, non sul blocco raggruppato.
 - **Suggested fix:** "Add a prototype interaction (e.g. On click → Navigate to or Open overlay) so this element is clickable in the prototype."
 - **Nota:** Possibili falsi positivi; in UI etichettare come "Suggested interactions".
 
-### P-20: Prototype Presentation Settings [LOW]
+### P-20: Flow Density & Testability [LOW]
 
-- **Definizione:** Device frame, background, starting frame orientation configurati per contesto (mobile, brand background, portrait/landscape).
-- **Detection:** Design mobile senza device frame → LOW. Background default grigio con design brand → LOW. Orientamento starting frame ≠ design → LOW.
-- **Suggested fix:** "Set device frame and background in prototype settings to match the intended viewing context."
+- **Definizione:** Troppi starting point (flussi) sulla stessa pagina rendono più difficile navigare, pianificare i test e mantenere il prototipo nel tempo.
+- **Detection:** Se la pagina ha più di 5 `flowStartingPoints` → LOW advisory.
+- **Suggested fix:** "Consider splitting this prototype into smaller sections/pages (<= 5 flows each) or rename flows clearly so each flow can be tested independently. Many flows on one page makes navigation and test planning harder."

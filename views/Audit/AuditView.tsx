@@ -15,6 +15,7 @@ import { PrototypeAuditTab } from './tabs/PrototypeAuditTab';
 import { 
   LOADING_MSGS,
   A11Y_LOADING_MSGS,
+  PROTO_LOADING_MSGS,
   DS_ISSUES, 
   A11Y_ISSUES, 
   buildDsCategoriesFromIssues,
@@ -77,6 +78,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [isScanning, setIsScanning] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
   const [a11yLoaderMsg, setA11yLoaderMsg] = useState(A11Y_LOADING_MSGS[0]);
+  const [protoLoaderMsg, setProtoLoaderMsg] = useState(PROTO_LOADING_MSGS[0]);
   
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
@@ -276,16 +278,22 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
   // Filter out excluded pages (categories and list both use this base)
   const filteredIssues = currentIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName));
-  // A11Y: when "Show hidden layers" is off (default), exclude issues on hidden layers
+  // A11Y & Prototype: when "Show hidden layers" is off (default), exclude issues on hidden layers
   const a11yVisibleIssues =
     activeTab === 'A11Y'
+      ? (showHiddenLayers ? filteredIssues : filteredIssues.filter(i => i.isOnHiddenLayer !== true))
+      : filteredIssues;
+  const protoVisibleIssues =
+    activeTab === 'PROTOTYPE'
       ? (showHiddenLayers ? filteredIssues : filteredIssues.filter(i => i.isOnHiddenLayer !== true))
       : filteredIssues;
   // A11Y: apply WCAG filter only to the list; categories use a11yVisibleIssues
   const listIssues =
     activeTab === 'A11Y'
       ? (wcagLevelFilter === 'AA' ? a11yVisibleIssues.filter(i => i.wcag_level !== 'AAA') : a11yVisibleIssues)
-      : filteredIssues;
+      : activeTab === 'PROTOTYPE'
+        ? protoVisibleIssues
+        : filteredIssues;
   const activeIssues = activeCat ? listIssues.filter(i => i.categoryId === activeCat) : listIssues;
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
   const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
@@ -315,9 +323,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const uxScore = activeTab === 'UX' ? computeUxHealthScoreFromIssues(filteredIssues) : 100;
   const uxScoreCopy = activeTab === 'UX' ? getUxScoreCopy(uxScore) : { badge: 'EXCELLENT' as const, status: '' };
 
-  // Prototype tab: categories and score from Prototype audit result
-  const protoCategories = activeTab === 'PROTOTYPE' ? buildPrototypeCategoriesFromIssues(filteredIssues) : [];
-  const protoScore = activeTab === 'PROTOTYPE' ? computePrototypeHealthScoreFromIssues(filteredIssues) : 100;
+  // Prototype tab: categories and score from Prototype audit result (respect "Show hidden layers" toggle)
+  const protoCategories = activeTab === 'PROTOTYPE' ? buildPrototypeCategoriesFromIssues(protoVisibleIssues) : [];
+  const protoScore = activeTab === 'PROTOTYPE' ? computePrototypeHealthScoreFromIssues(protoVisibleIssues) : 100;
   const protoScoreCopy = activeTab === 'PROTOTYPE' ? getPrototypeScoreCopy(protoScore) : { advisoryLevel: 'healthy' as const, status: '' };
 
   const highSeverityCount = activeIssues.filter(i => i.severity === 'HIGH').length; 
@@ -352,6 +360,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     }, 1500);
     return () => clearInterval(interval);
   }, [isA11yLoader]);
+
+  // Rotate Prototype loader messages (same ToV)
+  const isProtoLoader = activeTab === 'PROTOTYPE' && protoAuditLoading;
+  useEffect(() => {
+    if (!isProtoLoader) return;
+    let i = 0;
+    setProtoLoaderMsg(PROTO_LOADING_MSGS[0]);
+    const interval = setInterval(() => {
+      i = (i + 1) % PROTO_LOADING_MSGS.length;
+      setProtoLoaderMsg(PROTO_LOADING_MSGS[i]);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [isProtoLoader]);
 
   // Fetch document pages after first paint so mount stays snappy (get-pages is light; no traversal).
   useEffect(() => {
@@ -434,6 +455,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         setTimeout(() => setIsCalculating(false), 200);
         if (err) {
           setProtoAuditError(err);
+          // Even if audit fails, show the UI error state instead of returning to a "silent" ready screen.
+          setHasProtoAudited(true);
+          setLastProtoAuditDate(new Date());
         } else {
           setHasProtoAudited(true);
           setLastProtoAuditDate(new Date());
@@ -744,7 +768,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       isOpen: true,
       title: 'Run Prototype Audit',
       message: `This audit will use ${cost} credit${cost !== 1 ? 's' : ''} (${selectedFlowIds.length} ${flowWord}). Continue?`,
-      confirmLabel: `Run (-${cost} credit${cost !== 1 ? 's' : ''})`,
+      confirmLabel: 'Authorize Charge',
       onConfirm: () => {
         setConfirmConfig(null);
         setProtoAuditError(null);
@@ -944,15 +968,32 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                   type: 'AUDIT',
                   message: `[DISCARD] Tab: ${tabLabel}. ${scope}. IssueId: ${feedbackTargetId}. Comment: ${comment}`,
                 };
-                // Fire-and-forget; errors are logged in backend / Network tab, no UI noise
-                fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
+                // Fire-and-forget, ma logghiamo se l'endpoint risponde non-OK
+                void fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${authToken}`,
                   },
                   body: JSON.stringify(payload),
-                }).catch(() => {});
+                }).then(async (r) => {
+                  if (r.ok) return;
+                  let text: string | null = null;
+                  try {
+                    text = await r.text();
+                  } catch {
+                    text = null;
+                  }
+                  console.warn('[Comtra] POST /api/support/ticket failed', {
+                    status: r.status,
+                    feedbackType: 'DISCARD',
+                    issueId: feedbackTargetId,
+                    commentLength: comment.length,
+                    body: text ? text.slice(0, 200) : null,
+                  });
+                }).catch((err) => {
+                  console.warn('[Comtra] POST /api/support/ticket network error', err);
+                });
               }
           } else if (feedbackType === 'BAD_FIX') {
               const newSent = new Set(feedbackSentIds);
@@ -973,14 +1014,31 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                   type: 'AUDIT',
                   message: `[BAD_FIX] Tab: ${tabLabel}. ${scope}. IssueId: ${feedbackTargetId}. Comment: ${comment}`,
                 };
-                fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
+                void fetch(`${AUTH_BACKEND_URL}/api/support/ticket`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${authToken}`,
                   },
                   body: JSON.stringify(payload),
-                }).catch(() => {});
+                }).then(async (r) => {
+                  if (r.ok) return;
+                  let text: string | null = null;
+                  try {
+                    text = await r.text();
+                  } catch {
+                    text = null;
+                  }
+                  console.warn('[Comtra] POST /api/support/ticket failed', {
+                    status: r.status,
+                    feedbackType: 'BAD_FIX',
+                    issueId: feedbackTargetId,
+                    commentLength: comment.length,
+                    body: text ? text.slice(0, 200) : null,
+                  });
+                }).catch((err) => {
+                  console.warn('[Comtra] POST /api/support/ticket network error', err);
+                });
               }
           }
       }
@@ -1046,11 +1104,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const wordCount = feedbackText.trim().split(/\s+/).filter(w => w.length > 0).length;
   const canSubmitFeedback = wordCount >= 2;
 
-  // Full-page loader only after Authorize (not during first scan / count nodes). DS: isScanning. A11Y: waitingForFileContext + a11yAuditLoading. UX: waitingForFileContext + uxAuditLoading.
-  const showFullPageLoader = isScanning || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading) || (activeTab === 'UX' && uxAuditLoading);
-  const fullPageLoaderMsg = isA11yLoader ? a11yLoaderMsg : loadingMsg;
+  // Full-page loader only after Authorize (not during first scan / count nodes). DS: isScanning. A11Y/UX: waitingForFileContext + auditLoading. Prototype: protoAuditLoading.
+  const showFullPageLoader = isScanning || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading) || (activeTab === 'UX' && uxAuditLoading) || (activeTab === 'PROTOTYPE' && protoAuditLoading);
+  const fullPageLoaderMsg = isProtoLoader ? protoLoaderMsg : isA11yLoader ? a11yLoaderMsg : loadingMsg;
   const nodeCount = scanStats.nodes || 0;
-  const loaderBarDuration = nodeCount >= 10000 ? 28 : nodeCount >= 5000 ? 20 : nodeCount >= 2000 ? 14 : nodeCount >= 500 ? 9 : 6;
+  const loaderBarDuration = isProtoLoader ? 22 : (nodeCount >= 10000 ? 28 : nodeCount >= 5000 ? 20 : nodeCount >= 2000 ? 14 : nodeCount >= 500 ? 9 : 6);
   const isLargeFile = nodeCount >= 3000;
 
   if (showFullPageLoader) return (
@@ -1069,9 +1127,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
            style={{ animation: `fill-bar ${loaderBarDuration}s ease-in-out forwards` }}
          />
       </div>
-      {isLargeFile && (
+      {isLargeFile && !isProtoLoader && (
         <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
           Large file — analysis may take a minute or more.
+        </p>
+      )}
+      {isProtoLoader && (
+        <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
+          Checking flows, connections and interactions…
         </p>
       )}
     </div>

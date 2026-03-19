@@ -362,15 +362,17 @@ async function handleCreditsTimeline(req, res) {
 
   const creditsByDay = await sql`
     SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
-           SUM(credits_consumed)::int AS credits,
+           -- Mostriamo "crediti consumati": i "regali" additivi (admin_recharge) sono negativi e fuorvianti nel grafico
+           SUM(GREATEST(credits_consumed, 0))::int FILTER (WHERE action_type != 'admin_recharge') AS credits,
            COUNT(*) FILTER (WHERE action_type IN ('audit', 'scan'))::int AS scans
     FROM credit_transactions WHERE created_at >= ${since}
     GROUP BY 1 ORDER BY 1
   `;
   const byActionByDay = await sql`
     SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
-           action_type, COUNT(*)::int AS count, SUM(credits_consumed)::int AS credits
+           action_type, COUNT(*)::int AS count, SUM(GREATEST(credits_consumed, 0))::int AS credits
     FROM credit_transactions WHERE created_at >= ${since}
+      AND action_type != 'admin_recharge'
     GROUP BY 1, 2 ORDER BY 1, 3 DESC
   `;
 

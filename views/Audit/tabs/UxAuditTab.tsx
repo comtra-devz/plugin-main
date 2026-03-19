@@ -275,16 +275,16 @@ export const UxAuditTab: React.FC<Props> = ({
                       onClick={() => setActiveCat(isActive ? null : cat.id)}
                       className={`flex items-center justify-between px-2 py-2 border-b border-gray-100 cursor-pointer transition-colors ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`size-8 ${cat.color} border-2 border-black flex items-center justify-center text-sm shadow-[2px_2px_0_0_#000] text-black`}>
+                      <div className="flex items-center gap-3 mr-6 min-w-0">
+                        <div className={`size-8 shrink-0 ${cat.color} border-2 border-black flex items-center justify-center text-sm leading-none shadow-[2px_2px_0_0_#000] text-black`}>
                           {cat.icon}
                         </div>
-                        <div className="flex flex-col">
+                        <div className="flex flex-col min-w-0">
                           <span className="text-[10px] font-bold uppercase">{cat.label}</span>
                           <span className="text-[9px] font-medium opacity-70">{cat.desc}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className={`text-[10px] font-mono ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>{pctOfTotal}%</span>
                         {cat.issuesCount > 0 && (
                           <span className="size-7 min-w-7 bg-white text-black border border-black flex items-center justify-center text-[9px] font-bold rounded-full">
