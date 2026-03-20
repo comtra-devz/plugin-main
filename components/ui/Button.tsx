@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { BRUTAL } from '../../constants';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'black' | 'danger';
@@ -20,6 +20,8 @@ const sizeClasses = {
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** React 19: esplicito perché alcuni tipi HTMLButton non espongono più children */
+  children?: ReactNode;
   variant?: ButtonVariant;
   fullWidth?: boolean;
   /** 'column' = stacked (default); 'row' = icon + text */

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AUTH_BACKEND_URL, buildCheckoutUrl } from '../constants';
+import { AUTH_BACKEND_URL, BRUTAL, buildCheckoutUrl } from '../constants';
 import { Button } from '../components/ui/Button';
 import { User } from '../types';
 

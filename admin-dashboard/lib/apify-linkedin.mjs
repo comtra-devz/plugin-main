@@ -6,6 +6,7 @@
  * - postUrls: { postUrls: [{ url: "..." }, ...] }  (comune)
  * - urls:     { urls: ["...", ...] }
  * - startUrls:{ startUrls: [{ url: "..." }, ...] }
+ * - targetUrls:{ targetUrls: ["...", ...] } (alcuni actor LinkedIn profile/posts)
  */
 const APIFY = 'https://api.apify.com/v2';
 
@@ -22,7 +23,8 @@ export async function runLinkedInActor(token, actorId, postUrls, opts = {}) {
   if (!postUrls.length) return [];
 
   const actor = actorId.includes('/') ? actorId.replace('/', '~') : actorId;
-  const waitSeconds = Math.min(Math.max(opts.waitSeconds ?? 300, 60), 900);
+  /** Min 10s so Hobby/debug can fail fast; default 300 for full Apify runs (needs Vercel maxDuration). */
+  const waitSeconds = Math.min(Math.max(opts.waitSeconds ?? 300, 10), 900);
   const inputMode = opts.inputMode || process.env.APIFY_LINKEDIN_INPUT_MODE || 'postUrls';
 
   const input = buildActorInput(inputMode, postUrls);
@@ -60,6 +62,8 @@ export async function runLinkedInActor(token, actorId, postUrls, opts = {}) {
 
 function buildActorInput(mode, urls) {
   switch (mode) {
+    case 'targetUrls':
+      return { targetUrls: urls };
     case 'urls':
       return { urls };
     case 'startUrls':
@@ -176,13 +180,21 @@ function extractAllUrlsFromObject(obj, out = new Set(), depth = 0) {
  * @param {{ maxPosts?: number, waitSeconds?: number, inputMode?: string }} [opts]
  */
 export async function enrichLinkedInPosts(token, actorId, linkedinUrls, opts = {}) {
-  const max = opts.maxPosts ?? Number(process.env.PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN || 20) || 20;
+  const max = opts.maxPosts ?? (Number(process.env.PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN || 20) || 20);
   const slice = linkedinUrls.slice(0, max);
   if (!slice.length) return [];
 
+  const envWaitRaw = process.env.APIFY_LINKEDIN_WAIT_SECONDS;
+  const envWait =
+    envWaitRaw != null && String(envWaitRaw).trim() !== ''
+      ? Number(envWaitRaw)
+      : undefined;
+  const waitSeconds =
+    opts.waitSeconds ?? (Number.isFinite(envWait) ? envWait : undefined);
+
   try {
     const items = await runLinkedInActor(token, actorId, slice, {
-      waitSeconds: opts.waitSeconds,
+      waitSeconds,
       inputMode: opts.inputMode,
     });
     const mapped = mapLinkedInDatasetItems(items, slice);

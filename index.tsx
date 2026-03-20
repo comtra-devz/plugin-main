@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ToastProvider } from './contexts/ToastContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { InactivityTimerBadge } from './components/InactivityTimerBadge';
 import App from './App';
 
 const rootElement = document.getElementById('root');
@@ -13,6 +14,7 @@ root.render(
     <ErrorBoundary>
       <ToastProvider>
         <App />
+        <InactivityTimerBadge />
       </ToastProvider>
     </ErrorBoundary>
   </React.StrictMode>

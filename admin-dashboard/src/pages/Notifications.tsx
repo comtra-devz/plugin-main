@@ -86,7 +86,7 @@ export default function Notifications() {
                 }}
               >
                 <Link
-                  to={n.targetPath}
+                  to={n.target_path}
                   style={{
                     display: 'flex',
                     gap: '0.75rem',

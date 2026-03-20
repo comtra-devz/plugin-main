@@ -3,6 +3,11 @@
     { "source": "/auth/verify", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/cron-product-sources.mjs": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/cron-notify-discord",

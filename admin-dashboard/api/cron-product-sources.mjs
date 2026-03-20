@@ -1,6 +1,6 @@
 /**
  * GET /api/cron-product-sources
- * Cron Vercel (1×/giorno): esegue estrazione Notion + Apify LinkedIn solo se l’ultima run OK è ≥ 3 giorni fa.
+ * Cron Vercel (pianificato una volta al giorno): esegue estrazione Notion + Apify LinkedIn solo se l’ultima run OK è ≥ 3 giorni fa.
  *
  * Auth: Authorization: Bearer <CRON_SECRET> oppure ?key=<CRON_SECRET>
  * Opzionale: ?force=1 con stesso secret — ignora il gate 3 giorni (solo test).
@@ -15,6 +15,8 @@
  * - PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN opzionale (default 20)
  * - PRODUCT_SOURCES_CRON_WEBHOOK_URL opzionale (Discord webhook: report sintetico)
  * - POSTGRES_URL / DATABASE_URL (per gate 3 giorni + storico report)
+ * - PRODUCT_SOURCES_SKIP_LINKEDIN=1 opzionale — salta Apify (utile su Vercel Hobby / test Notion)
+ * - APIFY_LINKEDIN_WAIT_SECONDS opzionale — secondi max wait Apify (default 300; serve maxDuration Vercel adeguato)
  */
 import { sql } from '../lib/db.mjs';
 import { runNotionProductSourcesExtract, buildMarkdownReport } from '../lib/product-sources-notion.mjs';
@@ -23,6 +25,18 @@ import { enrichLinkedInPosts } from '../lib/apify-linkedin.mjs';
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 export default async function handler(req, res) {
+  try {
+    return await handleCronProductSources(req, res);
+  } catch (fatal) {
+    const msg = fatal instanceof Error ? fatal.message : String(fatal);
+    console.error('cron-product-sources fatal', fatal);
+    if (!res.headersSent) {
+      return res.status(500).json({ ok: false, error: msg || 'Errore interno' });
+    }
+  }
+}
+
+async function handleCronProductSources(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -106,13 +120,21 @@ export default async function handler(req, res) {
     const apifyToken = process.env.APIFY_TOKEN || '';
     const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || '';
     const inputMode = process.env.APIFY_LINKEDIN_INPUT_MODE;
+    const skipLinkedin =
+      process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === '1' ||
+      process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === 'true';
 
-    /** @type {Array<{ url: string, text?: string, outboundLinks?: string[], error?: string }>} */
+    // linkedinEnrichments: { url, text?, outboundLinks?, error? }[]
     let linkedinEnrichments = [];
-    if (linkedinUrls.length && apifyToken && actorId) {
+    if (linkedinUrls.length && apifyToken && actorId && !skipLinkedin) {
       linkedinEnrichments = await enrichLinkedInPosts(apifyToken, actorId, linkedinUrls, {
         inputMode: inputMode || undefined,
       });
+    } else if (linkedinUrls.length && skipLinkedin) {
+      linkedinEnrichments = linkedinUrls.map((url) => ({
+        url,
+        error: 'Arricchimento LinkedIn disattivato (PRODUCT_SOURCES_SKIP_LINKEDIN).',
+      }));
     } else if (linkedinUrls.length) {
       linkedinEnrichments = linkedinUrls.map((url) => ({
         url,
@@ -200,7 +222,10 @@ async function sendDiscordSummary({ linkCount, linkedinCount, mode, sourceId, ma
     process.env.PRODUCT_SOURCES_CRON_WEBHOOK_URL ||
     process.env.DISCORD_PRODUCT_SOURCES_WEBHOOK_URL ||
     '';
-  if (!url || !url.startsWith('https://discord.com/api/webhooks/')) return;
+  const isDiscordWebhook =
+    /^https:\/\/discord\.com\/api\/webhooks\//i.test(url) ||
+    /^https:\/\/discordapp\.com\/api\/webhooks\//i.test(url);
+  if (!url || !isDiscordWebhook) return;
 
   // Limite Discord: descrizione embed ~4096; evitiamo field >1024 char.
   const maxDesc = 3800;

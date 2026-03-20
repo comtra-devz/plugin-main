@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BRUTAL } from '../../../constants';
 import { Button } from '../../../components/ui/Button';
 import { IssueList } from '../components/IssueList';
 import { AuditIssue } from '../../../types';
