@@ -104,7 +104,7 @@ export default async function handler(req, res) {
         ok: true,
         stub: true,
         message:
-          'Integrazione GitHub automatica non è ancora attiva. Scarica il Markdown, apri una PR manuale sul repo del plugin; poi puoi incollare l’URL con «Segna PR aperta».',
+          'Stato aggiornato: in lavorazione. Le PR restano sempre manuali (sicurezza). Scarica il Markdown, apri la PR sul repo; quando esiste, usa «Segna PR» in dashboard per salvare l’URL.',
       });
     }
 

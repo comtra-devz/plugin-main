@@ -117,14 +117,14 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
 
 - **Content Management → Migliorie prodotto (Notion)** ha due schede:
   - **Scansione manuale Notion** — come prima (`POST /api/notion-product-sources`).
-  - **Storico cron & documenti** — tabella run da `product_sources_cron_runs`: anteprima, **Leggi** / **Scarica .md**, stato **Discord** e **Git/PR** (stub + registrazione manuale URL PR).
+  - **Storico cron & documenti** — tabella run da `product_sources_cron_runs`: anteprima, **Leggi** / **Scarica .md**, stato **Discord** e tracciamento **Git/PR** (tutto **manuale** per sicurezza: nessuna PR automatica).
 - API elenco/dettaglio: `GET /api/product-sources-runs` (auth admin JWT), `GET /api/product-sources-runs?id=<id>` per Markdown completo.
-- Azioni POST (auth admin): `request_pr_stub`, `set_pr_url` (URL `https://github.com/...`), `reset_git`.
+- Azioni POST (auth admin): `request_pr_stub` (segna «in lavorazione»), `set_pr_url` (URL `https://github.com/...` dopo PR aperta a mano), `reset_git`.
 - Migration stato Discord/Git: [`migrations/005_product_sources_git_discord.sql`](../migrations/005_product_sources_git_discord.sql) (dopo la `003`).
 
 ### 7) UI manuale (promemoria)
 
-- La doppia conferma “Applica su Git” nella scheda scansione resta **stub** finché non colleghiamo GitHub App / workflow; per le run cron usa **Segna PR** nello storico dopo PR manuale.
+- La doppia conferma “Applica su Git” nella scheda scansione è solo un **promemoria**: **nessuna** integrazione che apra PR in automatico è prevista (scelta di sicurezza). Per le run cron usa **Segna PR** nello storico dopo aver aperto la PR a mano su GitHub.
 
 ---
 
@@ -303,7 +303,7 @@ LIMIT 10;
 
 ---
 
-## Non ancora implementato
+## Non ancora implementato / fuori scope
 
-- Apertura automatica di **branch/PR** sul repo plugin dopo conferma in UI.
+- **PR automatiche:** volutamente **non** in roadmap (sicurezza); solo tracciamento manuale in dashboard.
 - Fetch generico di ogni URL non-LinkedIn (solo lista link nel report).

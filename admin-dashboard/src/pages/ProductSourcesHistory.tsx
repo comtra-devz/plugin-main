@@ -8,8 +8,8 @@ import {
 
 const GIT_LABEL: Record<string, string> = {
   not_sent: 'Non su Git',
-  pending: 'PR in coda (stub)',
-  pr_opened: 'PR registrata',
+  pending: 'In lavorazione (PR manuale)',
+  pr_opened: 'PR registrata (manuale)',
   failed: 'Errore Git',
 };
 
@@ -152,9 +152,10 @@ export default function ProductSourcesHistory() {
           Storico documenti (cron)
         </h2>
         <p style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1rem' }}>
-          Ogni riga è una run salvata in <code>product_sources_cron_runs</code>: Markdown completo in DB, riepilogo
-          qui. <strong>Git:</strong> oggi è flusso guidato (stub + registrazione manuale URL PR); l’automazione GitHub
-          arriverà a roadmap.
+          Ogni riga è una run salvata in <code>product_sources_cron_runs</code>: Markdown completo in DB, riepilogo qui.
+          <strong>Git / PR:</strong> sempre <strong>manuali</strong> (sicurezza): apri tu la PR sul repo, poi usa{' '}
+          <strong>Segna PR</strong> per incollare l’URL e tenere traccia in dashboard. Il pulsante «In lavorazione» serve
+          solo a segnare che stai lavorando alla PR (nessun accesso automatico al repo).
         </p>
 
         <div
@@ -311,7 +312,7 @@ export default function ProductSourcesHistory() {
                           style={{ padding: '0.2rem 0.45rem', fontSize: '0.65rem' }}
                           onClick={() => void handlePrStub(row.id)}
                         >
-                          PR (stub)
+                          In lavorazione
                         </button>
                         <button
                           type="button"

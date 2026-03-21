@@ -377,42 +377,61 @@ async function handleCreditsTimeline(req, res) {
   const planRaw = (req.query?.plan || '').toUpperCase().trim();
   const planFilter = planRaw === 'PRO' || planRaw === 'FREE' ? planRaw : null;
 
-  let creditsByDay;
-  let byActionByDay;
-  if (!planFilter) {
-    creditsByDay = await sql`
+  const loadUnfilteredTimeline = async () => {
+    const creditsRows = await sql`
       SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
              SUM(GREATEST(credits_consumed, 0))::int FILTER (WHERE action_type != 'admin_recharge') AS credits,
              COUNT(*) FILTER (WHERE action_type IN ('audit', 'scan'))::int AS scans
       FROM credit_transactions WHERE created_at >= ${since}
       GROUP BY 1 ORDER BY 1
     `;
-    byActionByDay = await sql`
+    const byActionRows = await sql`
       SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
              action_type, COUNT(*)::int AS count, SUM(GREATEST(credits_consumed, 0))::int AS credits
       FROM credit_transactions WHERE created_at >= ${since}
         AND action_type != 'admin_recharge'
       GROUP BY 1, 2 ORDER BY 1, 3 DESC
     `;
+    return { creditsRows, byActionRows };
+  };
+
+  let creditsByDay;
+  let byActionByDay;
+  let effectivePlanFilter = planFilter;
+  let planFilterFallbackNote = null;
+  if (!planFilter) {
+    const base = await loadUnfilteredTimeline();
+    creditsByDay = base.creditsRows;
+    byActionByDay = base.byActionRows;
   } else {
-    creditsByDay = await sql`
-      SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
-             SUM(GREATEST(ct.credits_consumed, 0))::int FILTER (WHERE ct.action_type != 'admin_recharge') AS credits,
-             COUNT(*) FILTER (WHERE ct.action_type IN ('audit', 'scan'))::int AS scans
-      FROM credit_transactions ct
-      INNER JOIN users u ON u.id = ct.user_id
-      WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
-      GROUP BY 1 ORDER BY 1
-    `;
-    byActionByDay = await sql`
-      SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
-             ct.action_type, COUNT(*)::int AS count, SUM(GREATEST(ct.credits_consumed, 0))::int AS credits
-      FROM credit_transactions ct
-      INNER JOIN users u ON u.id = ct.user_id
-      WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
-        AND ct.action_type != 'admin_recharge'
-      GROUP BY 1, 2 ORDER BY 1, 3 DESC
-    `;
+    try {
+      creditsByDay = await sql`
+        SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
+               SUM(GREATEST(ct.credits_consumed, 0))::int FILTER (WHERE ct.action_type != 'admin_recharge') AS credits,
+               COUNT(*) FILTER (WHERE ct.action_type IN ('audit', 'scan'))::int AS scans
+        FROM credit_transactions ct
+        INNER JOIN users u ON u.id = ct.user_id
+        WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
+        GROUP BY 1 ORDER BY 1
+      `;
+      byActionByDay = await sql`
+        SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
+               ct.action_type, COUNT(*)::int AS count, SUM(GREATEST(ct.credits_consumed, 0))::int AS credits
+        FROM credit_transactions ct
+        INNER JOIN users u ON u.id = ct.user_id
+        WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
+          AND ct.action_type != 'admin_recharge'
+        GROUP BY 1, 2 ORDER BY 1, 3 DESC
+      `;
+    } catch (err) {
+      // Non bloccare il grafico: in ambienti con schema "misto" il join users/plan può fallire.
+      console.warn('credits-timeline plan filter fallback to unfiltered:', err?.message || err);
+      const base = await loadUnfilteredTimeline();
+      creditsByDay = base.creditsRows;
+      byActionByDay = base.byActionRows;
+      effectivePlanFilter = null;
+      planFilterFallbackNote = `Filtro piano "${planFilter}" non disponibile in questo ambiente: timeline mostrata su tutti gli utenti.`;
+    }
   }
 
   const toDateStr = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : (d ? String(d).slice(0, 10) : ''));
@@ -452,7 +471,7 @@ async function handleCreditsTimeline(req, res) {
     kimiByDate[r.day] = { kimi_calls: r.count, kimi_cost_usd: r.cost_usd };
   }
   for (const d of days) {
-    if (!planFilter && kimiByDate[d.date]) {
+    if (!effectivePlanFilter && kimiByDate[d.date]) {
       d.kimi_calls = kimiByDate[d.date].kimi_calls;
       d.kimi_cost_usd = kimiByDate[d.date].kimi_cost_usd;
     }
@@ -463,10 +482,10 @@ async function handleCreditsTimeline(req, res) {
     since,
     timeline: days,
     by_action_per_day: byAction,
-    plan_filter: planFilter,
-    kimi_note: planFilter
+    plan_filter: effectivePlanFilter,
+    kimi_note: planFilterFallbackNote || (effectivePlanFilter
       ? 'Kimi (rosa/verde) non filtrato per piano: la telemetria token è anonima. Solo scan/crediti sono per piano selezionato.'
-      : null,
+      : null),
   });
 }
 

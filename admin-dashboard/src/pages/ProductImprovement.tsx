@@ -56,8 +56,8 @@ export default function ProductImprovement() {
     if (gitConfirmText.trim().toUpperCase() !== 'CONFERMA') return;
     closeGitModal();
     alert(
-      'Collegamento Git non ancora attivo: usa il report Markdown per aprire una PR manuale sul repo del plugin. ' +
-        'In seguito potremo collegare GitHub App / workflow per branch + PR automatica.',
+      'Le PR sul repo del plugin restano sempre manuali (sicurezza). Usa il report Markdown per aprire la PR tu stesso; ' +
+        'nella scheda «Storico cron & documenti» puoi poi registrare lo stato e l’URL della PR.',
     );
   };
 
@@ -188,8 +188,8 @@ export default function ProductImprovement() {
               </button>
             </div>
             <p style={{ fontSize: '0.75rem', marginTop: '0.75rem', color: 'var(--muted-fg, #555)' }}>
-              L’applicazione automatica su Git non è ancora collegata: la doppia conferma ti ricorda di usare PR
-              piccole e review, per non peggiorare comportamenti esistenti.
+              Nessuna modifica automatica su Git (scelta di sicurezza). PR manuali, piccole e con review — vedi anche lo
+              storico cron per tracciare l’URL PR.
             </p>
           </section>
 
@@ -236,8 +236,8 @@ export default function ProductImprovement() {
                   Conferma
                 </h3>
                 <p style={{ fontSize: '0.85rem' }}>
-                  Le modifiche automatiche sul repository del plugin non sono ancora attive. Procedendo vedrai solo un
-                  promemoria per usare una PR manuale. Vuoi continuare?
+                  La dashboard non aprirà mai PR in automatico. Procedendo vedrai un promemoria per la PR manuale e lo
+                  storico. Vuoi continuare?
                 </p>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
                   <button type="button" className="brutal-btn" onClick={closeGitModal}>
@@ -255,8 +255,7 @@ export default function ProductImprovement() {
                   Seconda conferma
                 </h3>
                 <p style={{ fontSize: '0.85rem' }}>
-                  Digita <strong>CONFERMA</strong> per chiudere il flusso (nessuna modifica Git verrà eseguita da
-                  questa dashboard nella versione attuale).
+                  Digita <strong>CONFERMA</strong> per chiudere (nessuna azione su GitHub: le PR restano manuali).
                 </p>
                 <input
                   className="brutal-input"
