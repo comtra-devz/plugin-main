@@ -1,9 +1,9 @@
 /**
  * GET /api/cron-product-sources
- * Cron Vercel (pianificato una volta al giorno): esegue estrazione Notion + Apify LinkedIn solo se l’ultima run OK è ≥ 3 giorni fa.
+ * Cron Vercel (pianificato una volta al giorno): esegue estrazione Notion + Apify LinkedIn solo se l’ultima run OK (non skipped) è ≥ N giorni fa.
  *
  * Auth: Authorization: Bearer <CRON_SECRET> oppure ?key=<CRON_SECRET>
- * Opzionale: ?force=1 con stesso secret — ignora il gate 3 giorni (solo test).
+ * Opzionale: ?force=1 con stesso secret — ignora il gate temporale (solo test).
  *
  * Env:
  * - CRON_SECRET
@@ -14,17 +14,32 @@
  * - APIFY_LINKEDIN_INPUT_MODE opzionale: postUrls | urls | startUrls
  * - PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN opzionale (default 20)
  * - PRODUCT_SOURCES_CRON_WEBHOOK_URL opzionale (Discord webhook: report sintetico)
- * - POSTGRES_URL / DATABASE_URL (per gate 3 giorni + storico report + dedup URL)
+ * - POSTGRES_URL / DATABASE_URL (per gate temporale + storico report + dedup URL)
+ * - PRODUCT_SOURCES_CRON_GATE_DAYS opzionale (default **3**) — giorni minimi tra due run **complete** (non skipped); es. `4` per allineo a “ogni 4 giorni”
  * - PRODUCT_SOURCES_SKIP_LINKEDIN=1 opzionale — salta Apify (utile su Vercel Hobby / test Notion)
+ * - PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL=1 opzionale — ad ogni run completa (~3 gg) Apify su **tutti** i LinkedIn in Notion (fino a PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN), non solo URL nuovi nel dedup
  * - APIFY_LINKEDIN_WAIT_SECONDS opzionale — secondi max wait Apify (default 300; serve maxDuration Vercel adeguato)
  * - PRODUCT_SOURCES_DISCORD_SUMMARY_ONLY=1 opzionale — Discord solo riepilogo (no report spezzato in più messaggi)
+ * - PRODUCT_SOURCES_FETCH_WEB=1 opzionale — Fase 1+2: fetch / strategia per tipo su URL **nuovi** non-LinkedIn (allow/block list, GitHub raw, stub YouTube/X, PDF rilevato)
  */
 import { sql } from '../lib/db.mjs';
 import { runNotionProductSourcesExtract, buildMarkdownReport } from '../lib/product-sources-notion.mjs';
 import { enrichLinkedInPosts } from '../lib/apify-linkedin.mjs';
-import { loadSeenUrlKeys, partitionLinksBySeen, upsertSeenUrls } from '../lib/product-sources-seen.mjs';
+import { isWebFetchCandidateUrl } from '../lib/fetch-generic-web.mjs';
+import { fetchProductSourcesSequential, getWebFetchLimitsFromEnv } from '../lib/product-source-fetch-strategy.mjs';
+import {
+  loadSeenUrlKeys,
+  partitionLinksBySeen,
+  upsertSeenUrls,
+  normalizeUrlKey,
+} from '../lib/product-sources-seen.mjs';
 
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+function getCronGateMs() {
+  const raw = process.env.PRODUCT_SOURCES_CRON_GATE_DAYS;
+  const n = raw != null && String(raw).trim() !== '' ? Number(raw) : 3;
+  const days = Number.isFinite(n) && n > 0 ? Math.min(n, 30) : 3;
+  return days * 24 * 60 * 60 * 1000;
+}
 
 export default async function handler(req, res) {
   try {
@@ -72,6 +87,7 @@ async function handleCronProductSources(req, res) {
 
   let skipped = false;
   let skipReason = '';
+  const gateMs = getCronGateMs();
 
   if (!force && sql) {
     try {
@@ -84,9 +100,9 @@ async function handleCronProductSources(req, res) {
       const row = prev?.rows?.[0];
       if (row?.ran_at) {
         const last = new Date(row.ran_at).getTime();
-        if (Number.isFinite(last) && Date.now() - last < THREE_DAYS_MS) {
+        if (Number.isFinite(last) && Date.now() - last < gateMs) {
           skipped = true;
-          skipReason = 'last_run_within_3_days';
+          skipReason = 'last_run_within_gate';
         }
       }
     } catch (e) {
@@ -123,6 +139,23 @@ async function handleCronProductSources(req, res) {
     const linkedinUrlsNew = newLinks.filter((l) => /linkedin\.com/i.test(l.url)).map((l) => l.url);
     const linkedinSeenCount = seenLinks.filter((l) => /linkedin\.com/i.test(l.url)).length;
 
+    const refetchAllLinkedIn =
+      process.env.PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL === '1' ||
+      process.env.PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL === 'true';
+
+    /** LinkedIn unici in Notion (stessa run), ordine stabile */
+    const linkedinUrlsAll = [];
+    const liKeyOrder = new Set();
+    for (const l of links) {
+      if (!/linkedin\.com/i.test(l.url)) continue;
+      const k = normalizeUrlKey(l.url);
+      if (liKeyOrder.has(k)) continue;
+      liKeyOrder.add(k);
+      linkedinUrlsAll.push(l.url);
+    }
+
+    const linkedinUrlsForApify = refetchAllLinkedIn ? linkedinUrlsAll : linkedinUrlsNew;
+
     const apifyToken = process.env.APIFY_TOKEN || '';
     const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || '';
     const inputMode = process.env.APIFY_LINKEDIN_INPUT_MODE;
@@ -130,24 +163,49 @@ async function handleCronProductSources(req, res) {
       process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === '1' ||
       process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === 'true';
 
-    // Apify solo su URL LinkedIn **nuovi** (mai registrati in product_sources_seen_urls)
+    // Apify: default solo URL LinkedIn **nuovi** nel dedup; con REFETCH_ALL tutti (fino al cap in enrichLinkedInPosts)
     let linkedinEnrichments = [];
-    if (linkedinUrlsNew.length && apifyToken && actorId && !skipLinkedin) {
-      linkedinEnrichments = await enrichLinkedInPosts(apifyToken, actorId, linkedinUrlsNew, {
+    if (linkedinUrlsForApify.length && apifyToken && actorId && !skipLinkedin) {
+      linkedinEnrichments = await enrichLinkedInPosts(apifyToken, actorId, linkedinUrlsForApify, {
         inputMode: inputMode || undefined,
       });
-    } else if (linkedinUrlsNew.length && skipLinkedin) {
-      linkedinEnrichments = linkedinUrlsNew.map((url) => ({
+    } else if (linkedinUrlsForApify.length && skipLinkedin) {
+      linkedinEnrichments = linkedinUrlsForApify.map((url) => ({
         url,
         error: 'Arricchimento LinkedIn disattivato (PRODUCT_SOURCES_SKIP_LINKEDIN).',
       }));
-    } else if (linkedinUrlsNew.length) {
-      linkedinEnrichments = linkedinUrlsNew.map((url) => ({
+    } else if (linkedinUrlsForApify.length) {
+      linkedinEnrichments = linkedinUrlsForApify.map((url) => ({
         url,
         error: !apifyToken
           ? 'APIFY_TOKEN non configurato'
           : 'APIFY_LINKEDIN_ACTOR_ID non configurato',
       }));
+    }
+
+    const linkedinApifyMode = refetchAllLinkedIn ? 'refetch_all' : 'new_only';
+
+    const fetchWebEnabled =
+      process.env.PRODUCT_SOURCES_FETCH_WEB === '1' ||
+      process.env.PRODUCT_SOURCES_FETCH_WEB === 'true';
+    const webLimits = getWebFetchLimitsFromEnv();
+
+    /** @type {Array<{ url: string, text?: string, error?: string, contentType?: string, kind?: string, strategyNote?: string }>} */
+    let webEnrichments = [];
+    if (fetchWebEnabled && webLimits.max > 0 && newLinks.length) {
+      const webUrls = [];
+      const webKeys = new Set();
+      for (const l of newLinks) {
+        if (!isWebFetchCandidateUrl(l.url)) continue;
+        const k = normalizeUrlKey(l.url);
+        if (webKeys.has(k)) continue;
+        webKeys.add(k);
+        webUrls.push(l.url);
+      }
+      webEnrichments = await fetchProductSourcesSequential(webUrls, {
+        max: webLimits.max,
+        fetchOpts: { timeoutMs: webLimits.timeoutMs, maxTextChars: webLimits.maxTextChars },
+      });
     }
 
     const markdown = buildMarkdownReport({
@@ -158,13 +216,15 @@ async function handleCronProductSources(req, res) {
       mode,
       stats,
       linkedinEnrichments,
+      linkedinApifyMode,
+      webEnrichments,
     });
 
     const runId = await recordRun({
       skipped: false,
       status: 'ok',
       linkCount: links.length,
-      linkedinAttempted: linkedinUrlsNew.length,
+      linkedinAttempted: linkedinEnrichments.length,
       linkedinReturned: linkedinEnrichments.filter((e) => e.text || (e.outboundLinks?.length ?? 0)).length,
       notionMode: mode,
       notionSourceId: sourceLabel,
@@ -181,9 +241,14 @@ async function handleCronProductSources(req, res) {
         linkCount: links.length,
         newLinkCount: newLinks.length,
         seenLinkCount: seenLinks.length,
-        linkedinNew: linkedinUrlsNew.length,
-        linkedinSeen: linkedinSeenCount,
+        linkedinDedupNew: linkedinUrlsNew.length,
+        linkedinDedupSeen: linkedinSeenCount,
+        linkedinApifyBatch: linkedinEnrichments.length,
+        linkedinLinkedInTotal: linkedinUrlsAll.length,
+        refetchAllLinkedIn,
         linkedinEnriched: linkedinEnrichments.filter((e) => e.text || (e.outboundLinks?.length ?? 0)).length,
+        webFetchBatch: webEnrichments.length,
+        webFetchOk: webEnrichments.filter((w) => w.text && !w.error).length,
         mode,
         sourceId: sourceLabel,
         markdown,
@@ -215,7 +280,13 @@ async function handleCronProductSources(req, res) {
       seenLinkCount: seenLinks.length,
       linkedinUrlsNew: linkedinUrlsNew.length,
       linkedinUrlsSeenSkipped: linkedinSeenCount,
-      linkedinEnriched: linkedinEnrichments.length,
+      linkedinApifyMode: linkedinApifyMode,
+      linkedinApifyBatch: linkedinEnrichments.length,
+      linkedinLinkedInTotal: linkedinUrlsAll.length,
+      linkedinEnriched: linkedinEnrichments.filter((e) => e.text || (e.outboundLinks?.length ?? 0)).length,
+      webFetchEnabled: fetchWebEnabled,
+      webFetchBatch: webEnrichments.length,
+      webFetchWithText: webEnrichments.filter((w) => w.text && !w.error).length,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -298,9 +369,14 @@ async function sendDiscordProductSources({
   linkCount,
   newLinkCount,
   seenLinkCount,
-  linkedinNew,
-  linkedinSeen,
+  linkedinDedupNew,
+  linkedinDedupSeen,
+  linkedinApifyBatch,
+  linkedinLinkedInTotal,
+  refetchAllLinkedIn,
   linkedinEnriched,
+  webFetchBatch,
+  webFetchOk,
   mode,
   sourceId,
   markdown,
@@ -315,11 +391,17 @@ async function sendDiscordProductSources({
     /^https:\/\/discordapp\.com\/api\/webhooks\//i.test(url);
   if (!url || !isDiscordWebhook) return false;
 
+  const liLine = refetchAllLinkedIn
+    ? `**LinkedIn in Notion (unici):** ${linkedinLinkedInTotal} · **Apify — URL nel batch questa run (rispetta cap max/run):** ${linkedinApifyBatch}\n` +
+      `**Dedup DB — LinkedIn nuovi:** ${linkedinDedupNew} · **già in seen:** ${linkedinDedupSeen} _(Apify rieseguito anche su già noti, fino al cap)_\n`
+    : `**LinkedIn → batch Apify (questa run, max N/run):** ${linkedinApifyBatch} · **LinkedIn già noti (skip Apify):** ${linkedinDedupSeen}\n`;
+
   const summary =
     `**Link totali (Notion):** ${linkCount}\n` +
     `**Nuovi URL:** ${newLinkCount} · **Già visti:** ${seenLinkCount}\n` +
-    `**LinkedIn nuovi (Apify questa run):** ${linkedinNew} · **LinkedIn già noti (skip Apify):** ${linkedinSeen}\n` +
-    `**LinkedIn con contenuto utile:** ${linkedinEnriched}\n` +
+    liLine +
+    `**LinkedIn con contenuto utile (batch):** ${linkedinEnriched}\n` +
+    `**Web — fetch HTTP (Fase 1):** ${webFetchBatch} URL in batch · **con testo estratto:** ${webFetchOk}\n` +
     `**Modalità Notion:** ${mode}\n` +
     `**Sorgente:** \`${sourceId}\`\n\n` +
     `Report completo anche in DB: \`product_sources_cron_runs.report_markdown\`.` +

@@ -5,6 +5,55 @@
 
 const NOTION_VERSION = '2022-06-28';
 
+/** Etichette leggibili per tipo blocco Notion (contesto link). */
+const BLOCK_TYPE_LABEL_IT = {
+  paragraph: 'Paragrafo',
+  heading_1: 'Titolo 1',
+  heading_2: 'Titolo 2',
+  heading_3: 'Titolo 3',
+  bulleted_list_item: 'Elenco puntato',
+  numbered_list_item: 'Elenco numerato',
+  to_do: 'Checkbox',
+  quote: 'Citazione',
+  callout: 'Callout',
+  code: 'Codice',
+  table_row: 'Tabella (riga)',
+  table_cell: 'Tabella (cella)',
+  synced_block: 'Blocco sincronizzato',
+  toggle: 'Toggle',
+  divider: 'Separatore',
+  image: 'Immagine',
+  video: 'Video',
+  bookmark: 'Segnalibro',
+  link_preview: 'Anteprima link',
+};
+
+/**
+ * @param {string} blockType
+ */
+export function humanBlockContextLabel(blockType) {
+  if (!blockType) return 'Blocco';
+  return BLOCK_TYPE_LABEL_IT[blockType] || blockType.replace(/_/g, ' ');
+}
+
+/**
+ * Umanizza una riga contesto (es. "Titolo pagina · bulleted_list_item" → "Titolo pagina · Elenco puntato").
+ * @param {string} line
+ */
+export function humanizeNotionContextLine(line) {
+  if (!line || typeof line !== 'string') return line;
+  return line
+    .split(' · ')
+    .map((part) => {
+      const t = part.trim();
+      if (BLOCK_TYPE_LABEL_IT[t]) return BLOCK_TYPE_LABEL_IT[t];
+      if (t.startsWith('property:')) return `Proprietà «${t.slice('property:'.length)}»`;
+      if (t.startsWith('title:')) return `Titolo «${t.slice('title:'.length)}»`;
+      return t;
+    })
+    .join(' · ');
+}
+
 /** @param {string} token @param {string} path @param {RequestInit} [init] */
 export async function notionRequest(token, path, init = {}) {
   const r = await fetch(`https://api.notion.com/v1${path}`, {
@@ -65,10 +114,12 @@ export function extractFromBlock(block, opts) {
     return label;
   };
 
-  let label = block.type || 'block';
+  let label = humanBlockContextLabel(block.type || 'block');
 
   const payload = block[block.type];
   if (!payload) return { urls: [], contextLabel: label, ignored: false };
+
+  const cellLabel = humanBlockContextLabel('table_cell');
 
   switch (block.type) {
     case 'paragraph':
@@ -79,17 +130,17 @@ export function extractFromBlock(block, opts) {
     case 'numbered_list_item':
     case 'to_do':
     case 'quote':
-      addRich(payload.rich_text, block.type);
+      addRich(payload.rich_text, humanBlockContextLabel(block.type));
       break;
     case 'callout':
-      addRich(payload.rich_text, 'callout');
+      addRich(payload.rich_text, humanBlockContextLabel('callout'));
       break;
     case 'code':
-      addRich(payload.rich_text, 'code');
+      addRich(payload.rich_text, humanBlockContextLabel('code'));
       break;
     case 'table_row':
       for (const cell of payload.cells || []) {
-        addRich(cell, 'table_cell');
+        addRich(cell, cellLabel);
       }
       break;
     case 'synced_block':

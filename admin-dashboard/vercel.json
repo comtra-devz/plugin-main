@@ -6,6 +6,9 @@
   "functions": {
     "api/cron-product-sources.mjs": {
       "maxDuration": 300
+    },
+    "api/notion-product-sources.mjs": {
+      "maxDuration": 300
     }
   },
   "crons": [

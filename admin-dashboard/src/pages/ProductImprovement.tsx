@@ -14,6 +14,8 @@ export default function ProductImprovement() {
   const [result, setResult] = useState<NotionProductSourcesResponse | null>(null);
   const [gitStep, setGitStep] = useState<0 | 1 | 2>(0);
   const [gitConfirmText, setGitConfirmText] = useState('');
+  const [enrichLinkedIn, setEnrichLinkedIn] = useState(false);
+  const [fetchWeb, setFetchWeb] = useState(false);
 
   useEffect(() => {
     if (tab !== 'scan') {
@@ -36,7 +38,9 @@ export default function ProductImprovement() {
     setLoading(true);
     setError(null);
     setResult(null);
-    scanNotionProductSources(p ? { pageId: p } : { databaseId: d })
+    scanNotionProductSources(
+      p ? { pageId: p, enrichLinkedIn, fetchWeb } : { databaseId: d, enrichLinkedIn, fetchWeb },
+    )
       .then(setResult)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -139,6 +143,57 @@ export default function ProductImprovement() {
             />
           </label>
         </div>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            marginTop: '0.75rem',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            maxWidth: '36rem',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={enrichLinkedIn}
+            onChange={(e) => setEnrichLinkedIn(e.target.checked)}
+            disabled={loading}
+            style={{ marginTop: '0.15rem' }}
+          />
+          <span>
+            <strong>Arricchisci post LinkedIn (Apify)</strong> — estrae <strong>testo del post</strong> e{' '}
+            <strong>link nel post</strong> (no commenti). Richiede <code>APIFY_TOKEN</code> e{' '}
+            <code>APIFY_LINKEDIN_ACTOR_ID</code> su Vercel; la richiesta può durare <strong>molti secondi</strong> e
+            rispetta <code>PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN</code> su Vercel (default 20 — tetto tecnico configurabile, non un tetto di business).
+          </span>
+        </label>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            marginTop: '0.75rem',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            maxWidth: '40rem',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={fetchWeb}
+            onChange={(e) => setFetchWeb(e.target.checked)}
+            disabled={loading}
+            style={{ marginTop: '0.15rem' }}
+          />
+          <span>
+            <strong>Fetch web + strategia tipo URL (Fase 1 bis–2)</strong> — per ogni link <em>non LinkedIn</em> fino a{' '}
+            <code>PRODUCT_SOURCES_MAX_WEB_FETCH_PER_RUN</code>: HTML grezzo, <strong>GitHub</strong>→raw, note guida per{' '}
+            <strong>YouTube / X</strong>, PDF rilevato, allow/block list (
+            <code>PRODUCT_SOURCES_DOMAIN_ALLOWLIST</code> / <code>BLOCKLIST</code>). Può richiedere{' '}
+            <strong>molti secondi</strong>.
+          </span>
+        </label>
       </section>
 
       {error && (
@@ -173,6 +228,16 @@ export default function ProductImprovement() {
               <li>
                 Blocchi ignorati (filtro): <strong>{result.stats.ignoredBlocks}</strong>
               </li>
+              {result.enrichLinkedInRequested && (
+                <li>
+                  LinkedIn processati da Apify (tentativi): <strong>{result.linkedinEnriched ?? 0}</strong>
+                </li>
+              )}
+              {result.fetchWebRequested && (
+                <li>
+                  Web — URL in batch (strategia Fase 2): <strong>{result.webEnriched ?? 0}</strong>
+                </li>
+              )}
             </ul>
             <div style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               <button type="button" className="brutal-btn" onClick={copyMarkdown}>

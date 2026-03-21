@@ -377,6 +377,7 @@ async function handleCreditsTimeline(req, res) {
   const planRaw = (req.query?.plan || '').toUpperCase().trim();
   const planFilter = planRaw === 'PRO' || planRaw === 'FREE' ? planRaw : null;
 
+  try {
   const loadUnfilteredTimeline = async () => {
     const creditsRows = await sql`
       SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
@@ -487,6 +488,20 @@ async function handleCreditsTimeline(req, res) {
       ? 'Kimi (rosa/verde) non filtrato per piano: la telemetria token è anonima. Solo scan/crediti sono per piano selezionato.'
       : null),
   });
+  } catch (err) {
+    console.error('credits-timeline fatal', err);
+    const hint = String(err?.message || err || '').slice(0, 240);
+    res.status(200).json({
+      period_days: period,
+      since,
+      timeline: [],
+      by_action_per_day: {},
+      plan_filter: null,
+      kimi_note: hint
+        ? `Timeline non disponibile (errore DB/query). Riferimento: ${hint}`
+        : 'Timeline non disponibile: verifica migration e tabella credit_transactions.',
+    });
+  }
 }
 
 async function handleUsers(req, res) {

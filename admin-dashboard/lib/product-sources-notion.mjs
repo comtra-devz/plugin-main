@@ -8,6 +8,7 @@ import {
   extractUrlsFromDatabaseProperties,
   normalizeUrlKey,
   buildIgnorePatterns,
+  humanizeNotionContextLine,
 } from './notion-extract.mjs';
 
 /** Notion accetta UUID con o senza trattini */
@@ -131,6 +132,8 @@ export function hintRulesetArea(url) {
  * @param {Array<{ url: string, contexts?: string[] }>} [opts.newLinks] — se presente con `seenLinks`, layout cron dedup
  * @param {Array<{ url: string, contexts?: string[] }>} [opts.seenLinks]
  * @param {Array<{ url: string, text?: string, outboundLinks?: string[], error?: string }>} [opts.linkedinEnrichments]
+ * @param {'new_only'|'refetch_all'} [opts.linkedinApifyMode] — cron: Apify solo nuovi nel dedup vs tutti i LinkedIn fino al cap
+ * @param {Array<{ url: string, text?: string, error?: string, contentType?: string, kind?: string, strategyNote?: string }>} [opts.webEnrichments] — fetch + strategia tipo URL (Fase 1–2)
  */
 export function buildMarkdownReport({
   links,
@@ -140,6 +143,8 @@ export function buildMarkdownReport({
   mode,
   stats,
   linkedinEnrichments = [],
+  linkedinApifyMode = 'new_only',
+  webEnrichments = [],
 }) {
   const when = new Date().toISOString();
   const useDedup = Array.isArray(newLinks) && Array.isArray(seenLinks);
@@ -156,8 +161,9 @@ export function buildMarkdownReport({
     ``,
     `## Archiviazione`,
     ``,
-    `Ogni run cron salva **l’intero** Markdown in Postgres: tabella \`product_sources_cron_runs\`, colonna \`report_markdown\` (storico per data run). ` +
-      `La prima passata è di solito la più corposa; le successive contengono soprattutto **link nuovi** + sezioni compatte per i già visti.`,
+    useDedup
+      ? `Ogni run **cron** salva il Markdown in Postgres (\`product_sources_cron_runs.report_markdown\`). Le run successive sono spesso più brevi: **link nuovi** in dettaglio, **già visti** in elenco compatto.`
+      : `**Scansione manuale:** elenco URL da Notion + (se richiesto) sezione **LinkedIn — contenuto (Apify)** con testo post e link nel post. Gli **storici** delle run cron restano sempre in Postgres.`,
     ``,
     `## Principi e guardrail`,
     ``,
@@ -165,8 +171,32 @@ export function buildMarkdownReport({
     `- **No** a cambiamenti che peggiorano o confondono comportamenti esistenti; **no** breaking non voluti; delta minimo e PR piccole.`,
     `- Solo **URL** da Notion (niente codice “sparato” senza link); blocchi con **Antigravity** esclusi.`,
     `- **LinkedIn:** post + testo + link nel payload Apify; **niente commenti** ai post.`,
+    `- **Web (non LinkedIn):** fetch HTTP grezzo + **classificazione** (GitHub→raw, YouTube/X stub, PDF rilevato, allow/block list).`,
     ``,
   ];
+
+  function webKindSummary(list) {
+    const m = {};
+    for (const w of list) {
+      const k = w.kind || 'html';
+      m[k] = (m[k] || 0) + 1;
+    }
+    return Object.keys(m).length
+      ? Object.entries(m)
+          .map(([k, v]) => `\`${k}\`: ${v}`)
+          .join(' · ')
+      : '—';
+  }
+
+  if (!useDedup && webEnrichments.length) {
+    lines.push(`## Riepilogo fetch web (scansione manuale)`);
+    lines.push(``);
+    lines.push(`| Voce | Valore |`);
+    lines.push(`|------|--------|`);
+    lines.push(`| URL in batch (rispetta \`PRODUCT_SOURCES_MAX_WEB_FETCH_PER_RUN\`) | ${webEnrichments.length} |`);
+    lines.push(`| Per tipo (Fase 2) | ${webKindSummary(webEnrichments)} |`);
+    lines.push(``);
+  }
 
   if (useDedup) {
     lines.push(`## Riepilogo run`);
@@ -175,7 +205,13 @@ export function buildMarkdownReport({
     lines.push(`|------|-----------|`);
     lines.push(`| Nuovi URL (mai visti in cron prima di questa run) | ${novel.length} |`);
     lines.push(`| Già esaminati in run precedenti | ${already.length} |`);
-    lines.push(`| LinkedIn arricchiti con Apify (solo nuovi URL) | ${linkedinEnrichments.length} |`);
+    lines.push(
+      `| LinkedIn — batch Apify questa run | ${linkedinEnrichments.length} |`,
+    );
+    lines.push(
+      `| Modalità Apify LinkedIn | ${linkedinApifyMode === 'refetch_all' ? 'Tutti i post in Notion (fino al cap per run)' : 'Solo URL nuovi nel dedup'} |`,
+    );
+    lines.push(`| Web — fetch HTTP (URL nuovi, questa run) | ${webEnrichments.length} |`);
     lines.push(``);
   }
 
@@ -193,9 +229,11 @@ export function buildMarkdownReport({
     for (const l of list) {
       lines.push(`- ${l.url}`);
       if (l.contexts?.length) {
-        lines.push(
-          `  - _contesto:_ ${l.contexts.slice(0, 3).join('; ')}${l.contexts.length > 3 ? '…' : ''}`,
-        );
+        const ctx = l.contexts
+          .slice(0, 3)
+          .map((c) => humanizeNotionContextLine(c))
+          .join('; ');
+        lines.push(`  - _contesto:_ ${ctx}${l.contexts.length > 3 ? '…' : ''}`);
       }
       if (withHints) {
         lines.push(`  - _area ruleset (euristica):_ ${hintRulesetArea(l.url)}`);
@@ -207,9 +245,17 @@ export function buildMarkdownReport({
   if (useDedup) {
     pushLinkSection('Nuovi URL', novel, true);
     if (already.length) {
-      lines.push(`### Già visti (nessun nuovo fetch Apify / nessuna ri-analisi automatica)`);
+      const seenTitle =
+        linkedinApifyMode === 'refetch_all'
+          ? 'Già visti (dedup — in questa run Apify può aver incluso anche LinkedIn già noti, vedi sezione Apify)'
+          : 'Già visti (nessun nuovo fetch Apify / nessuna ri-analisi automatica)';
+      lines.push(`### ${seenTitle}`);
       lines.push(``);
-      lines.push(`Lista compatta (${already.length} URL). Dettagli nelle run passate in DB.`);
+      lines.push(
+        linkedinApifyMode === 'refetch_all'
+          ? `Lista compatta (${already.length} URL). Il batch Apify sopra può contenere fino al cap anche URL già presenti in seen.`
+          : `Lista compatta (${already.length} URL). Dettagli nelle run passate in DB.`,
+      );
       lines.push(``);
       for (const l of already) {
         lines.push(`- ${l.url}`);
@@ -223,11 +269,18 @@ export function buildMarkdownReport({
     pushLinkSection('LinkedIn (URL in Notion)', linkedin, true);
   }
 
+  const linkedinUrlTotal = links.filter((l) => /linkedin\.com/i.test(l.url)).length;
+
   if (linkedinEnrichments.length) {
-    lines.push(`## LinkedIn — contenuto (Apify, solo URL nuovi in questa run)`);
+    const liTitle = useDedup
+      ? linkedinApifyMode === 'refetch_all'
+        ? `## LinkedIn — contenuto (Apify, batch su tutti i post fino al cap)`
+        : `## LinkedIn — contenuto (Apify, solo URL nuovi in questa run)`
+      : `## LinkedIn — contenuto (Apify)`;
+    lines.push(liTitle);
     lines.push(``);
     lines.push(
-      `Testo e link estratti dall’actor (senza commenti). Verifica sempre prima di aggiornare i ruleset.`,
+      `Testo del post e link presenti nel payload dell’actor (senza commenti). Verifica sempre prima di aggiornare i ruleset.`,
     );
     lines.push(``);
     for (const e of linkedinEnrichments) {
@@ -254,6 +307,53 @@ export function buildMarkdownReport({
           lines.push(`- ${u}`);
         }
         if (e.outboundLinks.length > 40) lines.push(`- …`);
+        lines.push(``);
+      }
+    }
+  } else if (linkedinUrlTotal > 0) {
+    lines.push(`## LinkedIn — testo dei post`);
+    lines.push(``);
+    lines.push(
+      `Qui **non** compare ancora il contenuto estratto dai post: in questa esecuzione **non** è stato chiamato Apify (o non ha restituito righe). Sopra trovi solo gli **URL** copiati da Notion.`,
+    );
+    lines.push(``);
+    lines.push(`**Per avere testo + link interni al post:**`);
+    lines.push(
+      `1. **Cron** \`GET /api/cron-product-sources\` — Apify sui link LinkedIn **nuovi** rispetto al dedup (fino a \`PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN\`).`,
+    );
+    lines.push(
+      `2. **Dashboard** — scheda *Scansione manuale*: attiva **«Arricchisci post LinkedIn (Apify)»** (o body API \`"enrichLinkedIn": true\`). Servono \`APIFY_TOKEN\` e \`APIFY_LINKEDIN_ACTOR_ID\` su Vercel; la richiesta può durare **molti secondi**.`,
+    );
+    lines.push(``);
+  }
+
+  if (webEnrichments.length) {
+    lines.push(`## Web — contenuto / strategia (Fase 1–2)`);
+    lines.push(``);
+    lines.push(`_Tipi in questo batch:_ ${webKindSummary(webEnrichments)}`);
+    lines.push(``);
+    lines.push(
+      `_HTML: estrazione grezza. **GitHub** file: preferenza \`raw.githubusercontent.com\`. **YouTube / X:** solo nota guida (niente download). **PDF:** rilevamento senza parser. Allow/block: env \`PRODUCT_SOURCES_DOMAIN_ALLOWLIST\` / \`BLOCKLIST\`._`,
+    );
+    lines.push(``);
+    for (const w of webEnrichments) {
+      lines.push(`### ${w.url}`);
+      lines.push(``);
+      if (w.kind) lines.push(`- _Tipo:_ \`${w.kind}\``);
+      if (w.strategyNote) lines.push(`- _Strategia:_ ${w.strategyNote}`);
+      if (w.contentType) lines.push(`- _Content-Type:_ ${w.contentType}`);
+      if (w.error) {
+        lines.push(`- **Errore / blocco:** ${w.error}`);
+        lines.push(``);
+        continue;
+      }
+      if (w.text) {
+        lines.push(`**Testo (estratto o stub)**`);
+        lines.push(``);
+        lines.push(w.text.slice(0, 12000) + (w.text.length > 12000 ? '\n\n…(troncato per report)' : ''));
+        lines.push(``);
+      } else {
+        lines.push(`_Nessun testo._`);
         lines.push(``);
       }
     }

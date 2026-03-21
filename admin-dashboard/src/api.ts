@@ -703,6 +703,11 @@ export interface NotionProductSourcesResponse {
   mode: 'page' | 'database';
   sourceId: string;
   linkCount: number;
+  linkedinEnriched?: number;
+  enrichLinkedInRequested?: boolean;
+  /** Fetch web + strategia Fase 2 (checkbox / body). */
+  fetchWebRequested?: boolean;
+  webEnriched?: number;
   links: NotionProductSourcesLink[];
   markdown: string;
   stats: {
@@ -715,6 +720,10 @@ export async function scanNotionProductSources(body: {
   pageId?: string;
   databaseId?: string;
   ignoreTokens?: string[];
+  /** Chiama Apify sui post LinkedIn (lenta; stessi env del cron). */
+  enrichLinkedIn?: boolean;
+  /** Fetch HTTP + strategia tipo URL (Fase 1 bis–2; stessi limiti env del cron). */
+  fetchWeb?: boolean;
 }): Promise<NotionProductSourcesResponse> {
   const r = await fetch(`${BASE}/api/notion-product-sources`, {
     method: 'POST',

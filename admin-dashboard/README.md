@@ -3,6 +3,8 @@
 Dashboard riservata agli admin per monitoraggio utenti, crediti, costi Kimi, affiliati e funnel.  
 Le **API admin** sono servite **dallo stesso progetto Vercel** della dashboard (non da auth-deploy), così non consumano il limite di 12 serverless function di auth.comtra.dev.
 
+**Documentazione ufficiale (mapping dashboard ↔ plugin, sezioni, troubleshooting):** [`docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md`](../docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md) e [`docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md`](../docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md).
+
 ## Setup
 
 1. Copia `.env.example` in `.env.local` e imposta:

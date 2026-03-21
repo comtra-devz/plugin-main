@@ -49,6 +49,8 @@ I **prompt** (system prompt per Kimi) stanno in **auth-deploy/prompts/** (vedi `
 | **auth-deploy/parked-endpoints/README.md** | Endpoint “parcheggiati” o non ancora attivi. |
 | **docs/TESTING-INTEGRATIONS.md** | Test e integrazioni (affiliate, referral, simulazioni). |
 | **docs/AFFILIATE.md** | Sistema affiliati e API. |
+| **docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md** | Architettura admin dashboard vs plugin Figma: nessun canale diretto; mapping API, DB, `postMessage`. |
+| **docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md** | Perché 500 sulle route admin, resilienza, riepilogo sezioni. |
 | **docs/GAMIFICATION.md** | XP, livelli, trofei, formula. |
 | **docs/COST-ESTIMATE-DS-AUDIT.md** | Stima costi e crediti DS Audit (Kimi, piani, cassa); include riferimento Generate. |
 | **docs/COST-ESTIMATE-A11Y.md** | Matrice crediti A11Y Audit v1.0 (senza Kimi, bande complessità). |

@@ -1,10 +1,14 @@
 # Migliorie prodotto — Notion, cron, Apify (LinkedIn)
 
+## Roadmap in fasi (semplice)
+
+Vedi **[PRODUCT-SOURCES-ROADMAP.md](./PRODUCT-SOURCES-ROADMAP.md)** (Fase 0 → 7).
+
 ## Cosa fa il sistema
 
-1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da una pagina o database Notion e genera un report Markdown (`POST /api/notion-product-sources`).
-2. **Cron giornaliero** — `GET /api/cron-product-sources` (Vercel, **06:00 UTC**): legge Notion dagli env, estrae i link, arricchisce i post **LinkedIn** con **Apify**, salva il report in Postgres e opzionalmente invia un riepilogo su **Discord**.
-3. **Gate 3 giorni**: dopo una run **OK**, le run successive entro 72 ore vengono **saltate** (salvate come `skipped` nel DB). Così il cron può essere giornaliero senza sovraccaricare Notion/Apify.
+1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da Notion e genera un report Markdown (`POST /api/notion-product-sources`). Opzionale: **Arricchisci post LinkedIn (Apify)** (`enrichLinkedIn: true`) e/o **Fetch web + strategia tipo URL** (`fetchWeb: true`) — stessi limiti env del cron; richieste lunghe.
+2. **Cron giornaliero** — `GET /api/cron-product-sources` (Vercel, orario in `vercel.json`, es. **09:00 UTC**): legge **automaticamente** Notion dagli env (`NOTION_PRODUCT_SOURCES_PAGE_ID` / `DATABASE_ID`), estrae **tutti** i link, arricchisce i post **LinkedIn** con **Apify** (policy sotto), salva il report in Postgres (**storico dashboard**) e opzionalmente invia riepilogo + report su **Discord**.
+3. **Gate temporale** (default **3 giorni**): dopo una run **OK** (non `skipped`), le run successive entro **N giorni** sono **saltate** (`skipped` nel DB). Imposta **`PRODUCT_SOURCES_CRON_GATE_DAYS=4`** su Vercel per allinearti a “ogni 4 giorni”. Il cron può restare giornaliero: decide il gate se eseguire il lavoro pesante.
 
 ---
 
@@ -35,7 +39,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 | Link da Notion + filtri Antigravity / solo URL | **Fatto** (estrazione + report). |
 | Dedup URL **tra run** (“già esaminati”) | **Fatto** (tabella `product_sources_seen_urls` + Apify solo su LinkedIn **nuovi**). |
 | LinkedIn post + outbound, **no commenti** | **Allineato** con actor attuale + mapping dataset. |
-| Fetch di ogni link non-LinkedIn | **Non fatto** (solo lista in Markdown). |
+| Fetch di ogni link non-LinkedIn | **Parziale** (opt-in: cron `PRODUCT_SOURCES_FETCH_WEB` + manuale `fetchWeb`; strategia tipo URL Fase 2 in `product-source-fetch-strategy.mjs`). |
 | Documento tipo “migliora ruleset” + cosa toccherà + guardrail | **Parziale** (sezioni guardrail + euristica “area ruleset” per URL; niente LLM). |
 | Discord come **canale del documento** | **Migliorato** (riepilogo + report spezzato in più messaggi/embed). |
 
@@ -56,9 +60,9 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 ### 2) Database Postgres (gate + storico report + dedup URL)
 
 1. Esegui le migration sullo **stesso DB** già usato dalla dashboard (`POSTGRES_URL` / `DATABASE_URL`):
-   - [`migrations/003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql) — storico run + gate 3 giorni
+   - [`migrations/003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql) — storico run + supporto al gate temporale (giorni configurabili via env)
    - [`migrations/004_product_sources_seen_urls.sql`](../migrations/004_product_sources_seen_urls.sql) — **URL già esaminati** (dedup tra run; Apify solo su LinkedIn nuovi)
-2. Senza `003` il cron **funziona comunque** ma **non** applica il gate 3 giorni.
+2. Senza `003` il cron **funziona comunque** ma **non** applica il gate temporale / storico strutturato.
 3. Senza `004` il cron logga un warning e **non** deduplica (comportamento precedente: Apify su tutti i LinkedIn fino al cap).
 
 **Dove finiscono i Markdown:** ogni run OK scrive il report in **`product_sources_cron_runs.report_markdown`** (una riga per run). La prima passata è di solito la più lunga; le successive sono spesso più brevi perché elencano soprattutto **link nuovi** e una lista compatta di **già visti**.
@@ -74,11 +78,42 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
    - oppure `urls` — `{ urls: ["...", ...] }`
    - oppure `startUrls` — `{ startUrls: [{ url }, ...] }`  
    Allinea il valore alla documentazione **Input** dell’actor che hai scelto.
-6. Opzionale: `PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN` (default **20**) — massimo numero di URL LinkedIn processati per run.
-7. Opzionale: `APIFY_LINKEDIN_WAIT_SECONDS` — secondi di **waitForFinish** verso Apify (default nel codice **300**). Deve essere **inferiore** al tempo massimo della funzione Vercel (vedi sotto) meno il tempo impiegato da Notion/DB.
-8. Opzionale: `PRODUCT_SOURCES_SKIP_LINKEDIN=1` — non chiama Apify; i link LinkedIn restano in elenco con messaggio “saltato” (utile per testare Notion/Postgres su piani con timeout bassi).
+6. Opzionale: `PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN` (default **20**) — massimo URL LinkedIn per **singolo batch Apify** in una run. **Non è un limite di prodotto assoluto:** è un default **ingegneristico** (timeout serverless, costi Apify, affidabilità). Con piano Vercel e budget adeguati puoi portarlo a **50**, **100**, ecc. e valutare **run spezzate** o **code** se superi i minuti di `maxDuration`.
+7. Opzionale: `PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL=1` — a ogni run **completa** (~3 gg), Apify riceve **tutti** i LinkedIn unici presenti in Notion (nell’ordine dell’estrazione), fino al cap del punto 6. **Default (assente/falso):** Apify solo su LinkedIn **nuovi** rispetto a `product_sources_seen_urls` (risparmio costi).
+8. Opzionale: `APIFY_LINKEDIN_WAIT_SECONDS` — secondi di **waitForFinish** verso Apify (default nel codice **300**). Deve essere **inferiore** al tempo massimo della funzione Vercel (vedi sotto) meno il tempo impiegato da Notion/DB.
+9. Opzionale: `PRODUCT_SOURCES_SKIP_LINKEDIN=1` — non chiama Apify; i link LinkedIn restano in elenco con messaggio “saltato” (utile per testare Notion/Postgres su piani con timeout bassi).
 
-> Il codice prova a mappare il **dataset** in testo + link; se l’actor restituisce campi con nomi diversi, potresti dover cambiare actor o adattare in seguito i campi in `lib/apify-linkedin.mjs`.
+### 3b) Fetch web + strategia tipo URL (Fase 1–2)
+
+**Cron:** opt-in **`PRODUCT_SOURCES_FETCH_WEB=1`**. Solo URL **nuovi** nel dedup (come LinkedIn Apify).
+
+**Manuale:** checkbox in UI oppure `"fetchWeb": true` nel body. Opzionale default sempre attivo: **`PRODUCT_SOURCES_MANUAL_FETCH_WEB_DEFAULT=1`** (attenzione ai tempi).
+
+Comportamento (modulo `lib/product-source-fetch-strategy.mjs` + `fetch-generic-web.mjs`):
+
+| Tipo | Cosa fa |
+|------|---------|
+| **html** | GET + HTML → testo grezzo |
+| **github** | Preferenza `raw.githubusercontent.com` per path `/blob/`; se fallisce, fallback pagina HTML |
+| **youtube** | Stub Markdown (nessuna trascrizione automatica) |
+| **social_x** | Stub (X/Twitter; nessun fetch thread) |
+| **pdf** / **.pdf** | Rilevamento `Content-Type` o firma `%PDF-` — messaggio “decoder non attivo” |
+
+**Limiti (condivisi cron + manuale):**
+
+- `PRODUCT_SOURCES_MAX_WEB_FETCH_PER_RUN` (default **15**, max **100**)
+- `PRODUCT_SOURCES_WEB_FETCH_TIMEOUT_MS` (default **18000**)
+- `PRODUCT_SOURCES_WEB_FETCH_MAX_CHARS` (default **48000**)
+- `PRODUCT_SOURCES_FETCH_USER_AGENT` (opzionale)
+
+**Policy hostname:**
+
+- **`PRODUCT_SOURCES_DOMAIN_BLOCKLIST`** — host da non processare (virgole o newline). Vale anche per stub YouTube/X.
+- **`PRODUCT_SOURCES_DOMAIN_ALLOWLIST`** — se **non vuota**, solo questi host ricevono **GET HTTP** reale. Gli stub **YouTube / X** non sono soggetti all’allowlist (nessun GET esterno oltre ai controlli), ma restano soggetti alla **blocklist**.
+
+> Siti **SPA / anti-bot / login** spesso restituiscono poco testo → backlog Apify actor dedicati.
+
+> Il codice Apify **LinkedIn** mappa il dataset in `lib/apify-linkedin.mjs` (indipendente da questa sezione).
 
 #### Vercel: errore 500 / `FUNCTION_INVOCATION_FAILED` (pagina generica)
 
@@ -94,13 +129,14 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
 ### 4) Cron Vercel + secret
 
 1. Su Vercel deve esistere **`CRON_SECRET`** (stesso concetto di `/api/cron-notify-discord`).
-2. Il file [`vercel.json`](../vercel.json) include già:
+2. Opzionale: **`PRODUCT_SOURCES_CRON_GATE_DAYS`** (default **3**, max **30** nel codice) — giorni tra due run **complete** non saltate. Esempio: `4` per un documento / pipeline allineata a controlli ogni quattro giorni.
+3. Il file [`vercel.json`](../vercel.json) include già:
    - `"path": "/api/cron-product-sources"`, `"schedule": "0 9 * * *"` (**09:00 UTC** ogni giorno ≈ **10:00 ora italiana invernale (CET)**; con CEST sarà **11:00** locale — regola su fuso o sposta il cron).
-3. Test manuale (dal browser o curl, **non** committare il secret):
+4. Test manuale (dal browser o curl, **non** committare il secret):
    ```bash
    curl -sS "https://<tuo-dominio-vercel>/api/cron-product-sources?key=CRON_SECRET"
    ```
-4. Forzare una run ignorando il gate 3 giorni (solo debug):
+5. Forzare una run ignorando il gate temporale (solo debug):
    ```bash
    curl -sS "https://<tuo-dominio-vercel>/api/cron-product-sources?key=CRON_SECRET&force=1"
    ```
@@ -116,7 +152,7 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
 ### 6) UI admin — scansione + storico
 
 - **Content Management → Migliorie prodotto (Notion)** ha due schede:
-  - **Scansione manuale Notion** — come prima (`POST /api/notion-product-sources`).
+  - **Scansione manuale Notion** — `POST /api/notion-product-sources` (solo URL da Notion; con `enrichLinkedIn: true` anche Apify su LinkedIn).
   - **Storico cron & documenti** — tabella run da `product_sources_cron_runs`: anteprima, **Leggi** / **Scarica .md**, stato **Discord** e tracciamento **Git/PR** (tutto **manuale** per sicurezza: nessuna PR automatica).
 - API elenco/dettaglio: `GET /api/product-sources-runs` (auth admin JWT), `GET /api/product-sources-runs?id=<id>` per Markdown completo.
 - Azioni POST (auth admin): `request_pr_stub` (segna «in lavorazione»), `set_pr_url` (URL `https://github.com/...` dopo PR aperta a mano), `reset_git`.

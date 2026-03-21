@@ -16,7 +16,15 @@ Gli handler delle route che dipendono da tabelle “opzionali” sono stati resi
 - Se l’errore è del tipo “relation/table/column does not exist”, la risposta è **200** con dati vuoti (0, `[]`, struttura minima) invece di 500.
 - Le pagine della dashboard si aprono comunque e mostrano “nessun dato” / “0” invece di errore generico.
 
-Route interessate: **discounts-stats**, **discounts-level**, **discounts-throttle**, **generate-ab-stats**, **support-feedback**, **plugin-logs**, **users** (colonna ricarica), **recharge**.
+Route interessate: **discounts-stats**, **discounts-level**, **discounts-throttle**, **generate-ab-stats**, **support-feedback**, **plugin-logs**, **users** (colonna ricarica), **recharge**, **credits-timeline** (vedi sotto).
+
+### Timeline crediti / grafico (`credits-timeline`)
+
+- Se la query aggregata su `credit_transactions` fallisce (tabella assente, errore SQL, ecc.), l’handler risponde **200** con `timeline: []`, `by_action_per_day: {}` e un messaggio in **`kimi_note`** (testo di diagnosi troncato), così la Home / Crediti non restano con fetch in 500 a cascata.
+- Con filtro **`plan=PRO|FREE`**, se il join con `users` fallisce (schema diverso), si fa **fallback** alla timeline non filtrata e `kimi_note` spiega il fallback.
+- Per dati reali sul grafico: migration/schema allineati e `POSTGRES_URL` corretto sul progetto Vercel della dashboard.
+
+Mapping architettura dashboard ↔ plugin (nessun canale diretto): **[DASHBOARD-PLUGIN-COMUNICAZIONI.md](./DASHBOARD-PLUGIN-COMUNICAZIONI.md)**.
 
 Per avere **dati reali** in quelle sezioni serve:
 
