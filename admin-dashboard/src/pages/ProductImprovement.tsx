@@ -16,6 +16,7 @@ export default function ProductImprovement() {
   const [gitConfirmText, setGitConfirmText] = useState('');
   const [enrichLinkedIn, setEnrichLinkedIn] = useState(false);
   const [fetchWeb, setFetchWeb] = useState(false);
+  const [includeDocSnapshot, setIncludeDocSnapshot] = useState(false);
 
   useEffect(() => {
     if (tab !== 'scan') {
@@ -39,7 +40,9 @@ export default function ProductImprovement() {
     setError(null);
     setResult(null);
     scanNotionProductSources(
-      p ? { pageId: p, enrichLinkedIn, fetchWeb } : { databaseId: d, enrichLinkedIn, fetchWeb },
+      p
+        ? { pageId: p, enrichLinkedIn, fetchWeb, includeDocSnapshot }
+        : { databaseId: d, enrichLinkedIn, fetchWeb, includeDocSnapshot },
     )
       .then(setResult)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -194,6 +197,31 @@ export default function ProductImprovement() {
             <strong>molti secondi</strong>.
           </span>
         </label>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            marginTop: '0.75rem',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            maxWidth: '40rem',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={includeDocSnapshot}
+            onChange={(e) => setIncludeDocSnapshot(e.target.checked)}
+            disabled={loading}
+            style={{ marginTop: '0.15rem' }}
+          />
+          <span>
+            <strong>Snapshot documentazione plugin (Fase 4)</strong> — allega al report le <strong>rules/docs</strong> del
+            repo (stessi env del cron: <code>PRODUCT_SOURCES_DOC_FETCH_URLS</code> e/o{' '}
+            <code>PRODUCT_SOURCES_DOC_REPO_ROOT</code>). Su Vercel usa di solito URL raw GitHub; in locale puoi puntare
+            alla root del monorepo.
+          </span>
+        </label>
       </section>
 
       {error && (
@@ -236,6 +264,17 @@ export default function ProductImprovement() {
               {result.fetchWebRequested && (
                 <li>
                   Web — URL in batch (strategia Fase 2): <strong>{result.webEnriched ?? 0}</strong>
+                </li>
+              )}
+              {result.includeDocSnapshotRequested && result.docSnapshot && (
+                <li>
+                  Snapshot doc (Fase 4):{' '}
+                  <strong>
+                    {result.docSnapshot.okCount ?? 0}/{result.docSnapshot.sourceCount ?? 0}
+                  </strong>{' '}
+                  file ok
+                  {result.docSnapshot.truncated ? ' · troncato' : ''}
+                  {result.docSnapshot.skipped ? ` · (${result.docSnapshot.skipReason || 'skip'})` : ''}
                 </li>
               )}
             </ul>

@@ -134,6 +134,7 @@ export function hintRulesetArea(url) {
  * @param {Array<{ url: string, text?: string, outboundLinks?: string[], error?: string }>} [opts.linkedinEnrichments]
  * @param {'new_only'|'refetch_all'} [opts.linkedinApifyMode] — cron: Apify solo nuovi nel dedup vs tutti i LinkedIn fino al cap
  * @param {Array<{ url: string, text?: string, error?: string, contentType?: string, kind?: string, strategyNote?: string }>} [opts.webEnrichments] — fetch + strategia tipo URL (Fase 1–2)
+ * @param {{ text: string, sources?: Array<{ label: string, ok: boolean, chars: number, error?: string }>, truncated?: boolean, skipped?: boolean, skipReason?: string } | null} [opts.pluginDocSnapshot] — Fase 4
  */
 export function buildMarkdownReport({
   links,
@@ -145,6 +146,7 @@ export function buildMarkdownReport({
   linkedinEnrichments = [],
   linkedinApifyMode = 'new_only',
   webEnrichments = [],
+  pluginDocSnapshot = null,
 }) {
   const when = new Date().toISOString();
   const useDedup = Array.isArray(newLinks) && Array.isArray(seenLinks);
@@ -172,8 +174,31 @@ export function buildMarkdownReport({
     `- Solo **URL** da Notion (niente codice “sparato” senza link); blocchi con **Antigravity** esclusi.`,
     `- **LinkedIn:** post + testo + link nel payload Apify; **niente commenti** ai post.`,
     `- **Web (non LinkedIn):** fetch HTTP grezzo + **classificazione** (GitHub→raw, YouTube/X stub, PDF rilevato, allow/block list).`,
+    `- **Snapshot doc plugin (Fase 4):** contesto rules/docs del repo (URL e/o filesystem) per confronto con le fonti Notion.`,
     ``,
   ];
+
+  if (pluginDocSnapshot && String(pluginDocSnapshot.text || '').trim()) {
+    lines.push(`## Snapshot documentazione plugin (Fase 4)`);
+    lines.push(``);
+    const src = pluginDocSnapshot.sources || [];
+    if (src.length) {
+      lines.push(`| Fonte | Esito | Caratteri |`);
+      lines.push(`|-------|-------|------------|`);
+      for (const s of src.slice(0, 40)) {
+        const lab = String(s.label).replace(/\|/g, '\\|').slice(0, 96);
+        lines.push(`| ${lab} | ${s.ok ? 'ok' : 'errore'} | ${s.chars} |`);
+      }
+      if (src.length > 40) lines.push(`| _…altre ${src.length - 40}_ | | |`);
+      lines.push(``);
+    }
+    if (pluginDocSnapshot.truncated) {
+      lines.push(`_Corpo sotto: possibile troncamento globale (\`PRODUCT_SOURCES_DOC_SNAPSHOT_MAX_TOTAL\`)._`);
+      lines.push(``);
+    }
+    lines.push(String(pluginDocSnapshot.text).trim());
+    lines.push(``);
+  }
 
   function webKindSummary(list) {
     const m = {};
@@ -198,6 +223,18 @@ export function buildMarkdownReport({
     lines.push(``);
   }
 
+  if (!useDedup && pluginDocSnapshot && String(pluginDocSnapshot.text || '').trim()) {
+    lines.push(`## Riepilogo snapshot documentazione (Fase 4, manuale)`);
+    lines.push(``);
+    lines.push(`| Voce | Valore |`);
+    lines.push(`|------|--------|`);
+    const src = pluginDocSnapshot.sources || [];
+    lines.push(`| Fonti tentate | ${src.length} |`);
+    lines.push(`| Letture ok | ${src.filter((s) => s.ok).length} |`);
+    lines.push(`| Troncamento globale | ${pluginDocSnapshot.truncated ? 'sì' : 'no'} |`);
+    lines.push(``);
+  }
+
   if (useDedup) {
     lines.push(`## Riepilogo run`);
     lines.push(``);
@@ -212,6 +249,14 @@ export function buildMarkdownReport({
       `| Modalità Apify LinkedIn | ${linkedinApifyMode === 'refetch_all' ? 'Tutti i post in Notion (fino al cap per run)' : 'Solo URL nuovi nel dedup'} |`,
     );
     lines.push(`| Web — fetch HTTP (URL nuovi, questa run) | ${webEnrichments.length} |`);
+    if (pluginDocSnapshot) {
+      const snapLabel = pluginDocSnapshot.skipped
+        ? pluginDocSnapshot.skipReason === 'disabled'
+          ? 'disattivato'
+          : 'non configurato / vuoto'
+        : `${(pluginDocSnapshot.sources || []).filter((s) => s.ok).length} file ok · ${(pluginDocSnapshot.sources || []).length} tentativi${pluginDocSnapshot.truncated ? ' · troncato' : ''}`;
+      lines.push(`| Snapshot doc plugin (Fase 4) | ${snapLabel} |`);
+    }
     lines.push(``);
   }
 

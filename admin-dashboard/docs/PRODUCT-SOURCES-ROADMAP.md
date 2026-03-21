@@ -56,12 +56,15 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 
 ---
 
-## Fase 4 — Snapshot documentazione plugin
+## Fase 4 — Snapshot documentazione plugin (**implementata — baseline**)
 
-- Raccogliere in automatico (o da path fissi) **rules**, **docs**, README rilevanti del **plugin**.
-- Versione “testo” da passare al modello come **contesto ufficiale** (“cosa fa oggi il prodotto”).
+- Modulo `lib/plugin-doc-snapshot.mjs`: legge **URL** (`PRODUCT_SOURCES_DOC_FETCH_URLS`, es. raw GitHub) e/o file sotto **`PRODUCT_SOURCES_DOC_REPO_ROOT`** (path assoluta alla root del repo sul runner).
+- Lista default di path relativi (ruleset, error messages, cursor rule, maintaining rules, …) se non imposti `PRODUCT_SOURCES_DOC_PATHS`.
+- Limite dimensione: `PRODUCT_SOURCES_DOC_SNAPSHOT_MAX_TOTAL`, `MAX_FILE`, timeout fetch `DOC_FETCH_TIMEOUT_MS`.
+- Il testo è incluso nel **report Markdown** (sezione dedicata) su ogni **cron** e opzionalmente in **scansione manuale** (checkbox / `includeDocSnapshot` / env default).
+- `PRODUCT_SOURCES_PLUGIN_DOC_SNAPSHOT_DISABLE=1` per disattivare.
 
-*Obiettivo:* il confronto non è nel vuoto, è **contro la doc reale**.
+*Obiettivo:* il confronto non è nel vuoto, è **contro la doc reale**; in Fase 5 lo stesso blocco sarà input LLM.
 
 ---
 
@@ -98,3 +101,4 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 - **Fase 1 bis** — fetch web da API manuale + checkbox UI.
 - **Fase 2** — strategia tipo URL + allow/block list + GitHub raw + stub social/video + PDF rilevato (senza parser binario).
 - **Fase 3** — coda Postgres + chunk cron + bypass gate se pending + UI/API stato.
+- **Fase 4** — snapshot docs/rules nel report (URL + filesystem configurabile).

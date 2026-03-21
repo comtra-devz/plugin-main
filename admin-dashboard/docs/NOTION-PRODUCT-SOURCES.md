@@ -6,7 +6,7 @@ Vedi **[PRODUCT-SOURCES-ROADMAP.md](./PRODUCT-SOURCES-ROADMAP.md)** (Fase 0 → 
 
 ## Cosa fa il sistema
 
-1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da Notion e genera un report Markdown (`POST /api/notion-product-sources`). Opzionale: **Arricchisci post LinkedIn (Apify)** (`enrichLinkedIn: true`) e/o **Fetch web + strategia tipo URL** (`fetchWeb: true`) — stessi limiti env del cron; richieste lunghe.
+1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da Notion e genera un report Markdown (`POST /api/notion-product-sources`). Opzionale: **LinkedIn Apify**, **Fetch web (Fase 2)**, **Snapshot doc (Fase 4)** — stessi limiti env del cron dove applicabile; richieste lunghe.
 2. **Cron giornaliero** — `GET /api/cron-product-sources` (Vercel, orario in `vercel.json`, es. **09:00 UTC**): legge **automaticamente** Notion dagli env (`NOTION_PRODUCT_SOURCES_PAGE_ID` / `DATABASE_ID`), estrae **tutti** i link, arricchisce i post **LinkedIn** con **Apify** (policy sotto), salva il report in Postgres (**storico dashboard**) e opzionalmente invia riepilogo + report su **Discord**.
 3. **Gate temporale** (default **3 giorni**): dopo una run **OK** (non `skipped`), le run successive entro **N giorni** sono **saltate** (`skipped` nel DB). Imposta **`PRODUCT_SOURCES_CRON_GATE_DAYS=4`** su Vercel per allinearti a “ogni 4 giorni”. Il cron può restare giornaliero: decide il gate se eseguire il lavoro pesante.
 
@@ -40,7 +40,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 | Dedup URL **tra run** (“già esaminati”) | **Fatto** (tabella `product_sources_seen_urls` + Apify solo su LinkedIn **nuovi**). |
 | LinkedIn post + outbound, **no commenti** | **Allineato** con actor attuale + mapping dataset. |
 | Fetch di ogni link non-LinkedIn | **Parziale** (opt-in: cron `PRODUCT_SOURCES_FETCH_WEB` + manuale `fetchWeb`; strategia tipo URL Fase 2 in `product-source-fetch-strategy.mjs`). |
-| Documento tipo “migliora ruleset” + cosa toccherà + guardrail | **Parziale** (sezioni guardrail + euristica “area ruleset” per URL; niente LLM). |
+| Documento tipo “migliora ruleset” + cosa toccherà + guardrail | **Parziale** (Fase 4: snapshot docs/rules nel report; euristica “area ruleset”; LLM in Fase 5). |
 | Discord come **canale del documento** | **Migliorato** (riepilogo + report spezzato in più messaggi/embed). |
 
 *Aggiorna questa tabella quando implementi una voce.*
@@ -136,6 +136,22 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
 - Report + Discord + `seen_urls` solo a **coda vuota** (stessa run logica della pipeline inline).
 - **Dashboard:** scheda *Storico cron & documenti* mostra un avviso se c’è batch attivo; **`GET /api/product-sources-queue`** (admin) elenco batch.
 - Per svuotare la coda in poche ore: secondo **cron** Vercel sullo stesso path o chiamate manuali con `?key=CRON_SECRET`.
+
+### 3d) Snapshot documentazione plugin (Fase 4)
+
+Obiettivo: ancorare le fonti Notion al **contesto ufficiale** del plugin (rules, ruleset, messaggi errore, ecc.) dentro lo stesso report Markdown (e in futuro input LLM).
+
+| Variabile | Ruolo |
+|-----------|--------|
+| `PRODUCT_SOURCES_DOC_FETCH_URLS` | Uno o più URL (virgole o newline), es. `https://raw.githubusercontent.com/org/repo/main/docs/GENERATION-ENGINE-RULESET.md` — ideale su **Vercel** senza filesystem repo |
+| `PRODUCT_SOURCES_DOC_REPO_ROOT` | Path **assoluta** alla root del monorepo sul processo che esegue il cron (spesso solo **locale** o runner self-hosted) |
+| `PRODUCT_SOURCES_DOC_PATHS` | Path relativi opzionali (virgole/newline); se vuoto si usa una **lista default** in codice (`docs/GENERATION-ENGINE-RULESET.md`, `.cursor/rules/generation-engine.mdc`, …) |
+| `PRODUCT_SOURCES_DOC_SNAPSHOT_MAX_TOTAL` | Caratteri massimi nel corpo snapshot (default ~450k) |
+| `PRODUCT_SOURCES_DOC_SNAPSHOT_MAX_FILE` | Max caratteri per singolo file/URL (default ~180k) |
+| `PRODUCT_SOURCES_DOC_FETCH_TIMEOUT_MS` | Timeout per ogni URL (default 20000) |
+| `PRODUCT_SOURCES_PLUGIN_DOC_SNAPSHOT_DISABLE` | `1` = nessuno snapshot |
+
+**Manuale:** checkbox *Snapshot documentazione plugin* oppure `"includeDocSnapshot": true`; env `PRODUCT_SOURCES_MANUAL_DOC_SNAPSHOT_DEFAULT=1` per default on.
 
 ### 4) Cron Vercel + secret
 

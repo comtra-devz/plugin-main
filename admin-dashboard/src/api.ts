@@ -708,6 +708,14 @@ export interface NotionProductSourcesResponse {
   /** Fetch web + strategia Fase 2 (checkbox / body). */
   fetchWebRequested?: boolean;
   webEnriched?: number;
+  includeDocSnapshotRequested?: boolean;
+  docSnapshot?: {
+    skipped?: boolean;
+    skipReason?: string;
+    truncated?: boolean;
+    sourceCount?: number;
+    okCount?: number;
+  } | null;
   links: NotionProductSourcesLink[];
   markdown: string;
   stats: {
@@ -724,6 +732,8 @@ export async function scanNotionProductSources(body: {
   enrichLinkedIn?: boolean;
   /** Fetch HTTP + strategia tipo URL (Fase 1 bis–2; stessi limiti env del cron). */
   fetchWeb?: boolean;
+  /** Snapshot rules/docs plugin (Fase 4). */
+  includeDocSnapshot?: boolean;
 }): Promise<NotionProductSourcesResponse> {
   const r = await fetch(`${BASE}/api/notion-product-sources`, {
     method: 'POST',

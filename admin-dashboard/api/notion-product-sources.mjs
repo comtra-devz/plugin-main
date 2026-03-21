@@ -7,6 +7,7 @@
  *   opzionale: "ignoreTokens": ["Antigravity", ...]
  *   opzionale: "enrichLinkedIn": true — chiama Apify sui URL LinkedIn (stessi env del cron; richiesta lunga)
  *   opzionale: "fetchWeb": true — Fase 1 bis + 2: fetch / strategia per URL web non-LinkedIn (stessi limiti env del cron)
+ *   opzionale: "includeDocSnapshot": true — Fase 4: include snapshot rules/docs (env URL/repo come il cron)
  *
  * Env: NOTION_INTEGRATION_TOKEN (secret integration Notion)
  * Fallback: se body senza id, usa NOTION_PRODUCT_SOURCES_PAGE_ID o NOTION_PRODUCT_SOURCES_DATABASE_ID
@@ -22,6 +23,7 @@ import { enrichLinkedInPosts } from '../lib/apify-linkedin.mjs';
 import { isWebFetchCandidateUrl } from '../lib/fetch-generic-web.mjs';
 import { fetchProductSourcesSequential, getWebFetchLimitsFromEnv } from '../lib/product-source-fetch-strategy.mjs';
 import { normalizeUrlKey } from '../lib/product-sources-seen.mjs';
+import { buildPluginDocSnapshot } from '../lib/plugin-doc-snapshot.mjs';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -74,6 +76,11 @@ export default async function handler(req, res) {
     String(body.fetchWeb || '').toLowerCase() === 'true' ||
     process.env.PRODUCT_SOURCES_MANUAL_FETCH_WEB_DEFAULT === '1' ||
     process.env.PRODUCT_SOURCES_MANUAL_FETCH_WEB_DEFAULT === 'true';
+  const includeDocSnapshot =
+    body.includeDocSnapshot === true ||
+    String(body.includeDocSnapshot || '').toLowerCase() === 'true' ||
+    process.env.PRODUCT_SOURCES_MANUAL_DOC_SNAPSHOT_DEFAULT === '1' ||
+    process.env.PRODUCT_SOURCES_MANUAL_DOC_SNAPSHOT_DEFAULT === 'true';
 
   try {
     const { mode, sourceLabel, links, stats } = await runNotionProductSourcesExtract({
@@ -125,6 +132,11 @@ export default async function handler(req, res) {
       }
     }
 
+    let pluginDocSnapshot = null;
+    if (includeDocSnapshot) {
+      pluginDocSnapshot = await buildPluginDocSnapshot();
+    }
+
     const markdown = buildMarkdownReport({
       links,
       sourceLabel,
@@ -132,6 +144,7 @@ export default async function handler(req, res) {
       stats,
       linkedinEnrichments,
       webEnrichments,
+      pluginDocSnapshot,
     });
 
     return res.status(200).json({
@@ -143,6 +156,16 @@ export default async function handler(req, res) {
       enrichLinkedInRequested: enrichLinkedIn,
       fetchWebRequested: fetchWeb,
       webEnriched: webEnrichments.length,
+      includeDocSnapshotRequested: includeDocSnapshot,
+      docSnapshot: pluginDocSnapshot
+        ? {
+            skipped: pluginDocSnapshot.skipped,
+            skipReason: pluginDocSnapshot.skipReason,
+            truncated: pluginDocSnapshot.truncated,
+            sourceCount: (pluginDocSnapshot.sources || []).length,
+            okCount: (pluginDocSnapshot.sources || []).filter((s) => s.ok).length,
+          }
+        : null,
       links,
       markdown,
       stats,

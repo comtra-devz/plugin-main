@@ -22,6 +22,7 @@
  * - PRODUCT_SOURCES_DISCORD_SUMMARY_ONLY=1 opzionale — Discord solo riepilogo (no report spezzato in più messaggi)
  * - PRODUCT_SOURCES_FETCH_WEB=1 opzionale — Fase 1+2: fetch / strategia per tipo su URL **nuovi** non-LinkedIn (allow/block list, GitHub raw, stub YouTube/X, PDF rilevato)
  * - PRODUCT_SOURCES_QUEUE_MODE=1 opzionale — Fase 3: coda job in Postgres; più hit cron (bypass gate se c’è batch con job pending). Vedi PRODUCT_SOURCES_QUEUE_MAX_JOBS, QUEUE_LINKEDIN_CHUNK.
+ * - Fase 4 snapshot doc: `PRODUCT_SOURCES_DOC_FETCH_URLS` (raw URL) e/o `PRODUCT_SOURCES_DOC_REPO_ROOT` (path repo sul runner). Disabilita: `PRODUCT_SOURCES_PLUGIN_DOC_SNAPSHOT_DISABLE=1`.
  */
 import { sql } from '../lib/db.mjs';
 import { runNotionProductSourcesExtract, buildMarkdownReport } from '../lib/product-sources-notion.mjs';
@@ -54,6 +55,7 @@ import {
   markBatchDone,
   markBatchFailed,
 } from '../lib/product-sources-queue.mjs';
+import { buildPluginDocSnapshot } from '../lib/plugin-doc-snapshot.mjs';
 
 function getCronGateMs() {
   const raw = process.env.PRODUCT_SOURCES_CRON_GATE_DAYS;
@@ -159,6 +161,8 @@ async function processSingleQueueChunkAndFinalizeIfDone(batchMeta) {
   const linkedinEnrichments = agg.linkedinEnrichments;
   const webEnrichments = agg.webEnrichments;
 
+  const pluginDocSnapshot = await buildPluginDocSnapshot();
+
   const markdown = buildMarkdownReport({
     links: context.links,
     newLinks: context.newLinks,
@@ -169,6 +173,7 @@ async function processSingleQueueChunkAndFinalizeIfDone(batchMeta) {
     linkedinEnrichments,
     linkedinApifyMode: context.linkedinApifyMode || 'new_only',
     webEnrichments,
+    pluginDocSnapshot,
   });
 
   const runId = await recordRun({
@@ -464,6 +469,8 @@ async function handleCronProductSources(req, res) {
       });
     }
 
+    const pluginDocSnapshot = await buildPluginDocSnapshot();
+
     const markdown = buildMarkdownReport({
       links,
       newLinks,
@@ -474,6 +481,7 @@ async function handleCronProductSources(req, res) {
       linkedinEnrichments,
       linkedinApifyMode,
       webEnrichments,
+      pluginDocSnapshot,
     });
 
     const runId = await recordRun({
