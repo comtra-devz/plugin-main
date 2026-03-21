@@ -41,13 +41,18 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 
 ---
 
-## Fase 3 — Coda e spezzamento lavoro (scale)
+## Fase 3 — Coda e spezzamento lavoro (scale) — **implementata (baseline)**
 
-- Se gli URL sono **molti**, una sola funzione serverless non basta.
-- **Coda** in database (job per URL o per batch) + più invocazioni cron o worker.
-- Ripresa da interruzioni e **progress** visibile in dashboard.
+- Tabelle Postgres: `product_sources_queue_batches`, `product_sources_queue_jobs` (migration **`006_product_sources_queue.sql`**).
+- Con **`PRODUCT_SOURCES_QUEUE_MODE=1`**, ogni run che passa il gate crea job: **LinkedIn** in chunk (`PRODUCT_SOURCES_QUEUE_LINKEDIN_CHUNK`, default 10 URL per job Apify), **web** un job per URL.
+- Ogni **hit** al cron elabora al massimo **`PRODUCT_SOURCES_QUEUE_MAX_JOBS`** job (default 15), poi esce; il giorno dopo (o un secondo schedule / chiamata manuale) continua.
+- Se esiste un batch con job **pending**, il cron **salta il gate temporale** e il Notion extract in quel hit: solo drain coda (evita stallo).
+- **Finalizzazione** (Markdown, `product_sources_cron_runs`, Discord, `seen_urls`) solo quando non restano job pending.
+- Dashboard **Storico cron & documenti**: banner stato coda + API `GET /api/product-sources-queue` (admin).
 
 *Obiettivo:* niente timeout, pipeline **affidabile** con decine/centinaia di link.
+
+**Test:** da fare in blocco a fine lavori (come da accordo); verificare migration 006, env queue, più hit cron con molti URL.
 
 ---
 
@@ -92,3 +97,4 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 - **Fase 1** — fetch web opt-in nel cron + sezione report.
 - **Fase 1 bis** — fetch web da API manuale + checkbox UI.
 - **Fase 2** — strategia tipo URL + allow/block list + GitHub raw + stub social/video + PDF rilevato (senza parser binario).
+- **Fase 3** — coda Postgres + chunk cron + bypass gate se pending + UI/API stato.

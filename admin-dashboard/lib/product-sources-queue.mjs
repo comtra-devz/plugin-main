@@ -170,7 +170,7 @@ export async function createBatchWithJobs(context, linkedinChunks, webUrls) {
 
   if (!jobs.length) return null;
 
-  const [batchRow] = await sqlRaw`
+  const inserted = await sqlRaw`
     INSERT INTO product_sources_queue_batches (status, context_json, total_jobs, completed_jobs)
     VALUES (
       'pending_work',
@@ -180,7 +180,7 @@ export async function createBatchWithJobs(context, linkedinChunks, webUrls) {
     )
     RETURNING id
   `;
-  const batchId = batchRow?.id;
+  const batchId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id;
   if (batchId == null) return null;
 
   for (const j of jobs) {
@@ -217,6 +217,13 @@ export async function aggregateJobResults(batchId) {
   const webEnrichments = [];
   for (const row of r.rows || []) {
     if (row.job_type === 'linkedin_apify') {
+      if (row.status === 'error') {
+        const p = row.payload_json || {};
+        const urls = Array.isArray(p.urls) ? p.urls : [];
+        const err = row.error_message || 'Errore job LinkedIn';
+        for (const url of urls) linkedinEnrichments.push({ url, error: err });
+        continue;
+      }
       const data = row.result_json;
       const arr = data?.enrichments;
       if (Array.isArray(arr)) {
@@ -280,7 +287,7 @@ export async function listQueueBatches({ limit = 30 } = {}) {
       ORDER BY b.id DESC
       LIMIT ${lim}
     `;
-    return { batches: r.rows || [] };
+    return { batches: r.rows || [], migrationNeeded: false };
   } catch (e) {
     if (/does not exist|relation .*product_sources_queue/i.test(String(e?.message || e))) {
       return { batches: [], migrationNeeded: true };

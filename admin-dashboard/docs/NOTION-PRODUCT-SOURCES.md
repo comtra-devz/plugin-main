@@ -62,6 +62,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 1. Esegui le migration sullo **stesso DB** già usato dalla dashboard (`POSTGRES_URL` / `DATABASE_URL`):
    - [`migrations/003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql) — storico run + supporto al gate temporale (giorni configurabili via env)
    - [`migrations/004_product_sources_seen_urls.sql`](../migrations/004_product_sources_seen_urls.sql) — **URL già esaminati** (dedup tra run; Apify solo su LinkedIn nuovi)
+   - [`migrations/006_product_sources_queue.sql`](../migrations/006_product_sources_queue.sql) — **Fase 3:** coda batch/job (opzionale; serve se usi `PRODUCT_SOURCES_QUEUE_MODE`)
 2. Senza `003` il cron **funziona comunque** ma **non** applica il gate temporale / storico strutturato.
 3. Senza `004` il cron logga un warning e **non** deduplica (comportamento precedente: Apify su tutti i LinkedIn fino al cap).
 
@@ -125,6 +126,16 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
   2. **Piano Pro (o superiore):** in [`vercel.json`](../vercel.json) è impostato `maxDuration: 300` per `api/cron-product-sources.mjs` così la run può attendere Apify.
   3. **Piano Hobby / test rapido:** imposta `PRODUCT_SOURCES_SKIP_LINKEDIN=1` **oppure** non configurare `APIFY_TOKEN` (il cron salta l’arrichimento ma dovresti ricevere **JSON** `200` con i link Notion).
   4. **Webhook Discord:** sono accettati sia `https://discord.com/api/webhooks/...` sia `https://discordapp.com/api/webhooks/...`.
+
+### 3c) Coda Fase 3 (opzionale — molti URL)
+
+- **`PRODUCT_SOURCES_QUEUE_MODE=1`** — spezza LinkedIn (chunk Apify) e fetch web (1 job per URL) su più invocazioni cron.
+- **`PRODUCT_SOURCES_QUEUE_MAX_JOBS`** (default **15**, max **80**) — job elaborati per singolo GET `/api/cron-product-sources`.
+- **`PRODUCT_SOURCES_QUEUE_LINKEDIN_CHUNK`** (default **10**) — quanti URL LinkedIn per **singola** chiamata Apify in un job.
+- Con batch **pending**, il cron **non** applica il gate giorni e **non** rilegge Notion in quel hit: consuma solo la coda (così non resta bloccata).
+- Report + Discord + `seen_urls` solo a **coda vuota** (stessa run logica della pipeline inline).
+- **Dashboard:** scheda *Storico cron & documenti* mostra un avviso se c’è batch attivo; **`GET /api/product-sources-queue`** (admin) elenco batch.
+- Per svuotare la coda in poche ore: secondo **cron** Vercel sullo stesso path o chiamate manuali con `?key=CRON_SECRET`.
 
 ### 4) Cron Vercel + secret
 

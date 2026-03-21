@@ -21,24 +21,222 @@
  * - APIFY_LINKEDIN_WAIT_SECONDS opzionale — secondi max wait Apify (default 300; serve maxDuration Vercel adeguato)
  * - PRODUCT_SOURCES_DISCORD_SUMMARY_ONLY=1 opzionale — Discord solo riepilogo (no report spezzato in più messaggi)
  * - PRODUCT_SOURCES_FETCH_WEB=1 opzionale — Fase 1+2: fetch / strategia per tipo su URL **nuovi** non-LinkedIn (allow/block list, GitHub raw, stub YouTube/X, PDF rilevato)
+ * - PRODUCT_SOURCES_QUEUE_MODE=1 opzionale — Fase 3: coda job in Postgres; più hit cron (bypass gate se c’è batch con job pending). Vedi PRODUCT_SOURCES_QUEUE_MAX_JOBS, QUEUE_LINKEDIN_CHUNK.
  */
 import { sql } from '../lib/db.mjs';
 import { runNotionProductSourcesExtract, buildMarkdownReport } from '../lib/product-sources-notion.mjs';
 import { enrichLinkedInPosts } from '../lib/apify-linkedin.mjs';
 import { isWebFetchCandidateUrl } from '../lib/fetch-generic-web.mjs';
-import { fetchProductSourcesSequential, getWebFetchLimitsFromEnv } from '../lib/product-source-fetch-strategy.mjs';
+import {
+  fetchProductSourcesSequential,
+  fetchProductSourceContent,
+  getWebFetchLimitsFromEnv,
+} from '../lib/product-source-fetch-strategy.mjs';
 import {
   loadSeenUrlKeys,
   partitionLinksBySeen,
   upsertSeenUrls,
   normalizeUrlKey,
 } from '../lib/product-sources-seen.mjs';
+import {
+  isQueueModeEnabled,
+  findActiveBatchWithPendingJobs,
+  createBatchWithJobs,
+  chunkArray,
+  getQueueMaxJobsPerInvocation,
+  getLinkedInChunkSizeForQueue,
+  resetStaleRunningJobs,
+  claimPendingJobs,
+  completeJob,
+  touchBatch,
+  countPendingJobs,
+  aggregateJobResults,
+  markBatchDone,
+  markBatchFailed,
+} from '../lib/product-sources-queue.mjs';
 
 function getCronGateMs() {
   const raw = process.env.PRODUCT_SOURCES_CRON_GATE_DAYS;
   const n = raw != null && String(raw).trim() !== '' ? Number(raw) : 3;
   const days = Number.isFinite(n) && n > 0 ? Math.min(n, 30) : 3;
   return days * 24 * 60 * 60 * 1000;
+}
+
+function parseJobPayload(raw) {
+  if (raw == null) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * @param {Array<{ id: number, job_type: string, payload_json: unknown }>} claimed
+ * @param {object} context
+ */
+async function executeClaimedQueueJobs(claimed, context) {
+  const webLimits = getWebFetchLimitsFromEnv();
+  const fetchOpts = { timeoutMs: webLimits.timeoutMs, maxTextChars: webLimits.maxTextChars };
+  const apifyToken = process.env.APIFY_TOKEN || '';
+  const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || '';
+  const inputMode = process.env.APIFY_LINKEDIN_INPUT_MODE;
+  const skipLinkedin = !!context.skipLinkedin;
+
+  for (const job of claimed) {
+    const payload = parseJobPayload(job.payload_json);
+    try {
+      if (job.job_type === 'web') {
+        const url = payload.url;
+        const one = await fetchProductSourceContent(url, fetchOpts);
+        await completeJob(job.id, 'done', { url: one.url || url, ...one }, null);
+      } else if (job.job_type === 'linkedin_apify') {
+        const urls = Array.isArray(payload.urls) ? payload.urls : [];
+        if (skipLinkedin || !apifyToken || !actorId) {
+          const enrichments = urls.map((url) => ({
+            url,
+            error: skipLinkedin
+              ? 'Arricchimento LinkedIn disattivato (PRODUCT_SOURCES_SKIP_LINKEDIN).'
+              : !apifyToken
+                ? 'APIFY_TOKEN non configurato'
+                : 'APIFY_LINKEDIN_ACTOR_ID non configurato',
+          }));
+          await completeJob(job.id, 'done', { enrichments }, null);
+        } else {
+          const enrichments = await enrichLinkedInPosts(apifyToken, actorId, urls, {
+            inputMode: inputMode || undefined,
+          });
+          await completeJob(job.id, 'done', { enrichments }, null);
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (job.job_type === 'linkedin_apify') {
+        const urls = Array.isArray(payload.urls) ? payload.urls : [];
+        await completeJob(
+          job.id,
+          'done',
+          { enrichments: urls.map((url) => ({ url, error: msg })) },
+          null,
+        );
+      } else {
+        await completeJob(job.id, 'error', null, msg);
+      }
+    }
+  }
+}
+
+/**
+ * Un solo “chunk” di job; se la coda è vuota finalizza (MD, DB run, Discord, seen).
+ * @param {{ id: number, context_json: object }} batchMeta
+ */
+async function processSingleQueueChunkAndFinalizeIfDone(batchMeta) {
+  const batchId = batchMeta.id;
+  const context =
+    batchMeta.context_json && typeof batchMeta.context_json === 'object'
+      ? batchMeta.context_json
+      : JSON.parse(String(batchMeta.context_json || '{}'));
+
+  await resetStaleRunningJobs(batchId);
+  const claimed = await claimPendingJobs(batchId, getQueueMaxJobsPerInvocation());
+  await executeClaimedQueueJobs(claimed, context);
+  await touchBatch(batchId);
+
+  const pending = await countPendingJobs(batchId);
+  if (pending > 0) {
+    return {
+      ok: true,
+      queue: true,
+      batchId,
+      chunkProcessed: claimed.length,
+      pendingJobs: pending,
+      finalized: false,
+    };
+  }
+
+  const agg = await aggregateJobResults(batchId);
+  const linkedinEnrichments = agg.linkedinEnrichments;
+  const webEnrichments = agg.webEnrichments;
+
+  const markdown = buildMarkdownReport({
+    links: context.links,
+    newLinks: context.newLinks,
+    seenLinks: context.seenLinks,
+    sourceLabel: context.sourceLabel,
+    mode: context.mode,
+    stats: context.stats,
+    linkedinEnrichments,
+    linkedinApifyMode: context.linkedinApifyMode || 'new_only',
+    webEnrichments,
+  });
+
+  const runId = await recordRun({
+    skipped: false,
+    status: 'ok',
+    linkCount: context.links?.length ?? 0,
+    linkedinAttempted: linkedinEnrichments.length,
+    linkedinReturned: linkedinEnrichments.filter((e) => e.text || (e.outboundLinks?.length ?? 0)).length,
+    notionMode: context.mode,
+    notionSourceId: context.sourceLabel,
+    errorMessage: null,
+    reportMarkdown: markdown,
+  });
+
+  await upsertSeenUrls(context.links || []).catch((e) => console.error('upsertSeenUrls', e));
+
+  const discordSummaryOnly = process.env.PRODUCT_SOURCES_DISCORD_SUMMARY_ONLY === '1';
+  let discordOk = false;
+  try {
+    discordOk = await sendDiscordProductSources({
+      linkCount: context.links?.length ?? 0,
+      newLinkCount: context.newLinks?.length ?? 0,
+      seenLinkCount: context.seenLinks?.length ?? 0,
+      linkedinDedupNew: context.linkedinDedupNew ?? 0,
+      linkedinDedupSeen: context.linkedinDedupSeen ?? 0,
+      linkedinApifyBatch: linkedinEnrichments.length,
+      linkedinLinkedInTotal: context.linkedinLinkedInTotal ?? 0,
+      refetchAllLinkedIn: !!context.refetchAllLinkedIn,
+      linkedinEnriched: linkedinEnrichments.filter((e) => e.text || (e.outboundLinks?.length ?? 0)).length,
+      webFetchBatch: webEnrichments.length,
+      webFetchOk: webEnrichments.filter((w) => w.text && !w.error).length,
+      mode: context.mode,
+      sourceId: context.sourceLabel,
+      markdown,
+      summaryOnly: discordSummaryOnly,
+    });
+  } catch (e) {
+    console.error('discord product sources (queue)', e);
+  }
+
+  if (runId != null && discordOk && sql) {
+    try {
+      await sql`
+        UPDATE product_sources_cron_runs
+        SET discord_notified = true
+        WHERE id = ${runId}
+      `;
+    } catch (e) {
+      if (!/discord_notified|column/i.test(String(e?.message || e))) {
+        console.error('cron-product-sources discord_notified queue', e);
+      }
+    }
+  }
+
+  await markBatchDone(batchId, runId);
+
+  return {
+    ok: true,
+    queue: true,
+    batchId,
+    finalized: true,
+    runId,
+    linkCount: context.links?.length ?? 0,
+    newLinkCount: context.newLinks?.length ?? 0,
+    linkedinApifyBatch: linkedinEnrichments.length,
+    webFetchBatch: webEnrichments.length,
+    queuePhase3: true,
+  };
 }
 
 export default async function handler(req, res) {
@@ -71,6 +269,26 @@ async function handleCronProductSources(req, res) {
   }
 
   const force = req.query?.force === '1';
+
+  /** Fase 3: batch con job pending → elabora un chunk (nessun gate, niente Notion in questo hit). */
+  if (isQueueModeEnabled()) {
+    try {
+      const active = await findActiveBatchWithPendingJobs();
+      if (active) {
+        try {
+          const out = await processSingleQueueChunkAndFinalizeIfDone(active);
+          return res.status(200).json(out);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error('cron-product-sources queue chunk', e);
+          await markBatchFailed(active.id, msg);
+          return res.status(500).json({ ok: false, error: msg, batchId: active.id });
+        }
+      }
+    } catch (e) {
+      console.error('cron-product-sources queue lookup', e);
+    }
+  }
 
   const notionToken = process.env.NOTION_INTEGRATION_TOKEN || process.env.NOTION_TOKEN;
   if (!notionToken) {
@@ -156,12 +374,66 @@ async function handleCronProductSources(req, res) {
 
     const linkedinUrlsForApify = refetchAllLinkedIn ? linkedinUrlsAll : linkedinUrlsNew;
 
-    const apifyToken = process.env.APIFY_TOKEN || '';
-    const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || '';
-    const inputMode = process.env.APIFY_LINKEDIN_INPUT_MODE;
+    const linkedinApifyMode = refetchAllLinkedIn ? 'refetch_all' : 'new_only';
     const skipLinkedin =
       process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === '1' ||
       process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === 'true';
+
+    const fetchWebEnabled =
+      process.env.PRODUCT_SOURCES_FETCH_WEB === '1' ||
+      process.env.PRODUCT_SOURCES_FETCH_WEB === 'true';
+    const webLimits = getWebFetchLimitsFromEnv();
+
+    const webUrlsUnique = [];
+    if (newLinks.length) {
+      const webKeys = new Set();
+      for (const l of newLinks) {
+        if (!isWebFetchCandidateUrl(l.url)) continue;
+        const k = normalizeUrlKey(l.url);
+        if (webKeys.has(k)) continue;
+        webKeys.add(k);
+        webUrlsUnique.push(l.url);
+      }
+    }
+
+    const context = {
+      links,
+      newLinks,
+      seenLinks,
+      stats,
+      mode,
+      sourceLabel,
+      linkedinApifyMode,
+      fetchWebEnabled,
+      skipLinkedin,
+      refetchAllLinkedIn,
+      linkedinDedupNew: linkedinUrlsNew.length,
+      linkedinDedupSeen: linkedinSeenCount,
+      linkedinLinkedInTotal: linkedinUrlsAll.length,
+    };
+
+    const linkedinChunks = linkedinUrlsForApify.length
+      ? chunkArray(linkedinUrlsForApify, getLinkedInChunkSizeForQueue())
+      : [];
+    const webUrlsForQueue = fetchWebEnabled && webLimits.max > 0 ? webUrlsUnique : [];
+
+    if (isQueueModeEnabled()) {
+      const batchId = await createBatchWithJobs(context, linkedinChunks, webUrlsForQueue);
+      if (batchId != null) {
+        try {
+          const out = await processSingleQueueChunkAndFinalizeIfDone({ id: batchId, context_json: context });
+          return res.status(200).json(out);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await markBatchFailed(batchId, msg);
+          throw e;
+        }
+      }
+    }
+
+    const apifyToken = process.env.APIFY_TOKEN || '';
+    const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || '';
+    const inputMode = process.env.APIFY_LINKEDIN_INPUT_MODE;
 
     // Apify: default solo URL LinkedIn **nuovi** nel dedup; con REFETCH_ALL tutti (fino al cap in enrichLinkedInPosts)
     let linkedinEnrichments = [];
@@ -183,26 +455,10 @@ async function handleCronProductSources(req, res) {
       }));
     }
 
-    const linkedinApifyMode = refetchAllLinkedIn ? 'refetch_all' : 'new_only';
-
-    const fetchWebEnabled =
-      process.env.PRODUCT_SOURCES_FETCH_WEB === '1' ||
-      process.env.PRODUCT_SOURCES_FETCH_WEB === 'true';
-    const webLimits = getWebFetchLimitsFromEnv();
-
     /** @type {Array<{ url: string, text?: string, error?: string, contentType?: string, kind?: string, strategyNote?: string }>} */
     let webEnrichments = [];
-    if (fetchWebEnabled && webLimits.max > 0 && newLinks.length) {
-      const webUrls = [];
-      const webKeys = new Set();
-      for (const l of newLinks) {
-        if (!isWebFetchCandidateUrl(l.url)) continue;
-        const k = normalizeUrlKey(l.url);
-        if (webKeys.has(k)) continue;
-        webKeys.add(k);
-        webUrls.push(l.url);
-      }
-      webEnrichments = await fetchProductSourcesSequential(webUrls, {
+    if (fetchWebEnabled && webLimits.max > 0 && webUrlsUnique.length) {
+      webEnrichments = await fetchProductSourcesSequential(webUrlsUnique, {
         max: webLimits.max,
         fetchOpts: { timeoutMs: webLimits.timeoutMs, maxTextChars: webLimits.maxTextChars },
       });

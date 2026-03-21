@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
+  fetchProductSourcesQueue,
   fetchProductSourcesRunById,
   fetchProductSourcesRuns,
   productSourcesRunAction,
+  type ProductSourcesQueueBatchRow,
   type ProductSourcesRunRow,
 } from '../api';
 
@@ -47,6 +49,20 @@ export default function ProductSourcesHistory() {
   const [readModal, setReadModal] = useState<{ id: number; markdown: string } | null>(null);
   const [readLoading, setReadLoading] = useState(false);
 
+  const [queueBatches, setQueueBatches] = useState<ProductSourcesQueueBatchRow[]>([]);
+  const [queueMigrationNeeded, setQueueMigrationNeeded] = useState(false);
+
+  const loadQueue = useCallback(async () => {
+    try {
+      const r = await fetchProductSourcesQueue({ limit: 40 });
+      setQueueBatches(r.batches || []);
+      setQueueMigrationNeeded(!!r.migrationNeeded);
+    } catch {
+      setQueueBatches([]);
+      setQueueMigrationNeeded(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -64,7 +80,8 @@ export default function ProductSourcesHistory() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadQueue();
+  }, [load, loadQueue]);
 
   const filtered = useMemo(() => {
     return runs.filter((row) => {
@@ -145,6 +162,10 @@ export default function ProductSourcesHistory() {
     }
   };
 
+  const activeQueueBatch = queueBatches.find(
+    (b) => b.status === 'pending_work' && (b.pending_jobs > 0 || b.running_jobs > 0),
+  );
+
   return (
     <>
       <section className="brutal-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
@@ -157,6 +178,49 @@ export default function ProductSourcesHistory() {
           <strong>Segna PR</strong> per incollare l’URL e tenere traccia in dashboard. Il pulsante «In lavorazione» serve
           solo a segnare che stai lavorando alla PR (nessun accesso automatico al repo).
         </p>
+
+        {queueMigrationNeeded && (
+          <div
+            role="status"
+            style={{
+              marginBottom: '1rem',
+              padding: '0.65rem 0.85rem',
+              border: '2px dashed var(--muted-fg, #888)',
+              fontSize: '0.8rem',
+              background: 'var(--card-bg, #f9f9f9)',
+            }}
+          >
+            <strong>Coda Fase 3:</strong> esegui la migration{' '}
+            <code style={{ fontSize: '0.75rem' }}>006_product_sources_queue.sql</code> sul DB per abilitare il monitoraggio
+            batch.
+          </div>
+        )}
+
+        {activeQueueBatch && (
+          <div
+            role="status"
+            style={{
+              marginBottom: '1rem',
+              padding: '0.65rem 0.85rem',
+              border: '2px solid var(--accent, #f5a623)',
+              fontSize: '0.8rem',
+              background: '#fff8e8',
+            }}
+          >
+            <strong>Coda Fase 3 attiva</strong> — batch <code>#{activeQueueBatch.id}</code>:{' '}
+            <strong>{activeQueueBatch.pending_jobs}</strong> job in attesa
+            {activeQueueBatch.running_jobs > 0 ? (
+              <>
+                {' '}
+                · <strong>{activeQueueBatch.running_jobs}</strong> in esecuzione (ripresi al prossimo hit se bloccati)
+              </>
+            ) : null}
+            . Completati <strong>{activeQueueBatch.completed_jobs}</strong> /{' '}
+            <strong>{activeQueueBatch.total_jobs}</strong>. Il cron consumerà fino a{' '}
+            <code>PRODUCT_SOURCES_QUEUE_MAX_JOBS</code> per invocazione; per svuotare più in fretta aggiungi un secondo
+            schedule Vercel sullo stesso endpoint o chiama manualmente con <code>?key=CRON_SECRET</code>.
+          </div>
+        )}
 
         <div
           style={{

@@ -810,3 +810,36 @@ export async function productSourcesRunAction(
   }
   return data as { ok: boolean; stub?: boolean; message?: string };
 }
+
+// --- Coda Fase 3 (batch job fetch / LinkedIn)
+export interface ProductSourcesQueueBatchRow {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  status: string;
+  total_jobs: number;
+  completed_jobs: number;
+  last_error: string | null;
+  final_run_id: number | null;
+  pending_jobs: number;
+  running_jobs: number;
+}
+
+export async function fetchProductSourcesQueue(params?: { limit?: number }): Promise<{
+  ok: boolean;
+  batches: ProductSourcesQueueBatchRow[];
+  migrationNeeded?: boolean;
+}> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set('limit', String(params.limit));
+  const r = await fetch(`${BASE}/api/product-sources-queue?${q}`, { headers: headers() });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as {
+    ok: boolean;
+    batches: ProductSourcesQueueBatchRow[];
+    migrationNeeded?: boolean;
+  };
+}
