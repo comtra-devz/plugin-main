@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import { scanNotionProductSources, type NotionProductSourcesResponse } from '../api';
+import ProductSourcesHistory from './ProductSourcesHistory';
+
+type Tab = 'scan' | 'history';
 
 export default function ProductImprovement() {
+  const [tab, setTab] = useState<Tab>('scan');
   const [pageId, setPageId] = useState('');
   const [databaseId, setDatabaseId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -10,6 +14,13 @@ export default function ProductImprovement() {
   const [result, setResult] = useState<NotionProductSourcesResponse | null>(null);
   const [gitStep, setGitStep] = useState<0 | 1 | 2>(0);
   const [gitConfirmText, setGitConfirmText] = useState('');
+
+  useEffect(() => {
+    if (tab !== 'scan') {
+      setGitStep(0);
+      setGitConfirmText('');
+    }
+  }, [tab]);
 
   const runScan = () => {
     const p = pageId.trim();
@@ -55,12 +66,37 @@ export default function ProductImprovement() {
       <PageHeader
         title="Migliorie prodotto (Notion)"
         actions={
-          <button type="button" className="brutal-btn" onClick={runScan} disabled={loading}>
-            {loading ? 'Scansione…' : 'Estrai link da Notion'}
-          </button>
+          tab === 'scan' ? (
+            <button type="button" className="brutal-btn" onClick={runScan} disabled={loading}>
+              {loading ? 'Scansione…' : 'Estrai link da Notion'}
+            </button>
+          ) : null
         }
       />
 
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+        <button
+          type="button"
+          className={`brutal-btn ${tab === 'scan' ? 'primary' : ''}`}
+          style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+          onClick={() => setTab('scan')}
+        >
+          Scansione manuale Notion
+        </button>
+        <button
+          type="button"
+          className={`brutal-btn ${tab === 'history' ? 'primary' : ''}`}
+          style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+          onClick={() => setTab('history')}
+        >
+          Storico cron &amp; documenti (Git/Discord)
+        </button>
+      </div>
+
+      {tab === 'history' && <ProductSourcesHistory />}
+
+      {tab === 'scan' && (
+        <>
       <section className="brutal-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
         <h2 className="section-title" style={{ marginTop: 0 }}>
           Sorgente Notion
@@ -247,6 +283,8 @@ export default function ProductImprovement() {
             )}
           </div>
         </div>
+      )}
+        </>
       )}
     </>
   );

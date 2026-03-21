@@ -8,6 +8,41 @@
 
 ---
 
+## Requisiti prodotto (fonte di verità — non perdere)
+
+Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread / NanoClaw / Vercel). Il codice può essere incompleto: qui resta il **bersaglio**.
+
+### Decisioni confermate
+
+| Tema | Indicazione |
+|------|-------------|
+| **LinkedIn / Apify** | **Niente commenti** sui post LinkedIn. L’actor Apify configurato va bene: ci interessano **post (testo) + link outbound** presenti nel dataset, non i commenti. |
+| **Output “documento”** | Il report non è solo per DB o copia manuale: deve essere **leggibile e utile anche su Discord** (struttura, titoli, messaggio che si capisce in channel). Oggi Discord riceve un **embed con anteprima troncata**; il testo completo è in `product_sources_cron_runs.report_markdown` — migliorare l’esperienza Discord resta in backlog se serve più che anteprima. |
+| **Limitazioni (scope)** | Solo **link** estratti da Notion (blocchi + proprietà URL/testo con link). **Ignorare** blocchi/testo che contengono **Antigravity**. Niente “suggerimenti di codice” non ancorati a URL. Non espandere lo scope oltre quanto richiesto. |
+
+### Indicazioni da rispettare (obiettivo funzionale)
+
+1. **Link** — Identificare **tutti** i link rilevanti da Notion (dedup per URL normalizzato **dentro** la run).
+2. **Sessioni future** — Nelle run successive **non ri-esaminare** gli URL già processati (dedup **persistente** tra run, non solo gate a 3 giorni sull’intera esecuzione).
+3. **Fetch** — Per **LinkedIn**: fetch via Apify come oggi (senza commenti). Per **altri URL**: policy esplicita (solo elenco da Notion vs fetch pagina) da allineare al requisito “fetch di ogni link” se confermato (oggi: **non** fetchati).
+4. **Documento ruleset / docs** — Un testo che aiuti a capire **cosa può migliorare** ruleset e documentazioni da cui attingono le funzioni (richiede sintesi strutturata e/o LLM se non banale).
+5. **Chiarezza e sicurezza** — In linguaggio semplice: **cosa andrà toccato** (aree/ sezioni). **Guardrail espliciti**: migliorie sì; niente peggioramenti, cambiamenti confusionari o breaking non voluti.
+
+### Stato rispetto al codice attuale (snapshot)
+
+| Requisito | Stato approssimativo |
+|-----------|----------------------|
+| Link da Notion + filtri Antigravity / solo URL | **Fatto** (estrazione + report). |
+| Dedup URL **tra run** (“già esaminati”) | **Fatto** (tabella `product_sources_seen_urls` + Apify solo su LinkedIn **nuovi**). |
+| LinkedIn post + outbound, **no commenti** | **Allineato** con actor attuale + mapping dataset. |
+| Fetch di ogni link non-LinkedIn | **Non fatto** (solo lista in Markdown). |
+| Documento tipo “migliora ruleset” + cosa toccherà + guardrail | **Parziale** (sezioni guardrail + euristica “area ruleset” per URL; niente LLM). |
+| Discord come **canale del documento** | **Migliorato** (riepilogo + report spezzato in più messaggi/embed). |
+
+*Aggiorna questa tabella quando implementi una voce.*
+
+---
+
 ## Checklist: cosa devi fare tu
 
 ### 1) Notion
@@ -18,11 +53,15 @@
 4. Copia l’**ID** (UUID) dalla URL della risorsa → **un solo** env tra `NOTION_PRODUCT_SOURCES_PAGE_ID` e `NOTION_PRODUCT_SOURCES_DATABASE_ID` (dettaglio sotto nella guida Notion).
 5. Il **cron** legge solo questi env; la UI admin può incollare ID diversi per prove manuali.
 
-### 2) Database Postgres (gate + storico report)
+### 2) Database Postgres (gate + storico report + dedup URL)
 
-1. Esegui la migration sullo **stesso DB** già usato dalla dashboard (`POSTGRES_URL` / `DATABASE_URL`):
-   - File: [`migrations/003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql)
-2. Senza questa tabella il cron **funziona comunque** ma **non** applica il gate 3 giorni (ogni giorno esegue una run completa).
+1. Esegui le migration sullo **stesso DB** già usato dalla dashboard (`POSTGRES_URL` / `DATABASE_URL`):
+   - [`migrations/003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql) — storico run + gate 3 giorni
+   - [`migrations/004_product_sources_seen_urls.sql`](../migrations/004_product_sources_seen_urls.sql) — **URL già esaminati** (dedup tra run; Apify solo su LinkedIn nuovi)
+2. Senza `003` il cron **funziona comunque** ma **non** applica il gate 3 giorni.
+3. Senza `004` il cron logga un warning e **non** deduplica (comportamento precedente: Apify su tutti i LinkedIn fino al cap).
+
+**Dove finiscono i Markdown:** ogni run OK scrive il report in **`product_sources_cron_runs.report_markdown`** (una riga per run). La prima passata è di solito la più lunga; le successive sono spesso più brevi perché elencano soprattutto **link nuovi** e una lista compatta di **già visti**.
 
 ### 3) Apify (LinkedIn)
 
@@ -56,7 +95,7 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
 
 1. Su Vercel deve esistere **`CRON_SECRET`** (stesso concetto di `/api/cron-notify-discord`).
 2. Il file [`vercel.json`](../vercel.json) include già:
-   - `"path": "/api/cron-product-sources"`, `"schedule": "0 6 * * *"` (ogni giorno 06:00 UTC).
+   - `"path": "/api/cron-product-sources"`, `"schedule": "0 9 * * *"` (**09:00 UTC** ogni giorno ≈ **10:00 ora italiana invernale (CET)**; con CEST sarà **11:00** locale — regola su fuso o sposta il cron).
 3. Test manuale (dal browser o curl, **non** committare il secret):
    ```bash
    curl -sS "https://<tuo-dominio-vercel>/api/cron-product-sources?key=CRON_SECRET"
@@ -69,13 +108,23 @@ Succede spesso quando la funzione viene **terminata dal runtime** prima che risp
 ### 5) Discord (opzionale)
 
 - `PRODUCT_SOURCES_CRON_WEBHOOK_URL` oppure `DISCORD_PRODUCT_SOURCES_WEBHOOK_URL`  
-  URL webhook `https://discord.com/api/webhooks/...` (accettato anche `discordapp.com`)  
-  Riceve un embed con statistiche e **anteprima troncata** del Markdown. Il report **completo** è in DB: `product_sources_cron_runs.report_markdown`.
+  URL webhook `https://discord.com/api/webhooks/...` (accettato anche `discordapp.com`)
+- **Comportamento:** primo messaggio = **embed riepilogo** (nuovi vs già visti, LinkedIn Apify, sorgente). Poi **uno o più messaggi** con il Markdown in blocchi `md` (fino a 10 embed per richiesta; il report molto lungo genera più POST in sequenza). Il report **completo** resta sempre in DB: `product_sources_cron_runs.report_markdown`.
+- `PRODUCT_SOURCES_DISCORD_SUMMARY_ONLY=1` — invia **solo** il riepilogo (utile se il canale viene sommerso o per test).
+- Il documento deve restare **comprensibile anche in Discord** (vedi **Requisiti prodotto**).
 
-### 6) UI manuale
+### 6) UI admin — scansione + storico
 
-- Continua a usare **Migliorie prodotto (Notion)** per prove senza aspettare il cron.
-- La doppia conferma “Applica su Git” resta **stub** (nessuna modifica automatica al repo).
+- **Content Management → Migliorie prodotto (Notion)** ha due schede:
+  - **Scansione manuale Notion** — come prima (`POST /api/notion-product-sources`).
+  - **Storico cron & documenti** — tabella run da `product_sources_cron_runs`: anteprima, **Leggi** / **Scarica .md**, stato **Discord** e **Git/PR** (stub + registrazione manuale URL PR).
+- API elenco/dettaglio: `GET /api/product-sources-runs` (auth admin JWT), `GET /api/product-sources-runs?id=<id>` per Markdown completo.
+- Azioni POST (auth admin): `request_pr_stub`, `set_pr_url` (URL `https://github.com/...`), `reset_git`.
+- Migration stato Discord/Git: [`migrations/005_product_sources_git_discord.sql`](../migrations/005_product_sources_git_discord.sql) (dopo la `003`).
+
+### 7) UI manuale (promemoria)
+
+- La doppia conferma “Applica su Git” nella scheda scansione resta **stub** finché non colleghiamo GitHub App / workflow; per le run cron usa **Segna PR** nello storico dopo PR manuale.
 
 ---
 
@@ -184,8 +233,8 @@ Se valorizzi **entrambi** `NOTION_PRODUCT_SOURCES_PAGE_ID` e `NOTION_PRODUCT_SOU
 
 - **Dove sta il connection string:** stesso valore che usi già per la dashboard (Vercel → env `POSTGRES_URL` o `DATABASE_URL`). Non è un “token” separato: è l’URL completo `postgres://user:pass@host:5432/db`.
 - **Come eseguire la migration:**
-  - **Neon / Supabase / altri:** apri la **SQL console** del provider, incolla il contenuto di [`migrations/003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql), esegui.
-  - **CLI locale:** `psql "$POSTGRES_URL" -f migrations/003_product_sources_cron.sql` (con URL esportato in shell, mai committato).
+  - **Neon / Supabase / altri:** SQL console → esegui in ordine [`003_product_sources_cron.sql`](../migrations/003_product_sources_cron.sql) poi [`004_product_sources_seen_urls.sql`](../migrations/004_product_sources_seen_urls.sql).
+  - **CLI locale:** `psql "$POSTGRES_URL" -f migrations/003_product_sources_cron.sql` e poi `-f migrations/004_product_sources_seen_urls.sql`.
 
 ### Apify — `APIFY_TOKEN`
 

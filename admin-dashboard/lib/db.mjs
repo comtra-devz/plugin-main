@@ -14,3 +14,6 @@ export const sql = raw
         rowCount: (rows || []).length,
       }))
   : null;
+
+/** Client postgres originale (insert dinamici `sql\`...\${sql(rows)}\``); usare solo dove serve. */
+export const sqlRaw = raw;

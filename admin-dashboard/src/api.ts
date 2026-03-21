@@ -727,3 +727,77 @@ export async function scanNotionProductSources(body: {
   }
   return data as NotionProductSourcesResponse;
 }
+
+// --- Storico cron fonti prodotto (report Markdown + stato Discord/Git)
+export interface ProductSourcesRunRow {
+  id: number;
+  ran_at: string;
+  status: string;
+  skipped: boolean;
+  link_count: number | null;
+  linkedin_urls_attempted: number | null;
+  linkedin_items_returned: number | null;
+  notion_mode: string | null;
+  notion_source_id: string | null;
+  error_message: string | null;
+  discord_notified?: boolean;
+  github_sync_status?: string;
+  github_pr_url?: string | null;
+  github_updated_at?: string | null;
+  github_error?: string | null;
+  markdown_preview?: string;
+  report_markdown?: string | null;
+}
+
+export async function fetchProductSourcesRuns(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<{ ok: boolean; runs: ProductSourcesRunRow[]; total: number; limit: number; offset: number }> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set('limit', String(params.limit));
+  if (params?.offset != null) q.set('offset', String(params.offset));
+  const r = await fetch(`${BASE}/api/product-sources-runs?${q}`, { headers: headers() });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as {
+    ok: boolean;
+    runs: ProductSourcesRunRow[];
+    total: number;
+    limit: number;
+    offset: number;
+  };
+}
+
+export async function fetchProductSourcesRunById(
+  id: number,
+): Promise<{ ok: boolean; run: ProductSourcesRunRow }> {
+  const r = await fetch(`${BASE}/api/product-sources-runs?id=${encodeURIComponent(String(id))}`, {
+    headers: headers(),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as { ok: boolean; run: ProductSourcesRunRow };
+}
+
+export async function productSourcesRunAction(
+  runId: number,
+  action: 'request_pr_stub' | 'set_pr_url' | 'reset_git',
+  prUrl?: string,
+): Promise<{ ok: boolean; stub?: boolean; message?: string }> {
+  const body: Record<string, unknown> = { action, runId };
+  if (action === 'set_pr_url' && prUrl) body.prUrl = prUrl;
+  const r = await fetch(`${BASE}/api/product-sources-runs`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as { ok: boolean; stub?: boolean; message?: string };
+}
