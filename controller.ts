@@ -1459,6 +1459,34 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
   return issues;
 }
 
+/**
+ * Flow starting points for the editor's current page → UI (prototype tab).
+ * Must run again when the user switches page in Figma, otherwise the list stays stale.
+ */
+function postFlowStartingPointsToUi(): void {
+  try {
+    const page = figma.currentPage;
+    const raw = (page as PageNode & { flowStartingPoints?: ReadonlyArray<{ nodeId: string; name: string }> })
+      .flowStartingPoints;
+    const flows =
+      raw != null ? Array.from(raw).map((f) => ({ nodeId: f.nodeId, name: f.name })) : [];
+    figma.ui.postMessage({
+      type: 'flow-starting-points-result',
+      flows,
+      pageId: page.id,
+      pageName: page.name,
+    });
+  } catch (_e) {
+    const page = figma.currentPage;
+    figma.ui.postMessage({
+      type: 'flow-starting-points-result',
+      flows: [],
+      pageId: page?.id ?? '',
+      pageName: page?.name ?? '',
+    });
+  }
+}
+
 figma.ui.onmessage = async (raw: any) => {
   const msg = raw?.pluginMessage ?? raw;
   if (msg.type === 'resize-window') {
@@ -1503,11 +1531,7 @@ figma.ui.onmessage = async (raw: any) => {
   }
 
   if (msg.type === 'get-flow-starting-points') {
-    const page = figma.currentPage;
-    const flows = (page as any).flowStartingPoints != null
-      ? Array.from((page as any).flowStartingPoints as ReadonlyArray<{ nodeId: string; name: string }>).map(f => ({ nodeId: f.nodeId, name: f.name }))
-      : [];
-    figma.ui.postMessage({ type: 'flow-starting-points-result', flows });
+    postFlowStartingPointsToUi();
   }
 
   if (msg.type === 'run-proto-audit') {
@@ -2015,3 +2039,7 @@ figma.ui.onmessage = async (raw: any) => {
     })();
   }
 };
+
+figma.on('currentpagechange', () => {
+  postFlowStartingPointsToUi();
+});

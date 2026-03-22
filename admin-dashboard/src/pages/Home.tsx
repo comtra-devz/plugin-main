@@ -62,8 +62,8 @@ export default function Home() {
       .finally(() => setLoadingTimeline(false));
   };
 
+  // In parallelo con le stats: prima la timeline partiva solo dopo fetchStats (sequenziale → lentezza + grafico in attesa).
   useEffect(() => {
-    if (!data) return;
     let cancelled = false;
     setErrorTimeline(null);
     setLoadingTimeline(true);
@@ -72,7 +72,7 @@ export default function Home() {
       .catch((e) => { if (!cancelled) setErrorTimeline(e.message || 'Errore timeline'); })
       .finally(() => { if (!cancelled) setLoadingTimeline(false); });
     return () => { cancelled = true; };
-  }, [chartPeriod, data, timelinePlan]);
+  }, [chartPeriod, timelinePlan]);
 
   const loadWeeklyUpdates = () => {
     setErrorWeeklyUpdates(null);
@@ -263,7 +263,25 @@ export default function Home() {
             </p>
           </div>
         ) : timeline ? (
-          <p style={{ marginTop: '1rem', color: 'var(--muted)' }}>Nessun dato per il periodo selezionato.</p>
+          <div style={{ marginTop: '1rem' }}>
+            <p style={{ color: 'var(--muted)', marginBottom: timeline.kimi_note ? '0.5rem' : 0 }}>
+              Nessun punto nel grafico per il periodo selezionato (nessuna transazione in quel range o timeline degradata lato server).
+            </p>
+            {timeline.kimi_note ? (
+              <p
+                role="status"
+                style={{
+                  margin: 0,
+                  padding: '0.65rem 0.75rem',
+                  fontSize: '0.85rem',
+                  border: '2px solid var(--black)',
+                  background: 'var(--yellow)',
+                }}
+              >
+                {timeline.kimi_note}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {credits.by_action_type.length > 0 && (

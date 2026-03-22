@@ -102,6 +102,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [protoAuditIssues, setProtoAuditIssues] = useState<AuditIssue[] | null>(null);
   const [protoAuditLoading, setProtoAuditLoading] = useState(false);
   const [protoAuditError, setProtoAuditError] = useState<string | null>(null);
+  /** Figma canvas page for prototype flows (synced on tab open + currentpagechange). */
+  const [prototypeCanvasPageId, setPrototypeCanvasPageId] = useState<string>('');
+  const [prototypeCanvasPageName, setPrototypeCanvasPageName] = useState<string>('');
+  /** Prototype full-page loader: indeterminate-style bar (never sits at 100% until done). */
+  const [protoLoaderBarPercent, setProtoLoaderBarPercent] = useState(0);
   const protoCostRef = useRef<number>(0);
 
   // A11Y / legacy deep scan (receipt flow)
@@ -383,12 +388,30 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     return () => cancelAnimationFrame(t);
   }, []);
 
-  // Fetch flow starting points when Prototype tab is active (current page only).
+  // Fetch flow starting points when Prototype tab is active (current Figma page).
   useEffect(() => {
     if (activeTab === 'PROTOTYPE') {
       window.parent.postMessage({ pluginMessage: { type: 'get-flow-starting-points' } }, '*');
     }
   }, [activeTab]);
+
+  // Figma fires currentpagechange → controller sends flow-starting-points-result; close flow dropdown when page changes.
+  useEffect(() => {
+    if (prototypeCanvasPageId) setIsFlowDropdownOpen(false);
+  }, [prototypeCanvasPageId]);
+
+  // Prototype audit: creep progress bar slowly, cap ~87% until proto-audit-result (avoids “full bar but still working”).
+  useEffect(() => {
+    if (!protoAuditLoading) {
+      setProtoLoaderBarPercent(0);
+      return;
+    }
+    setProtoLoaderBarPercent(6);
+    const id = window.setInterval(() => {
+      setProtoLoaderBarPercent((p) => (p >= 87 ? p : Math.min(87, p + 1 + Math.floor(Math.random() * 4))));
+    }, 480);
+    return () => clearInterval(id);
+  }, [protoAuditLoading]);
 
   // Fake progress: slow creep so we don't sit at 95% for long; real count-nodes-progress overrides when available
   useEffect(() => {
@@ -446,11 +469,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       }
       if (msg.type === 'flow-starting-points-result' && Array.isArray(msg.flows)) {
         setFlowStartingPoints(msg.flows);
+        if (typeof msg.pageId === 'string') setPrototypeCanvasPageId(msg.pageId);
+        if (typeof msg.pageName === 'string') setPrototypeCanvasPageName(msg.pageName);
+        setSelectedFlowIds((prev) => {
+          const valid = new Set((msg.flows as { nodeId: string }[]).map((f) => f.nodeId));
+          return prev.filter((id) => valid.has(id));
+        });
       }
       if (msg.type === 'proto-audit-result') {
         const issues = Array.isArray(msg.issues) ? msg.issues as AuditIssue[] : [];
         const err = msg.error as string | undefined;
         setProtoAuditIssues(issues);
+        setProtoLoaderBarPercent(100);
         setProtoAuditLoading(false);
         setScanProgress({ percent: 100, count: 0 });
         setTimeout(() => setIsCalculating(false), 200);
@@ -884,14 +914,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         setProtoAuditLoading(true);
         setIsCalculating(true);
         setScanProgress({ percent: 0, count: 0 });
-        const start = Date.now();
-        const tick = () => {
-          const elapsed = Date.now() - start;
-          const pct = Math.min(90, Math.floor((elapsed / 1500) * 90));
-          setScanProgress(prev => ({ ...prev, percent: pct }));
-          if (pct < 90) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
         window.parent.postMessage(
           { pluginMessage: { type: 'run-proto-audit', selectedFlowNodeIds: selectedFlowIds } },
           '*'
@@ -899,6 +921,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       },
     });
   }, [flowStartingPoints.length, selectedFlowIds, knownZeroCredits, onUnlockRequest]);
+
+  const handleRefreshPrototypeFlows = useCallback(() => {
+    window.parent.postMessage({ pluginMessage: { type: 'get-flow-starting-points' } }, '*');
+  }, []);
 
   const handleConfirmScan = () => {
     const cost = scanStats.cost;
@@ -1231,7 +1257,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const showFullPageLoader = isScanning || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading) || (activeTab === 'UX' && uxAuditLoading) || (activeTab === 'PROTOTYPE' && protoAuditLoading);
   const fullPageLoaderMsg = isProtoLoader ? protoLoaderMsg : isA11yLoader ? a11yLoaderMsg : loadingMsg;
   const nodeCount = scanStats.nodes || 0;
-  const loaderBarDuration = isProtoLoader ? 22 : (nodeCount >= 10000 ? 28 : nodeCount >= 5000 ? 20 : nodeCount >= 2000 ? 14 : nodeCount >= 500 ? 9 : 6);
+  const loaderBarDuration = nodeCount >= 10000 ? 28 : nodeCount >= 5000 ? 20 : nodeCount >= 2000 ? 14 : nodeCount >= 500 ? 9 : 6;
   const isLargeFile = nodeCount >= 3000;
 
   if (showFullPageLoader) return (
@@ -1245,10 +1271,17 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       <div className="text-4xl mb-6 animate-bounce">✨</div>
       <h3 className="text-xl font-black uppercase mb-4 leading-tight">{fullPageLoaderMsg}</h3>
       <div className="w-full max-w-sm h-4 border-2 border-black p-0.5 rounded-full bg-white">
-         <div 
-           className="h-full bg-[#ff90e8] rounded-full" 
-           style={{ animation: `fill-bar ${loaderBarDuration}s ease-in-out forwards` }}
-         />
+         {isProtoLoader ? (
+           <div
+             className="h-full bg-[#ff90e8] rounded-full transition-[width] duration-500 ease-out"
+             style={{ width: `${protoLoaderBarPercent}%` }}
+           />
+         ) : (
+           <div
+             className="h-full bg-[#ff90e8] rounded-full"
+             style={{ animation: `fill-bar ${loaderBarDuration}s ease-in-out forwards` }}
+           />
+         )}
       </div>
       {isLargeFile && !isProtoLoader && (
         <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
@@ -1258,6 +1291,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       {isProtoLoader && (
         <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
           Checking flows, connections and interactions…
+          <span className="block mt-2 text-[10px] text-gray-500">
+            Progress is approximate — it slows before the end and completes when analysis finishes.
+          </span>
         </p>
       )}
     </div>
@@ -1489,6 +1525,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       {activeTab === 'PROTOTYPE' && (
         <PrototypeAuditTab
           flowStartingPoints={flowStartingPoints}
+          prototypeCanvasPageName={prototypeCanvasPageName}
+          onRefreshPrototypeFlows={handleRefreshPrototypeFlows}
           selectedFlowIds={selectedFlowIds}
           setSelectedFlowIds={setSelectedFlowIds}
           isFlowDropdownOpen={isFlowDropdownOpen}

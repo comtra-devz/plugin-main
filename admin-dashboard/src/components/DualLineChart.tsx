@@ -15,13 +15,25 @@ export interface TimelinePoint {
   kimi_cost_usd?: number;
 }
 
+function safeNum(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Arrotonda il valore più alto a un massimo "pulito" per l'asse Y (es. 7 → 10, 24 → 30). */
 function niceMax(val: number): number {
-  if (val <= 0) return 5;
+  if (!Number.isFinite(val) || val <= 0) return 5;
   const exp = Math.pow(10, Math.floor(Math.log10(val)));
   const f = val / exp;
   const step = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
-  return Math.ceil(val / (step * exp)) * step * exp;
+  const out = Math.ceil(val / (step * exp)) * step * exp;
+  return Number.isFinite(out) && out > 0 ? out : 5;
+}
+
+/** Asse Y sempre valido (mai NaN): scan/crediti non devono sparire se Kimi è a zero o sporco). */
+function finiteAxisMax(scansMax: number, creditsMax: number): number {
+  const m = Math.max(safeNum(scansMax), safeNum(creditsMax), 1);
+  return niceMax(m);
 }
 
 type SeriesKey = 'scans' | 'credits' | 'kimi_calls' | 'kimi_cost_usd';
@@ -41,7 +53,7 @@ function dualLinePath(
   key: SeriesKey,
   maxVal: number
 ): string {
-  if (maxVal <= 0) return '';
+  if (!Number.isFinite(maxVal) || maxVal <= 0) return '';
   return data
     .map((d, i) => {
       const x = pad.left + (i / (data.length - 1 || 1)) * innerW;
@@ -66,23 +78,47 @@ interface DualLineChartProps {
 }
 
 export default function DualLineChart({ timeline, period, onPeriodChange, byActionPerDay, planNote }: DualLineChartProps) {
-  const data = [...timeline].reverse();
-  const scansMax = Math.max(...data.map((d) => d.scans), 1);
-  const creditsMax = Math.max(...data.map((d) => d.credits), 1);
-  const kimiCallsMax = Math.max(...data.map((d) => d.kimi_calls ?? 0), 0);
-  const costMaxRaw = Math.max(...data.map((d) => d.kimi_cost_usd ?? 0), 0);
-  const costMaxNice = costMaxRaw > 0 ? niceMax(costMaxRaw) : 0.1;
-  const maxNice = niceMax(Math.max(scansMax, creditsMax, kimiCallsMax, 1));
+  const data: TimelinePoint[] = [...timeline]
+    .reverse()
+    .map((d) => ({
+      date: d.date,
+      scans: safeNum(d.scans),
+      credits: safeNum(d.credits),
+      kimi_calls: d.kimi_calls != null ? safeNum(d.kimi_calls) : 0,
+      kimi_cost_usd: d.kimi_cost_usd != null ? safeNum(d.kimi_cost_usd) : 0,
+    }));
+
+  const scansMax = data.length ? Math.max(...data.map((d) => d.scans), 0) : 0;
+  const creditsMax = data.length ? Math.max(...data.map((d) => d.credits), 0) : 0;
+  const kimiCallsMax = data.length ? Math.max(...data.map((d) => d.kimi_calls ?? 0), 0) : 0;
+  const costMaxRaw = data.length ? Math.max(...data.map((d) => d.kimi_cost_usd ?? 0), 0) : 0;
+
+  /** Asse sinistro: solo scan + crediti. Kimi (anche assente o tutto a zero) non influenza mai questa scala. */
+  const primaryMaxNice = finiteAxisMax(scansMax, creditsMax);
+  /** Scala separata per la linea rosa Kimi (se c’è almeno un valore > 0). */
+  const kimiAxisMaxNice = kimiCallsMax > 0 ? niceMax(Math.max(kimiCallsMax, 1)) : 0;
+  const costMaxNice =
+    costMaxRaw > 0 ? niceMax(Math.max(costMaxRaw, 0.0001)) : 0.1;
+
   const w = 640;
   const h = 200;
   const pad = { top: 28, right: 44, bottom: 36, left: 52 };
   const innerW = w - pad.left - pad.right;
   const innerH = h - pad.top - pad.bottom;
 
-  const pathScans = data.length ? `M ${dualLinePath(data, pad, innerW, innerH, 'scans', maxNice)}` : '';
-  const pathCredits = data.length ? `M ${dualLinePath(data, pad, innerW, innerH, 'credits', maxNice)}` : '';
-  const pathKimiCalls = data.length && kimiCallsMax > 0 ? `M ${dualLinePath(data, pad, innerW, innerH, 'kimi_calls', maxNice)}` : '';
-  const pathCost = data.length && costMaxNice > 0 ? `M ${dualLinePath(data, pad, innerW, innerH, 'kimi_cost_usd', costMaxNice)}` : '';
+  const segScans = data.length ? dualLinePath(data, pad, innerW, innerH, 'scans', primaryMaxNice) : '';
+  const segCredits = data.length ? dualLinePath(data, pad, innerW, innerH, 'credits', primaryMaxNice) : '';
+  const segKimi = data.length && kimiCallsMax > 0 && kimiAxisMaxNice > 0
+    ? dualLinePath(data, pad, innerW, innerH, 'kimi_calls', kimiAxisMaxNice)
+    : '';
+  const segCost = data.length && costMaxNice > 0
+    ? dualLinePath(data, pad, innerW, innerH, 'kimi_cost_usd', costMaxNice)
+    : '';
+
+  const pathScans = segScans ? `M ${segScans}` : '';
+  const pathCredits = segCredits ? `M ${segCredits}` : '';
+  const pathKimiCalls = segKimi ? `M ${segKimi}` : '';
+  const pathCost = segCost ? `M ${segCost}` : '';
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [tooltipLeft, setTooltipLeft] = useState<number>(0);
@@ -100,8 +136,8 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
     const wrapRect = chartWrapRef.current.getBoundingClientRect();
     const pointX = pad.left + (data.length > 1 ? (hoverIdx / (data.length - 1)) * innerW : innerW / 2);
     const d = data[hoverIdx];
-    const maxVal = Math.max(d.scans, d.credits, d.kimi_calls ?? 0);
-    const pointY = pad.top + innerH - (maxVal / maxNice) * innerH;
+    const maxVal = Math.max(d.scans, d.credits);
+    const pointY = pad.top + innerH - (maxVal / primaryMaxNice) * innerH;
     const xRatio = pointX / w;
     const yRatio = pointY / h;
     const px = xRatio * svgRect.width + (svgRect.left - wrapRect.left);
@@ -114,7 +150,7 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
     top = Math.max(6, Math.min(wrapRect.height - TOOLTIP_EST_HEIGHT - 6, top));
     setTooltipLeft(left);
     setTooltipTop(top);
-  }, [hoverIdx, data.length, pad.left, pad.top, innerW, innerH, w, h, maxNice]);
+  }, [hoverIdx, data.length, pad.left, pad.top, innerW, innerH, w, h, primaryMaxNice]);
 
   const clearLeaveTimeout = () => {
     if (leaveTimeoutRef.current) {
@@ -132,7 +168,7 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
   const handleTooltipEnter = () => clearLeaveTimeout();
   const handleTooltipLeave = () => setHoverIdx(null);
 
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * maxNice));
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * primaryMaxNice));
   const uniqY = Array.from(new Set(yTicks)).sort((a, b) => a - b);
   const costTicks = costMaxNice > 0 ? [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * costMaxNice * 100) / 100) : [];
   const uniqCost = Array.from(new Set(costTicks)).sort((a, b) => a - b);
@@ -173,7 +209,7 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
             <line x1={pad.left} y1={pad.top + innerH} x2={pad.left + innerW} y2={pad.top + innerH} stroke="var(--black)" strokeWidth={2} />
             {/* Valori asse Y (massimo arrotondato) */}
             {uniqY.map((val) => {
-              const y = pad.top + innerH - (val / maxNice) * innerH;
+              const y = pad.top + innerH - (val / primaryMaxNice) * innerH;
               return (
                 <g key={`left-${val}`}>
                   <line x1={pad.left} y1={y} x2={pad.left + innerW} y2={y} stroke="var(--black)" strokeWidth={1} strokeDasharray="4 2" opacity={0.4} />
@@ -233,10 +269,16 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
             )}
             {data.map((d, i) => {
               const x = pad.left + (i / (data.length - 1 || 1)) * innerW;
-              const yScans = pad.top + innerH - (d.scans / maxNice) * innerH;
-              const yCredits = pad.top + innerH - (d.credits / maxNice) * innerH;
-              const yKimi = kimiCallsMax > 0 ? pad.top + innerH - ((d.kimi_calls ?? 0) / maxNice) * innerH : null;
-              const yCost = costMaxNice > 0 ? pad.top + innerH - ((d.kimi_cost_usd ?? 0) / costMaxNice) * innerH : null;
+              const yScans = pad.top + innerH - (d.scans / primaryMaxNice) * innerH;
+              const yCredits = pad.top + innerH - (d.credits / primaryMaxNice) * innerH;
+              const yKimi =
+                kimiCallsMax > 0 && kimiAxisMaxNice > 0
+                  ? pad.top + innerH - ((d.kimi_calls ?? 0) / kimiAxisMaxNice) * innerH
+                  : null;
+              const yCost =
+                costMaxRaw > 0 && Number.isFinite(costMaxNice) && costMaxNice > 0
+                  ? pad.top + innerH - ((d.kimi_cost_usd ?? 0) / costMaxNice) * innerH
+                  : null;
               return (
                 <g key={d.date}>
                   <rect

@@ -3,6 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 /** Chiave separata dal plugin Figma (non condividere stato tra app). */
 const STORAGE_KEY = 'comtra:admin:last-activity-at';
 
+/** Non aggiornare React a ogni mousemove: blocca il main thread e rallenta tutta la SPA. */
+const ACTIVITY_SAMPLE_MS = 3000;
+
 function readLastActivityAt(): number {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -31,27 +34,28 @@ function formatIdle(ms: number): string {
 
 /** Timer di inattività fisso in basso a destra (solo dashboard admin). */
 export function InactivityTimerBadge() {
-  const [lastActivityAt, setLastActivityAt] = useState<number>(() => readLastActivityAt());
-  const [now, setNow] = useState<number>(() => Date.now());
-  const lastWriteAtRef = useRef<number>(0);
+  const lastAtRef = useRef<number>(readLastActivityAt());
+  const lastSampleAtRef = useRef<number>(0);
+  /** Solo per forzare 1 re-render al secondo (display), mai su mousemove. */
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    const persistActivity = (timestamp: number) => {
-      setLastActivityAt(timestamp);
-      const elapsedSinceWrite = timestamp - lastWriteAtRef.current;
-      if (elapsedSinceWrite < 1000) return;
-      lastWriteAtRef.current = timestamp;
+    const markActivity = (ts: number) => {
+      lastAtRef.current = ts;
+      const prev = lastSampleAtRef.current;
+      if (ts - prev < ACTIVITY_SAMPLE_MS) return;
+      lastSampleAtRef.current = ts;
       try {
-        window.localStorage.setItem(STORAGE_KEY, String(timestamp));
+        window.localStorage.setItem(STORAGE_KEY, String(ts));
       } catch {
         // ignore
       }
     };
 
-    const onActivity = () => persistActivity(Date.now());
-    const onFocus = () => persistActivity(Date.now());
+    const onActivity = () => markActivity(Date.now());
+    const onFocus = () => markActivity(Date.now());
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') persistActivity(Date.now());
+      if (document.visibilityState === 'visible') markActivity(Date.now());
     };
 
     window.addEventListener('mousemove', onActivity, { passive: true });
@@ -62,7 +66,15 @@ export function InactivityTimerBadge() {
     window.addEventListener('focus', onFocus, { passive: true });
     document.addEventListener('visibilitychange', onVisibilityChange);
 
-    const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
+    const intervalId = window.setInterval(() => {
+      setTick((n) => n + 1);
+      try {
+        window.localStorage.setItem(STORAGE_KEY, String(lastAtRef.current));
+      } catch {
+        // ignore
+      }
+    }, 1000);
+
     return () => {
       window.removeEventListener('mousemove', onActivity);
       window.removeEventListener('mousedown', onActivity);
@@ -72,10 +84,15 @@ export function InactivityTimerBadge() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.clearInterval(intervalId);
+      try {
+        window.localStorage.setItem(STORAGE_KEY, String(lastAtRef.current));
+      } catch {
+        // ignore
+      }
     };
   }, []);
 
-  const idleLabel = useMemo(() => formatIdle(now - lastActivityAt), [now, lastActivityAt]);
+  const idleLabel = useMemo(() => formatIdle(Date.now() - lastAtRef.current), [tick]);
 
   return (
     <div
