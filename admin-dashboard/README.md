@@ -1,36 +1,148 @@
-# Comtra Admin Dashboard
+# Comtra — Admin Dashboard
 
-Dashboard riservata agli admin per monitoraggio utenti, crediti, costi Kimi, affiliati e funnel.  
-Le **API admin** sono servite **dallo stesso progetto Vercel** della dashboard (non da auth-deploy), così non consumano il limite di 12 serverless function di auth.comtra.dev.
+Interfaccia **riservata al team** per vedere cosa succede nel prodotto: utenti, crediti, richieste, contenuti e — da poco — la **pipeline “fonti da Notion”** (link, report, opzionale LLM).
 
-**Documentazione ufficiale (mapping dashboard ↔ plugin, sezioni, troubleshooting):** [`docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md`](../docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md) e [`docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md`](../docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md).
+Le **API** girano **nello stesso progetto Vercel** della dashboard (cartella `admin-dashboard/` nel monorepo). Così non appesantiscono il limite di funzioni su altri deploy (es. auth).
 
-## Setup
+---
 
-1. Copia `.env.example` in `.env.local` e imposta:
-   - `VITE_ADMIN_API_URL`: lascia **vuoto** in produzione (le API sono same-origin, `/api/admin?route=...`). In dev locale puoi mettere l’URL del progetto dashboard deployato (es. `https://admin.comtra.dev`) per chiamare le API in remoto.
-   - `VITE_ADMIN_SECRET`: stesso valore di **`ADMIN_SECRET`** configurato nel **progetto Vercel della dashboard** (vedi sotto).
+## In due parole: cosa c’è dentro
 
-2. Sul **progetto Vercel della dashboard** (non auth-deploy) imposta in Environment Variables:
-   - **`POSTGRES_URL`**: stesso URL del DB usato da auth-deploy (Supabase/Postgres).
-   - **`ADMIN_SECRET`**: stringa segreta (es. `openssl rand -hex 32`). Le API `/api/admin` accettano solo richieste con header `Authorization: Bearer <ADMIN_SECRET>` o `X-Admin-Key: <ADMIN_SECRET>`.
+| Area | A cosa serve (semplice) |
+|------|-------------------------|
+| **Home / grafici** | Numeri e trend d’uso (crediti, esecuzioni, …). |
+| **Utenti** | Elenco e dettaglio account collegati al backend. |
+| **Crediti & token** | Consumi, ricariche, stime costi lato API. |
+| **Affiliati, sconti, notifiche** | Gestione commerciale / messaggi agli utenti. |
+| **Supporto & sicurezza** | Richieste, log sensibili, health check. |
+| **Esecuzioni** | Traccia run degli agenti / job lato server. |
+| **A/B test (Generate)** | Esperimenti sulla tab Generate. |
+| **Contenuti → Documentazione** | Testi/help editabili serviti al plugin (se configurato). |
+| **Contenuti → Migliorie prodotto (Notion)** | Estrae **link** da una pagina/database Notion, opzionalmente arricchisce (LinkedIn, web, doc interne, **sintesi LLM**), salva **report Markdown** in database e può avvisare **Discord**. |
+| **Brand awareness** | Metriche e funnel touchpoint (se attivi). |
 
-## Sviluppo
+Nessuna delle funzioni sopra **apre PR su GitHub da sola**: il passaggio “metto il report nel repo” resta **manuale** (sicurezza), con guida in `docs/PRODUCT-SOURCES-GIT-WORKFLOW.md` nel monorepo plugin.
+
+---
+
+## Documentazione da leggere
+
+| File | Contenuto |
+|------|-----------|
+| **[`docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md`](../docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md)** | Come dialogano dashboard e plugin Figma (nessun canale diretto “segreto”). |
+| **[`docs/NOTION-PRODUCT-SOURCES.md`](docs/NOTION-PRODUCT-SOURCES.md)** | Guida completa Notion + cron + env (Apify, web, snapshot doc, **Gemini/Kimi**, Fase 6 leggera, **MCP** opzionale, Discord, Postgres). |
+| **[`docs/PRODUCT-SOURCES-ROADMAP.md`](docs/PRODUCT-SOURCES-ROADMAP.md)** | Roadmap a fasi (0→7) del progetto “intelligence da Notion”. |
+| **[`docs/PRODUCT-SOURCES-GIT-WORKFLOW.md`](../docs/PRODUCT-SOURCES-GIT-WORKFLOW.md)** | Fase 7: dal report Markdown al branch/PR nel repo. |
+| **[`../docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md`](../docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md)** | Perché a volte le API rispondono 500 e riepilogo sezioni. |
+
+---
+
+## Accesso (login)
+
+- **Flusso principale:** **magic link** via email (`POST /api/admin-auth`) + opzionale **2FA** (TOTP), sessione **JWT** poi inviata come `Authorization: Bearer …` alle API.
+- Serve **email configurata** (tabella admin su DB) oppure, in emergenza, **`ALLOWED_ADMIN_EMAIL`** uguale alla tua email (senza dover creare la riga a mano).
+- **Resend:** `RESEND_API_KEY` (e opzionalmente `RESEND_FROM`, `ADMIN_DASHBOARD_URL`) per inviare il link.
+- **Compatibilità:** alcune integrazioni accettano ancora **`ADMIN_SECRET`** come Bearer (stesso valore per tutte le chiamate “da script”).
+
+Dettaglio variabili: vedi **[`.env.example`](.env.example)**.
+
+---
+
+## Database (Postgres)
+
+La dashboard legge/scrive sul **solito Postgres** usato dal backend Comtra (`POSTGRES_URL` / `DATABASE_URL` su Vercel).
+
+**Migration utili per “Migliorie prodotto” e cron:**
+
+| File | Cosa aggiunge (semplice) |
+|------|---------------------------|
+| `migrations/003_product_sources_cron.sql` | Storico delle run cron + gate “non ripetere troppo spesso”. |
+| `migrations/004_product_sources_seen_urls.sql` | URL già visti (dedup tra un cron e l’altro). |
+| `migrations/005_product_sources_git_discord.sql` | Stato Discord + **URL PR GitHub** registrato a mano. |
+| `migrations/006_product_sources_queue.sql` | **Coda** di job (LinkedIn/web spezzati) se abiliti la modalità coda. |
+
+Eseguile **in ordine** sullo stesso database della produzione.
+
+---
+
+## Cron su Vercel (questo progetto)
+
+Definiti in [`vercel.json`](vercel.json):
+
+| Path | Orario (UTC) | Ruolo |
+|------|----------------|------|
+| `/api/cron-notify-discord` | 08:00 | Notifiche **admin** su Discord: legge dati via `/api/admin` e posta sul webhook `ADMIN_NOTIFICATIONS_WEBHOOK_URL` (serve anche `ADMIN_SECRET`). |
+| `/api/cron-product-sources` | 09:00 | Pipeline Notion → report → DB → Discord (se configurato). **Timeout lungo** (fino a 300s) per Apify/LLM. |
+
+Entrambe richiedono in genere **`CRON_SECRET`** (query `?key=` o header) — vedi commenti in cima a `api/cron-product-sources.mjs` e `api/cron-notify-discord.mjs`.
+
+---
+
+## API “pubbliche” della dashboard (panoramica)
+
+Oltre a **`/api/admin`** (router unico con `?route=…`), ci sono handler dedicati:
+
+- **`/api/admin-auth`** — Magic link, login, 2FA.
+- **`/api/notion-product-sources`** — Scansione manuale Notion (POST, lenta se Apify/web/LLM).
+- **`/api/cron-product-sources`** — Cron giornaliero fonti prodotto.
+- **`/api/product-sources-runs`** — Lista/dettaglio run + azioni Git stub / URL PR.
+- **`/api/product-sources-queue`** — Stato coda (Fase 3).
+- **`/api/cron-notify-discord`** — Cron notifiche.
+- **`/api/recharge`**, **`/api/doc-content`** — Altri flussi già presenti.
+
+---
+
+## Variabili d’ambiente (raggruppate, semplice)
+
+**Sempre utili in produzione**
+
+- `POSTGRES_URL` — Database.
+- `ADMIN_SECRET` — Oltre al JWT: chiave per script e compatibilità.
+- `CRON_SECRET` — Protezione dei cron.
+- `ADMIN_NOTIFICATIONS_WEBHOOK_URL` — Webhook Discord per il cron **08:00** (notifiche admin; vedi `api/cron-notify-discord.mjs`).
+- `RESEND_*` + `ADMIN_DASHBOARD_URL` — Magic link (se usi quella login).
+
+**Notion / fonti prodotto** (solo se usi quella sezione)
+
+- `NOTION_INTEGRATION_TOKEN`, `NOTION_PRODUCT_SOURCES_PAGE_ID` **o** `NOTION_PRODUCT_SOURCES_DATABASE_ID`
+- Opzionali: Apify (`APIFY_*`), fetch web (`PRODUCT_SOURCES_FETCH_WEB`), snapshot doc plugin (`PRODUCT_SOURCES_DOC_*`), coda (`PRODUCT_SOURCES_QUEUE_MODE`), Fase 6 (`PRODUCT_SOURCES_SKIP_HEAVY_*`, `…SNAPSHOT_ON_NO_NEW`), LLM (`PRODUCT_SOURCES_LLM_*`, `GEMINI_API_KEY`), Discord webhook, ecc.
+
+La lista completa e i default stanno in **`docs/NOTION-PRODUCT-SOURCES.md`**.
+
+**Frontend (build Vite)**
+
+- `VITE_ADMIN_SECRET` — Stesso segreto usato dal browser per firmare/chiamare le route admin (allineato a `ADMIN_SECRET` dove previsto).
+- `VITE_ADMIN_API_URL` — In **locale** puoi puntare al deploy remoto; in **produzione** lascia **vuoto** (same-origin `/api/...`).
+
+---
+
+## MCP (opzionale, fuori da Vercel)
+
+Se non vuoi chiamare l’LLM dal server (risparmio su deploy), puoi usare il server MCP in **`../mcp/product-sources-synthesis/`** con `PRODUCT_SOURCES_LLM_EXECUTION=mcp`. Istruzioni nel README di quella cartella.
+
+---
+
+## Sviluppo locale
 
 ```bash
+cd admin-dashboard
 npm install
 npm run dev
 ```
 
-Apri `http://localhost:3001`. Se non hai impostato `VITE_ADMIN_SECRET`, le chiamate API falliranno con 401.
+Apri l’URL indicato dal dev server (spesso porta **3001**). Senza DB/segreti corretti, molte pagine risponderanno errore o 401 — è normale.
 
-## Build e deploy
+## Build e deploy Vercel
 
 ```bash
 npm run build
 ```
 
-Deploy su Vercel con **Root Directory** = `admin-dashboard` (secondo progetto, stesso repo). Nel **progetto dashboard** configura:
-- **Build:** `VITE_ADMIN_SECRET` (stesso valore che userai per le chiamate; può essere uguale a `ADMIN_SECRET`).
-- **Runtime (API):** `POSTGRES_URL` (stesso DB di auth-deploy), `ADMIN_SECRET`.
-Lascia `VITE_ADMIN_API_URL` vuoto così in produzione la SPA chiama le API in same-origin (`/api/admin?route=...`). Usa un dominio privato (es. `admin.comtra.dev`) e non linkare la dashboard dal sito pubblico.
+- **Root Directory del progetto Vercel:** `admin-dashboard`
+- **Dominio:** meglio un host **non pubblicizzato** (es. `admin.…`) e accesso solo al team.
+
+---
+
+## Riepilogo
+
+La dashboard è il **pannello operativo** del backend Comtra; la parte **Notion** aggiunge un flusso automatico/manuale per **raccogliere fonti**, **generare un documento Markdown**, opzionalmente **sintetizzarlo con un LLM** (es. Gemini free tier), e **tracciare** su DB/Discord/Git **senza** modificare il repo da sola. Per il resto delle funzioni, usa le voci menu e la documentazione linkata sopra.

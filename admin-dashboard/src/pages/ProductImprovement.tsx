@@ -17,6 +17,7 @@ export default function ProductImprovement() {
   const [enrichLinkedIn, setEnrichLinkedIn] = useState(false);
   const [fetchWeb, setFetchWeb] = useState(false);
   const [includeDocSnapshot, setIncludeDocSnapshot] = useState(false);
+  const [includeLlmSynthesis, setIncludeLlmSynthesis] = useState(false);
 
   useEffect(() => {
     if (tab !== 'scan') {
@@ -41,8 +42,8 @@ export default function ProductImprovement() {
     setResult(null);
     scanNotionProductSources(
       p
-        ? { pageId: p, enrichLinkedIn, fetchWeb, includeDocSnapshot }
-        : { databaseId: d, enrichLinkedIn, fetchWeb, includeDocSnapshot },
+        ? { pageId: p, enrichLinkedIn, fetchWeb, includeDocSnapshot, includeLlmSynthesis }
+        : { databaseId: d, enrichLinkedIn, fetchWeb, includeDocSnapshot, includeLlmSynthesis },
     )
       .then(setResult)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -63,8 +64,8 @@ export default function ProductImprovement() {
     if (gitConfirmText.trim().toUpperCase() !== 'CONFERMA') return;
     closeGitModal();
     alert(
-      'Le PR sul repo del plugin restano sempre manuali (sicurezza). Usa il report Markdown per aprire la PR tu stesso; ' +
-        'nella scheda «Storico cron & documenti» puoi poi registrare lo stato e l’URL della PR.',
+      'Fase 7 (manuale): salva il Markdown in docs/product-sources/archive/ (vedi docs/PRODUCT-SOURCES-GIT-WORKFLOW.md nel repo), apri la PR su GitHub, ' +
+        'poi in «Storico cron & documenti» imposta l’URL della PR. Nessuna azione automatica su Git.',
     );
   };
 
@@ -222,6 +223,31 @@ export default function ProductImprovement() {
             alla root del monorepo.
           </span>
         </label>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            marginTop: '0.75rem',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            maxWidth: '40rem',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={includeLlmSynthesis}
+            onChange={(e) => setIncludeLlmSynthesis(e.target.checked)}
+            disabled={loading}
+            style={{ marginTop: '0.15rem' }}
+          />
+          <span>
+            <strong>Sintesi LLM (Fase 5)</strong> — aggiunge al Markdown la sezione generata dal modello (costi API).
+            Serve <code>PRODUCT_SOURCES_LLM_SYNTHESIS=1</code> su Vercel e una key (
+            <code>KIMI_API_KEY</code> / <code>PRODUCT_SOURCES_LLM_API_KEY</code> / <code>OPENAI_API_KEY</code> a seconda
+            di <code>PRODUCT_SOURCES_LLM_PROVIDER</code>).
+          </span>
+        </label>
       </section>
 
       {error && (
@@ -275,6 +301,12 @@ export default function ProductImprovement() {
                   file ok
                   {result.docSnapshot.truncated ? ' · troncato' : ''}
                   {result.docSnapshot.skipped ? ` · (${result.docSnapshot.skipReason || 'skip'})` : ''}
+                </li>
+              )}
+              {result.includeLlmSynthesisRequested && (
+                <li>
+                  Sintesi LLM (Fase 5):{' '}
+                  <strong>{(result.llmSynthesisChars ?? 0) > 0 ? `${result.llmSynthesisChars} caratteri` : 'vuota / disattiva'}</strong>
                 </li>
               )}
             </ul>
@@ -356,10 +388,26 @@ export default function ProductImprovement() {
             {gitStep === 2 && (
               <>
                 <h3 id="git-modal-title" style={{ marginTop: 0 }}>
-                  Seconda conferma
+                  Fase 7 — Checklist (repo plugin)
                 </h3>
-                <p style={{ fontSize: '0.85rem' }}>
-                  Digita <strong>CONFERMA</strong> per chiudere (nessuna azione su GitHub: le PR restano manuali).
+                <ol style={{ fontSize: '0.8rem', lineHeight: 1.55, margin: '0.5rem 0 0', paddingLeft: '1.1rem' }}>
+                  <li>
+                    Usa <strong>Copia report Markdown</strong> (qui) o, per il cron, <strong>Storico → Scarica .md</strong>.
+                  </li>
+                  <li>
+                    Nel repo: branch dedicato → file sotto{' '}
+                    <code style={{ fontSize: '0.72rem' }}>docs/product-sources/archive/</code> es.{' '}
+                    <code style={{ fontSize: '0.72rem' }}>YYYY-MM-DD-manual.md</code>.
+                  </li>
+                  <li>
+                    Apri la <strong>PR</strong> su GitHub; poi registra l’URL in <strong>Storico cron & documenti</strong>.
+                  </li>
+                </ol>
+                <p style={{ fontSize: '0.72rem', color: 'var(--muted-fg, #555)', marginTop: '0.65rem' }}>
+                  Dettaglio: <code>docs/PRODUCT-SOURCES-GIT-WORKFLOW.md</code> nel monorepo.
+                </p>
+                <p style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
+                  Digita <strong>CONFERMA</strong> per chiudere (nessuna azione automatica su Git).
                 </p>
                 <input
                   className="brutal-input"

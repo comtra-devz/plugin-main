@@ -8,6 +8,7 @@ Usata per costruire i prompt, validare le risposte e mantenere uno standard di q
 ```
 audit-specs/
 ├── README.md                 (questo file)
+├── AUTO-FIX-ISSUE-MAP.md     Mappatura completa: categorie, rule_id, stato auto-fix vs implementazione plugin
 ├── MAINTAINING-RULES.md      Guida: come modificare le regole e handoff ad altre persone
 ├── ds-audit/                 Design System Audit
 │   ├── README.md
@@ -31,6 +32,7 @@ audit-specs/
     └── AGENT-DIRECTIVES.md      Tono, falsi positivi, costo crediti
 ├── prototype-audit/          Prototype Audit (in-plugin deterministico, no Kimi)
     ├── README.md               Scope, AI vs deterministico, tabella regole, scope UI per flussi
+    ├── PROTOTYPE-AUTO-FIX-ROADMAP.md  Piano auto-fix prototype (fasi A–C, before go live D–E)
     ├── SCOPE-AND-UI.md         Multi-select flussi (flowStartingPoints); no All Pages
     ├── PROTOTYPE-AUDIT-RULES.md  20 regole P-01–P-20 (flow, nav, interaction, overlay, variables, docs)
     ├── OUTPUT-SCHEMA.md         Schema JSON (findings, summary, health score)
@@ -48,6 +50,7 @@ In futuro, stessa struttura per altri agenti:
 
 ## Uso
 
+- **Auto-fix (roadmap + mapping issue/categoria):** vedi **AUTO-FIX-ISSUE-MAP.md** (allineamento con `controller.ts`, engine A11Y, `autoFixConfig.ts`).
 - **Backend:** legge regole e schema dalla cartella corrispondente per costruire il system prompt e validare l’output.
 - **Documentazione:** i file `.md` servono come riferimento per estendere le regole e per il QA.
 - **Manutenzione regole e handoff:** vedi **MAINTAINING-RULES.md**. **Test Kimi (senza backend):** vedi `docs/KIMI-FOR-DUMMIES.md`.

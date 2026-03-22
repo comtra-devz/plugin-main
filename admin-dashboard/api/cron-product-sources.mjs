@@ -23,6 +23,8 @@
  * - PRODUCT_SOURCES_FETCH_WEB=1 opzionale — Fase 1+2: fetch / strategia per tipo su URL **nuovi** non-LinkedIn (allow/block list, GitHub raw, stub YouTube/X, PDF rilevato)
  * - PRODUCT_SOURCES_QUEUE_MODE=1 opzionale — Fase 3: coda job in Postgres; più hit cron (bypass gate se c’è batch con job pending). Vedi PRODUCT_SOURCES_QUEUE_MAX_JOBS, QUEUE_LINKEDIN_CHUNK.
  * - Fase 4 snapshot doc: `PRODUCT_SOURCES_DOC_FETCH_URLS` (raw URL) e/o `PRODUCT_SOURCES_DOC_REPO_ROOT` (path repo sul runner). Disabilita: `PRODUCT_SOURCES_PLUGIN_DOC_SNAPSHOT_DISABLE=1`.
+ * - Fase 5 LLM: `PRODUCT_SOURCES_LLM_SYNTHESIS=1`, `PRODUCT_SOURCES_LLM_PROVIDER` (moonshot|openai|custom|**gemini**), key/model — vedi `lib/product-sources-llm.mjs`. **Gemini free tier:** `PROVIDER=gemini` + `GEMINI_API_KEY`; se quota esaurita, messaggio nel report e retry alla prossima run. **Senza API sul deploy:** `PRODUCT_SOURCES_LLM_EXECUTION=mcp` + MCP locale.
+ * - Fase 6: `PRODUCT_SOURCES_SKIP_HEAVY_IF_NO_NEW_URLS` (default on: salta Apify/web se nessun URL nuovo e nessun batch; disattiva con `0`); `PRODUCT_SOURCES_SNAPSHOT_ON_NO_NEW=1` forza snapshot anche senza URL nuovi.
  */
 import { sql } from '../lib/db.mjs';
 import { runNotionProductSourcesExtract, buildMarkdownReport } from '../lib/product-sources-notion.mjs';
@@ -56,6 +58,32 @@ import {
   markBatchFailed,
 } from '../lib/product-sources-queue.mjs';
 import { buildPluginDocSnapshot } from '../lib/plugin-doc-snapshot.mjs';
+import { synthesizeProductImprovementsMarkdown } from '../lib/product-sources-llm.mjs';
+import {
+  shouldSkipHeavyWorkloadCron,
+  shouldOmitDocSnapshotOnPhase6Skip,
+} from '../lib/product-sources-phase6.mjs';
+
+/** Snapshot omesso in run Fase 6 (nessun URL nuovo / nessun lavoro pesante). */
+function phase6SkippedSnapshotStub() {
+  return {
+    text: '',
+    sources: [],
+    truncated: false,
+    skipped: true,
+    skipReason: 'phase6_no_new_urls',
+  };
+}
+
+/**
+ * @param {boolean} phase6SkipHeavy
+ */
+async function buildProductSourcesDocSnapshotForCron(phase6SkipHeavy) {
+  if (phase6SkipHeavy && shouldOmitDocSnapshotOnPhase6Skip()) {
+    return phase6SkippedSnapshotStub();
+  }
+  return buildPluginDocSnapshot();
+}
 
 function getCronGateMs() {
   const raw = process.env.PRODUCT_SOURCES_CRON_GATE_DAYS;
@@ -161,7 +189,17 @@ async function processSingleQueueChunkAndFinalizeIfDone(batchMeta) {
   const linkedinEnrichments = agg.linkedinEnrichments;
   const webEnrichments = agg.webEnrichments;
 
-  const pluginDocSnapshot = await buildPluginDocSnapshot();
+  const phase6SkipHeavy = context.phase6SkipHeavy === true;
+  const pluginDocSnapshot = await buildProductSourcesDocSnapshotForCron(phase6SkipHeavy);
+  const llmSynthesisSection = await synthesizeProductImprovementsMarkdown({
+    mode: context.mode,
+    sourceLabel: context.sourceLabel,
+    newLinks: context.newLinks,
+    seenLinks: context.seenLinks,
+    linkedinEnrichments,
+    webEnrichments,
+    pluginDocSnapshot,
+  });
 
   const markdown = buildMarkdownReport({
     links: context.links,
@@ -174,6 +212,8 @@ async function processSingleQueueChunkAndFinalizeIfDone(batchMeta) {
     linkedinApifyMode: context.linkedinApifyMode || 'new_only',
     webEnrichments,
     pluginDocSnapshot,
+    llmSynthesisSection,
+    phase6SkipHeavy,
   });
 
   const runId = await recordRun({
@@ -401,6 +441,13 @@ async function handleCronProductSources(req, res) {
       }
     }
 
+    const skipHeavy = shouldSkipHeavyWorkloadCron({
+      newLinks,
+      linkedinUrlsForApify,
+      fetchWebEnabled,
+      webUrlsUnique,
+    });
+
     const context = {
       links,
       newLinks,
@@ -415,6 +462,7 @@ async function handleCronProductSources(req, res) {
       linkedinDedupNew: linkedinUrlsNew.length,
       linkedinDedupSeen: linkedinSeenCount,
       linkedinLinkedInTotal: linkedinUrlsAll.length,
+      phase6SkipHeavy: skipHeavy,
     };
 
     const linkedinChunks = linkedinUrlsForApify.length
@@ -469,7 +517,17 @@ async function handleCronProductSources(req, res) {
       });
     }
 
-    const pluginDocSnapshot = await buildPluginDocSnapshot();
+    const phase6SkipHeavy = skipHeavy;
+    const pluginDocSnapshot = await buildProductSourcesDocSnapshotForCron(phase6SkipHeavy);
+    const llmSynthesisSection = await synthesizeProductImprovementsMarkdown({
+      mode,
+      sourceLabel,
+      newLinks,
+      seenLinks,
+      linkedinEnrichments,
+      webEnrichments,
+      pluginDocSnapshot,
+    });
 
     const markdown = buildMarkdownReport({
       links,
@@ -482,6 +540,8 @@ async function handleCronProductSources(req, res) {
       linkedinApifyMode,
       webEnrichments,
       pluginDocSnapshot,
+      llmSynthesisSection,
+      phase6SkipHeavy,
     });
 
     const runId = await recordRun({
@@ -551,6 +611,8 @@ async function handleCronProductSources(req, res) {
       webFetchEnabled: fetchWebEnabled,
       webFetchBatch: webEnrichments.length,
       webFetchWithText: webEnrichments.filter((w) => w.text && !w.error).length,
+      phase6SkipHeavy,
+      llmSynthesisChars: llmSynthesisSection.length,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

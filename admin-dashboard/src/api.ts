@@ -709,6 +709,8 @@ export interface NotionProductSourcesResponse {
   fetchWebRequested?: boolean;
   webEnriched?: number;
   includeDocSnapshotRequested?: boolean;
+  includeLlmSynthesisRequested?: boolean;
+  llmSynthesisChars?: number;
   docSnapshot?: {
     skipped?: boolean;
     skipReason?: string;
@@ -734,6 +736,8 @@ export async function scanNotionProductSources(body: {
   fetchWeb?: boolean;
   /** Snapshot rules/docs plugin (Fase 4). */
   includeDocSnapshot?: boolean;
+  /** Sintesi LLM nel report (Fase 5; richiede env `PRODUCT_SOURCES_LLM_SYNTHESIS=1` + key). */
+  includeLlmSynthesis?: boolean;
 }): Promise<NotionProductSourcesResponse> {
   const r = await fetch(`${BASE}/api/notion-product-sources`, {
     method: 'POST',

@@ -41,26 +41,80 @@ let nodeCountCache: { scope: string; pageId: string | undefined; count: number; 
 /**
  * Switch to the page containing the node, select it, and reveal it in the viewport.
  * Works regardless of which page is currently active (Audit, Code/Sync, apply-fix, undo-fix).
+ *
+ * With manifest `documentAccess: "dynamic-page"`, nodes on non-active pages are not loaded until
+ * we call `loadAllPagesAsync()` or `page.loadAsync()`. Without that, `getNodeByIdAsync` can return
+ * null. After changing `figma.currentPage`, selection must run only after the editor has applied
+ * the active page — otherwise the selection is dropped or stays on the previous page.
  */
 async function selectLayerAndReveal(layerId: string): Promise<boolean> {
-  const node = await figma.getNodeByIdAsync(layerId);
-  if (!node || !('id' in node)) return false;
-  const sceneNode = node as SceneNode;
-  let current: BaseNode | null = node;
-  while (current) {
-    if (current.type === 'PAGE') {
-      if (figma.currentPage !== current) {
-        figma.currentPage = current as PageNode;
+  async function resolveNode(): Promise<{ sceneNode: SceneNode; pageNode: PageNode } | null> {
+    const n = await figma.getNodeByIdAsync(layerId);
+    if (!n || !('id' in n)) return null;
+    const sceneNode = n as SceneNode;
+    let pageNode: PageNode | null = null;
+    for (let current: BaseNode | null = n; current; current = current.parent) {
+      if (current.type === 'PAGE') {
+        pageNode = current as PageNode;
+        break;
       }
-      break;
     }
-    current = current.parent;
+    if (!pageNode) return null;
+    return { sceneNode, pageNode };
   }
+
+  let resolved = await resolveNode();
+  if (!resolved) {
+    try {
+      await figma.loadAllPagesAsync();
+    } catch (_) {
+      /* continue; retry below */
+    }
+    resolved = await resolveNode();
+  }
+  if (!resolved) return false;
+
+  const { sceneNode, pageNode } = resolved;
+
+  // Switching away from the current page: load everything so the target page tree is available.
+  if (figma.currentPage.id !== pageNode.id) {
+    try {
+      await figma.loadAllPagesAsync();
+    } catch (_) {
+      /* still try page.loadAsync below */
+    }
+  }
+
+  try {
+    await pageNode.loadAsync();
+  } catch (_) {
+    /* proceed */
+  }
+
+  figma.currentPage = pageNode;
+
+  // Yield so Figma applies the new active page before we set selection (critical for dynamic-page).
+  await new Promise<void>((r) => setTimeout(r, 0));
+
+  try {
+    await pageNode.loadAsync();
+  } catch (_) {
+    /* proceed */
+  }
+
+  if (figma.currentPage.id !== pageNode.id) {
+    figma.currentPage = pageNode;
+    await new Promise<void>((r) => setTimeout(r, 0));
+  }
+
   figma.currentPage.selection = [sceneNode];
-  // Defer viewport update so the page switch is applied before scrolling
-  setTimeout(() => {
+
+  await new Promise<void>((r) => setTimeout(r, 0));
+  try {
     figma.viewport.scrollAndZoomIntoView([sceneNode]);
-  }, 0);
+  } catch (_) {
+    /* ignore */
+  }
   return true;
 }
 
@@ -196,14 +250,58 @@ function getBackgroundLuminanceFromNode(node: SceneNode): number {
   return 1; // white
 }
 
-async function getContrastFixPreview(layerId: string): Promise<{ source: 'variable' | 'style' | 'hardcoded'; label: string; message: string; variableId?: string; styleId?: string; r?: number; g?: number; b?: number } | null> {
+export type ContrastFixPreviewPayload =
+  | { source: 'external_library'; message: string }
+  | {
+      source: 'variable' | 'style' | 'hardcoded';
+      label: string;
+      message: string;
+      variableId?: string;
+      styleId?: string;
+      r?: number;
+      g?: number;
+      b?: number;
+      /** Text sits inside a local component instance; fix applies to this instance on canvas only */
+      instanceLocalMain?: boolean;
+    };
+
+async function getContrastInstanceContext(layerId: string): Promise<'none' | 'local_instance' | 'remote_instance'> {
+  const node = (await figma.getNodeByIdAsync(layerId)) as SceneNode | null;
+  if (!node) return 'none';
+  let p: BaseNode | null = node.parent;
+  while (p) {
+    if (p.type === 'INSTANCE') {
+      const main = await getMainComponentSafe(p as InstanceNode);
+      if (main?.remote) return 'remote_instance';
+      return 'local_instance';
+    }
+    p = p.parent;
+  }
+  return 'none';
+}
+
+async function getContrastFixPreview(layerId: string): Promise<ContrastFixPreviewPayload | null> {
   const node = await figma.getNodeByIdAsync(layerId) as SceneNode | null;
   if (!node || !('fills' in node)) return null;
+
+  const instCtx = await getContrastInstanceContext(layerId);
+  if (instCtx === 'remote_instance') {
+    return {
+      source: 'external_library',
+      message:
+        'This text lives inside a component from an external published library. Open that library file in Figma, run Comtra there, and fix contrast on the main component (or its text styles) — then publish so this file updates.',
+    };
+  }
+
   const fill = getFillFromNode(node);
   if (!fill) return null;
   const bgLum = getBackgroundLuminanceFromNode(node);
   const target = adjustForContrast(fill.r, fill.g, fill.b, bgLum, CONTRAST_AA_MIN);
   const targetHex = rgbToHex(target.r, target.g, target.b);
+  const instanceNote =
+    instCtx === 'local_instance'
+      ? ' This text is inside a local component instance — the fix applies to this instance on the canvas; edit the main component for the same change everywhere.'
+      : '';
 
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const defaultModeByColl: Record<string, string> = {};
@@ -236,7 +334,13 @@ async function getContrastFixPreview(layerId: string): Promise<{ source: 'variab
       }
     }
     if (best) {
-      return { source: 'variable', label: best.name, message: `We'll use your variable «${best.name}» (same tone) to meet WCAG AA contrast.`, variableId: best.id };
+      return {
+        source: 'variable',
+        label: best.name,
+        message: `We'll use your variable «${best.name}» (same tone) to meet WCAG AA contrast.${instanceNote}`,
+        variableId: best.id,
+        instanceLocalMain: instCtx === 'local_instance',
+      };
     }
   }
 
@@ -253,11 +357,25 @@ async function getContrastFixPreview(layerId: string): Promise<{ source: 'variab
     }
     if (withSameHue.length > 0) {
       const chosen = withSameHue[0];
-      return { source: 'style', label: chosen.name, message: `We'll apply the style «${chosen.name}» (same tone) to meet WCAG AA.`, styleId: chosen.id };
+      return {
+        source: 'style',
+        label: chosen.name,
+        message: `We'll apply the style «${chosen.name}» (same tone) to meet WCAG AA.${instanceNote}`,
+        styleId: chosen.id,
+        instanceLocalMain: instCtx === 'local_instance',
+      };
     }
   }
 
-  return { source: 'hardcoded', label: targetHex, message: `No variables or styles found. We'll set this color (same tone) to meet WCAG AA: ${targetHex}.`, r: target.r, g: target.g, b: target.b };
+  return {
+    source: 'hardcoded',
+    label: targetHex,
+    message: `No variables or styles found. We'll set this color (same tone) to meet WCAG AA: ${targetHex}.${instanceNote}`,
+    r: target.r,
+    g: target.g,
+    b: target.b,
+    instanceLocalMain: instCtx === 'local_instance',
+  };
 }
 
 async function applyContrastFix(
@@ -297,6 +415,271 @@ async function applyContrastFix(
   }
 
   return false;
+}
+
+// --- Touch target fix: variables (FLOAT spacing) → additive padding → resize. Prefer main component for INSTANCE (local library only).
+const SPACING_FLOAT_NAME_HINT = /space|spacing|padding|pad|gap|inset|margin|sizing|dimension|scale|stack|xs|sm|md|lg|xl|2xs|3xs|4xl|5xl/i;
+/** Prefer variables from collections that look like spacing/layout (not opacity, effects, etc.) */
+const SPACING_COLLECTION_HINT = /spacing|space|layout|grid|sizing|dimension|scale|stack|token|primitives/i;
+/** FLOAT names that are almost never spacing tokens (avoid radius/opacity/etc. false positives) */
+const FLOAT_SPACING_EXCLUDE = /radius|radii|corner|opacity|alpha|blur|spread|shadow|elevation|font|leading|line-?height|letter|tracking|stroke|border-?width|icon|avatar|breakpoint|z-?index|duration|delay|easing|rotation|angle|perspective/i;
+
+async function getMainComponentSafe(inst: InstanceNode): Promise<ComponentNode | null> {
+  const anyInst = inst as any;
+  if (typeof anyInst.getMainComponentAsync === 'function') {
+    try {
+      const c = await anyInst.getMainComponentAsync();
+      if (c) return c;
+    } catch (_) { /* fall through */ }
+  }
+  return inst.mainComponent ?? null;
+}
+
+async function resolveFloatVariableValue(variableId: string, depth = 0): Promise<number | null> {
+  if (depth > 8) return null;
+  const variable = await figma.variables.getVariableByIdAsync(variableId);
+  if (!variable || variable.resolvedType !== 'FLOAT') return null;
+  const coll = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+  const modeId = coll?.defaultModeId;
+  const raw =
+    modeId && variable.valuesByMode[modeId] !== undefined
+      ? variable.valuesByMode[modeId]
+      : Object.values(variable.valuesByMode)[0];
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+  if (raw && typeof raw === 'object' && (raw as { type?: string; id?: string }).type === 'VARIABLE_ALIAS') {
+    const id = (raw as { id?: string }).id;
+    if (id) return resolveFloatVariableValue(id, depth + 1);
+  }
+  return null;
+}
+
+type TouchEditResolution =
+  | { ok: true; measure: SceneNode; apply: SceneNode; appliesToMain: boolean }
+  | { ok: false; reason: 'external_library' | 'unsupported'; message: string };
+
+async function resolveTouchEditTargets(layerId: string): Promise<TouchEditResolution> {
+  const node = (await figma.getNodeByIdAsync(layerId)) as SceneNode | null;
+  if (!node) return { ok: false, reason: 'unsupported', message: 'Layer not found.' };
+
+  let measure: SceneNode = node;
+  let apply: SceneNode = node;
+  let appliesToMain = false;
+
+  if (node.type === 'INSTANCE') {
+    const main = await getMainComponentSafe(node);
+    if (!main) return { ok: false, reason: 'unsupported', message: 'Could not resolve component for this instance.' };
+    if (main.remote) {
+      return {
+        ok: false,
+        reason: 'external_library',
+        message:
+          'This component lives in an external published library. Open that library file in Figma, run Comtra there, and apply the touch-area fix on the main component — then publish so this file updates.',
+      };
+    }
+    apply = main;
+    appliesToMain = true;
+  }
+
+  return { ok: true, measure, apply, appliesToMain };
+}
+
+function isFrameLike(n: BaseNode): n is FrameNode | ComponentNode | InstanceNode {
+  return n.type === 'FRAME' || n.type === 'COMPONENT' || n.type === 'INSTANCE';
+}
+
+function getAutoLayoutHost(n: SceneNode): (FrameNode | ComponentNode | InstanceNode) | null {
+  if (!isFrameLike(n)) return null;
+  const f = n as FrameNode;
+  if (f.layoutMode && f.layoutMode !== 'NONE') return f;
+  return null;
+}
+
+export type TouchFixPreviewPayload = {
+  source: 'variable' | 'hardcoded' | 'resize' | 'external_library' | 'unsupported';
+  message: string;
+  label?: string;
+  applyLayerId: string;
+  /** Original issue layer (instance on canvas) */
+  sourceLayerId: string;
+  variableId?: string;
+  paddingDelta?: number;
+  newWidth?: number;
+  newHeight?: number;
+  appliesToMainComponent?: boolean;
+  targetMin: number;
+};
+
+async function getTouchFixPreview(layerId: string, targetMin: number): Promise<TouchFixPreviewPayload | null> {
+  const resolved = await resolveTouchEditTargets(layerId);
+  if (!resolved.ok) {
+    return {
+      source: resolved.reason,
+      message: resolved.message,
+      applyLayerId: layerId,
+      sourceLayerId: layerId,
+      targetMin,
+    };
+  }
+
+  const { measure, apply, appliesToMain } = resolved;
+  const mw = 'width' in measure && typeof (measure as LayoutMixin).width === 'number' ? (measure as LayoutMixin).width : 0;
+  const mh = 'height' in measure && typeof (measure as LayoutMixin).height === 'number' ? (measure as LayoutMixin).height : 0;
+  if (mw <= 0 || mh <= 0) {
+    return {
+      source: 'unsupported',
+      message: 'Could not read layer dimensions. Try selecting a frame or component with explicit size.',
+      applyLayerId: apply.id,
+      sourceLayerId: layerId,
+      targetMin,
+    };
+  }
+
+  const minSide = Math.min(mw, mh);
+  if (minSide >= targetMin) {
+    return {
+      source: 'unsupported',
+      message: 'This layer already meets the minimum touch target for this rule.',
+      applyLayerId: apply.id,
+      sourceLayerId: layerId,
+      targetMin,
+    };
+  }
+
+  const paddingDelta = Math.max(1, Math.ceil((targetMin - minSide) / 2));
+  const layoutHost = getAutoLayoutHost(apply);
+
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const floatCandidates: { id: string; name: string; value: number; preferred: boolean }[] = [];
+  for (const coll of collections) {
+    const collPreferred = SPACING_COLLECTION_HINT.test(coll.name);
+    for (const vid of coll.variableIds) {
+      const variable = await figma.variables.getVariableByIdAsync(vid);
+      if (!variable || variable.resolvedType !== 'FLOAT') continue;
+      if (FLOAT_SPACING_EXCLUDE.test(variable.name)) continue;
+      const nameHint = SPACING_FLOAT_NAME_HINT.test(variable.name);
+      if (!collPreferred && !nameHint) continue;
+      const val = await resolveFloatVariableValue(variable.id);
+      if (val == null || val <= 0) continue;
+      floatCandidates.push({
+        id: variable.id,
+        name: variable.name,
+        value: val,
+        preferred: collPreferred,
+      });
+    }
+  }
+  floatCandidates.sort((a, b) => {
+    if (a.preferred !== b.preferred) return a.preferred ? -1 : 1;
+    return a.value - b.value;
+  });
+  const spacingVar = floatCandidates.find((c) => c.value >= paddingDelta);
+
+  const dsNote = appliesToMain
+    ? ' We will update the main component in this file so instances stay in sync.'
+    : '';
+
+  if (layoutHost) {
+    if (spacingVar) {
+      return {
+        source: 'variable',
+        message: `We'll expand the hit area using your spacing token «${spacingVar.name}» (${spacingVar.value}px) on all sides of the auto-layout frame.${dsNote}`,
+        label: spacingVar.name,
+        applyLayerId: layoutHost.id,
+        sourceLayerId: layerId,
+        variableId: spacingVar.id,
+        paddingDelta,
+        appliesToMainComponent: appliesToMain,
+        targetMin,
+      };
+    }
+    return {
+      source: 'hardcoded',
+      message: `We'll add ${paddingDelta}px padding on each side of the auto-layout frame to reach at least ${targetMin}px on the shorter edge.${dsNote}`,
+      label: `${paddingDelta}px`,
+      applyLayerId: layoutHost.id,
+      sourceLayerId: layerId,
+      paddingDelta,
+      appliesToMainComponent: appliesToMain,
+      targetMin,
+    };
+  }
+
+  if ('resize' in apply && typeof (apply as LayoutMixin).width === 'number' && typeof (apply as LayoutMixin).height === 'number') {
+    const nw = Math.max(mw, targetMin);
+    const nh = Math.max(mh, targetMin);
+    return {
+      source: 'resize',
+      message: `No auto-layout on this layer. We'll resize it from ${Math.round(mw)}×${Math.round(mh)} to ${Math.round(nw)}×${Math.round(nh)} px to meet the minimum touch target.${dsNote}`,
+      applyLayerId: apply.id,
+      sourceLayerId: layerId,
+      newWidth: nw,
+      newHeight: nh,
+      appliesToMainComponent: appliesToMain,
+      targetMin,
+    };
+  }
+
+  return {
+    source: 'unsupported',
+    message: 'Enable auto layout on this component or use a frame we can resize; we could not apply a safe automatic touch fix.',
+    applyLayerId: apply.id,
+    sourceLayerId: layerId,
+    targetMin,
+  };
+}
+
+async function applyTouchFix(
+  preview: {
+    source: 'variable' | 'hardcoded' | 'resize';
+    applyLayerId: string;
+    variableId?: string;
+    paddingDelta?: number;
+    newWidth?: number;
+    newHeight?: number;
+  }
+): Promise<boolean> {
+  const node = (await figma.getNodeByIdAsync(preview.applyLayerId)) as SceneNode | null;
+  if (!node) return false;
+
+  if (preview.source === 'resize' && preview.newWidth != null && preview.newHeight != null && 'resize' in node) {
+    try {
+      (node as LayoutMixin).resize(preview.newWidth, preview.newHeight);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  const host = getAutoLayoutHost(node);
+  if (!host || preview.paddingDelta == null) return false;
+
+  const f = host as FrameNode;
+  const setVar = (f as any).setBoundVariable as undefined | ((field: string, alias: VariableAlias) => void);
+
+  if (preview.source === 'variable' && preview.variableId) {
+    const variable = await figma.variables.getVariableByIdAsync(preview.variableId);
+    if (variable && typeof setVar === 'function') {
+      try {
+        const alias = figma.variables.createVariableAlias(variable);
+        for (const field of ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'] as const) {
+          setVar.call(f, field, alias);
+        }
+        return true;
+      } catch (_) {
+        /* fall through to hardcoded */
+      }
+    }
+  }
+
+  try {
+    f.paddingTop = (f.paddingTop || 0) + preview.paddingDelta;
+    f.paddingRight = (f.paddingRight || 0) + preview.paddingDelta;
+    f.paddingBottom = (f.paddingBottom || 0) + preview.paddingDelta;
+    f.paddingLeft = (f.paddingLeft || 0) + preview.paddingDelta;
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 /** Keywords in frame name that suggest label/section/doc rather than a prototype screen (case-insensitive). */
@@ -1450,7 +1833,14 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'select-layer') {
     const layerId = msg.layerId;
-    if (layerId) await selectLayerAndReveal(layerId);
+    if (layerId) {
+      const ok = await selectLayerAndReveal(layerId);
+      if (!ok) {
+        figma.notify('Could not open that layer — it may be deleted or in an unloaded page.', {
+          error: true,
+        });
+      }
+    }
   }
 
   if (msg.type === 'switch-to-page') {
@@ -1470,6 +1860,21 @@ figma.ui.onmessage = async (raw: any) => {
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         figma.ui.postMessage({ type: 'contrast-fix-preview', layerId, preview: null, error: errMsg });
+      }
+    }
+  }
+
+  if (msg.type === 'get-touch-fix-preview') {
+    const layerId = msg.layerId as string | undefined;
+    const rawMin = Number((msg as { targetMin?: number }).targetMin);
+    const targetMin = Number.isFinite(rawMin) ? Math.max(24, Math.min(120, Math.floor(rawMin))) : 24;
+    if (layerId) {
+      try {
+        const preview = await getTouchFixPreview(layerId, targetMin);
+        figma.ui.postMessage({ type: 'touch-fix-preview', layerId, preview });
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        figma.ui.postMessage({ type: 'touch-fix-preview', layerId, preview: null, error: errMsg });
       }
     }
   }
@@ -1494,6 +1899,27 @@ figma.ui.onmessage = async (raw: any) => {
         await selectLayerAndReveal(layerId);
       } else {
         figma.notify("Could not apply contrast fix", { error: true });
+      }
+      return;
+    }
+
+    if (categoryId === 'touch' && fixPreview && (fixPreview.source === 'variable' || fixPreview.source === 'hardcoded' || fixPreview.source === 'resize')) {
+      const touchPayload = fixPreview as {
+        source: 'variable' | 'hardcoded' | 'resize';
+        applyLayerId: string;
+        variableId?: string;
+        paddingDelta?: number;
+        newWidth?: number;
+        newHeight?: number;
+      };
+      const applyId = touchPayload.applyLayerId || layerId;
+      const ok = await applyTouchFix({ ...touchPayload, applyLayerId: applyId });
+      if (ok) {
+        const node = await figma.getNodeByIdAsync(applyId);
+        figma.notify('Touch target fix applied — ' + (node ? node.name : 'layer'));
+        await selectLayerAndReveal(applyId);
+      } else {
+        figma.notify('Could not apply touch target fix', { error: true });
       }
       return;
     }

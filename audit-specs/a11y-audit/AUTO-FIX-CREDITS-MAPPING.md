@@ -2,6 +2,8 @@
 
 Mappatura unica per il costo in crediti degli auto-fix sui layer (Audit A11Y e DS). Il codice che applica i costi e consuma i crediti è in `views/Audit/autoFixConfig.ts`.
 
+Per **tutte** le audit tab, categorie, `rule_id` e stato reale degli auto-fix (implemented / stub / roadmap) vedi **`audit-specs/AUTO-FIX-ISSUE-MAP.md`**.
+
 ## Action type (API credits)
 
 | Action                 | action_type         | Quando viene usato                          |
@@ -38,8 +40,13 @@ Se l’issue non ha `rule_id` in override, si usa il costo per `categoryId`:
 |-----------|-------------------------------------|---------|
 | CTR-001   | Contrasto normale < 4.5:1           | 2       |
 | CTR-002   | Contrasto large < 3:1               | 2       |
+| CTR-003   | Contrasto AAA normale (advisory)    | 2       |
+| CTR-004   | Contrasto AAA large (advisory)      | 2       |
+| CTR-009   | Focus: variante focus assente (euristica) | 2  |
 | TGT-001   | Touch < 24×24 senza spaziatura       | 2       |
 | TGT-003   | Touch < 44×44 (AAA advisory)         | 2       |
+| CVD-001   | Stati solo per colore (component set) | 2     |
+| CLR-002   | OKLCH / RGB advisory (file)         | 2       |
 
 ## Eccezioni
 

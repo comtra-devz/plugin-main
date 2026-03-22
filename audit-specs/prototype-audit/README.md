@@ -35,6 +35,7 @@ L’audit è **statico**: analizza il grafo delle connessioni e le impostazioni 
 | **AGENT-DIRECTIVES.md** | (Opzionale) Tono e linee guida per eventuali tips AI. |
 | **SCOPE-AND-UI.md** | Scope per flussi: multi-select sui flow starting point; no “All Pages”. |
 | **COST-PROSPECT.md** | Riferimento a docs/COST-ESTIMATE-DS-AUDIT.md (tabella unificata costi; Prototype = 1–4 cr per numero flussi). |
+| **PROTOTYPE-AUTO-FIX-ROADMAP.md** | Piano auto-fix in-plugin: Fase A (messaggio dedicato, crediti), B–C (P-04, P-17, P-10/11 con motion DS, P-08, P-12, P-13), Before go live (D–E). |
 
 ---
 

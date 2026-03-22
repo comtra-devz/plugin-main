@@ -48,11 +48,16 @@ export const CREDITS_BY_CATEGORY: Record<string, number> = {
  * If not present, CREDITS_BY_CATEGORY[categoryId] or DEFAULT_CREDITS_PER_FIX is used.
  */
 export const CREDITS_BY_RULE: Record<string, number> = {
-  // A11Y ruleset examples (same as default for now; can differentiate later)
+  // A11Y (engine: auth-deploy/oauth-server/a11y-audit-engine.mjs) — see audit-specs/AUTO-FIX-ISSUE-MAP.md
   'CTR-001': 2,
   'CTR-002': 2,
+  'CTR-003': 2,
+  'CTR-004': 2,
+  'CTR-009': 2, // focus variant heuristic (rule id in engine)
   'TGT-001': 2,
   'TGT-003': 2,
+  'CVD-001': 2,
+  'CLR-002': 2,
   // Component deviation (multiple layers) could cost more
   // adoption + layerIds: already handled as single fix per issue
 };

@@ -142,6 +142,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
   /** When user clicks Auto-Fix on a contrast issue we request a preview; this holds pending data until we get the response. */
   const pendingContrastFixRef = useRef<{ issueId: string; layerId: string; cost: number } | null>(null);
+  const pendingTouchFixRef = useRef<{ issueId: string; layerId: string; cost: number; targetMin: number } | null>(null);
 
   // Pending confirm scan: after user confirms we request file context, then in message handler we consume + fetch file
   const confirmPayloadRef = useRef<{ cost: number; score: number; pendingScanType: 'MAIN' | 'DEEP' | 'A11Y' | 'UX' } | null>(null);
@@ -500,18 +501,45 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       if (msg.type === 'contrast-fix-preview') {
         const pending = pendingContrastFixRef.current;
         if (pending && pending.layerId === msg.layerId) {
-          const preview = msg.preview as { source: string; message: string; variableId?: string; styleId?: string; r?: number; g?: number; b?: number } | null;
+          const preview = msg.preview as {
+            source: string;
+            message: string;
+            variableId?: string;
+            styleId?: string;
+            r?: number;
+            g?: number;
+            b?: number;
+          } | null;
           const err = msg.error as string | undefined;
           if (err || !preview) {
             setAuditFixError(err || 'Could not get fix suggestion.');
             pendingContrastFixRef.current = null;
             return;
           }
+          pendingContrastFixRef.current = null;
+          if (preview.source === 'external_library') {
+            setAuditFixError(null);
+            setConfirmConfig({
+              isOpen: true,
+              title: 'External library',
+              message: preview.message,
+              confirmLabel: 'OK',
+              onConfirm: () => setConfirmConfig(null),
+              onCancel: () => setConfirmConfig(null),
+            });
+            return;
+          }
+          if (preview.source !== 'variable' && preview.source !== 'style' && preview.source !== 'hardcoded') {
+            setAuditFixError('Unexpected contrast preview state.');
+            return;
+          }
           const cost = pending.cost;
+          const dsBanner =
+            '\n\nA11Y priority: we fix at the design-system source (color variables / text styles when possible) so every screen stays consistent.';
           setConfirmConfig({
             isOpen: true,
             title: 'Confirm Auto-Fix',
-            message: `${preview.message}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            message: `${preview.message}${dsBanner}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
             confirmLabel: `Apply Fix (-${cost} Credits)`,
             onConfirm: async () => {
               const result = await consumeCredits({ action_type: ACTION_AUTO_FIX, credits_consumed: cost });
@@ -522,7 +550,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               applySingleFix(pending.issueId);
               setAuditFixError(null);
               setConfirmConfig(null);
-              pendingContrastFixRef.current = null;
               window.parent.postMessage({
                 pluginMessage: {
                   type: 'apply-fix',
@@ -533,7 +560,89 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               }, '*');
             },
           });
-          pendingContrastFixRef.current = null;
+        }
+      }
+      if (msg.type === 'touch-fix-preview') {
+        const pending = pendingTouchFixRef.current;
+        if (pending && pending.layerId === msg.layerId) {
+          const cost = pending.cost;
+          const issueId = pending.issueId;
+          pendingTouchFixRef.current = null;
+          const preview = msg.preview as {
+            source: string;
+            message: string;
+            applyLayerId: string;
+            variableId?: string;
+            paddingDelta?: number;
+            newWidth?: number;
+            newHeight?: number;
+            appliesToMainComponent?: boolean;
+          } | null;
+          const err = msg.error as string | undefined;
+          if (err || !preview) {
+            setAuditFixError(err || 'Could not compute touch target fix.');
+            return;
+          }
+          if (preview.source === 'external_library' || preview.source === 'unsupported') {
+            setAuditFixError(null);
+            setConfirmConfig({
+              isOpen: true,
+              title: preview.source === 'external_library' ? 'External library' : 'Touch fix',
+              message: preview.message,
+              confirmLabel: 'OK',
+              onConfirm: () => setConfirmConfig(null),
+              onCancel: () => setConfirmConfig(null),
+            });
+            return;
+          }
+          if (preview.source !== 'variable' && preview.source !== 'hardcoded' && preview.source !== 'resize') {
+            setAuditFixError('Unexpected preview state.');
+            return;
+          }
+          const dsBanner =
+            '\n\nA11Y priority: we fix at the design-system source (main component + spacing tokens when possible) so every screen stays consistent.';
+          setConfirmConfig({
+            isOpen: true,
+            title: 'Confirm Auto-Fix',
+            message: `${preview.message}${dsBanner}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            confirmLabel: `Apply Fix (-${cost} Credits)`,
+            onConfirm: async () => {
+              const result = await consumeCredits({
+                action_type: ACTION_AUTO_FIX,
+                credits_consumed: cost,
+              });
+              if (result.error) {
+                setAuditFixError(
+                  result.error === 'Insufficient credits'
+                    ? 'Insufficient credits. Upgrade or try again later.'
+                    : result.error
+                );
+                return;
+              }
+              applySingleFix(issueId);
+              setAuditFixError(null);
+              setConfirmConfig(null);
+              window.parent.postMessage(
+                {
+                  pluginMessage: {
+                    type: 'apply-fix',
+                    layerId: preview.applyLayerId,
+                    categoryId: 'touch',
+                    fixPreview: {
+                      source: preview.source,
+                      applyLayerId: preview.applyLayerId,
+                      variableId: preview.variableId,
+                      paddingDelta: preview.paddingDelta,
+                      newWidth: preview.newWidth,
+                      newHeight: preview.newHeight,
+                    },
+                  },
+                },
+                '*'
+              );
+            },
+            onCancel: () => setConfirmConfig(null),
+          });
         }
       }
       if (msg.type === 'file-context-chunked-start') {
@@ -825,6 +934,20 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     if (issue?.categoryId === 'contrast' && layerId) {
       pendingContrastFixRef.current = { issueId: id, layerId, cost };
       window.parent.postMessage({ pluginMessage: { type: 'get-contrast-fix-preview', layerId } }, '*');
+      return;
+    }
+
+    if (issue?.categoryId === 'touch' && layerId && activeTab === 'A11Y') {
+      if (issue.passes === true) {
+        setAuditFixError('This target already passes via spacing; no auto-fix needed.');
+        return;
+      }
+      const targetMin = issue.rule_id === 'TGT-003' ? 44 : 24;
+      pendingTouchFixRef.current = { issueId: id, layerId, cost, targetMin };
+      window.parent.postMessage(
+        { pluginMessage: { type: 'get-touch-fix-preview', layerId, targetMin } },
+        '*'
+      );
       return;
     }
 

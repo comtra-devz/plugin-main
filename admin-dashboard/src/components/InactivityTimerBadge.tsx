@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-const STORAGE_KEY = 'comtra:last-activity-at';
+/** Chiave separata dal plugin Figma (non condividere stato tra app). */
+const STORAGE_KEY = 'comtra:admin:last-activity-at';
 
 function readLastActivityAt(): number {
   try {
@@ -28,6 +29,7 @@ function formatIdle(ms: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Timer di inattività fisso in basso a destra (solo dashboard admin). */
 export function InactivityTimerBadge() {
   const [lastActivityAt, setLastActivityAt] = useState<number>(() => readLastActivityAt());
   const [now, setNow] = useState<number>(() => Date.now());
@@ -42,7 +44,7 @@ export function InactivityTimerBadge() {
       try {
         window.localStorage.setItem(STORAGE_KEY, String(timestamp));
       } catch {
-        // Ignore storage failures in restricted environments
+        // ignore
       }
     };
 
@@ -78,14 +80,15 @@ export function InactivityTimerBadge() {
   return (
     <div
       aria-live="polite"
+      title="Tempo dall’ultima interazione (mouse, tastiera, scroll, focus). Persiste al refresh."
       style={{
         position: 'fixed',
         right: '12px',
         bottom: '12px',
         zIndex: 9999,
-        border: '2px solid #000',
-        background: '#fff',
-        color: '#000',
+        border: '2px solid var(--black, #000)',
+        background: 'var(--white, #fff)',
+        color: 'var(--black, #000)',
         fontFamily: 'monospace',
         fontSize: '11px',
         padding: '6px 8px',
@@ -93,7 +96,7 @@ export function InactivityTimerBadge() {
         pointerEvents: 'none',
       }}
     >
-      <span style={{ opacity: 0.7 }}>Idle</span> {idleLabel}
+      <span style={{ opacity: 0.75 }}>Inattività</span> {idleLabel}
     </div>
   );
 }

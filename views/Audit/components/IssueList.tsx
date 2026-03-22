@@ -277,6 +277,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 </button>
                             )}
                             
+                            {!(i.categoryId === 'touch' && i.passes === true) && (
                             <Button
                                 variant="primary"
                                 layout="row"
@@ -286,6 +287,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 {isWireframeIssue ? 'Create Wireframe' : 'Auto-Fix Layer'}
                                 <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
                             </Button>
+                            )}
                             </div>
                             )}
                         </div>

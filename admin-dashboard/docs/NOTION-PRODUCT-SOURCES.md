@@ -6,7 +6,7 @@ Vedi **[PRODUCT-SOURCES-ROADMAP.md](./PRODUCT-SOURCES-ROADMAP.md)** (Fase 0 → 
 
 ## Cosa fa il sistema
 
-1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da Notion e genera un report Markdown (`POST /api/notion-product-sources`). Opzionale: **LinkedIn Apify**, **Fetch web (Fase 2)**, **Snapshot doc (Fase 4)** — stessi limiti env del cron dove applicabile; richieste lunghe.
+1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da Notion e genera un report Markdown (`POST /api/notion-product-sources`). Opzionale: **LinkedIn Apify**, **Fetch web (Fase 2)**, **Snapshot doc (Fase 4)**, **Sintesi LLM (Fase 5)** — stessi limiti env del cron dove applicabile; richieste lunghe.
 2. **Cron giornaliero** — `GET /api/cron-product-sources` (Vercel, orario in `vercel.json`, es. **09:00 UTC**): legge **automaticamente** Notion dagli env (`NOTION_PRODUCT_SOURCES_PAGE_ID` / `DATABASE_ID`), estrae **tutti** i link, arricchisce i post **LinkedIn** con **Apify** (policy sotto), salva il report in Postgres (**storico dashboard**) e opzionalmente invia riepilogo + report su **Discord**.
 3. **Gate temporale** (default **3 giorni**): dopo una run **OK** (non `skipped`), le run successive entro **N giorni** sono **saltate** (`skipped` nel DB). Imposta **`PRODUCT_SOURCES_CRON_GATE_DAYS=4`** su Vercel per allinearti a “ogni 4 giorni”. Il cron può restare giornaliero: decide il gate se eseguire il lavoro pesante.
 
@@ -40,7 +40,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 | Dedup URL **tra run** (“già esaminati”) | **Fatto** (tabella `product_sources_seen_urls` + Apify solo su LinkedIn **nuovi**). |
 | LinkedIn post + outbound, **no commenti** | **Allineato** con actor attuale + mapping dataset. |
 | Fetch di ogni link non-LinkedIn | **Parziale** (opt-in: cron `PRODUCT_SOURCES_FETCH_WEB` + manuale `fetchWeb`; strategia tipo URL Fase 2 in `product-source-fetch-strategy.mjs`). |
-| Documento tipo “migliora ruleset” + cosa toccherà + guardrail | **Parziale** (Fase 4: snapshot docs/rules nel report; euristica “area ruleset”; LLM in Fase 5). |
+| Documento tipo “migliora ruleset” + cosa toccherà + guardrail | **Parziale** (Fase 4 snapshot + Fase 5 LLM opt-in + euristica “area ruleset”). |
 | Discord come **canale del documento** | **Migliorato** (riepilogo + report spezzato in più messaggi/embed). |
 
 *Aggiorna questa tabella quando implementi una voce.*
@@ -152,6 +152,50 @@ Obiettivo: ancorare le fonti Notion al **contesto ufficiale** del plugin (rules,
 | `PRODUCT_SOURCES_PLUGIN_DOC_SNAPSHOT_DISABLE` | `1` = nessuno snapshot |
 
 **Manuale:** checkbox *Snapshot documentazione plugin* oppure `"includeDocSnapshot": true`; env `PRODUCT_SOURCES_MANUAL_DOC_SNAPSHOT_DEFAULT=1` per default on.
+
+### 3e) Sintesi LLM (Fase 5)
+
+Modulo `lib/product-sources-llm.mjs`. **Opt-in costi:** `PRODUCT_SOURCES_LLM_SYNTHESIS=1` (altrimenti nessuna chiamata API).
+
+| Variabile | Ruolo |
+|-----------|--------|
+| `PRODUCT_SOURCES_LLM_PROVIDER` | `moonshot` (default, Kimi), `openai`, `custom`, **`gemini`** (Google AI Studio, free tier) |
+| `PRODUCT_SOURCES_LLM_API_KEY` | Secret API (Moonshot/OpenAI/custom); Moonshot accetta anche `KIMI_API_KEY` |
+| `GEMINI_API_KEY` / `GOOGLE_AI_API_KEY` | Chiave da [Google AI Studio](https://aistudio.google.com/apikey) se `PROVIDER=gemini` |
+| `PRODUCT_SOURCES_LLM_MODEL` | Modello (Gemini default: `gemini-2.0-flash`; Moonshot: `kimi-k2-0905-preview` / `KIMI_MODEL`; OpenAI: `gpt-4o-mini`) |
+| `PRODUCT_SOURCES_LLM_BASE_URL` | Solo **custom** (es. `https://api.example.com/v1`); opzionale override per openai |
+| `PRODUCT_SOURCES_LLM_MAX_BUNDLE_CHARS` | Max caratteri inviati nel prompt utente (default ~100k) |
+| `PRODUCT_SOURCES_LLM_MAX_TOKENS` / `PRODUCT_SOURCES_LLM_TEMPERATURE` | Parametri generazione |
+| `PRODUCT_SOURCES_LLM_EXECUTION` | `server` (default) = chiamata API dal cron/Vercel; **`mcp`** o **`client`** = nessuna chiamata sul deploy: il report include un fence `product-sources-llm-bundle` da passare al MCP locale (stesso effetto di `PRODUCT_SOURCES_LLM_MCP=1`) |
+
+Il cron e la scansione manuale appendono al report la sezione **«Sintesi proposte (LLM, Fase 5)»** quando c’è output (o messaggio di errore/config in Markdown se la sintesi è richiesta ma manca la key).
+
+**Gemini — quota free tier:** se Google risponde con rate limit / `RESOURCE_EXHAUSTED`, il report include un messaggio esplicito e **nessun intervento**: alla **prossima run** la sintesi viene **riprovata** automaticamente (stessi env), senza flag o DB.
+
+**Manuale:** checkbox *Sintesi LLM* oppure `"includeLlmSynthesis": true`.
+
+#### MCP + Kimi (zero inferenza su Vercel)
+
+- Imposta `PRODUCT_SOURCES_LLM_SYNTHESIS=1` e **`PRODUCT_SOURCES_LLM_EXECUTION=mcp`**: su Vercel **non** serve `KIMI_API_KEY`; il Markdown conterrà istruzioni + JSON bundle.
+- In **Cursor**, aggiungi il server MCP in `mcp/product-sources-synthesis/` (vedi **README** in quella cartella): lì configuri `KIMI_API_KEY` e invochi il tool **`kimi_synthesize_product_sources`** quando vuoi la sintesi (token Moonshot solo in quel momento, dalla tua macchina).
+
+### 3f) Run leggera senza URL nuovi (Fase 6)
+
+Modulo `lib/product-sources-phase6.mjs` (solo **cron** con dedup). Se **nessun URL nuovo**, **nessun** batch LinkedIn Apify e **nessun** URL web da fetchare, la run **salta** Apify e fetch web. Lo **snapshot Fase 4** non viene costruito (risparmio I/O) salvo `PRODUCT_SOURCES_SNAPSHOT_ON_NO_NEW=1`.
+
+| Variabile | Ruolo |
+|-----------|--------|
+| `PRODUCT_SOURCES_SKIP_HEAVY_IF_NO_NEW_URLS` | Default: attivo; imposta `0` o `false` per eseguire sempre fetch/Apify anche senza novità |
+| `PRODUCT_SOURCES_SNAPSHOT_ON_NO_NEW` | `1` = includi comunque lo snapshot anche in run “solo già visti” |
+
+Il report include una sezione **«Run leggera (Fase 6)»** quando applicabile.
+
+### 3g) Repo Git / archivio docs (Fase 7)
+
+Workflow **manuale** dal report al plugin repo (nessuna automazione server):
+
+- Guida unica nel monorepo: **`docs/PRODUCT-SOURCES-GIT-WORKFLOW.md`** (branch, naming `docs/product-sources/archive/YYYY-MM-DD-cron-{id}.md`, checklist PR, segreti da non committare).
+- Dopo la PR su GitHub: **Storico cron & documenti** → **Imposta URL PR** (`set_pr_url`).
 
 ### 4) Cron Vercel + secret
 

@@ -68,29 +68,37 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 
 ---
 
-## Fase 5 — Sintesi intelligente (LLM)
+## Fase 5 — Sintesi intelligente (LLM) — **implementata (opt-in)**
 
-- Input: **fonti nuove** (testo fetch + LinkedIn Apify) + **snapshot doc**.
-- Output: un **unico documento MD** strutturato: idee di miglioria **tecniche e strategiche**, con **riferimento alle fonti**, linguaggio semplice.
+- Modulo `lib/product-sources-llm.mjs`; abilitazione: **`PRODUCT_SOURCES_LLM_SYNTHESIS=1`** + key/model (`PRODUCT_SOURCES_LLM_PROVIDER` moonshot | openai | custom | **gemini**). **Gemini** (Google AI Studio): free tier; se quota/rate limit → messaggio nel report e retry automatico alla run successiva.
+- Input: URL **nuovi** Notion, estratti **LinkedIn/web**, **snapshot doc** (se presente e non skipped).
+- Output: sezione Markdown **«Sintesi proposte (LLM, Fase 5)»** nel report (struttura fissa: priorità, idee tecniche/strategiche, rischi, fonti).
 - **Guardrail** in prompt: niente proposte “peggiorative”, niente breaking non richiesti, incertezza esplicita.
+- **Manuale:** checkbox / `includeLlmSynthesis: true` su `POST /api/notion-product-sources`.
+- **MCP (opzionale):** `PRODUCT_SOURCES_LLM_EXECUTION=mcp` — nessuna chiamata LLM su Vercel; bundle nel report + server `mcp/product-sources-synthesis` (Kimi dalla macchina di sviluppo).
 
 *Obiettivo:* il report diventa un **backlog da revisionare**, non solo link e copia-incolla.
 
 ---
 
-## Fase 6 — “Niente di nuovo, niente lavoro pesante”
+## Fase 6 — “Niente di nuovo, niente lavoro pesante” — **implementata (cron)**
 
-- Se **nessun URL nuovo** (e opzionalmente **nessun cambiamento** rilevato in Notion), **saltare** fetch costosi e **saltare** LLM.
-- Eventuale riga in storico: “controllo effettuato, nulla di nuovo”.
+- Modulo `lib/product-sources-phase6.mjs`: se **nessun URL nuovo** nel dedup **e** nessun lavoro LinkedIn (batch Apify) **e** nessun URL web da fetchare → **salta** Apify, fetch web e (salvo env) **non** costruisce lo snapshot doc.
+- **`PRODUCT_SOURCES_SKIP_HEAVY_IF_NO_NEW_URLS=0`** disattiva lo skip.
+- **`PRODUCT_SOURCES_SNAPSHOT_ON_NO_NEW=1`** forza lo snapshot anche senza URL nuovi.
+- La **LLM** non viene chiamata se non c’è materiale utile (`PRODUCT_SOURCES_LLM_SYNTHESIS` resta disattivo di default).
 
 *Obiettivo:* rispetto del ciclo (es. ogni 4 giorni) **senza** costi inutili.
 
 ---
 
-## Fase 7 — Integrazione Git / docs (come vuoi tu)
+## Fase 7 — Integrazione Git / docs — **implementata (baseline manuale)**
 
-- **Manuale (default):** tu copi il MD in `docs/` e apri PR da Cursor.
-- **Opzionale dopo:** branch + commit + PR automatica (policy di review e segreti da definire).
+- **Workflow documentato** nel repo plugin: **`docs/PRODUCT-SOURCES-GIT-WORKFLOW.md`** (path archivio, naming file, checklist PR, link a storico dashboard).
+- **Cartella versionabile:** **`docs/product-sources/archive/`** (`.gitkeep` + README) per snapshot opzionali dei report.
+- **Dashboard:** già presenti `request_pr_stub`, **`set_pr_url`**, `reset_git` su `product_sources_cron_runs` (migration `005`).
+- **UI:** scheda *Migliorie prodotto* — modale “Applica modifiche” con checklist Fase 7 e riferimento al doc.
+- **Opzionale dopo:** branch + commit + PR **automatica** (non in scope: policy, secret, GitHub App).
 
 ---
 
@@ -102,3 +110,6 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 - **Fase 2** — strategia tipo URL + allow/block list + GitHub raw + stub social/video + PDF rilevato (senza parser binario).
 - **Fase 3** — coda Postgres + chunk cron + bypass gate se pending + UI/API stato.
 - **Fase 4** — snapshot docs/rules nel report (URL + filesystem configurabile).
+- **Fase 5** — sintesi LLM opt-in nel report (cron + API/UI manuale).
+- **Fase 6** — skip lavoro pesante cron quando non ci sono URL nuovi / batch LinkedIn / web da processare.
+- **Fase 7** — doc Git/workflow + cartella `docs/product-sources/archive/` + checklist in UI; PR manuali, tracciamento URL in storico.

@@ -20,6 +20,7 @@ import ProductImprovement from './pages/ProductImprovement';
 import BrandAwareness from './pages/BrandAwareness';
 import TouchpointFunnel from './pages/TouchpointFunnel';
 import Notifications from './pages/Notifications';
+import { InactivityTimerBadge } from './components/InactivityTimerBadge';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -97,6 +98,7 @@ export default function App() {
         </Routes>
       </main>
       </div>
+      <InactivityTimerBadge />
     </div>
   );
 }

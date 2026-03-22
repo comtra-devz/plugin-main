@@ -1,0 +1,19 @@
+{
+  "name": "product-sources-synthesis",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["mcp", "comtra", "kimi"],
+  "author": "",
+  "license": "ISC",
+  "description": "MCP stdio server: sintesi fonti prodotto via Kimi (Moonshot)",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^3.25.76"
+  }
+}

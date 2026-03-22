@@ -26,11 +26,29 @@ function formatWhen(iso: string) {
   }
 }
 
-function downloadMd(id: number, markdown: string) {
+/** Allineato a Fase 7: `docs/PRODUCT-SOURCES-GIT-WORKFLOW.md` — `YYYY-MM-DD-cron-{id}.md` */
+function productSourcesArchiveFilename(id: number, ranAt?: string | null) {
+  if (ranAt) {
+    try {
+      const d = new Date(ranAt);
+      if (!Number.isNaN(d.getTime())) {
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${day}-cron-${id}.md`;
+      }
+    } catch {
+      /* fallback */
+    }
+  }
+  return `product-sources-run-${id}.md`;
+}
+
+function downloadMd(id: number, markdown: string, ranAt?: string | null) {
   const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `product-sources-run-${id}.md`;
+  a.download = productSourcesArchiveFilename(id, ranAt);
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -46,7 +64,7 @@ export default function ProductSourcesHistory() {
   const [skippedF, setSkippedF] = useState<'all' | 'yes' | 'no'>('all');
   const [search, setSearch] = useState('');
 
-  const [readModal, setReadModal] = useState<{ id: number; markdown: string } | null>(null);
+  const [readModal, setReadModal] = useState<{ id: number; markdown: string; ran_at?: string | null } | null>(null);
   const [readLoading, setReadLoading] = useState(false);
 
   const [queueBatches, setQueueBatches] = useState<ProductSourcesQueueBatchRow[]>([]);
@@ -109,7 +127,11 @@ export default function ProductSourcesHistory() {
     try {
       const r = await fetchProductSourcesRunById(id);
       const md = r.run.report_markdown || '';
-      setReadModal({ id, markdown: md || '_(Nessun Markdown per questa run.)_' });
+      setReadModal({
+        id,
+        markdown: md || '_(Nessun Markdown per questa run.)_',
+        ran_at: r.run.ran_at,
+      });
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
     } finally {
@@ -125,7 +147,7 @@ export default function ProductSourcesHistory() {
         alert('Nessun Markdown da scaricare per questa run.');
         return;
       }
-      downloadMd(id, md);
+      downloadMd(id, md, r.run.ran_at);
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
     }
@@ -176,7 +198,8 @@ export default function ProductSourcesHistory() {
           Ogni riga è una run salvata in <code>product_sources_cron_runs</code>: Markdown completo in DB, riepilogo qui.
           <strong>Git / PR:</strong> sempre <strong>manuali</strong> (sicurezza): apri tu la PR sul repo, poi usa{' '}
           <strong>Segna PR</strong> per incollare l’URL e tenere traccia in dashboard. Il pulsante «In lavorazione» serve
-          solo a segnare che stai lavorando alla PR (nessun accesso automatico al repo).
+          solo a segnare che stai lavorando alla PR (nessun accesso automatico al repo).{' '}
+          <strong>Fase 7:</strong> naming file e checklist in <code>docs/PRODUCT-SOURCES-GIT-WORKFLOW.md</code> nel monorepo.
         </p>
 
         {queueMigrationNeeded && (
@@ -450,7 +473,11 @@ export default function ProductSourcesHistory() {
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem' }}
             />
             <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button type="button" className="brutal-btn" onClick={() => downloadMd(readModal.id, readModal.markdown)}>
+              <button
+                type="button"
+                className="brutal-btn"
+                onClick={() => downloadMd(readModal.id, readModal.markdown, readModal.ran_at)}
+              >
                 Scarica
               </button>
               <button type="button" className="brutal-btn" onClick={() => setReadModal(null)}>

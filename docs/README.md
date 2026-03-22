@@ -41,6 +41,16 @@ I **prompt** (system prompt per Kimi) stanno in **auth-deploy/prompts/** (vedi `
 
 ---
 
+## Fonti prodotto (Notion → report → Git)
+
+| File | Contenuto |
+|------|-----------|
+| **docs/PRODUCT-SOURCES-GIT-WORKFLOW.md** | **Fase 7:** da report Markdown a branch/PR nel repo; naming in `docs/product-sources/archive/`, tracciamento URL PR in dashboard. |
+| **docs/product-sources/README.md** | Scopo cartella archivio report (opzionale, versionabile). |
+| **admin-dashboard/docs/NOTION-PRODUCT-SOURCES.md** | Pipeline completa (Notion, cron, Apify, web, snapshot, LLM, Fase 6). |
+
+---
+
 ## Backend e integrazioni
 
 | File | Contenuto |

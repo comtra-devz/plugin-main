@@ -8,6 +8,7 @@
  *   opzionale: "enrichLinkedIn": true — chiama Apify sui URL LinkedIn (stessi env del cron; richiesta lunga)
  *   opzionale: "fetchWeb": true — Fase 1 bis + 2: fetch / strategia per URL web non-LinkedIn (stessi limiti env del cron)
  *   opzionale: "includeDocSnapshot": true — Fase 4: include snapshot rules/docs (env URL/repo come il cron)
+ *   opzionale: "includeLlmSynthesis": true — Fase 5: sintesi LLM nel Markdown (`PRODUCT_SOURCES_LLM_SYNTHESIS=1` + key/model)
  *
  * Env: NOTION_INTEGRATION_TOKEN (secret integration Notion)
  * Fallback: se body senza id, usa NOTION_PRODUCT_SOURCES_PAGE_ID o NOTION_PRODUCT_SOURCES_DATABASE_ID
@@ -24,6 +25,7 @@ import { isWebFetchCandidateUrl } from '../lib/fetch-generic-web.mjs';
 import { fetchProductSourcesSequential, getWebFetchLimitsFromEnv } from '../lib/product-source-fetch-strategy.mjs';
 import { normalizeUrlKey } from '../lib/product-sources-seen.mjs';
 import { buildPluginDocSnapshot } from '../lib/plugin-doc-snapshot.mjs';
+import { synthesizeProductImprovementsMarkdown } from '../lib/product-sources-llm.mjs';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -81,6 +83,9 @@ export default async function handler(req, res) {
     String(body.includeDocSnapshot || '').toLowerCase() === 'true' ||
     process.env.PRODUCT_SOURCES_MANUAL_DOC_SNAPSHOT_DEFAULT === '1' ||
     process.env.PRODUCT_SOURCES_MANUAL_DOC_SNAPSHOT_DEFAULT === 'true';
+  const includeLlmSynthesis =
+    body.includeLlmSynthesis === true ||
+    String(body.includeLlmSynthesis || '').toLowerCase() === 'true';
 
   try {
     const { mode, sourceLabel, links, stats } = await runNotionProductSourcesExtract({
@@ -137,6 +142,19 @@ export default async function handler(req, res) {
       pluginDocSnapshot = await buildPluginDocSnapshot();
     }
 
+    let llmSynthesisSection = '';
+    if (includeLlmSynthesis) {
+      llmSynthesisSection = await synthesizeProductImprovementsMarkdown({
+        mode,
+        sourceLabel,
+        newLinks: links,
+        seenLinks: [],
+        linkedinEnrichments,
+        webEnrichments,
+        pluginDocSnapshot,
+      });
+    }
+
     const markdown = buildMarkdownReport({
       links,
       sourceLabel,
@@ -145,6 +163,8 @@ export default async function handler(req, res) {
       linkedinEnrichments,
       webEnrichments,
       pluginDocSnapshot,
+      llmSynthesisSection,
+      phase6SkipHeavy: false,
     });
 
     return res.status(200).json({
@@ -157,6 +177,8 @@ export default async function handler(req, res) {
       fetchWebRequested: fetchWeb,
       webEnriched: webEnrichments.length,
       includeDocSnapshotRequested: includeDocSnapshot,
+      includeLlmSynthesisRequested: includeLlmSynthesis,
+      llmSynthesisChars: llmSynthesisSection.length,
       docSnapshot: pluginDocSnapshot
         ? {
             skipped: pluginDocSnapshot.skipped,

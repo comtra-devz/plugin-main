@@ -135,6 +135,8 @@ export function hintRulesetArea(url) {
  * @param {'new_only'|'refetch_all'} [opts.linkedinApifyMode] — cron: Apify solo nuovi nel dedup vs tutti i LinkedIn fino al cap
  * @param {Array<{ url: string, text?: string, error?: string, contentType?: string, kind?: string, strategyNote?: string }>} [opts.webEnrichments] — fetch + strategia tipo URL (Fase 1–2)
  * @param {{ text: string, sources?: Array<{ label: string, ok: boolean, chars: number, error?: string }>, truncated?: boolean, skipped?: boolean, skipReason?: string } | null} [opts.pluginDocSnapshot] — Fase 4
+ * @param {string} [opts.llmSynthesisSection] — Fase 5: Markdown dalla sintesi LLM (opzionale)
+ * @param {boolean} [opts.phase6SkipHeavy] — Fase 6: run senza Apify/web (e snapshot opz. omesso)
  */
 export function buildMarkdownReport({
   links,
@@ -147,6 +149,8 @@ export function buildMarkdownReport({
   linkedinApifyMode = 'new_only',
   webEnrichments = [],
   pluginDocSnapshot = null,
+  llmSynthesisSection = '',
+  phase6SkipHeavy = false,
 }) {
   const when = new Date().toISOString();
   const useDedup = Array.isArray(newLinks) && Array.isArray(seenLinks);
@@ -177,6 +181,18 @@ export function buildMarkdownReport({
     `- **Snapshot doc plugin (Fase 4):** contesto rules/docs del repo (URL e/o filesystem) per confronto con le fonti Notion.`,
     ``,
   ];
+
+  if (phase6SkipHeavy && useDedup) {
+    lines.push(`## Run leggera (Fase 6)`);
+    lines.push(``);
+    lines.push(
+      `Nessun **URL nuovo** nel dedup e nessun batch LinkedIn/web da eseguire: **Apify**, **fetch web** e (se consentito dalla config) lo **snapshot documentazione** sono stati saltati per ridurre costi e tempo.`,
+    );
+    lines.push(
+      `Per includere comunque lo snapshot senza nuovi URL: \`PRODUCT_SOURCES_SNAPSHOT_ON_NO_NEW=1\`. Per eseguire sempre fetch/Apify anche senza novità: \`PRODUCT_SOURCES_SKIP_HEAVY_IF_NO_NEW_URLS=0\`.`,
+    );
+    lines.push(``);
+  }
 
   if (pluginDocSnapshot && String(pluginDocSnapshot.text || '').trim()) {
     lines.push(`## Snapshot documentazione plugin (Fase 4)`);
@@ -253,7 +269,9 @@ export function buildMarkdownReport({
       const snapLabel = pluginDocSnapshot.skipped
         ? pluginDocSnapshot.skipReason === 'disabled'
           ? 'disattivato'
-          : 'non configurato / vuoto'
+          : pluginDocSnapshot.skipReason === 'phase6_no_new_urls'
+            ? 'omesso (Fase 6, nessun URL nuovo)'
+            : 'non configurato / vuoto'
         : `${(pluginDocSnapshot.sources || []).filter((s) => s.ok).length} file ok · ${(pluginDocSnapshot.sources || []).length} tentativi${pluginDocSnapshot.truncated ? ' · troncato' : ''}`;
       lines.push(`| Snapshot doc plugin (Fase 4) | ${snapLabel} |`);
     }
@@ -413,8 +431,15 @@ export function buildMarkdownReport({
   );
   lines.push(`2. Se un link non mappa a una sezione chiara, **non** forzare un cambiamento ampio.`,
   );
-  lines.push(`3. Preferisci aggiunte chiare e retrocompatibili.`);
-  lines.push(``);
+    lines.push(`3. Preferisci aggiunte chiare e retrocompatibili.`);
+    lines.push(``);
+
+  if (String(llmSynthesisSection || '').trim()) {
+    lines.push(`## Sintesi proposte (LLM, Fase 5)`);
+    lines.push(``);
+    lines.push(String(llmSynthesisSection).trim());
+    lines.push(``);
+  }
 
   lines.push(`## Prossimi passi`);
   lines.push(``);
