@@ -240,7 +240,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_source TEXT CHECK (signup_sour
 CREATE TABLE IF NOT EXISTS support_tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('BUG', 'FEATURE', 'LOVE')),
+  type TEXT NOT NULL CHECK (type IN ('BUG', 'FEATURE', 'LOVE', 'AUDIT')),
   message TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

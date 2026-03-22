@@ -1126,7 +1126,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                   },
                   body: JSON.stringify(payload),
                 }).then(async (r) => {
-                  if (r.ok) return;
+                  if (r.ok) {
+                    console.info('[Comtra] POST /api/support/ticket ok', {
+                      source: 'audit-discard',
+                      status: r.status,
+                      issueId: feedbackTargetId,
+                    });
+                    return;
+                  }
                   let text: string | null = null;
                   try {
                     text = await r.text();
@@ -1171,7 +1178,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                   },
                   body: JSON.stringify(payload),
                 }).then(async (r) => {
-                  if (r.ok) return;
+                  if (r.ok) {
+                    console.info('[Comtra] POST /api/support/ticket ok', {
+                      source: 'audit-bad-fix',
+                      status: r.status,
+                      issueId: feedbackTargetId,
+                    });
+                    return;
+                  }
                   let text: string | null = null;
                   try {
                     text = await r.text();

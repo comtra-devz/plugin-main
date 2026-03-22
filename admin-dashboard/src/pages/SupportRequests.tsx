@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchSupportFeedback, type SupportFeedbackItem } from '../api';
 import PageHeader from '../components/PageHeader';
 
@@ -7,22 +7,36 @@ export default function SupportRequests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(() => {
     setLoading(true);
+    setError(null);
     fetchSupportFeedback(100)
-      .then((r) => { if (!cancelled) { setItems(r.items || []); setError(null); } })
-      .catch((e) => { if (!cancelled) { setItems([]); setError(e.message); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((r) => {
+        setItems(r.items || []);
+        setError(null);
+      })
+      .catch((e) => {
+        setItems([]);
+        setError(e.message);
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <>
       <PageHeader title="Supporto" />
-      <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-        Feedback dagli utenti (A/B test Generate e altre fonti).
-      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+        <p style={{ color: 'var(--muted)', margin: 0, fontSize: '0.9rem', flex: '1 1 200px' }}>
+          Ticket da plugin (Discard / Documentation) e feedback A/B Generate. Se il plugin risponde <code>200</code> ma qui non vedi nulla, verifica che <strong>POSTGRES_URL</strong> della dashboard punti allo stesso DB dell’auth (vedi <code>docs/SUPPORT-TICKETS-VERIFICATION.md</code>).
+        </p>
+        <button type="button" className="brutal-btn" onClick={load} disabled={loading}>
+          {loading ? 'Caricamento…' : 'Aggiorna'}
+        </button>
+      </div>
 
       {loading && <p className="loading">Caricamento…</p>}
       {error && <p className="error">{error}</p>}

@@ -96,15 +96,27 @@ export const Documentation: React.FC<DocumentationProps> = ({ user }) => {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
+        console.warn('[Comtra] POST /api/support/ticket failed', {
+          source: 'documentation',
+          status: r.status,
+          type: supportType,
+          error: data.error || null,
+        });
         setSupportError(data.error || `Errore ${r.status}`);
         setSupportSending(false);
         return;
       }
+      console.info('[Comtra] POST /api/support/ticket ok', {
+        source: 'documentation',
+        status: r.status,
+        type: supportType,
+      });
       setShowSupportModal(false);
       setSupportMsg('');
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     } catch (e) {
+      console.warn('[Comtra] POST /api/support/ticket network error', e);
       setSupportError('Network error. Riprova.');
     } finally {
       setSupportSending(false);
