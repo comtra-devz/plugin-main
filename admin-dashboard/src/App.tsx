@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import AdminLogin, { isAdminLoggedIn } from './AdminLogin';
+import { isSafeAdminRedirectPath } from './utils/adminRedirect';
 import AuthVerify from './pages/AuthVerify';
 import Sidebar from './Sidebar';
 import Home from './pages/Home';
@@ -21,6 +22,27 @@ import BrandAwareness from './pages/BrandAwareness';
 import TouchpointFunnel from './pages/TouchpointFunnel';
 import Notifications from './pages/Notifications';
 import { InactivityTimerBadge } from './components/InactivityTimerBadge';
+
+/** Dopo login o con `?redirect=/path` da Discord: porta alla pagina fonte. */
+function PostLoginRedirect() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const q = searchParams.get('redirect');
+    if (q && isSafeAdminRedirectPath(q)) {
+      navigate(q, { replace: true });
+      return;
+    }
+    const s = sessionStorage.getItem('admin_redirect_after_login');
+    if (s && isSafeAdminRedirectPath(s)) {
+      sessionStorage.removeItem('admin_redirect_after_login');
+      navigate(s, { replace: true });
+    }
+  }, [navigate, searchParams]);
+
+  return null;
+}
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -51,6 +73,7 @@ export default function App() {
 
   return (
     <div className="layout">
+      <PostLoginRedirect />
       <a href="#main-content" className="skip-link">Vai al contenuto</a>
       <div
         className="sidebar-backdrop"

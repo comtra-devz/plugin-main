@@ -259,6 +259,20 @@ export const PrototypeAuditTab: React.FC<Props> = ({
 
       {/* Flow multi-select */}
       <div ref={flowDropdownRef} className="relative z-20">
+        <div className="flex items-center justify-between gap-2 mb-1 px-0.5">
+          <span className="text-[9px] font-bold text-gray-500 uppercase truncate" title={prototypeCanvasPageName}>
+            Page: {prototypeCanvasPageName || '—'}
+          </span>
+          {onRefreshPrototypeFlows && (
+            <button
+              type="button"
+              onClick={() => onRefreshPrototypeFlows()}
+              className="text-[9px] font-bold uppercase underline hover:text-black shrink-0"
+            >
+              Refresh
+            </button>
+          )}
+        </div>
         <div
           onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
           className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10`}

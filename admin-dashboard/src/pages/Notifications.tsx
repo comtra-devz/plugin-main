@@ -60,8 +60,9 @@ export default function Notifications() {
     <>
       <PageHeader title="Notifiche" />
       <p style={{ color: 'var(--muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-        Riepilogo eventi importanti su salute servizi, costi, utilizzo e sicurezza. Ogni notifica porta alla pagina di dettaglio
-        corrispondente nella dashboard.
+        Elenco <strong>dinamico</strong> in base a dati DB e soglie (supporto, throttle, Kimi, signup, A/B, cron Notion, …).
+        Ogni riga è cliccabile per aprire la pagina fonte. Il cron Discord usa lo stesso link pubblico: se non sei loggato,
+        prima la login/magic link, poi arrivi alla sezione giusta.
       </p>
 
       {loading && !error && (
@@ -120,6 +121,21 @@ export default function Notifications() {
                     <p style={{ margin: '0.25rem 0 0', fontSize: '0.9rem', color: 'var(--muted)' }}>{n.description}</p>
                   </div>
                 </Link>
+                {n.open_url ? (
+                  <div style={{ padding: '0 1rem 0.75rem' }}>
+                    <a
+                      href={n.open_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--black)' }}
+                    >
+                      Apri con flusso login (Discord / nuova scheda)
+                    </a>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', marginLeft: '0.35rem' }}>
+                      — parametro redirect verso la pagina fonte
+                    </span>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -72,8 +72,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, sent: 0, message: 'Nessuna notifica' });
   }
 
+  /** URL pubblico dashboard (stesso che in open_url delle notifiche): login + redirect alla pagina fonte. */
+  const siteBase = (
+    (process.env.ADMIN_DASHBOARD_URL || '').trim().replace(/\/$/, '') ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+  );
+
   const lines = [];
   lines.push('📣 **Comtra — notifiche admin**');
+  lines.push(
+    siteBase
+      ? `Clic su **Apri in dashboard** → se non sei loggato, magic link e poi atterri sulla pagina indicata.`
+      : 'Configura `ADMIN_DASHBOARD_URL` per link cliccabili verso la dashboard.',
+  );
   lines.push('');
 
   for (const n of items) {
@@ -91,9 +102,17 @@ export default async function handler(req, res) {
         : n.severity === 'warning'
           ? '🟨 Avviso'
           : '🟦 Info';
+    const path = (n.target_path || '/').startsWith('/') ? n.target_path : `/${n.target_path}`;
+    const dashLink =
+      n.open_url && typeof n.open_url === 'string' && n.open_url.startsWith('https://')
+        ? n.open_url
+        : siteBase
+          ? `${siteBase}/?redirect=${encodeURIComponent(path)}`
+          : '';
     lines.push(`- ${sev} — **${n.title}**`);
     if (n.description) lines.push(`  ${n.description}`);
-    if (when) lines.push(`  _(creata il ${when})_`);
+    if (when) lines.push(`  _(agg. ${when})_`);
+    if (dashLink) lines.push(`  🔗 [Apri in dashboard](${dashLink})`);
     lines.push('');
   }
 

@@ -33,10 +33,12 @@ Non sono previste opzioni “All Pages” o “Current Selection” in stile DS/
 
 ## 3. Flusso dati (plugin)
 
-1. All’apertura del tab (o al cambio pagina): leggere `figma.currentPage.flowStartingPoints`.
-2. Popolare la multi-select con `{ nodeId, name }` per ogni flusso; opzione “Tutti” che seleziona tutti i `nodeId`.
-3. All’avvio dell’audit: solo i flussi **selezionati** entrano in scope. Per ogni starting point selezionato si costruisce il grafo (traversale da quel frame) e si applicano le regole P-01–P-20; i finding sono etichettati con il nome flusso (`flowName`) quando possibile.
-4. Se l’utente seleziona “Tutti”, l’audit considera tutti i `flowStartingPoints` della pagina.
+1. All’apertura del tab **Prototype**: inviare `get-flow-starting-points` → il main thread legge `figma.currentPage.flowStartingPoints` e risponde con `flow-starting-points-result` (inclusi `pageId`, `pageName` per mostrare in UI su quale pagina canvas si sta lavorando).
+2. **Sincronizzazione al cambio pagina in Figma:** il main thread ascolta `figma.on('currentpagechange', …)` e invia di nuovo `flow-starting-points-result`, così la lista flussi non resta “bloccata” sulla pagina precedente se l’utente cambia pagina nel file con il plugin aperto. Le selezioni (`selectedFlowIds`) vanno filrate ai soli `nodeId` ancora presenti nel nuovo elenco.
+3. **Refresh manuale:** pulsante “Refresh list” che rimanda `get-flow-starting-points` (utile se l’evento non basta o in edge case).
+4. Popolare la multi-select con `{ nodeId, name }` per ogni flusso; opzione “Tutti” che seleziona tutti i `nodeId`.
+5. All’avvio dell’audit: solo i flussi **selezionati** entrano in scope. Per ogni starting point selezionato si costruisce il grafo (traversale da quel frame) e si applicano le regole P-01–P-20; i finding sono etichettati con il nome flusso (`flowName`) quando possibile.
+6. Se l’utente seleziona “Tutti”, l’audit considera tutti i `flowStartingPoints` della pagina.
 
 ---
 

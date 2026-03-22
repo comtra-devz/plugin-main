@@ -45,13 +45,17 @@ export interface Setup2FAResponse {
 }
 
 /** Magic link: richiedi invio email con link */
-export async function requestMagicLink(email: string): Promise<{ ok: boolean }> {
+export async function requestMagicLink(email: string, redirectPath?: string): Promise<{ ok: boolean }> {
   let r: Response;
   try {
     r = await fetch(authApiUrl(), {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ action: 'request-magic-link', email: email.trim().toLowerCase() }),
+      body: JSON.stringify({
+        action: 'request-magic-link',
+        email: email.trim().toLowerCase(),
+        ...(redirectPath ? { redirect: redirectPath } : {}),
+      }),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -160,6 +164,8 @@ export interface AdminNotification {
   description: string;
   severity: NotificationSeverity;
   target_path: string;
+  /** URL assoluto (?redirect=…) per Discord / condivisione: dopo login atterra su `target_path`. */
+  open_url?: string | null;
 }
 
 export interface AdminNotificationsResponse {

@@ -1,5 +1,6 @@
-import { useState, FormEvent } from 'react';
-import { requestMagicLink, setStoredToken } from './api';
+import { useState, useEffect, FormEvent } from 'react';
+import { requestMagicLink } from './api';
+import { isSafeAdminRedirectPath } from './utils/adminRedirect';
 
 const AUTH_TOKEN_KEY = 'admin_token';
 
@@ -26,6 +27,16 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get('redirect');
+    if (r && isSafeAdminRedirectPath(r)) {
+      sessionStorage.setItem('admin_redirect_after_login', r);
+      const path = window.location.pathname || '/';
+      window.history.replaceState({}, '', path);
+    }
+  }, []);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -36,7 +47,10 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
     }
     setLoading(true);
     try {
-      await requestMagicLink(trimmed);
+      const stored = sessionStorage.getItem('admin_redirect_after_login');
+      const redirect =
+        stored && isSafeAdminRedirectPath(stored) ? stored : undefined;
+      await requestMagicLink(trimmed, redirect);
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Errore. Riprova.');

@@ -20,6 +20,23 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Key');
 }
 
+function getAdminDashboardBaseUrl() {
+  const u = (process.env.ADMIN_DASHBOARD_URL || '').trim().replace(/\/$/, '');
+  if (u) return u;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return '';
+}
+
+/** Link da Discord / email: ?redirect= così dopo login si atterra sulla pagina giusta. */
+function attachNotificationOpenUrls(items) {
+  const base = getAdminDashboardBaseUrl();
+  if (!base) return items.map((n) => ({ ...n, open_url: null }));
+  return items.map((n) => {
+    const p = (n.target_path || '/').startsWith('/') ? n.target_path : `/${n.target_path}`;
+    return { ...n, open_url: `${base}/?redirect=${encodeURIComponent(p)}` };
+  });
+}
+
 function maskEmail(email) {
   if (!email || typeof email !== 'string') return '—';
   const t = email.trim();
@@ -240,6 +257,7 @@ async function handleStats(req, res) {
 
 async function handleNotifications(req, res) {
   const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -303,25 +321,26 @@ async function handleNotifications(req, res) {
     }
   } catch (_) {}
 
-  // --- Throttle events dal plugin (se ci sono spike recenti)
+  // --- Throttle / 503 (24h + 7d, stessa card se c’è attività)
   try {
-    const totalResult = await sql`SELECT COUNT(*)::int AS c FROM throttle_events`;
-    const total = totalResult.rows?.[0]?.c ?? 0;
-    if (total > 0) {
-      const sevenDaysResult = await sql`
-        SELECT COUNT(*)::int AS c FROM throttle_events WHERE occurred_at >= ${sevenDaysAgo}
-      `;
-      const last7 = sevenDaysResult.rows?.[0]?.c ?? 0;
-      if (last7 > 0) {
-        notifications.push({
-          id: 'throttle-last7',
-          created_at: now.toISOString(),
-          severity: 'info',
-          title: `Eventi throttle/503 negli ultimi 7 giorni: ${last7}`,
-          description: 'Ci sono stati errori di limite richieste segnalati dal plugin. Controlla Storico utilizzo o i log plugin.',
-          target_path: '/executions',
-        });
-      }
+    const th = await sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM throttle_events WHERE occurred_at >= ${oneDayAgo}) AS d1,
+        (SELECT COUNT(*)::int FROM throttle_events WHERE occurred_at >= ${sevenDaysAgo}) AS d7
+    `;
+    const d1 = th.rows?.[0]?.d1 ?? 0;
+    const d7 = th.rows?.[0]?.d7 ?? 0;
+    if (d7 > 0) {
+      const severity = d1 > 15 ? 'critical' : d1 > 5 ? 'warning' : 'info';
+      notifications.push({
+        id: 'throttle-recent',
+        created_at: now.toISOString(),
+        severity,
+        title: `Throttle / 503 plugin: ${d1} ultime 24h · ${d7} ultimi 7 gg`,
+        description:
+          'Eventi di limite richieste lato utente. Controlla Sicurezza e log, Storico utilizzo e carico backend.',
+        target_path: '/security',
+      });
     }
   } catch (_) {}
 
@@ -345,20 +364,29 @@ async function handleNotifications(req, res) {
     }
   } catch (_) {}
 
-  // --- Ticket supporto aperti da >48 ore (se la tabella esiste)
+  // --- Supporto: ticket aperti + sottoinsieme in ritardo >48h
   try {
-    const openResult = await sql`
-      SELECT COUNT(*)::int AS c FROM support_tickets
-      WHERE (status = 'open' OR status IS NULL) AND created_at <= NOW() - INTERVAL '48 hours'
+    const sup = await sql`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'open' OR status IS NULL)::int AS open_total,
+        COUNT(*) FILTER (WHERE (status = 'open' OR status IS NULL) AND created_at <= NOW() - INTERVAL '48 hours')::int AS stale_48h
+      FROM support_tickets
     `;
-    const count = openResult.rows?.[0]?.c ?? 0;
-    if (count > 0) {
+    const openTotal = sup.rows?.[0]?.open_total ?? 0;
+    const stale48 = sup.rows?.[0]?.stale_48h ?? 0;
+    if (openTotal > 0) {
       notifications.push({
-        id: 'support-open-48h',
+        id: 'support-tickets-open',
         created_at: now.toISOString(),
-        severity: 'info',
-        title: `Ticket supporto aperti da oltre 48 ore: ${count}`,
-        description: 'Ci sono richieste di supporto in attesa da più di 48 ore. Controlla la pagina Supporto.',
+        severity: stale48 > 0 ? 'warning' : 'info',
+        title:
+          stale48 > 0
+            ? `Supporto: ${openTotal} ticket aperti (${stale48} da >48h)`
+            : `Supporto: ${openTotal} ticket aperti`,
+        description:
+          stale48 > 0
+            ? 'Alcune richieste sono in attesa da oltre 48 ore. Rispondi dalla pagina Supporto.'
+            : 'Ci sono richieste in stato aperto. Monitora dalla pagina Supporto.',
         target_path: '/support',
       });
     }
@@ -368,7 +396,113 @@ async function handleNotifications(req, res) {
     }
   }
 
-  res.status(200).json({ items: notifications });
+  // --- Signup: nessun nuovo utente in 7 gg (base già significativa)
+  try {
+    const u = await sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM users WHERE created_at >= ${sevenDaysAgo}) AS signups_7d,
+        (SELECT COUNT(*)::int FROM users) AS total_users
+    `;
+    const sign7 = u.rows?.[0]?.signups_7d ?? 0;
+    const totalU = u.rows?.[0]?.total_users ?? 0;
+    if (sign7 === 0 && totalU >= 40) {
+      notifications.push({
+        id: 'signups-zero-7d',
+        created_at: now.toISOString(),
+        severity: 'info',
+        title: 'Nessun signup negli ultimi 7 giorni',
+        description:
+          'La base utenti è attiva ma non ci sono nuove registrazioni nella settimana. Controlla funnel e canali.',
+        target_path: '/',
+      });
+    }
+  } catch (_) {}
+
+  // --- A/B Generate: feedback negativi in eccesso (7 gg)
+  try {
+    const ab = await sql`
+      SELECT
+        COUNT(*) FILTER (WHERE thumbs = 'down')::int AS down_n,
+        COUNT(*) FILTER (WHERE thumbs = 'up')::int AS up_n
+      FROM generate_ab_feedback
+      WHERE created_at >= ${sevenDaysAgo}
+    `;
+    const downN = ab.rows?.[0]?.down_n ?? 0;
+    const upN = ab.rows?.[0]?.up_n ?? 0;
+    if (downN >= 3 && downN > upN) {
+      notifications.push({
+        id: 'generate-ab-feedback-negative',
+        created_at: now.toISOString(),
+        severity: 'warning',
+        title: `Generate A/B: più thumbs down (${downN}) che up (${upN}) in 7 gg`,
+        description: 'Valuta qualità dell’output o del prompt. Dettaglio in A/B tests e Supporto.',
+        target_path: '/ab-tests/generate',
+      });
+    }
+  } catch (_) {}
+
+  // --- Attività crediti: picco ultime 24h
+  try {
+    const act = await sql`
+      WITH last24 AS (
+        SELECT COUNT(*)::int AS c, COALESCE(SUM(GREATEST(credits_consumed, 0)), 0)::int AS credits
+        FROM credit_transactions
+        WHERE created_at >= ${oneDayAgo} AND action_type != 'admin_recharge'
+      ),
+      last7 AS (
+        SELECT COALESCE(SUM(GREATEST(credits_consumed, 0)), 0)::int AS credits
+        FROM credit_transactions
+        WHERE created_at >= ${sevenDaysAgo} AND action_type != 'admin_recharge'
+      )
+      SELECT last24.c AS tx_24h, last24.credits AS cr_24h, last7.credits AS cr_7d FROM last24, last7
+    `;
+    const tx24 = act.rows?.[0]?.tx_24h ?? 0;
+    const cr24 = act.rows?.[0]?.cr_24h ?? 0;
+    const cr7 = act.rows?.[0]?.cr_7d ?? 0;
+    const avgDay = cr7 / 7 || 0;
+    if (tx24 > 80 || (avgDay > 0 && cr24 > avgDay * 2.5 && cr24 > 30)) {
+      notifications.push({
+        id: 'credits-activity-spike',
+        created_at: now.toISOString(),
+        severity: 'info',
+        title: `Picco attività crediti (24h): ${tx24} transazioni, ${cr24} crediti`,
+        description:
+          avgDay > 0
+            ? `Media ~${Math.round(avgDay)} crediti/giorno negli ultimi 7 gg. Verifica costi e utilizzo.`
+            : 'Volume elevato nelle ultime 24 ore. Controlla Storico utilizzo e Crediti.',
+        target_path: '/executions',
+      });
+    }
+  } catch (_) {}
+
+  // --- Ultimo run fonti prodotto (Notion) in errore
+  try {
+    const run = await sql`
+      SELECT status, error_message, ran_at
+      FROM product_sources_cron_runs
+      ORDER BY ran_at DESC
+      LIMIT 1
+    `;
+    const row = run.rows?.[0];
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    if (row && row.status && row.status !== 'ok' && row.ran_at && new Date(row.ran_at) >= weekAgo) {
+      const em = row.error_message || 'Errore sconosciuto';
+      const msg = em.slice(0, 120);
+      notifications.push({
+        id: 'product-sources-last-run-fail',
+        created_at: now.toISOString(),
+        severity: 'warning',
+        title: 'Ultimo run fonti prodotto (Notion) non ok',
+        description: `${msg}${em.length > 120 ? '…' : ''}`,
+        target_path: '/content/product-improvement',
+      });
+    }
+  } catch (_) {}
+
+  const rank = { critical: 0, warning: 1, info: 2 };
+  notifications.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
+
+  res.status(200).json({ items: attachNotificationOpenUrls(notifications) });
 }
 
 async function handleCreditsTimeline(req, res) {

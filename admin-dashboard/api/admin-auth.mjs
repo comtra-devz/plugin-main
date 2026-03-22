@@ -20,6 +20,7 @@ import {
   verifyMagicLinkToken,
 } from '../lib/admin-session.mjs';
 import { sendMagicLinkEmail } from '../lib/send-magic-link.mjs';
+import { sanitizeAdminRedirectPath } from '../lib/sanitize-redirect.mjs';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -83,7 +84,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
       const magicToken = await createMagicLinkToken({ sub, email: emailToUse });
-      const sent = await sendMagicLinkEmail(emailToUse, magicToken);
+      const redirectAfterLogin = sanitizeAdminRedirectPath(body.redirect || body.next || '');
+      const sent = await sendMagicLinkEmail(emailToUse, magicToken, redirectAfterLogin || undefined);
       if (!sent.ok) {
         console.error('sendMagicLinkEmail', sent.error);
         return res.status(500).json({

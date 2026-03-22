@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { verifyMagicLink, setStoredToken } from '../api';
+import { isSafeAdminRedirectPath } from '../utils/adminRedirect';
 
 interface AuthVerifyProps {
   onSuccess: () => void;
@@ -10,6 +11,7 @@ export default function AuthVerify({ onSuccess }: AuthVerifyProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
+  const redirectParam = searchParams.get('redirect');
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
   const [message, setMessage] = useState<string>('');
 
@@ -26,7 +28,12 @@ export default function AuthVerify({ onSuccess }: AuthVerifyProps) {
         setStoredToken(sessionToken);
         setStatus('ok');
         onSuccess();
-        navigate('/', { replace: true });
+        const fromQuery = redirectParam && isSafeAdminRedirectPath(redirectParam) ? redirectParam : '';
+        const fromStorage = sessionStorage.getItem('admin_redirect_after_login');
+        const fromStore = fromStorage && isSafeAdminRedirectPath(fromStorage) ? fromStorage : '';
+        const target = fromQuery || fromStore || '/';
+        if (fromStore) sessionStorage.removeItem('admin_redirect_after_login');
+        navigate(target, { replace: true });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -34,7 +41,7 @@ export default function AuthVerify({ onSuccess }: AuthVerifyProps) {
         setMessage(err instanceof Error ? err.message : 'Link non valido o scaduto.');
       });
     return () => { cancelled = true; };
-  }, [token, onSuccess, navigate]);
+  }, [token, redirectParam, onSuccess, navigate]);
 
   return (
     <div className="admin-login-wrap">

@@ -42,6 +42,7 @@ Nessuna delle funzioni sopra **apre PR su GitHub da sola**: il passaggio “mett
 - **Flusso principale:** **magic link** via email (`POST /api/admin-auth`) + opzionale **2FA** (TOTP), sessione **JWT** poi inviata come `Authorization: Bearer …` alle API.
 - Serve **email configurata** (tabella admin su DB) oppure, in emergenza, **`ALLOWED_ADMIN_EMAIL`** uguale alla tua email (senza dover creare la riga a mano).
 - **Resend:** `RESEND_API_KEY` (e opzionalmente `RESEND_FROM`, `ADMIN_DASHBOARD_URL`) per inviare il link.
+- **`ADMIN_DASHBOARD_URL`:** URL pubblico **canonico** della dashboard (es. `https://admin.comtra.dev`, senza slash finale). Oltre al magic link, serve ai campi **`open_url`** delle notifiche API e ai **link cliccabili** nel messaggio Discord del cron (`/api/cron-notify-discord`). Se manca, in produzione si usa `https://$VERCEL_URL` (spesso diverso dal dominio custom).
 - **Compatibilità:** alcune integrazioni accettano ancora **`ADMIN_SECRET`** come Bearer (stesso valore per tutte le chiamate “da script”).
 
 Dettaglio variabili: vedi **[`.env.example`](.env.example)**.
@@ -71,7 +72,7 @@ Definiti in [`vercel.json`](vercel.json):
 
 | Path | Orario (UTC) | Ruolo |
 |------|----------------|------|
-| `/api/cron-notify-discord` | 08:00 | Notifiche **admin** su Discord: legge dati via `/api/admin` e posta sul webhook `ADMIN_NOTIFICATIONS_WEBHOOK_URL` (serve anche `ADMIN_SECRET`). |
+| `/api/cron-notify-discord` | 08:00 | Notifiche **admin** su Discord: legge `route=notifications`, un link **Apri in dashboard** per voce (stesso `?redirect=` della SPA). Imposta **`ADMIN_DASHBOARD_URL`** per URL corretti col dominio custom. |
 | `/api/cron-product-sources` | 09:00 UTC **ogni giorno** | Invocazione giornaliera; il **lavoro completo** (Notion, Apify, …) rispetta il **gate** (default **4 giorni** tra due run OK — `PRODUCT_SOURCES_CRON_GATE_DAYS`). Gli altri giorni → `skipped`. Timeout lungo (300s) se esegue tutto. |
 
 Entrambe richiedono in genere **`CRON_SECRET`** (query `?key=` o header) — vedi commenti in cima a `api/cron-product-sources.mjs` e `api/cron-notify-discord.mjs`.

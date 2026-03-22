@@ -100,11 +100,18 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
   const costMaxNice =
     costMaxRaw > 0 ? niceMax(Math.max(costMaxRaw, 0.0001)) : 0.1;
 
-  const w = 640;
+  const hasKimiAxis = kimiCallsMax > 0 && kimiAxisMaxNice > 0;
+  /** Con Kimi: più margine sinistro per due colonne numeri (Kimi | Scan/Cr. | asse). */
+  const axisX = hasKimiAxis ? 78 : 52;
+  const w = hasKimiAxis ? 668 : 640;
   const h = 200;
-  const pad = { top: 28, right: 44, bottom: 36, left: 52 };
+  const pad = { top: 28, right: 48, bottom: 36, left: axisX };
   const innerW = w - pad.left - pad.right;
   const innerH = h - pad.top - pad.bottom;
+  /** Colonna esterna (sinistra): scala Kimi chiamate. */
+  const kimiLabelX = hasKimiAxis ? pad.left - 34 : 0;
+  /** Colonna interna: scan + crediti (come prima, vicino all’asse). */
+  const primaryLabelX = pad.left - 6;
 
   const segScans = data.length ? dualLinePath(data, pad, innerW, innerH, 'scans', primaryMaxNice) : '';
   const segCredits = data.length ? dualLinePath(data, pad, innerW, innerH, 'credits', primaryMaxNice) : '';
@@ -170,6 +177,11 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * primaryMaxNice));
   const uniqY = Array.from(new Set(yTicks)).sort((a, b) => a - b);
+  const kimiYTicks =
+    hasKimiAxis && kimiAxisMaxNice > 0
+      ? [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * kimiAxisMaxNice))
+      : [];
+  const uniqKimiY = Array.from(new Set(kimiYTicks)).sort((a, b) => a - b);
   const costTicks = costMaxNice > 0 ? [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(t * costMaxNice * 100) / 100) : [];
   const uniqCost = Array.from(new Set(costTicks)).sort((a, b) => a - b);
 
@@ -195,6 +207,12 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
       </div>
       <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.75rem', marginTop: 0 }}>
         <strong>Scan</strong> = n° operazioni audit/scan · <strong>Crediti</strong> = crediti consumati nel giorno (tutte le funzioni: audit, a11y_audit, generate, sync, …). Puoi avere crediti senza scan se hai usato altre funzioni.
+        {hasKimiAxis ? (
+          <>
+            {' '}
+            <strong>Due assi Y a sinistra:</strong> colonna <span style={{ color: 'var(--pink)', fontWeight: 700 }}>rosa</span> = chiamate Kimi (scala propria); colonna <strong>nera</strong> = scan + crediti (scala condivisa).
+          </>
+        ) : null}
       </p>
       {planNote ? (
         <p style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.75rem', marginTop: '-0.5rem', fontStyle: 'italic' }}>
@@ -207,18 +225,37 @@ export default function DualLineChart({ timeline, period, onPeriodChange, byActi
             {/* Assi X e Y più visibili */}
             <line x1={pad.left} y1={pad.top} x2={pad.left} y2={pad.top + innerH} stroke="var(--black)" strokeWidth={2} />
             <line x1={pad.left} y1={pad.top + innerH} x2={pad.left + innerW} y2={pad.top + innerH} stroke="var(--black)" strokeWidth={2} />
-            {/* Valori asse Y (massimo arrotondato) */}
+            {/* Griglia orizzontale + asse Y primario (scan / crediti) */}
             {uniqY.map((val) => {
               const y = pad.top + innerH - (val / primaryMaxNice) * innerH;
               return (
-                <g key={`left-${val}`}>
+                <g key={`grid-${val}`}>
                   <line x1={pad.left} y1={y} x2={pad.left + innerW} y2={y} stroke="var(--black)" strokeWidth={1} strokeDasharray="4 2" opacity={0.4} />
-                  <text x={pad.left - 6} y={y + 3} textAnchor="end" fontSize="10" fill="var(--black)" fontFamily="var(--font-mono)">
+                  <text x={primaryLabelX} y={y + 3} textAnchor="end" fontSize="10" fill="var(--black)" fontFamily="var(--font-mono)">
                     {val}
                   </text>
                 </g>
               );
             })}
+            {/* Seconda colonna Y: scala Kimi (solo se ci sono chiamate nel periodo) — stesse altezze “fisiche” della scala Kimi, griglia resta su scan/crediti */}
+            {hasKimiAxis &&
+              uniqKimiY.map((val) => {
+                const y = pad.top + innerH - (val / kimiAxisMaxNice) * innerH;
+                return (
+                  <text
+                    key={`kimi-y-${val}`}
+                    x={kimiLabelX}
+                    y={y + 3}
+                    textAnchor="end"
+                    fontSize="9"
+                    fill="var(--pink)"
+                    fontFamily="var(--font-mono)"
+                    fontWeight={700}
+                  >
+                    {val}
+                  </text>
+                );
+              })}
             {uniqCost.length > 0 && uniqCost.map((val) => {
               const y = pad.top + innerH - (val / costMaxNice) * innerH;
               return (

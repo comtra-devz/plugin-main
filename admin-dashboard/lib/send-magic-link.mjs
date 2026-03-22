@@ -3,6 +3,7 @@
  * Env: RESEND_API_KEY, RESEND_FROM (es. "Comtra Admin <noreply@tudominio.com>"), ADMIN_DASHBOARD_URL (base URL della dashboard).
  */
 import { Resend } from 'resend';
+import { sanitizeAdminRedirectPath } from './sanitize-redirect.mjs';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.RESEND_FROM || 'Comtra Admin <onboarding@resend.dev>';
@@ -16,11 +17,14 @@ export function canSendEmail() {
 /**
  * Invia magic link all'email. Restituisce { ok: true } o { ok: false, error }.
  */
-export async function sendMagicLinkEmail(toEmail, magicLinkToken) {
+export async function sendMagicLinkEmail(toEmail, magicLinkToken, redirectPath) {
   if (!resend) return { ok: false, error: 'RESEND_API_KEY non configurato' };
   if (!BASE_URL) return { ok: false, error: 'ADMIN_DASHBOARD_URL o VERCEL_URL non configurato' };
 
-  const link = `${BASE_URL.replace(/\/$/, '')}/auth/verify?token=${encodeURIComponent(magicLinkToken)}`;
+  const safeRedirect = sanitizeAdminRedirectPath(redirectPath || '');
+  const q = new URLSearchParams({ token: magicLinkToken });
+  if (safeRedirect) q.set('redirect', safeRedirect);
+  const link = `${BASE_URL.replace(/\/$/, '')}/auth/verify?${q.toString()}`;
 
   const { data, error } = await resend.emails.send({
     from: FROM,
