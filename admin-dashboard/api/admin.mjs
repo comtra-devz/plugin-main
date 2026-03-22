@@ -368,8 +368,8 @@ async function handleNotifications(req, res) {
   try {
     const sup = await sql`
       SELECT
-        COUNT(*) FILTER (WHERE status = 'open' OR status IS NULL)::int AS open_total,
-        COUNT(*) FILTER (WHERE (status = 'open' OR status IS NULL) AND created_at <= NOW() - INTERVAL '48 hours')::int AS stale_48h
+        COUNT(CASE WHEN status = 'open' OR status IS NULL THEN 1 END)::int AS open_total,
+        COUNT(CASE WHEN (status = 'open' OR status IS NULL) AND created_at <= NOW() - INTERVAL '48 hours' THEN 1 END)::int AS stale_48h
       FROM support_tickets
     `;
     const openTotal = sup.rows?.[0]?.open_total ?? 0;
@@ -422,8 +422,8 @@ async function handleNotifications(req, res) {
   try {
     const ab = await sql`
       SELECT
-        COUNT(*) FILTER (WHERE thumbs = 'down')::int AS down_n,
-        COUNT(*) FILTER (WHERE thumbs = 'up')::int AS up_n
+        COUNT(CASE WHEN thumbs = 'down' THEN 1 END)::int AS down_n,
+        COUNT(CASE WHEN thumbs = 'up' THEN 1 END)::int AS up_n
       FROM generate_ab_feedback
       WHERE created_at >= ${sevenDaysAgo}
     `;
@@ -515,8 +515,8 @@ async function handleCreditsTimeline(req, res) {
   const loadUnfilteredTimeline = async () => {
     const creditsRows = await sql`
       SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day,
-             SUM(GREATEST(credits_consumed, 0))::int FILTER (WHERE action_type != 'admin_recharge') AS credits,
-             COUNT(*) FILTER (WHERE action_type IN ('audit', 'scan'))::int AS scans
+             SUM(CASE WHEN action_type != 'admin_recharge' THEN GREATEST(credits_consumed, 0) ELSE 0 END)::int AS credits,
+             SUM(CASE WHEN action_type IN ('audit', 'scan') THEN 1 ELSE 0 END)::int AS scans
       FROM credit_transactions WHERE created_at >= ${since}
       GROUP BY 1 ORDER BY 1
     `;
@@ -542,8 +542,8 @@ async function handleCreditsTimeline(req, res) {
     try {
       creditsByDay = await sql`
         SELECT date_trunc('day', ct.created_at AT TIME ZONE 'UTC')::date AS day,
-               SUM(GREATEST(ct.credits_consumed, 0))::int FILTER (WHERE ct.action_type != 'admin_recharge') AS credits,
-               COUNT(*) FILTER (WHERE ct.action_type IN ('audit', 'scan'))::int AS scans
+               SUM(CASE WHEN ct.action_type != 'admin_recharge' THEN GREATEST(ct.credits_consumed, 0) ELSE 0 END)::int AS credits,
+               SUM(CASE WHEN ct.action_type IN ('audit', 'scan') THEN 1 ELSE 0 END)::int AS scans
         FROM credit_transactions ct
         INNER JOIN users u ON u.id = ct.user_id
         WHERE ct.created_at >= ${since} AND u.plan = ${planFilter}
