@@ -10,7 +10,7 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 - Estrarre i **link**, filtrare rumore (es. blocchi da escludere).
 - **Dedup** degli URL tra una run e l’altra (così non rifai tutto ogni volta).
 - **LinkedIn**: arricchimento con **Apify** (testo post + link nel post).
-- **Cron** su Vercel + **gate giorni** configurabile (`PRODUCT_SOURCES_CRON_GATE_DAYS`).
+- **Cron** su Vercel **ogni giorno** + **gate giorni** (default **4** nel codice; `PRODUCT_SOURCES_CRON_GATE_DAYS` per override).
 - Salvataggio **Markdown** in Postgres + **Discord** + **storico** in dashboard.
 
 ---

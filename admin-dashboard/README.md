@@ -72,7 +72,7 @@ Definiti in [`vercel.json`](vercel.json):
 | Path | Orario (UTC) | Ruolo |
 |------|----------------|------|
 | `/api/cron-notify-discord` | 08:00 | Notifiche **admin** su Discord: legge dati via `/api/admin` e posta sul webhook `ADMIN_NOTIFICATIONS_WEBHOOK_URL` (serve anche `ADMIN_SECRET`). |
-| `/api/cron-product-sources` | 09:00 | Pipeline Notion → report → DB → Discord (se configurato). **Timeout lungo** (fino a 300s) per Apify/LLM. |
+| `/api/cron-product-sources` | 09:00 UTC **ogni giorno** | Invocazione giornaliera; il **lavoro completo** (Notion, Apify, …) rispetta il **gate** (default **4 giorni** tra due run OK — `PRODUCT_SOURCES_CRON_GATE_DAYS`). Gli altri giorni → `skipped`. Timeout lungo (300s) se esegue tutto. |
 
 Entrambe richiedono in genere **`CRON_SECRET`** (query `?key=` o header) — vedi commenti in cima a `api/cron-product-sources.mjs` e `api/cron-notify-discord.mjs`.
 

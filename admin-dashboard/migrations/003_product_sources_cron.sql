@@ -1,4 +1,4 @@
--- Cron "fonti prodotto": storico run Notion + LinkedIn (gate 3 giorni sulla colonna ran_at).
+-- Cron "fonti prodotto": storico run Notion + LinkedIn (gate giorni configurabile via env, default 4 nel codice).
 -- Stesso database delle altre tabelle admin (POSTGRES_URL sul progetto Vercel dashboard).
 
 CREATE TABLE IF NOT EXISTS product_sources_cron_runs (

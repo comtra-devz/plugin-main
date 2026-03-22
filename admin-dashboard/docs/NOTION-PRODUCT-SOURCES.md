@@ -8,7 +8,7 @@ Vedi **[PRODUCT-SOURCES-ROADMAP.md](./PRODUCT-SOURCES-ROADMAP.md)** (Fase 0 → 
 
 1. **UI admin** — *Content Management → Migliorie prodotto (Notion)*: estrae i link da Notion e genera un report Markdown (`POST /api/notion-product-sources`). Opzionale: **LinkedIn Apify**, **Fetch web (Fase 2)**, **Snapshot doc (Fase 4)**, **Sintesi LLM (Fase 5)** — stessi limiti env del cron dove applicabile; richieste lunghe.
 2. **Cron giornaliero** — `GET /api/cron-product-sources` (Vercel, orario in `vercel.json`, es. **09:00 UTC**): legge **automaticamente** Notion dagli env (`NOTION_PRODUCT_SOURCES_PAGE_ID` / `DATABASE_ID`), estrae **tutti** i link, arricchisce i post **LinkedIn** con **Apify** (policy sotto), salva il report in Postgres (**storico dashboard**) e opzionalmente invia riepilogo + report su **Discord**.
-3. **Gate temporale** (default **3 giorni**): dopo una run **OK** (non `skipped`), le run successive entro **N giorni** sono **saltate** (`skipped` nel DB). Imposta **`PRODUCT_SOURCES_CRON_GATE_DAYS=4`** su Vercel per allinearti a “ogni 4 giorni”. Il cron può restare giornaliero: decide il gate se eseguire il lavoro pesante.
+3. **Gate temporale** (default **4 giorni** nel codice): il cron Vercel viene chiamato **ogni giorno**, ma dopo una run **OK** (non `skipped`) le chiamate successive entro **N giorni** sono **saltate** (`skipped` nel DB) — niente Notion/Apify in quel giorno. Imposta **`PRODUCT_SOURCES_CRON_GATE_DAYS`** su Vercel solo se vuoi un valore diverso da 4 (o più frequente, es. `3`).
 
 ---
 
@@ -27,7 +27,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 ### Indicazioni da rispettare (obiettivo funzionale)
 
 1. **Link** — Identificare **tutti** i link rilevanti da Notion (dedup per URL normalizzato **dentro** la run).
-2. **Sessioni future** — Nelle run successive **non ri-esaminare** gli URL già processati (dedup **persistente** tra run, non solo gate a 3 giorni sull’intera esecuzione).
+2. **Sessioni future** — Nelle run successive **non ri-esaminare** gli URL già processati (dedup **persistente** tra run, indipendente dal gate giornaliero sul cron).
 3. **Fetch** — Per **LinkedIn**: fetch via Apify come oggi (senza commenti). Per **altri URL**: policy esplicita (solo elenco da Notion vs fetch pagina) da allineare al requisito “fetch di ogni link” se confermato (oggi: **non** fetchati).
 4. **Documento ruleset / docs** — Un testo che aiuti a capire **cosa può migliorare** ruleset e documentazioni da cui attingono le funzioni (richiede sintesi strutturata e/o LLM se non banale).
 5. **Chiarezza e sicurezza** — In linguaggio semplice: **cosa andrà toccato** (aree/ sezioni). **Guardrail espliciti**: migliorie sì; niente peggioramenti, cambiamenti confusionari o breaking non voluti.
@@ -80,7 +80,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
    - oppure `startUrls` — `{ startUrls: [{ url }, ...] }`  
    Allinea il valore alla documentazione **Input** dell’actor che hai scelto.
 6. Opzionale: `PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN` (default **20**) — massimo URL LinkedIn per **singolo batch Apify** in una run. **Non è un limite di prodotto assoluto:** è un default **ingegneristico** (timeout serverless, costi Apify, affidabilità). Con piano Vercel e budget adeguati puoi portarlo a **50**, **100**, ecc. e valutare **run spezzate** o **code** se superi i minuti di `maxDuration`.
-7. Opzionale: `PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL=1` — a ogni run **completa** (~3 gg), Apify riceve **tutti** i LinkedIn unici presenti in Notion (nell’ordine dell’estrazione), fino al cap del punto 6. **Default (assente/falso):** Apify solo su LinkedIn **nuovi** rispetto a `product_sources_seen_urls` (risparmio costi).
+7. Opzionale: `PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL=1` — a ogni run **completa** (quando il gate lo consente, es. ogni ~4 gg con default), Apify riceve **tutti** i LinkedIn unici presenti in Notion (nell’ordine dell’estrazione), fino al cap del punto 6. **Default (assente/falso):** Apify solo su LinkedIn **nuovi** rispetto a `product_sources_seen_urls` (risparmio costi).
 8. Opzionale: `APIFY_LINKEDIN_WAIT_SECONDS` — secondi di **waitForFinish** verso Apify (default nel codice **300**). Deve essere **inferiore** al tempo massimo della funzione Vercel (vedi sotto) meno il tempo impiegato da Notion/DB.
 9. Opzionale: `PRODUCT_SOURCES_SKIP_LINKEDIN=1` — non chiama Apify; i link LinkedIn restano in elenco con messaggio “saltato” (utile per testare Notion/Postgres su piani con timeout bassi).
 
@@ -200,7 +200,7 @@ Workflow **manuale** dal report al plugin repo (nessuna automazione server):
 ### 4) Cron Vercel + secret
 
 1. Su Vercel deve esistere **`CRON_SECRET`** (stesso concetto di `/api/cron-notify-discord`).
-2. Opzionale: **`PRODUCT_SOURCES_CRON_GATE_DAYS`** (default **3**, max **30** nel codice) — giorni tra due run **complete** non saltate. Esempio: `4` per un documento / pipeline allineata a controlli ogni quattro giorni.
+2. Opzionale: **`PRODUCT_SOURCES_CRON_GATE_DAYS`** (default **4** nel codice, max **30**) — giorni minimi tra due run **complete** non saltate. Il cron resta **giornaliero**; i giorni “vuoti” sono `skipped`.
 3. Il file [`vercel.json`](../vercel.json) include già:
    - `"path": "/api/cron-product-sources"`, `"schedule": "0 9 * * *"` (**09:00 UTC** ogni giorno ≈ **10:00 ora italiana invernale (CET)**; con CEST sarà **11:00** locale — regola su fuso o sposta il cron).
 4. Test manuale (dal browser o curl, **non** committare il secret):

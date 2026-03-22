@@ -1,6 +1,6 @@
 /**
  * GET /api/cron-product-sources
- * Cron Vercel (pianificato una volta al giorno): esegue estrazione Notion + Apify LinkedIn solo se l’ultima run OK (non skipped) è ≥ N giorni fa.
+ * Cron Vercel (pianificato **ogni giorno** UTC): a ogni hit controlla il **gate**; il lavoro completo (Notion + Apify/…) parte solo se l’ultima run OK (non skipped) è ≥ **N** giorni fa (default **4**). I giorni “vuoti” restano `skipped` in DB.
  *
  * Auth: Authorization: Bearer <CRON_SECRET> oppure ?key=<CRON_SECRET>
  * Opzionale: ?force=1 con stesso secret — ignora il gate temporale (solo test).
@@ -15,9 +15,9 @@
  * - PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN opzionale (default 20)
  * - PRODUCT_SOURCES_CRON_WEBHOOK_URL opzionale (Discord webhook: report sintetico)
  * - POSTGRES_URL / DATABASE_URL (per gate temporale + storico report + dedup URL)
- * - PRODUCT_SOURCES_CRON_GATE_DAYS opzionale (default **3**) — giorni minimi tra due run **complete** (non skipped); es. `4` per allineo a “ogni 4 giorni”
+ * - PRODUCT_SOURCES_CRON_GATE_DAYS opzionale (default **4**) — giorni minimi tra due run **complete** (non skipped); es. `3` per ciclo più frequente
  * - PRODUCT_SOURCES_SKIP_LINKEDIN=1 opzionale — salta Apify (utile su Vercel Hobby / test Notion)
- * - PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL=1 opzionale — ad ogni run completa (~3 gg) Apify su **tutti** i LinkedIn in Notion (fino a PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN), non solo URL nuovi nel dedup
+ * - PRODUCT_SOURCES_LINKEDIN_REFETCH_ALL=1 opzionale — ad ogni run **completa** (quando il gate consente) Apify su **tutti** i LinkedIn in Notion (fino a PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN), non solo URL nuovi nel dedup
  * - APIFY_LINKEDIN_WAIT_SECONDS opzionale — secondi max wait Apify (default 300; serve maxDuration Vercel adeguato)
  * - PRODUCT_SOURCES_DISCORD_SUMMARY_ONLY=1 opzionale — Discord solo riepilogo (no report spezzato in più messaggi)
  * - PRODUCT_SOURCES_FETCH_WEB=1 opzionale — Fase 1+2: fetch / strategia per tipo su URL **nuovi** non-LinkedIn (allow/block list, GitHub raw, stub YouTube/X, PDF rilevato)
@@ -87,8 +87,9 @@ async function buildProductSourcesDocSnapshotForCron(phase6SkipHeavy) {
 
 function getCronGateMs() {
   const raw = process.env.PRODUCT_SOURCES_CRON_GATE_DAYS;
-  const n = raw != null && String(raw).trim() !== '' ? Number(raw) : 3;
-  const days = Number.isFinite(n) && n > 0 ? Math.min(n, 30) : 3;
+  const defaultDays = 4;
+  const n = raw != null && String(raw).trim() !== '' ? Number(raw) : defaultDays;
+  const days = Number.isFinite(n) && n > 0 ? Math.min(n, 30) : defaultDays;
   return days * 24 * 60 * 60 * 1000;
 }
 
