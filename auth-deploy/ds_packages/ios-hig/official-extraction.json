@@ -1,0 +1,14 @@
+{
+  "ds_id": "ios-hig",
+  "extracted_at": "2026-03-23T18:33:41.773Z",
+  "extractor": "ios-hig-official-extractor",
+  "elapsed_ms": 3454,
+  "source": {
+    "docs_count": 5,
+    "pages_fetched": 5,
+    "pages_failed": 0,
+    "token_heading_signals": 0,
+    "component_heading_signals": 0,
+    "keyword_signals": 2
+  }
+}

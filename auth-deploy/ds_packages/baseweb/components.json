@@ -1,0 +1,4393 @@
+{
+  "$schema": "comtra://ds_package/components/1.0",
+  "components": {
+    "button-filled": {
+      "component_id": "button-filled",
+      "display_name": "Button Filled",
+      "category": "core",
+      "description": "baseweb normalized component button-filled",
+      "figma_component_key": "button/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-outlined": {
+      "component_id": "button-outlined",
+      "display_name": "Button Outlined",
+      "category": "core",
+      "description": "baseweb normalized component button-outlined",
+      "figma_component_key": "button/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-text": {
+      "component_id": "button-text",
+      "display_name": "Button Text",
+      "category": "core",
+      "description": "baseweb normalized component button-text",
+      "figma_component_key": "button/text",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-elevated": {
+      "component_id": "button-elevated",
+      "display_name": "Button Elevated",
+      "category": "core",
+      "description": "baseweb normalized component button-elevated",
+      "figma_component_key": "button/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-tonal": {
+      "component_id": "button-tonal",
+      "display_name": "Button Tonal",
+      "category": "core",
+      "description": "baseweb normalized component button-tonal",
+      "figma_component_key": "button/tonal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "icon-button": {
+      "component_id": "icon-button",
+      "display_name": "Icon Button",
+      "category": "core",
+      "description": "baseweb normalized component icon-button",
+      "figma_component_key": "icon/button",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab": {
+      "component_id": "fab",
+      "display_name": "Fab",
+      "category": "core",
+      "description": "baseweb normalized component fab",
+      "figma_component_key": "fab",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab-small": {
+      "component_id": "fab-small",
+      "display_name": "Fab Small",
+      "category": "core",
+      "description": "baseweb normalized component fab-small",
+      "figma_component_key": "fab/small",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab-large": {
+      "component_id": "fab-large",
+      "display_name": "Fab Large",
+      "category": "core",
+      "description": "baseweb normalized component fab-large",
+      "figma_component_key": "fab/large",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "extended-fab": {
+      "component_id": "extended-fab",
+      "display_name": "Extended Fab",
+      "category": "core",
+      "description": "baseweb normalized component extended-fab",
+      "figma_component_key": "extended/fab",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "text-field-outlined": {
+      "component_id": "text-field-outlined",
+      "display_name": "Text Field Outlined",
+      "category": "core",
+      "description": "baseweb normalized component text-field-outlined",
+      "figma_component_key": "text/field/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "text-field-filled": {
+      "component_id": "text-field-filled",
+      "display_name": "Text Field Filled",
+      "category": "core",
+      "description": "baseweb normalized component text-field-filled",
+      "figma_component_key": "text/field/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-bar": {
+      "component_id": "search-bar",
+      "display_name": "Search Bar",
+      "category": "core",
+      "description": "baseweb normalized component search-bar",
+      "figma_component_key": "search/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-view": {
+      "component_id": "search-view",
+      "display_name": "Search View",
+      "category": "core",
+      "description": "baseweb normalized component search-view",
+      "figma_component_key": "search/view",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-assist": {
+      "component_id": "chip-assist",
+      "display_name": "Chip Assist",
+      "category": "core",
+      "description": "baseweb normalized component chip-assist",
+      "figma_component_key": "chip/assist",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-filter": {
+      "component_id": "chip-filter",
+      "display_name": "Chip Filter",
+      "category": "core",
+      "description": "baseweb normalized component chip-filter",
+      "figma_component_key": "chip/filter",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-input": {
+      "component_id": "chip-input",
+      "display_name": "Chip Input",
+      "category": "core",
+      "description": "baseweb normalized component chip-input",
+      "figma_component_key": "chip/input",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-suggestion": {
+      "component_id": "chip-suggestion",
+      "display_name": "Chip Suggestion",
+      "category": "core",
+      "description": "baseweb normalized component chip-suggestion",
+      "figma_component_key": "chip/suggestion",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "navigation-bar": {
+      "component_id": "navigation-bar",
+      "display_name": "Navigation Bar",
+      "category": "core",
+      "description": "baseweb normalized component navigation-bar",
+      "figma_component_key": "navigation/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "navigation-drawer": {
+      "component_id": "navigation-drawer",
+      "display_name": "Navigation Drawer",
+      "category": "core",
+      "description": "baseweb normalized component navigation-drawer",
+      "figma_component_key": "navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "modal-navigation-drawer": {
+      "component_id": "modal-navigation-drawer",
+      "display_name": "Modal Navigation Drawer",
+      "category": "core",
+      "description": "baseweb normalized component modal-navigation-drawer",
+      "figma_component_key": "modal/navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "nav-rail": {
+      "component_id": "nav-rail",
+      "display_name": "Nav Rail",
+      "category": "core",
+      "description": "baseweb normalized component nav-rail",
+      "figma_component_key": "nav/rail",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "top-app-bar": {
+      "component_id": "top-app-bar",
+      "display_name": "Top App Bar",
+      "category": "core",
+      "description": "baseweb normalized component top-app-bar",
+      "figma_component_key": "top/app/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-app-bar": {
+      "component_id": "bottom-app-bar",
+      "display_name": "Bottom App Bar",
+      "category": "core",
+      "description": "baseweb normalized component bottom-app-bar",
+      "figma_component_key": "bottom/app/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-primary": {
+      "component_id": "tabs-primary",
+      "display_name": "Tabs Primary",
+      "category": "core",
+      "description": "baseweb normalized component tabs-primary",
+      "figma_component_key": "tabs/primary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-secondary": {
+      "component_id": "tabs-secondary",
+      "display_name": "Tabs Secondary",
+      "category": "core",
+      "description": "baseweb normalized component tabs-secondary",
+      "figma_component_key": "tabs/secondary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-elevated": {
+      "component_id": "card-elevated",
+      "display_name": "Card Elevated",
+      "category": "core",
+      "description": "baseweb normalized component card-elevated",
+      "figma_component_key": "card/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-filled": {
+      "component_id": "card-filled",
+      "display_name": "Card Filled",
+      "category": "core",
+      "description": "baseweb normalized component card-filled",
+      "figma_component_key": "card/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-outlined": {
+      "component_id": "card-outlined",
+      "display_name": "Card Outlined",
+      "category": "core",
+      "description": "baseweb normalized component card-outlined",
+      "figma_component_key": "card/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "dialog": {
+      "component_id": "dialog",
+      "display_name": "Dialog",
+      "category": "core",
+      "description": "baseweb normalized component dialog",
+      "figma_component_key": "dialog",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-sheet-modal": {
+      "component_id": "bottom-sheet-modal",
+      "display_name": "Bottom Sheet Modal",
+      "category": "core",
+      "description": "baseweb normalized component bottom-sheet-modal",
+      "figma_component_key": "bottom/sheet/modal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-sheet-standard": {
+      "component_id": "bottom-sheet-standard",
+      "display_name": "Bottom Sheet Standard",
+      "category": "core",
+      "description": "baseweb normalized component bottom-sheet-standard",
+      "figma_component_key": "bottom/sheet/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "snackbar": {
+      "component_id": "snackbar",
+      "display_name": "Snackbar",
+      "category": "core",
+      "description": "baseweb normalized component snackbar",
+      "figma_component_key": "snackbar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "list-item": {
+      "component_id": "list-item",
+      "display_name": "List Item",
+      "category": "core",
+      "description": "baseweb normalized component list-item",
+      "figma_component_key": "list/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "menu": {
+      "component_id": "menu",
+      "display_name": "Menu",
+      "category": "core",
+      "description": "baseweb normalized component menu",
+      "figma_component_key": "menu",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "menu-item": {
+      "component_id": "menu-item",
+      "display_name": "Menu Item",
+      "category": "core",
+      "description": "baseweb normalized component menu-item",
+      "figma_component_key": "menu/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "divider": {
+      "component_id": "divider",
+      "display_name": "Divider",
+      "category": "core",
+      "description": "baseweb normalized component divider",
+      "figma_component_key": "divider",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "badge": {
+      "component_id": "badge",
+      "display_name": "Badge",
+      "category": "core",
+      "description": "baseweb normalized component badge",
+      "figma_component_key": "badge",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "progress-linear": {
+      "component_id": "progress-linear",
+      "display_name": "Progress Linear",
+      "category": "core",
+      "description": "baseweb normalized component progress-linear",
+      "figma_component_key": "progress/linear",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "progress-circular": {
+      "component_id": "progress-circular",
+      "display_name": "Progress Circular",
+      "category": "core",
+      "description": "baseweb normalized component progress-circular",
+      "figma_component_key": "progress/circular",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "switch": {
+      "component_id": "switch",
+      "display_name": "Switch",
+      "category": "core",
+      "description": "baseweb normalized component switch",
+      "figma_component_key": "switch",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "checkbox": {
+      "component_id": "checkbox",
+      "display_name": "Checkbox",
+      "category": "core",
+      "description": "baseweb normalized component checkbox",
+      "figma_component_key": "checkbox",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "radio": {
+      "component_id": "radio",
+      "display_name": "Radio",
+      "category": "core",
+      "description": "baseweb normalized component radio",
+      "figma_component_key": "radio",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "slider": {
+      "component_id": "slider",
+      "display_name": "Slider",
+      "category": "core",
+      "description": "baseweb normalized component slider",
+      "figma_component_key": "slider",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "segmented-button": {
+      "component_id": "segmented-button",
+      "display_name": "Segmented Button",
+      "category": "core",
+      "description": "baseweb normalized component segmented-button",
+      "figma_component_key": "segmented/button",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "date-picker": {
+      "component_id": "date-picker",
+      "display_name": "Date Picker",
+      "category": "core",
+      "description": "baseweb normalized component date-picker",
+      "figma_component_key": "date/picker",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "time-picker": {
+      "component_id": "time-picker",
+      "display_name": "Time Picker",
+      "category": "core",
+      "description": "baseweb normalized component time-picker",
+      "figma_component_key": "time/picker",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tooltip": {
+      "component_id": "tooltip",
+      "display_name": "Tooltip",
+      "category": "core",
+      "description": "baseweb normalized component tooltip",
+      "figma_component_key": "tooltip",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    }
+  },
+  "official_import": {
+    "baseweb": {
+      "extracted_at": "2026-03-23T18:33:17.879Z",
+      "source_repo": "uber/baseweb",
+      "ref": "main",
+      "component_source_files": [
+        "src/a11y/a11y.tsx",
+        "src/a11y/index.ts",
+        "src/a11y/types.ts",
+        "src/accordion/__tests__/accordion-controlled.scenario.tsx",
+        "src/accordion/__tests__/accordion-disabled.scenario.tsx",
+        "src/accordion/__tests__/accordion-expanded.scenario.tsx",
+        "src/accordion/__tests__/accordion-panel-override.scenario.tsx",
+        "src/accordion/__tests__/accordion-stateless.scenario.tsx",
+        "src/accordion/__tests__/accordion.e2e.ts",
+        "src/accordion/__tests__/accordion.scenario.tsx",
+        "src/accordion/__tests__/accordion.stories.tsx",
+        "src/accordion/__tests__/accordion.test.tsx",
+        "src/accordion/__tests__/panel.test.tsx",
+        "src/accordion/__tests__/stateful-panel-container.test.tsx",
+        "src/accordion/accordion.tsx",
+        "src/accordion/constants.ts",
+        "src/accordion/index.ts",
+        "src/accordion/locale.ts",
+        "src/accordion/panel.tsx",
+        "src/accordion/stateful-panel-container.ts",
+        "src/accordion/stateful-panel.tsx",
+        "src/accordion/stateless-accordion.tsx",
+        "src/accordion/styled-components.ts",
+        "src/accordion/types.ts",
+        "src/app-nav-bar/__tests__/app-nav-bar-get-unique-identifier.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar-icon-overrides.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar-is-main-item-active.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar-map-item-to-node.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar-overrides.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar-title-node.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar.scenario.tsx",
+        "src/app-nav-bar/__tests__/app-nav-bar.stories.tsx",
+        "src/app-nav-bar/__tests__/utils.test.ts",
+        "src/app-nav-bar/app-nav-bar.tsx",
+        "src/app-nav-bar/constants.ts",
+        "src/app-nav-bar/index.ts",
+        "src/app-nav-bar/mobile-menu.tsx",
+        "src/app-nav-bar/styled-components.ts",
+        "src/app-nav-bar/types.ts",
+        "src/app-nav-bar/user-menu.tsx",
+        "src/app-nav-bar/user-profile-tile.tsx",
+        "src/app-nav-bar/utils.ts",
+        "src/aspect-ratio-box/__tests__/aspect-ratio-box.scenario.tsx",
+        "src/aspect-ratio-box/__tests__/aspect-ratio-box.stories.tsx",
+        "src/aspect-ratio-box/aspect-ratio-box-body.tsx",
+        "src/aspect-ratio-box/aspect-ratio-box.tsx",
+        "src/aspect-ratio-box/index.ts",
+        "src/aspect-ratio-box/types.ts",
+        "src/avatar/__tests__/avatar-custom-initials.scenario.tsx",
+        "src/avatar/__tests__/avatar-error.scenario.tsx",
+        "src/avatar/__tests__/avatar-no-src.scenario.tsx",
+        "src/avatar/__tests__/avatar-update-image.scenario.tsx",
+        "src/avatar/__tests__/avatar.scenario.tsx",
+        "src/avatar/__tests__/avatar.stories.tsx",
+        "src/avatar/__tests__/avatar.test.tsx",
+        "src/avatar/__tests__/styled-component.test.tsx",
+        "src/avatar/avatar.tsx",
+        "src/avatar/index.ts",
+        "src/avatar/styled-components.ts",
+        "src/avatar/types.ts",
+        "src/badge/__tests__/badge.scenario.tsx",
+        "src/badge/__tests__/badge.stories.tsx",
+        "src/badge/__tests__/hint-dot.scenario.tsx",
+        "src/badge/__tests__/inline-badge.scenario.tsx",
+        "src/badge/__tests__/notification-circle.scenario.tsx",
+        "src/badge/badge.tsx",
+        "src/badge/constants.ts",
+        "src/badge/hint-dot.tsx",
+        "src/badge/index.ts",
+        "src/badge/notification-circle.tsx",
+        "src/badge/styled-components.ts",
+        "src/badge/types.ts",
+        "src/badge/utils.ts",
+        "src/banner/__tests__/banner-action-below.scenario.tsx",
+        "src/banner/__tests__/banner-artwork.scenario.tsx",
+        "src/banner/__tests__/banner-nested.scenario.tsx",
+        "src/banner/__tests__/banner-overrides.scenario.tsx",
+        "src/banner/__tests__/banner.scenario.tsx",
+        "src/banner/__tests__/banner.stories.tsx",
+        "src/banner/__tests__/banner.test.tsx",
+        "src/banner/banner.tsx",
+        "src/banner/constants.ts",
+        "src/banner/index.ts",
+        "src/banner/styled-components.ts",
+        "src/banner/types.ts",
+        "src/block/__tests__/block.scenario.tsx",
+        "src/block/__tests__/block.stories.tsx",
+        "src/block/__tests__/block.test.tsx",
+        "src/block/block.tsx",
+        "src/block/index.ts",
+        "src/block/styled-components.ts",
+        "src/block/types.ts",
+        "src/bottom-navigation/bottom-navigation.tsx",
+        "src/bottom-navigation/index.ts",
+        "src/bottom-navigation/nav-item.tsx",
+        "src/bottom-navigation/panel.tsx",
+        "src/bottom-navigation/selector.tsx",
+        "src/bottom-navigation/styled-components.ts",
+        "src/bottom-navigation/types.ts",
+        "src/breadcrumbs/__tests__/breadcrumbs-icon-overrides.scenario.tsx",
+        "src/breadcrumbs/__tests__/breadcrumbs-pseudo.scenario.tsx",
+        "src/breadcrumbs/__tests__/breadcrumbs-rtl.scenario.tsx",
+        "src/breadcrumbs/__tests__/breadcrumbs-trailing.scenario.tsx",
+        "src/breadcrumbs/__tests__/breadcrumbs.e2e.ts",
+        "src/breadcrumbs/__tests__/breadcrumbs.scenario.tsx",
+        "src/breadcrumbs/__tests__/breadcrumbs.stories.tsx",
+        "src/breadcrumbs/__tests__/breadcrumbs.test.tsx",
+        "src/breadcrumbs/breadcrumbs.tsx",
+        "src/breadcrumbs/index.ts",
+        "src/breadcrumbs/locale.ts",
+        "src/breadcrumbs/styled-components.ts",
+        "src/breadcrumbs/types.ts",
+        "src/button-dock/button-dock.tsx",
+        "src/button-dock/index.ts",
+        "src/button-dock/styled-components.ts",
+        "src/button-dock/types.ts",
+        "src/button-group/__tests__/button-group-a11y.scenario.tsx",
+        "src/button-group/__tests__/button-group-checkbox.scenario.tsx",
+        "src/button-group/__tests__/button-group-disabled.scenario.tsx",
+        "src/button-group/__tests__/button-group-kinds.scenario.tsx",
+        "src/button-group/__tests__/button-group-overrides.scenario.tsx",
+        "src/button-group/__tests__/button-group-padding-scenario.tsx",
+        "src/button-group/__tests__/button-group-pill.scenario.tsx",
+        "src/button-group/__tests__/button-group-radio.scenario.tsx",
+        "src/button-group/__tests__/button-group-selected-disabled.scenario.tsx",
+        "src/button-group/__tests__/button-group-selected.scenario.tsx",
+        "src/button-group/__tests__/button-group-sizes.scenario.tsx",
+        "src/button-group/__tests__/button-group-wrap.scenario.tsx",
+        "src/button-group/__tests__/button-group.e2e.ts",
+        "src/button-group/__tests__/button-group.stories.tsx",
+        "src/button-group/__tests__/button-group.test.tsx",
+        "src/button-group/__tests__/stateful-button-group.test.tsx",
+        "src/button-group/__tests__/stateful-container.test.tsx",
+        "src/button-group/button-group.tsx",
+        "src/button-group/constants.ts",
+        "src/button-group/index.ts",
+        "src/button-group/locale.ts",
+        "src/button-group/stateful-button-group.tsx",
+        "src/button-group/stateful-container.ts",
+        "src/button-group/styled-components.ts",
+        "src/button-group/types.ts",
+        "src/button-timed/__tests__/button-timed.e2e.ts",
+        "src/button-timed/__tests__/button-timed.scenario.tsx",
+        "src/button-timed/__tests__/button-timed.stories.tsx",
+        "src/button-timed/__tests__/button-timed.test.tsx",
+        "src/button-timed/button-timed.tsx",
+        "src/button-timed/index.ts",
+        "src/button-timed/styled-components.ts",
+        "src/button-timed/types.ts",
+        "src/button-timed/utils.ts",
+        "src/button/__tests__/button-a11y.scenario.tsx",
+        "src/button/__tests__/button-backgroundsafe.scenario.tsx",
+        "src/button/__tests__/button-circle.scenario.tsx",
+        "src/button/__tests__/button-colors.scenario.tsx",
+        "src/button/__tests__/button-enhancers-compact.scenario.tsx",
+        "src/button/__tests__/button-enhancers-loading.scenario.tsx",
+        "src/button/__tests__/button-enhancers.scenario.tsx",
+        "src/button/__tests__/button-functional-children.scenario.tsx",
+        "src/button/__tests__/button-in-form.test.tsx",
+        "src/button/__tests__/button-min-hit-area.scenario.tsx",
+        "src/button/__tests__/button-rtl.scenario.tsx",
+        "src/button/__tests__/button-shapes.scenario.tsx",
+        "src/button/__tests__/button-sizes-loading.scenario.tsx",
+        "src/button/__tests__/button-sizes.scenario.tsx",
+        "src/button/__tests__/button-width-type.scenario.tsx",
+        "src/button/__tests__/button.e2e.ts",
+        "src/button/__tests__/button.scenario.tsx",
+        "src/button/__tests__/button.stories.tsx",
+        "src/button/__tests__/button.test.tsx",
+        "src/button/__tests__/link-buttons.scenario.tsx",
+        "src/button/button-internals.tsx",
+        "src/button/button.tsx",
+        "src/button/constants.ts",
+        "src/button/default-props.ts",
+        "src/button/index.ts",
+        "src/button/styled-components.ts",
+        "src/button/types.ts",
+        "src/button/utils.ts",
+        "src/card/__tests__/card-header-level.scenario.tsx",
+        "src/card/__tests__/card-heading-level.e2e.ts",
+        "src/card/__tests__/card-image-link.scenario.tsx",
+        "src/card/__tests__/card-image-object.scenario.tsx",
+        "src/card/__tests__/card-text-only.scenario.tsx",
+        "src/card/__tests__/card.e2e.ts",
+        "src/card/__tests__/card.scenario.tsx",
+        "src/card/__tests__/card.stories.tsx",
+        "src/card/__tests__/card.test.tsx",
+        "src/card/__tests__/images.ts",
+        "src/card/card.tsx",
+        "src/card/index.ts",
+        "src/card/styled-components.ts",
+        "src/card/types.ts",
+        "src/checkbox-v2/__tests__/checkbox-v2-auto-focus.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2-indeterminate.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2-placement.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2-react-hook-form.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2-states.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2-unlabeled.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2.scenario.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2.stories.tsx",
+        "src/checkbox-v2/__tests__/checkbox-v2.test.tsx",
+        "src/checkbox-v2/__tests__/stateful-checkbox-v2-container.test.tsx",
+        "src/checkbox-v2/checkbox.tsx",
+        "src/checkbox-v2/constants.ts",
+        "src/checkbox-v2/index.ts",
+        "src/checkbox-v2/stateful-checkbox-container.ts",
+        "src/checkbox-v2/stateful-checkbox.tsx",
+        "src/checkbox-v2/styled-components.ts",
+        "src/checkbox-v2/types.ts",
+        "src/checkbox/__tests__/checkbox-indeterminate.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-placement.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-react-hook-form.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-rtl.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-select.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-states.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-toggle.scenario.tsx",
+        "src/checkbox/__tests__/checkbox-unlabeled.scenario.tsx",
+        "src/checkbox/__tests__/checkbox.e2e.ts",
+        "src/checkbox/__tests__/checkbox.scenario.tsx",
+        "src/checkbox/__tests__/checkbox.stories.tsx",
+        "src/checkbox/__tests__/checkbox.test.tsx",
+        "src/checkbox/__tests__/stateful-checkbox-container.test.tsx",
+        "src/checkbox/checkbox.tsx",
+        "src/checkbox/constants.ts",
+        "src/checkbox/index.ts",
+        "src/checkbox/stateful-checkbox-container.ts",
+        "src/checkbox/stateful-checkbox.tsx",
+        "src/checkbox/styled-components.ts",
+        "src/checkbox/types.ts",
+        "src/combobox/__tests__/combobox-async.scenario.tsx",
+        "src/combobox/__tests__/combobox-autocomplete-false.scenario.tsx",
+        "src/combobox/__tests__/combobox-disabled.scenario.tsx",
+        "src/combobox/__tests__/combobox-form-control.scenario.tsx",
+        "src/combobox/__tests__/combobox-form.scenario.tsx",
+        "src/combobox/__tests__/combobox-inline-text-search.scenario.tsx",
+        "src/combobox/__tests__/combobox-overrides.scenario.tsx",
+        "src/combobox/__tests__/combobox-replacement-node.scenario.tsx",
+        "src/combobox/__tests__/combobox-search.scenario.tsx",
+        "src/combobox/__tests__/combobox-sizes.scenario.tsx",
+        "src/combobox/__tests__/combobox.e2e.ts",
+        "src/combobox/__tests__/combobox.scenario.tsx",
+        "src/combobox/__tests__/combobox.stories.tsx",
+        "src/combobox/__tests__/combobox.test.tsx",
+        "src/combobox/combobox.tsx",
+        "src/combobox/index.ts",
+        "src/combobox/styled-components.ts",
+        "src/combobox/types.ts",
+        "src/data-table/__tests__/animal-data.ts",
+        "src/data-table/__tests__/column-anchor.test.tsx",
+        "src/data-table/__tests__/column-boolean.test.tsx"
+      ],
+      "component_source_count": 250
+    }
+  }
+}

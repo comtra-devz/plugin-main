@@ -30,6 +30,7 @@ Solo queste categorie appartengono al **Design System audit**. L’accessibilit�
 | **structure** | Structure         | Gerarchia e layout: ghost node, nesting, auto-layout, constraints |
 | **consistency** | Consistency    | Griglia, spacing scale, type scale, line height |
 | **copy**    | Copywriting       | Placeholder, terminologia, overflow/localizzazione |
+| **optimization** | Optimization | Raccomandazioni: merge componenti, slot, token, varianti (sistemi più snelli) |
 
 Non usare nel tab DS: **a11y**, **contrast**, **touch**, **focus**, **alt**, **semantics**, **color** (quelle sono per il tab Accessibility).
 
@@ -45,6 +46,7 @@ Come in `DS-AUDIT-RULES.md`:
 - 4.1–4.5 → **structure**
 - 5.1–5.4 → **consistency**
 - 6.1–6.3 → **copy**
+- 8.1–8.4 → **optimization**
 
 ---
 

@@ -1,0 +1,4271 @@
+{
+  "$schema": "comtra://ds_package/components/1.0",
+  "components": {
+    "button-filled": {
+      "component_id": "button-filled",
+      "display_name": "Button Filled",
+      "category": "core",
+      "description": "Carbon component button-filled with normalized anatomy and states",
+      "figma_component_key": "button/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-outlined": {
+      "component_id": "button-outlined",
+      "display_name": "Button Outlined",
+      "category": "core",
+      "description": "Carbon component button-outlined with normalized anatomy and states",
+      "figma_component_key": "button/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-text": {
+      "component_id": "button-text",
+      "display_name": "Button Text",
+      "category": "core",
+      "description": "Carbon component button-text with normalized anatomy and states",
+      "figma_component_key": "button/text",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-elevated": {
+      "component_id": "button-elevated",
+      "display_name": "Button Elevated",
+      "category": "core",
+      "description": "Carbon component button-elevated with normalized anatomy and states",
+      "figma_component_key": "button/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-tonal": {
+      "component_id": "button-tonal",
+      "display_name": "Button Tonal",
+      "category": "core",
+      "description": "Carbon component button-tonal with normalized anatomy and states",
+      "figma_component_key": "button/tonal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "icon-button": {
+      "component_id": "icon-button",
+      "display_name": "Icon Button",
+      "category": "core",
+      "description": "Carbon component icon-button with normalized anatomy and states",
+      "figma_component_key": "icon/button",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab": {
+      "component_id": "fab",
+      "display_name": "Fab",
+      "category": "core",
+      "description": "Carbon component fab with normalized anatomy and states",
+      "figma_component_key": "fab",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab-small": {
+      "component_id": "fab-small",
+      "display_name": "Fab Small",
+      "category": "core",
+      "description": "Carbon component fab-small with normalized anatomy and states",
+      "figma_component_key": "fab/small",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab-large": {
+      "component_id": "fab-large",
+      "display_name": "Fab Large",
+      "category": "core",
+      "description": "Carbon component fab-large with normalized anatomy and states",
+      "figma_component_key": "fab/large",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "extended-fab": {
+      "component_id": "extended-fab",
+      "display_name": "Extended Fab",
+      "category": "core",
+      "description": "Carbon component extended-fab with normalized anatomy and states",
+      "figma_component_key": "extended/fab",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "text-field-outlined": {
+      "component_id": "text-field-outlined",
+      "display_name": "Text Field Outlined",
+      "category": "core",
+      "description": "Carbon component text-field-outlined with normalized anatomy and states",
+      "figma_component_key": "text/field/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "text-field-filled": {
+      "component_id": "text-field-filled",
+      "display_name": "Text Field Filled",
+      "category": "core",
+      "description": "Carbon component text-field-filled with normalized anatomy and states",
+      "figma_component_key": "text/field/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-bar": {
+      "component_id": "search-bar",
+      "display_name": "Search Bar",
+      "category": "core",
+      "description": "Carbon component search-bar with normalized anatomy and states",
+      "figma_component_key": "search/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-view": {
+      "component_id": "search-view",
+      "display_name": "Search View",
+      "category": "core",
+      "description": "Carbon component search-view with normalized anatomy and states",
+      "figma_component_key": "search/view",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-assist": {
+      "component_id": "chip-assist",
+      "display_name": "Chip Assist",
+      "category": "core",
+      "description": "Carbon component chip-assist with normalized anatomy and states",
+      "figma_component_key": "chip/assist",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-filter": {
+      "component_id": "chip-filter",
+      "display_name": "Chip Filter",
+      "category": "core",
+      "description": "Carbon component chip-filter with normalized anatomy and states",
+      "figma_component_key": "chip/filter",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-input": {
+      "component_id": "chip-input",
+      "display_name": "Chip Input",
+      "category": "core",
+      "description": "Carbon component chip-input with normalized anatomy and states",
+      "figma_component_key": "chip/input",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-suggestion": {
+      "component_id": "chip-suggestion",
+      "display_name": "Chip Suggestion",
+      "category": "core",
+      "description": "Carbon component chip-suggestion with normalized anatomy and states",
+      "figma_component_key": "chip/suggestion",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "navigation-bar": {
+      "component_id": "navigation-bar",
+      "display_name": "Navigation Bar",
+      "category": "core",
+      "description": "Carbon component navigation-bar with normalized anatomy and states",
+      "figma_component_key": "navigation/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "navigation-drawer": {
+      "component_id": "navigation-drawer",
+      "display_name": "Navigation Drawer",
+      "category": "core",
+      "description": "Carbon component navigation-drawer with normalized anatomy and states",
+      "figma_component_key": "navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "modal-navigation-drawer": {
+      "component_id": "modal-navigation-drawer",
+      "display_name": "Modal Navigation Drawer",
+      "category": "core",
+      "description": "Carbon component modal-navigation-drawer with normalized anatomy and states",
+      "figma_component_key": "modal/navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "nav-rail": {
+      "component_id": "nav-rail",
+      "display_name": "Nav Rail",
+      "category": "core",
+      "description": "Carbon component nav-rail with normalized anatomy and states",
+      "figma_component_key": "nav/rail",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "top-app-bar": {
+      "component_id": "top-app-bar",
+      "display_name": "Top App Bar",
+      "category": "core",
+      "description": "Carbon component top-app-bar with normalized anatomy and states",
+      "figma_component_key": "top/app/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-app-bar": {
+      "component_id": "bottom-app-bar",
+      "display_name": "Bottom App Bar",
+      "category": "core",
+      "description": "Carbon component bottom-app-bar with normalized anatomy and states",
+      "figma_component_key": "bottom/app/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-primary": {
+      "component_id": "tabs-primary",
+      "display_name": "Tabs Primary",
+      "category": "core",
+      "description": "Carbon component tabs-primary with normalized anatomy and states",
+      "figma_component_key": "tabs/primary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-secondary": {
+      "component_id": "tabs-secondary",
+      "display_name": "Tabs Secondary",
+      "category": "core",
+      "description": "Carbon component tabs-secondary with normalized anatomy and states",
+      "figma_component_key": "tabs/secondary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-elevated": {
+      "component_id": "card-elevated",
+      "display_name": "Card Elevated",
+      "category": "core",
+      "description": "Carbon component card-elevated with normalized anatomy and states",
+      "figma_component_key": "card/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-filled": {
+      "component_id": "card-filled",
+      "display_name": "Card Filled",
+      "category": "core",
+      "description": "Carbon component card-filled with normalized anatomy and states",
+      "figma_component_key": "card/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-outlined": {
+      "component_id": "card-outlined",
+      "display_name": "Card Outlined",
+      "category": "core",
+      "description": "Carbon component card-outlined with normalized anatomy and states",
+      "figma_component_key": "card/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "dialog": {
+      "component_id": "dialog",
+      "display_name": "Dialog",
+      "category": "core",
+      "description": "Carbon component dialog with normalized anatomy and states",
+      "figma_component_key": "dialog",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-sheet-modal": {
+      "component_id": "bottom-sheet-modal",
+      "display_name": "Bottom Sheet Modal",
+      "category": "core",
+      "description": "Carbon component bottom-sheet-modal with normalized anatomy and states",
+      "figma_component_key": "bottom/sheet/modal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-sheet-standard": {
+      "component_id": "bottom-sheet-standard",
+      "display_name": "Bottom Sheet Standard",
+      "category": "core",
+      "description": "Carbon component bottom-sheet-standard with normalized anatomy and states",
+      "figma_component_key": "bottom/sheet/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "snackbar": {
+      "component_id": "snackbar",
+      "display_name": "Snackbar",
+      "category": "core",
+      "description": "Carbon component snackbar with normalized anatomy and states",
+      "figma_component_key": "snackbar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "list-item": {
+      "component_id": "list-item",
+      "display_name": "List Item",
+      "category": "core",
+      "description": "Carbon component list-item with normalized anatomy and states",
+      "figma_component_key": "list/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "menu": {
+      "component_id": "menu",
+      "display_name": "Menu",
+      "category": "core",
+      "description": "Carbon component menu with normalized anatomy and states",
+      "figma_component_key": "menu",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "menu-item": {
+      "component_id": "menu-item",
+      "display_name": "Menu Item",
+      "category": "core",
+      "description": "Carbon component menu-item with normalized anatomy and states",
+      "figma_component_key": "menu/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "divider": {
+      "component_id": "divider",
+      "display_name": "Divider",
+      "category": "core",
+      "description": "Carbon component divider with normalized anatomy and states",
+      "figma_component_key": "divider",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "badge": {
+      "component_id": "badge",
+      "display_name": "Badge",
+      "category": "core",
+      "description": "Carbon component badge with normalized anatomy and states",
+      "figma_component_key": "badge",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "progress-linear": {
+      "component_id": "progress-linear",
+      "display_name": "Progress Linear",
+      "category": "core",
+      "description": "Carbon component progress-linear with normalized anatomy and states",
+      "figma_component_key": "progress/linear",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "progress-circular": {
+      "component_id": "progress-circular",
+      "display_name": "Progress Circular",
+      "category": "core",
+      "description": "Carbon component progress-circular with normalized anatomy and states",
+      "figma_component_key": "progress/circular",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "switch": {
+      "component_id": "switch",
+      "display_name": "Switch",
+      "category": "core",
+      "description": "Carbon component switch with normalized anatomy and states",
+      "figma_component_key": "switch",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "checkbox": {
+      "component_id": "checkbox",
+      "display_name": "Checkbox",
+      "category": "core",
+      "description": "Carbon component checkbox with normalized anatomy and states",
+      "figma_component_key": "checkbox",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "radio": {
+      "component_id": "radio",
+      "display_name": "Radio",
+      "category": "core",
+      "description": "Carbon component radio with normalized anatomy and states",
+      "figma_component_key": "radio",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "slider": {
+      "component_id": "slider",
+      "display_name": "Slider",
+      "category": "core",
+      "description": "Carbon component slider with normalized anatomy and states",
+      "figma_component_key": "slider",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "segmented-button": {
+      "component_id": "segmented-button",
+      "display_name": "Segmented Button",
+      "category": "core",
+      "description": "Carbon component segmented-button with normalized anatomy and states",
+      "figma_component_key": "segmented/button",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "date-picker": {
+      "component_id": "date-picker",
+      "display_name": "Date Picker",
+      "category": "core",
+      "description": "Carbon component date-picker with normalized anatomy and states",
+      "figma_component_key": "date/picker",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "time-picker": {
+      "component_id": "time-picker",
+      "display_name": "Time Picker",
+      "category": "core",
+      "description": "Carbon component time-picker with normalized anatomy and states",
+      "figma_component_key": "time/picker",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tooltip": {
+      "component_id": "tooltip",
+      "display_name": "Tooltip",
+      "category": "core",
+      "description": "Carbon component tooltip with normalized anatomy and states",
+      "figma_component_key": "tooltip",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    }
+  },
+  "official_import": {
+    "carbon": {
+      "extracted_at": "2026-03-23T18:27:19.361Z",
+      "source_repo": "carbon-design-system/carbon",
+      "ref": "main",
+      "component_paths": [
+        "packages/carbon-components",
+        "packages/carbon-components-react",
+        "packages/carbon-components-react/__tests__",
+        "packages/carbon-components-react/scripts",
+        "packages/carbon-components-react/scss",
+        "packages/carbon-components-react/src",
+        "packages/carbon-components-react/tasks",
+        "packages/carbon-components/__tests__",
+        "packages/carbon-components/docs",
+        "packages/carbon-components/scripts",
+        "packages/carbon-components/scss",
+        "packages/carbon-components/tasks",
+        "packages/cli",
+        "packages/cli-reporter",
+        "packages/cli/bin",
+        "packages/cli/src",
+        "packages/colors",
+        "packages/colors/__tests__",
+        "packages/colors/artifacts",
+        "packages/colors/docs",
+        "packages/colors/examples",
+        "packages/colors/src",
+        "packages/colors/tasks",
+        "packages/elements",
+        "packages/elements/docs",
+        "packages/elements/src",
+        "packages/feature-flags",
+        "packages/feature-flags/__tests__",
+        "packages/feature-flags/src",
+        "packages/feature-flags/tasks",
+        "packages/grid",
+        "packages/grid/__tests__",
+        "packages/grid/docs",
+        "packages/grid/examples",
+        "packages/grid/scss",
+        "packages/icon-build-helpers",
+        "packages/icon-build-helpers/src",
+        "packages/icon-helpers",
+        "packages/icon-helpers/src",
+        "packages/icons",
+        "packages/icons-react",
+        "packages/icons-react/examples",
+        "packages/icons-react/tasks",
+        "packages/icons-vue",
+        "packages/icons-vue/examples",
+        "packages/icons-vue/tasks",
+        "packages/icons/examples",
+        "packages/icons/master",
+        "packages/icons/src",
+        "packages/icons/tasks",
+        "packages/layout",
+        "packages/layout/__tests__",
+        "packages/layout/docs",
+        "packages/layout/examples",
+        "packages/layout/scss",
+        "packages/layout/src",
+        "packages/layout/tasks",
+        "packages/motion",
+        "packages/motion/__tests__",
+        "packages/motion/docs",
+        "packages/motion/src",
+        "packages/pictograms",
+        "packages/pictograms-react",
+        "packages/pictograms-react/tasks",
+        "packages/pictograms/docs",
+        "packages/pictograms/examples",
+        "packages/pictograms/master",
+        "packages/pictograms/src",
+        "packages/pictograms/tasks",
+        "packages/react",
+        "packages/react/.storybook",
+        "packages/react/__tests__",
+        "packages/react/code-connect",
+        "packages/react/docs",
+        "packages/react/examples",
+        "packages/react/icons",
+        "packages/react/previewer",
+        "packages/react/scss",
+        "packages/react/src",
+        "packages/react/tasks",
+        "packages/react/thumbnails",
+        "packages/scss-generator",
+        "packages/scss-generator/__tests__",
+        "packages/scss-generator/src",
+        "packages/styles",
+        "packages/styles/__tests__",
+        "packages/styles/docs",
+        "packages/styles/scss",
+        "packages/styles/tasks",
+        "packages/styles/thumbnails",
+        "packages/test-utils",
+        "packages/test-utils/__tests__",
+        "packages/test-utils/src",
+        "packages/themes",
+        "packages/themes/__tests__",
+        "packages/themes/docs",
+        "packages/themes/examples",
+        "packages/themes/scss",
+        "packages/themes/src",
+        "packages/themes/tasks",
+        "packages/type",
+        "packages/type/__tests__",
+        "packages/type/docs",
+        "packages/type/examples",
+        "packages/type/scss",
+        "packages/type/src",
+        "packages/upgrade",
+        "packages/upgrade/__mocks__",
+        "packages/upgrade/bin",
+        "packages/upgrade/fixtures",
+        "packages/upgrade/src",
+        "packages/upgrade/transforms",
+        "packages/utilities",
+        "packages/utilities-react",
+        "packages/utilities-react/src",
+        "packages/utilities/scss",
+        "packages/utilities/src",
+        "packages/web-components",
+        "packages/web-components/.storybook",
+        "packages/web-components/code-connect",
+        "packages/web-components/docs",
+        "packages/web-components/examples",
+        "packages/web-components/src",
+        "packages/web-components/tasks",
+        "packages/web-components/tests",
+        "packages/web-components/thumbnails",
+        "packages/web-components/tools",
+        "www/src/components"
+      ],
+      "component_path_count": 128
+    }
+  }
+}

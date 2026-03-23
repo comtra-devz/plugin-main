@@ -1,0 +1,27 @@
+{
+  "ds_id": "bootstrap5",
+  "official_sources": {
+    "docs": [
+      "https://getbootstrap.com/docs/5.3/getting-started/introduction/",
+      "https://getbootstrap.com/docs/5.3/components/alerts/"
+    ],
+    "tokens": [
+      "https://getbootstrap.com/docs/5.3/customize/sass/"
+    ],
+    "components": [
+      "https://github.com/twbs/bootstrap"
+    ],
+    "storybook": []
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

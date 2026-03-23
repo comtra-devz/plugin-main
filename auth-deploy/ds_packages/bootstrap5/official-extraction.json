@@ -1,0 +1,12 @@
+{
+  "ds_id": "bootstrap5",
+  "extracted_at": "2026-03-23T18:33:17.056Z",
+  "extractor": "bootstrap5-official-extractor",
+  "elapsed_ms": 406,
+  "source": {
+    "repo": "twbs/bootstrap",
+    "ref": "main",
+    "token_source_count": 40,
+    "component_source_count": 26
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "profile": "baseweb",
+  "generated_at": "2026-03-23T15:32:44.162Z",
+  "summary": {
+    "token_count": 60,
+    "min_token_count": 60,
+    "token_ok": true,
+    "rule_count": 32,
+    "min_rule_count": 32,
+    "rule_ok": true,
+    "component_count": 48,
+    "required_component_count": 48,
+    "components_ok": true,
+    "scaffold_component_count": 0,
+    "rule_groups_ok": true,
+    "themes_ok": true
+  },
+  "gaps": {
+    "missing_components": [],
+    "missing_rule_groups": [],
+    "missing_themes": [],
+    "scaffold_components": []
+  },
+  "notes": [
+    "Autofill disabled.",
+    "No scaffold components detected."
+  ]
+}

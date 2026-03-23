@@ -1,0 +1,27 @@
+{
+  "ds_id": "ant",
+  "official_sources": {
+    "docs": [
+      "https://ant.design/docs/spec/introduce",
+      "https://ant.design/components/overview"
+    ],
+    "tokens": [
+      "https://ant.design/docs/react/customize-theme"
+    ],
+    "components": [
+      "https://github.com/ant-design/ant-design"
+    ],
+    "storybook": []
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

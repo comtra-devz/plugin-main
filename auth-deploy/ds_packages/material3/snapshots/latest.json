@@ -1,0 +1,92 @@
+{
+  "ds_id": "material3",
+  "extracted_at": "2026-03-23T17:45:03.554Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:cf8a208e2923e983e648f0f177826e0a493412e3bca4d4409274ac6a384cec97",
+  "package_manifest_version": "2026.03.5",
+  "summary": {
+    "total": 6,
+    "ok": 6,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://m3.material.io/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"315532801.0-62319-2265778700\"",
+      "last_modified": "Tue, 01 Jan 1980 00:00:01 GMT",
+      "body_sha256": "sha256:a1648990ef17017c6332196587880a37e641e2ce0e7b339d7be2dc1a346df1e6",
+      "body_size": 62311,
+      "elapsed_ms": 364,
+      "fetched_at": "2026-03-23T17:45:01.515Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://m3.material.io/components",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"315532801.0-62699-303304321\"",
+      "last_modified": "Tue, 01 Jan 1980 00:00:01 GMT",
+      "body_sha256": "sha256:076a23f311a30f0a752f64879ed711eb6826d75b57bbcc9980949f06a16b3d4f",
+      "body_size": 62691,
+      "elapsed_ms": 262,
+      "fetched_at": "2026-03-23T17:45:01.781Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://github.com/material-foundation/material-tokens",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"c3287c06ca609703baf39bcea0d027db\"",
+      "last_modified": null,
+      "body_sha256": "sha256:756658557019f80dea8cb56bae33ac426f2b73435649dedfe4330b3aba5ecb0a",
+      "body_size": 276238,
+      "elapsed_ms": 656,
+      "fetched_at": "2026-03-23T17:45:02.437Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/material-components/material-web",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"40dac4de09540ff92e666a2a06a051aa\"",
+      "last_modified": null,
+      "body_sha256": "sha256:29d1c501035331ea1c2a8cce1d382565b5e74fa9802bee988cef6bb15606e457",
+      "body_size": 393331,
+      "elapsed_ms": 562,
+      "fetched_at": "2026-03-23T17:45:02.999Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/material-components/material-web",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"40dac4de09540ff92e666a2a06a051aa\"",
+      "last_modified": null,
+      "body_sha256": "sha256:1c8d47a66c879e1f9a34a832294d64c486f04049d2ef67820a0c56a6570aaa33",
+      "body_size": 393331,
+      "elapsed_ms": 33,
+      "fetched_at": "2026-03-23T17:45:03.032Z",
+      "group": "components"
+    },
+    {
+      "url": "https://github.com/material-components/material-components-android",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"6d0c15a2f84e38f9f8ee02ba60cc06c5\"",
+      "last_modified": null,
+      "body_sha256": "sha256:1d14a15908bd1b8dae41250a36609eb25bbdb66943003e11f333a18b67e2c1de",
+      "body_size": 299636,
+      "elapsed_ms": 521,
+      "fetched_at": "2026-03-23T17:45:03.554Z",
+      "group": "components"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "ds_id": "sls",
+  "extracted_at": "2026-03-23T17:45:11.570Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:2a2b6f89b3d69911f3456d4b93dd810371bfbc66b08614dc8f4b470786a030ee",
+  "package_manifest_version": "2026.03.2",
+  "summary": {
+    "total": 4,
+    "ok": 4,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://github.com/salesforce-ux/design-system",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"f59074664c024777055ef00a26ab2552\"",
+      "last_modified": null,
+      "body_sha256": "sha256:13295527521af9ec98348daa3d03b18ce4532549bd2253eea4a4d3a09dde2703",
+      "body_size": 438720,
+      "elapsed_ms": 782,
+      "fetched_at": "2026-03-23T17:45:10.846Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://github.com/salesforce-ux/design-system/tree/master/ui/components",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"fa2f98e660f0dd1d5936b80ce9996de1\"",
+      "last_modified": null,
+      "body_sha256": "sha256:feac4d1688428af84b9d3da619ffab96a6d88d86ce0e27fd7368fb4312ada6a9",
+      "body_size": 434234,
+      "elapsed_ms": 646,
+      "fetched_at": "2026-03-23T17:45:11.492Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://github.com/salesforce-ux/design-system",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"f59074664c024777055ef00a26ab2552\"",
+      "last_modified": null,
+      "body_sha256": "sha256:46ad4ba27bb09f9ab625e82ccb0f7598bbc1d49b986ad173737110c93587e4cb",
+      "body_size": 438720,
+      "elapsed_ms": 39,
+      "fetched_at": "2026-03-23T17:45:11.531Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/salesforce-ux/design-system",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"f59074664c024777055ef00a26ab2552\"",
+      "last_modified": null,
+      "body_sha256": "sha256:fccc5fdcd748b6c65e1c249c6f6a32bfa3c9f718b689bd9e05f0a291b7fa08b4",
+      "body_size": 438720,
+      "elapsed_ms": 39,
+      "fetched_at": "2026-03-23T17:45:11.570Z",
+      "group": "components"
+    }
+  ]
+}

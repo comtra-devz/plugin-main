@@ -1,0 +1,27 @@
+{
+  "ds_id": "baseweb",
+  "official_sources": {
+    "docs": [
+      "https://baseweb.design/",
+      "https://baseweb.design/components/"
+    ],
+    "tokens": [
+      "https://baseweb.design/guides/theming/"
+    ],
+    "components": [
+      "https://github.com/uber/baseweb"
+    ],
+    "storybook": []
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

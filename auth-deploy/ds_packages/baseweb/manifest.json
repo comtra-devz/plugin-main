@@ -1,0 +1,43 @@
+{
+  "ds_id": "baseweb",
+  "ds_name": "Base Web",
+  "version": "2026.03.3",
+  "source_version": "current",
+  "source_url": "https://baseweb.design",
+  "source_type": "mixed",
+  "extraction_date": "2026-03-23T15:32:34Z",
+  "schema_version": "1.0.0",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "curated",
+    "components": "curated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "hash": "sha256:54ce9ea2f90594be6b9224ff5d1bebf17e82a20a3f8d74b9f6b63dcc5d795970",
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "baseweb P2 completed: no scaffold components, conformance pass"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T18:33:17.881Z",
+    "token_source_count": 60,
+    "component_source_count": 250
+  }
+}

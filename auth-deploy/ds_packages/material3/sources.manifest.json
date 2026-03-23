@@ -1,0 +1,29 @@
+{
+  "ds_id": "material3",
+  "official_sources": {
+    "docs": [
+      "https://m3.material.io/",
+      "https://m3.material.io/components"
+    ],
+    "tokens": [
+      "https://github.com/material-foundation/material-tokens",
+      "https://github.com/material-components/material-web"
+    ],
+    "components": [
+      "https://github.com/material-components/material-web",
+      "https://github.com/material-components/material-components-android"
+    ],
+    "storybook": []
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

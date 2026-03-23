@@ -1,0 +1,686 @@
+{
+  "$schema": "comtra://ds_package/rules/1.0",
+  "color_usage": [
+    {
+      "rule_id": "color-001",
+      "description": "Primary color is reserved for key actions and active indicators.",
+      "severity": "error",
+      "context": [
+        "interactive",
+        "navigation"
+      ],
+      "applies_to": [
+        "button-filled",
+        "fab",
+        "tabs",
+        "navigation-bar"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "background-cta",
+          "active-indicator",
+          "brand-accent"
+        ],
+        "forbidden_roles": [
+          "text-body",
+          "decorative-fill"
+        ]
+      }
+    },
+    {
+      "rule_id": "color-002",
+      "description": "Error color cannot be used as primary CTA background.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled"
+      ],
+      "token": "color.semantic.error",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "feedback-error"
+        ],
+        "forbidden_roles": [
+          "background-cta"
+        ]
+      }
+    },
+    {
+      "rule_id": "color-003",
+      "description": "All foreground/background pairs must map to semantic on-* tokens.",
+      "severity": "error",
+      "context": [
+        "content",
+        "interactive"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.on-surface",
+      "constraint": {
+        "type": "pairing",
+        "when_token": "color.semantic.surface",
+        "must_pair_with": "color.semantic.on-surface",
+        "relationship": "text-on-background"
+      }
+    },
+    {
+      "rule_id": "color-004",
+      "description": "Outline variant must be used for subtle separators, not primary borders.",
+      "severity": "warning",
+      "context": [
+        "layout"
+      ],
+      "applies_to": [
+        "card-elevated",
+        "list-item"
+      ],
+      "token": "color.semantic.outline-variant",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "border-subtle"
+        ],
+        "forbidden_roles": [
+          "border-strong",
+          "focus-ring"
+        ]
+      }
+    }
+  ],
+  "typography_usage": [
+    {
+      "rule_id": "typo-001",
+      "description": "Body content uses body scale, not display/headline scales.",
+      "severity": "error",
+      "context": [
+        "content",
+        "card-body"
+      ],
+      "applies_to": [
+        "card-elevated",
+        "list-item"
+      ],
+      "token": "typography.scale.body-medium",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "body",
+        "allowed": [
+          "body-medium",
+          "body-large"
+        ],
+        "forbidden": [
+          "display-large",
+          "headline-large",
+          "title-large"
+        ]
+      }
+    },
+    {
+      "rule_id": "typo-002",
+      "description": "Buttons use label scale only.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "button-outlined"
+      ],
+      "token": "typography.scale.label-large",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "button-label",
+        "allowed": [
+          "label-large",
+          "label-medium"
+        ],
+        "forbidden": [
+          "body-large",
+          "title-medium"
+        ]
+      }
+    },
+    {
+      "rule_id": "typo-003",
+      "description": "Use title scale for section headers in cards/sheets.",
+      "severity": "warning",
+      "context": [
+        "content"
+      ],
+      "applies_to": [
+        "card-elevated",
+        "dialog"
+      ],
+      "token": "typography.scale.title-medium",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "section-header",
+        "allowed": [
+          "title-medium",
+          "title-large"
+        ],
+        "forbidden": [
+          "display-large"
+        ]
+      }
+    }
+  ],
+  "spacing_usage": [
+    {
+      "rule_id": "space-001",
+      "description": "Use spacing scale tokens only (4pt rhythm multiples).",
+      "severity": "error",
+      "context": [
+        "layout",
+        "interactive"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "spacing.xs",
+          "spacing.sm",
+          "spacing.md",
+          "spacing.lg",
+          "spacing.xl",
+          "spacing.xxl"
+        ],
+        "forbidden": [
+          "raw-px"
+        ]
+      }
+    },
+    {
+      "rule_id": "space-002",
+      "description": "Card internal padding should be lg or xl for readability.",
+      "severity": "warning",
+      "context": [
+        "content"
+      ],
+      "applies_to": [
+        "card-elevated"
+      ],
+      "token": "spacing.lg",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "internal-padding-range",
+        "value": [
+          16,
+          24
+        ],
+        "unit": "px"
+      }
+    }
+  ],
+  "layout_rules": [
+    {
+      "rule_id": "layout-001",
+      "description": "Interactive elements must meet minimum touch target 48px.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "icon-button",
+        "text-field-outlined"
+      ],
+      "token": "spacing.xl",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-touch-target",
+        "value": 48,
+        "unit": "px"
+      }
+    },
+    {
+      "rule_id": "layout-002",
+      "description": "Do not place more than 2 primary CTAs in the same viewport section.",
+      "severity": "warning",
+      "context": [
+        "content"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "max-primary-actions-per-section",
+        "value": 2,
+        "unit": "count"
+      }
+    },
+    {
+      "rule_id": "layout-003",
+      "description": "FAB must be anchored bottom-end with safe area spacing.",
+      "severity": "warning",
+      "context": [
+        "navigation",
+        "actions"
+      ],
+      "applies_to": [
+        "fab"
+      ],
+      "token": "spacing.xl",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "fab-anchor",
+        "value": "bottom-end",
+        "offset": "spacing.xl"
+      }
+    },
+    {
+      "rule_id": "layout-004",
+      "description": "Navigation rail is preferred over bottom navigation for medium+ layouts.",
+      "severity": "warning",
+      "context": [
+        "responsive"
+      ],
+      "applies_to": [
+        "nav-rail",
+        "navigation-bar"
+      ],
+      "token": "breakpoints.medium",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-nav-choice",
+        "value": "rail-for-medium-up"
+      }
+    },
+    {
+      "rule_id": "layout-005",
+      "description": "Navigation drawer width should follow medium/expanded width guidance.",
+      "severity": "warning",
+      "context": [
+        "navigation",
+        "responsive"
+      ],
+      "applies_to": [
+        "navigation-drawer",
+        "modal-navigation-drawer"
+      ],
+      "token": "breakpoints.medium",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "drawer-width-range",
+        "value": [
+          280,
+          360
+        ],
+        "unit": "px"
+      }
+    },
+    {
+      "rule_id": "layout-006",
+      "description": "Bottom sheets require drag handle and top safe-area spacing.",
+      "severity": "error",
+      "context": [
+        "feedback",
+        "layout"
+      ],
+      "applies_to": [
+        "bottom-sheet-modal",
+        "bottom-sheet-standard"
+      ],
+      "token": "spacing.sm",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "sheet-handle-required",
+        "value": 1,
+        "unit": "boolean"
+      }
+    }
+  ],
+  "state_rules": [
+    {
+      "rule_id": "state-001",
+      "description": "Buttons must define default, hovered, pressed, and disabled mappings.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "button-filled",
+        "states": {
+          "default": {
+            "background": "color.semantic.primary",
+            "text": "color.semantic.on-primary"
+          },
+          "hovered": {
+            "overlay": "color.semantic.on-primary@0.08"
+          },
+          "pressed": {
+            "overlay": "color.semantic.on-primary@0.12"
+          },
+          "disabled": {
+            "background": "color.semantic.on-surface@0.12",
+            "text": "color.semantic.on-surface@0.38"
+          }
+        }
+      }
+    },
+    {
+      "rule_id": "state-002",
+      "description": "Input fields must include focused and error states.",
+      "severity": "error",
+      "context": [
+        "forms"
+      ],
+      "applies_to": [
+        "text-field-outlined"
+      ],
+      "token": "color.semantic.outline",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "text-field-outlined",
+        "states": {
+          "default": {
+            "border": "color.semantic.outline"
+          },
+          "focused": {
+            "border": "color.semantic.primary"
+          },
+          "error": {
+            "border": "color.semantic.error"
+          },
+          "disabled": {
+            "border": "color.semantic.outline-variant"
+          }
+        }
+      }
+    },
+    {
+      "rule_id": "state-003",
+      "description": "Dialogs must define dismiss and confirm action hierarchy.",
+      "severity": "error",
+      "context": [
+        "feedback"
+      ],
+      "applies_to": [
+        "dialog"
+      ],
+      "token": "typography.scale.label-large",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "dialog",
+        "states": {
+          "default": {
+            "actions": "secondary-left-primary-right"
+          }
+        }
+      }
+    },
+    {
+      "rule_id": "state-004",
+      "description": "Snackbar action must be text style only.",
+      "severity": "error",
+      "context": [
+        "feedback"
+      ],
+      "applies_to": [
+        "snackbar"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "text-action"
+        ],
+        "forbidden_roles": [
+          "filled-action"
+        ]
+      }
+    },
+    {
+      "rule_id": "state-005",
+      "description": "Switch, checkbox and radio must expose selected/unselected/disabled states.",
+      "severity": "error",
+      "context": [
+        "forms"
+      ],
+      "applies_to": [
+        "switch",
+        "checkbox",
+        "radio"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "selection-controls",
+        "states": {
+          "unselected": {},
+          "selected": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "state-006",
+      "description": "Progress indicators should include indeterminate and determinate semantics.",
+      "severity": "warning",
+      "context": [
+        "feedback"
+      ],
+      "applies_to": [
+        "progress-linear",
+        "progress-circular"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "progress",
+        "states": {
+          "determinate": {},
+          "indeterminate": {}
+        }
+      }
+    }
+  ],
+  "composition_rules": [
+    {
+      "rule_id": "comp-001",
+      "description": "Nested interactive elements are forbidden.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "single-interactive-root"
+        ],
+        "forbidden_roles": [
+          "interactive-inside-interactive"
+        ]
+      }
+    },
+    {
+      "rule_id": "comp-002",
+      "description": "Icon-only actions must include tooltip or aria label metadata.",
+      "severity": "warning",
+      "context": [
+        "interactive",
+        "accessibility"
+      ],
+      "applies_to": [
+        "icon-button"
+      ],
+      "token": "typography.scale.label-small",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "icon-only-requires-label",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "comp-003",
+      "description": "Top app bar plus navigation rail must not duplicate same primary destinations.",
+      "severity": "warning",
+      "context": [
+        "navigation"
+      ],
+      "applies_to": [
+        "top-app-bar",
+        "nav-rail"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "avoid-duplicate-primary-nav",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "comp-004",
+      "description": "Lists in cards require consistent leading content alignment.",
+      "severity": "warning",
+      "context": [
+        "content"
+      ],
+      "applies_to": [
+        "list-item",
+        "card-elevated"
+      ],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "list-leading-alignment",
+        "value": "consistent"
+      }
+    }
+  ],
+  "accessibility_rules": [
+    {
+      "rule_id": "a11y-001",
+      "description": "Text/surface contrast must satisfy WCAG AA >= 4.5.",
+      "severity": "error",
+      "context": [
+        "content",
+        "interactive"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.on-surface",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    },
+    {
+      "rule_id": "a11y-002",
+      "description": "Disabled text opacity must use semantic disabled-content level.",
+      "severity": "warning",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "text-field-outlined"
+      ],
+      "token": "opacity.disabled-content",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "opacity",
+        "context": "disabled-content",
+        "allowed": [
+          "opacity.disabled-content"
+        ],
+        "forbidden": [
+          "arbitrary-alpha"
+        ]
+      }
+    },
+    {
+      "rule_id": "a11y-003",
+      "description": "Tooltips must not be the only source of critical information.",
+      "severity": "warning",
+      "context": [
+        "accessibility",
+        "content"
+      ],
+      "applies_to": [
+        "tooltip"
+      ],
+      "token": "typography.scale.label-small",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "tooltip-noncritical-only",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "a11y-004",
+      "description": "Touch targets for chips, segmented buttons, and icon buttons must be at least 48x48.",
+      "severity": "error",
+      "context": [
+        "accessibility",
+        "interactive"
+      ],
+      "applies_to": [
+        "chip-assist",
+        "chip-filter",
+        "chip-input",
+        "chip-suggestion",
+        "segmented-button",
+        "icon-button"
+      ],
+      "token": "spacing.xl",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-touch-target",
+        "value": 48,
+        "unit": "px"
+      }
+    }
+  ],
+  "forbidden_patterns": [
+    {
+      "pattern_id": "fp-001",
+      "description": "Never hardcode hex colors when semantic token exists.",
+      "detect": {
+        "token": "hardcoded-hex"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "fp-002",
+      "description": "Never use display typography in containers narrower than 320px.",
+      "detect": {
+        "typography_scale": [
+          "display-*"
+        ],
+        "container_max_width": 320
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "fp-003",
+      "description": "Never assign error color to non-feedback decorative fills.",
+      "detect": {
+        "token": "color.semantic.error",
+        "role": "decorative-fill"
+      },
+      "severity": "error"
+    }
+  ]
+}

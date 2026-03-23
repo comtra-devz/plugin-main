@@ -1,0 +1,14 @@
+{
+  "ds_id": "carbon",
+  "official_only": true,
+  "extracted_at": "2026-03-23T17:45:07.567Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_file": "sources.manifest.json",
+  "snapshot_file": "snapshots/latest.json",
+  "snapshot_summary": {
+    "total": 4,
+    "ok": 4,
+    "failed": 0
+  },
+  "confidence": "verified"
+}

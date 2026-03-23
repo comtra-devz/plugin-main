@@ -1,0 +1,43 @@
+{
+  "ds_id": "bootstrap5",
+  "ds_name": "Bootstrap 5",
+  "version": "2026.03.3",
+  "source_version": "current",
+  "source_url": "https://getbootstrap.com",
+  "source_type": "mixed",
+  "extraction_date": "2026-03-23T15:32:34Z",
+  "schema_version": "1.0.0",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "curated",
+    "components": "curated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "hash": "sha256:e57efe2a25ebbc7705b4a40158dc0a613c113a45647fdd0220c6b433bf722e61",
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "bootstrap5 P2 completed: no scaffold components, conformance pass"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T18:33:17.056Z",
+    "token_source_count": 40,
+    "component_source_count": 26
+  }
+}

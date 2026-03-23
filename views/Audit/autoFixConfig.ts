@@ -36,6 +36,7 @@ export const CREDITS_BY_CATEGORY: Record<string, number> = {
   structure: 2,
   consistency: 2,
   copy: 2,
+  optimization: 2,
   // UX / Prototype (placeholder)
   flow: 2,
   feedback: 2,
@@ -60,6 +61,11 @@ export const CREDITS_BY_RULE: Record<string, number> = {
   'CLR-002': 2,
   // Component deviation (multiple layers) could cost more
   // adoption + layerIds: already handled as single fix per issue
+  // DS Optimization (audit-specs/ds-audit/DS-AUDIT-RULES.md §8)
+  'DS-OPT-1': 2,
+  'DS-OPT-2': 2,
+  'DS-OPT-3': 2,
+  'DS-OPT-4': 2,
 };
 
 /**

@@ -1,0 +1,66 @@
+{
+  "ds_id": "bootstrap5",
+  "extracted_at": "2026-03-23T17:28:26.297Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:ee18f29b58e879e18a26ca9222125d70e0392720c5b5ec475c8acd92c7b5b32e",
+  "package_manifest_version": "2026.03.2",
+  "summary": {
+    "total": 4,
+    "ok": 4,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://getbootstrap.com/docs/5.3/getting-started/introduction/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"695dedd8-120bc\"",
+      "last_modified": "Wed, 07 Jan 2026 05:23:36 GMT",
+      "body_sha256": "sha256:a2362450103efafcb3a17ccfa6a8baf72d24c81d7c1eb5cabb0c5f868ea1f8b9",
+      "body_size": 73885,
+      "elapsed_ms": 265,
+      "fetched_at": "2026-03-23T17:28:25.526Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://getbootstrap.com/docs/5.3/components/alerts/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"695dedd8-21a9c\"",
+      "last_modified": "Wed, 07 Jan 2026 05:23:36 GMT",
+      "body_sha256": "sha256:fc899d0e9c354f9727075a9e26619f5edcd1e9f98c6b904aea5e1ec41967c554",
+      "body_size": 137829,
+      "elapsed_ms": 136,
+      "fetched_at": "2026-03-23T17:28:25.663Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://getbootstrap.com/docs/5.3/customize/sass/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"695dedd8-17840\"",
+      "last_modified": "Wed, 07 Jan 2026 05:23:36 GMT",
+      "body_sha256": "sha256:107c0765df4b621147cc141ae9cf7723cb05f39d23751ab473f54d9c28bb566d",
+      "body_size": 96169,
+      "elapsed_ms": 16,
+      "fetched_at": "2026-03-23T17:28:25.679Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/twbs/bootstrap",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"ec2be8c567d3a5e9cbae17205955f16a\"",
+      "last_modified": null,
+      "body_sha256": "sha256:1cc9ce736589a9fae5f2de726baff8fb48416fdfd10c9079325e92e6e0ec1783",
+      "body_size": 419411,
+      "elapsed_ms": 618,
+      "fetched_at": "2026-03-23T17:28:26.297Z",
+      "group": "components"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "ds_id": "ios-hig",
+  "extracted_at": "2026-03-23T17:28:31.034Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:cff345044dc5e6ebfaf445052d8a886924a8f72f11859a3bac10f60d801ea43f",
+  "package_manifest_version": "2026.03.2",
+  "summary": {
+    "total": 5,
+    "ok": 5,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://developer.apple.com/design/human-interface-guidelines/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "d8799ae894669f474fb5f3240622e114",
+      "last_modified": null,
+      "body_sha256": "sha256:e86eee40a278792b75156d6c72b05adac89e76e5f2f6fb29a40506be1cb565cb",
+      "body_size": 3353,
+      "elapsed_ms": 528,
+      "fetched_at": "2026-03-23T17:28:28.816Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://developer.apple.com/design/human-interface-guidelines/components",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "536c89a7439649a8f27029b92597e53d",
+      "last_modified": null,
+      "body_sha256": "sha256:328ac854202f3d9f7e38a5830d8b1ef092e2325bcf0fab60daf65e04f90e8f21",
+      "body_size": 3316,
+      "elapsed_ms": 375,
+      "fetched_at": "2026-03-23T17:28:29.191Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://developer.apple.com/design/human-interface-guidelines/foundations/color",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "be7075a831dcf5ed94796fdb653474c9",
+      "last_modified": null,
+      "body_sha256": "sha256:acc6e5c8a290bef0d9e89273e012a45ade3cb3554d8414616af10d7f0e8b866f",
+      "body_size": 3465,
+      "elapsed_ms": 768,
+      "fetched_at": "2026-03-23T17:28:29.959Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://developer.apple.com/design/human-interface-guidelines/foundations/typography",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "73966d1daa894a3ed7355d1f0b5175d9",
+      "last_modified": null,
+      "body_sha256": "sha256:e6e2f40b07d6ed47f2e5460cf177ebd8b36cb53f160a8a48e7a41ab149ccb2d2",
+      "body_size": 3457,
+      "elapsed_ms": 901,
+      "fetched_at": "2026-03-23T17:28:30.860Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://developer.apple.com/design/human-interface-guidelines/components",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "536c89a7439649a8f27029b92597e53d",
+      "last_modified": null,
+      "body_sha256": "sha256:328ac854202f3d9f7e38a5830d8b1ef092e2325bcf0fab60daf65e04f90e8f21",
+      "body_size": 3316,
+      "elapsed_ms": 174,
+      "fetched_at": "2026-03-23T17:28:31.034Z",
+      "group": "components"
+    }
+  ]
+}

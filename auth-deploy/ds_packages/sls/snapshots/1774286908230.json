@@ -1,0 +1,50 @@
+{
+  "ds_id": "sls",
+  "extracted_at": "2026-03-23T17:28:28.229Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:f261a34ee215942ed574186154dc2121928788a8bdd3ac0692925eeb9d03d6b6",
+  "package_manifest_version": "2026.03.2",
+  "summary": {
+    "total": 4,
+    "ok": 0,
+    "failed": 4
+  },
+  "sources": [
+    {
+      "url": "https://www.lightningdesignsystem.com/",
+      "ok": false,
+      "status": null,
+      "error": "fetch failed",
+      "elapsed_ms": 260,
+      "fetched_at": "2026-03-23T17:28:27.653Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://www.lightningdesignsystem.com/components/overview/",
+      "ok": false,
+      "status": null,
+      "error": "fetch failed",
+      "elapsed_ms": 206,
+      "fetched_at": "2026-03-23T17:28:27.860Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://www.lightningdesignsystem.com/design-tokens/",
+      "ok": false,
+      "status": null,
+      "error": "fetch failed",
+      "elapsed_ms": 186,
+      "fetched_at": "2026-03-23T17:28:28.046Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://www.lightningdesignsystem.com/components/overview/",
+      "ok": false,
+      "status": null,
+      "error": "fetch failed",
+      "elapsed_ms": 183,
+      "fetched_at": "2026-03-23T17:28:28.229Z",
+      "group": "components"
+    }
+  ]
+}

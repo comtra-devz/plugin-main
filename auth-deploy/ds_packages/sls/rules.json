@@ -1,0 +1,579 @@
+{
+  "$schema": "comtra://ds_package/rules/1.0",
+  "color_usage": [
+    {
+      "rule_id": "sls-colo-001",
+      "description": "color_usage enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-colo-002",
+      "description": "color_usage enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-colo-003",
+      "description": "color_usage enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-colo-004",
+      "description": "color_usage enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    }
+  ],
+  "typography_usage": [
+    {
+      "rule_id": "sls-typo-001",
+      "description": "typography_usage enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-typo-002",
+      "description": "typography_usage enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-typo-003",
+      "description": "typography_usage enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-typo-004",
+      "description": "typography_usage enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    }
+  ],
+  "spacing_usage": [
+    {
+      "rule_id": "sls-spac-001",
+      "description": "spacing_usage enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-spac-002",
+      "description": "spacing_usage enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-spac-003",
+      "description": "spacing_usage enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-spac-004",
+      "description": "spacing_usage enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "tokenized"
+        ],
+        "forbidden": [
+          "raw"
+        ]
+      }
+    }
+  ],
+  "layout_rules": [
+    {
+      "rule_id": "sls-layo-001",
+      "description": "layout_rules enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "sls-layo-002",
+      "description": "layout_rules enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "sls-layo-003",
+      "description": "layout_rules enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "sls-layo-004",
+      "description": "layout_rules enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": 1,
+        "unit": "boolean"
+      }
+    }
+  ],
+  "state_rules": [
+    {
+      "rule_id": "sls-stat-001",
+      "description": "state_rules enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "sls-stat-002",
+      "description": "state_rules enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "sls-stat-003",
+      "description": "state_rules enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "sls-stat-004",
+      "description": "state_rules enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    }
+  ],
+  "composition_rules": [
+    {
+      "rule_id": "sls-comp-001",
+      "description": "composition_rules enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-comp-002",
+      "description": "composition_rules enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-comp-003",
+      "description": "composition_rules enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    },
+    {
+      "rule_id": "sls-comp-004",
+      "description": "composition_rules enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-values"
+        ]
+      }
+    }
+  ],
+  "accessibility_rules": [
+    {
+      "rule_id": "sls-acce-001",
+      "description": "accessibility_rules enforcement rule 1.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    },
+    {
+      "rule_id": "sls-acce-002",
+      "description": "accessibility_rules enforcement rule 2.",
+      "severity": "error",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    },
+    {
+      "rule_id": "sls-acce-003",
+      "description": "accessibility_rules enforcement rule 3.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    },
+    {
+      "rule_id": "sls-acce-004",
+      "description": "accessibility_rules enforcement rule 4.",
+      "severity": "warning",
+      "context": [
+        "global"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    }
+  ],
+  "forbidden_patterns": [
+    {
+      "pattern_id": "sls-fp-001",
+      "description": "Forbidden pattern 1.",
+      "detect": {
+        "token": "raw-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "sls-fp-002",
+      "description": "Forbidden pattern 2.",
+      "detect": {
+        "token": "raw-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "sls-fp-003",
+      "description": "Forbidden pattern 3.",
+      "detect": {
+        "token": "raw-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "sls-fp-004",
+      "description": "Forbidden pattern 4.",
+      "detect": {
+        "token": "raw-values"
+      },
+      "severity": "error"
+    }
+  ]
+}

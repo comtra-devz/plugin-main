@@ -1,0 +1,12 @@
+{
+  "ds_id": "carbon",
+  "extracted_at": "2026-03-23T18:27:19.363Z",
+  "extractor": "carbon-official-extractor",
+  "elapsed_ms": 3105,
+  "source": {
+    "repo": "carbon-design-system/carbon",
+    "ref": "main",
+    "token_source_count": 200,
+    "component_path_count": 128
+  }
+}

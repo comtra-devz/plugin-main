@@ -1,0 +1,12 @@
+{
+  "ds_id": "sls",
+  "extracted_at": "2026-03-23T18:33:18.496Z",
+  "extractor": "sls-official-extractor",
+  "elapsed_ms": 576,
+  "source": {
+    "repo": "salesforce-ux/design-system",
+    "ref": "master",
+    "token_source_count": 200,
+    "component_source_count": 250
+  }
+}

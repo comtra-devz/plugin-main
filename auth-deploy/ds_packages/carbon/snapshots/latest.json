@@ -1,0 +1,66 @@
+{
+  "ds_id": "carbon",
+  "extracted_at": "2026-03-23T17:45:07.567Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:0b47d3aa2fa42bd33b8b2c14f71b6216b6670e857194b02d74ef683158ae67a1",
+  "package_manifest_version": "2026.03.3",
+  "summary": {
+    "total": 4,
+    "ok": 4,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://carbondesignsystem.com/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Tue, 17 Mar 2026 18:13:37 GMT",
+      "body_sha256": "sha256:a4433ec81ddbd969e68023b1f0c647f751923a039976eec8869ea117300b9e55",
+      "body_size": 3119460,
+      "elapsed_ms": 1180,
+      "fetched_at": "2026-03-23T17:45:06.406Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://carbondesignsystem.com/elements/color/tokens/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Tue, 17 Mar 2026 18:13:37 GMT",
+      "body_sha256": "sha256:05d2555b4624eb375706971507cea7e8df98f2ba7fafdcaf5932411d615caf06",
+      "body_size": 3887899,
+      "elapsed_ms": 241,
+      "fetched_at": "2026-03-23T17:45:06.647Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/carbon-design-system/carbon",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"6cbe6bf1d1a521a66fbd03e3934baa40\"",
+      "last_modified": null,
+      "body_sha256": "sha256:6f1f0d13d0b742b323f55ce4ca10f45da70cd17c219a84b94de2f50d02aacee7",
+      "body_size": 584601,
+      "elapsed_ms": 692,
+      "fetched_at": "2026-03-23T17:45:07.339Z",
+      "group": "components"
+    },
+    {
+      "url": "https://react.carbondesignsystem.com/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Wed, 11 Mar 2026 16:46:06 GMT",
+      "body_sha256": "sha256:a67d3688359ae6fba0b6233066ea07464e08c6e9c3f5837647809be63104a9f5",
+      "body_size": 7182,
+      "elapsed_ms": 228,
+      "fetched_at": "2026-03-23T17:45:07.567Z",
+      "group": "storybook"
+    }
+  ]
+}

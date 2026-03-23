@@ -485,6 +485,17 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 ---
 
+## 8. Optimization (raccomandazioni di consolidamento)
+
+Producono **raccomandazioni** (`categoryId: optimization`, `recommendation: true`). **Similarità via JSON**: struttura (tipi figlio, layout, padding), fills/strokes, naming. Se il JSON non basta, non emettere. *Screenshot: TO-DO-BEFORE-GOING-LIVE.*
+
+- **8.1 DS-OPT-1** Famiglie ridondanti: merge con slot/varianti. `optimizationPayload`: componentIdsToMerge, suggestedSlots, suggestedVariants, suggestedTokens.
+- **8.2 DS-OPT-2** Slot mancanti: aree variabili come slot. `autoFixAvailable`: feasible.
+- **8.3 DS-OPT-3** Token da estrarre: valori ripetuti. `autoFixAvailable`: feasible.
+- **8.4 DS-OPT-4** Varianti da introdurre: component set. `optimizationPayload`: suggestedVariants.
+
+---
+
 ## Mappatura regola → categoryId (per l’agente)
 
 | Regola | categoryId |
@@ -496,6 +507,7 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 | 5.1–5.4 | consistency |
 | 6.1–6.3 | copy |
 | 7.1–7.4 | adoption / coverage / naming / consistency (come più appropriato) |
+| 8.1–8.4 | optimization |
 
 ---
 

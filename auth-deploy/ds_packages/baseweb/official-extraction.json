@@ -1,0 +1,12 @@
+{
+  "ds_id": "baseweb",
+  "extracted_at": "2026-03-23T18:33:17.881Z",
+  "extractor": "baseweb-official-extractor",
+  "elapsed_ms": 785,
+  "source": {
+    "repo": "uber/baseweb",
+    "ref": "main",
+    "token_source_count": 60,
+    "component_source_count": 250
+  }
+}

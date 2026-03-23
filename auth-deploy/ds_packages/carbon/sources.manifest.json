@@ -1,0 +1,28 @@
+{
+  "ds_id": "carbon",
+  "official_sources": {
+    "docs": [
+      "https://carbondesignsystem.com/"
+    ],
+    "tokens": [
+      "https://carbondesignsystem.com/elements/color/tokens/"
+    ],
+    "components": [
+      "https://github.com/carbon-design-system/carbon"
+    ],
+    "storybook": [
+      "https://react.carbondesignsystem.com/"
+    ]
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

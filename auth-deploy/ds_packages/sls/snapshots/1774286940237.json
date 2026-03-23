@@ -1,0 +1,66 @@
+{
+  "ds_id": "sls",
+  "extracted_at": "2026-03-23T17:29:00.237Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:10825e0661977f7d403b377195c99ae8284fd1a9b2a755af93ee8c1d5ac0dc29",
+  "package_manifest_version": "2026.03.2",
+  "summary": {
+    "total": 4,
+    "ok": 1,
+    "failed": 3
+  },
+  "sources": [
+    {
+      "url": "https://www.salesforce.com/design-system/",
+      "ok": false,
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"56521-QT8YbwlwRWdQJFkNe3C1JIodg00\"",
+      "last_modified": null,
+      "body_sha256": "sha256:c6128398381e0ef53e33c60b05f416a72003439f06dcf90d742a1e9d8b6e42a0",
+      "body_size": 353287,
+      "elapsed_ms": 850,
+      "fetched_at": "2026-03-23T17:28:57.798Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://www.salesforce.com/design-system/components/",
+      "ok": false,
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"56521-QT8YbwlwRWdQJFkNe3C1JIodg00\"",
+      "last_modified": null,
+      "body_sha256": "sha256:c6128398381e0ef53e33c60b05f416a72003439f06dcf90d742a1e9d8b6e42a0",
+      "body_size": 353287,
+      "elapsed_ms": 826,
+      "fetched_at": "2026-03-23T17:28:58.625Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://www.salesforce.com/design-system/design-tokens/",
+      "ok": false,
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"56521-QT8YbwlwRWdQJFkNe3C1JIodg00\"",
+      "last_modified": null,
+      "body_sha256": "sha256:c6128398381e0ef53e33c60b05f416a72003439f06dcf90d742a1e9d8b6e42a0",
+      "body_size": 353287,
+      "elapsed_ms": 909,
+      "fetched_at": "2026-03-23T17:28:59.534Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/salesforce-ux/design-system",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"69540d4a53b58269a459baf72c2bfe6c\"",
+      "last_modified": null,
+      "body_sha256": "sha256:3ec31adc075dade946551af67649218d01a6d4c9a74d493d22a6013ad57506b5",
+      "body_size": 445994,
+      "elapsed_ms": 703,
+      "fetched_at": "2026-03-23T17:29:00.237Z",
+      "group": "components"
+    }
+  ]
+}

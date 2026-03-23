@@ -17,13 +17,8 @@ interface Props {
   fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null; ascii_wireframe?: string }>;
   requestFileContext: () => Promise<{ fileKey: string | null; error?: string | null }>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
+  selectedNode: { id: string; name: string; type: string } | null;
 }
-
-const INSPIRATION = [
-  "Create a desktop login page",
-  "Create a different version of this component",
-  "Create a mobile cart",
-];
 
 const DESIGN_SYSTEMS = [
   "Custom (Current)",
@@ -36,7 +31,7 @@ const DESIGN_SYSTEMS = [
   "Uber Base Web"
 ];
 
-export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt, fetchGenerate, requestFileContext, fetchGenerateFeedback }) => {
+export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt, fetchGenerate, requestFileContext, fetchGenerateFeedback, selectedNode }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -45,9 +40,10 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   const [asciiWireframe, setAsciiWireframe] = useState<string | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showReadFirstModal, setShowReadFirstModal] = useState(false);
   const [feedbackComment, setFeedbackComment] = useState('');
-  const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [hasContent, setHasContent] = useState(!!initialPrompt);
+  const [promptText, setPromptText] = useState(initialPrompt || '');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   
   // Design System State
@@ -68,6 +64,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
       if (initialPrompt && inputRef.current) {
           inputRef.current.innerText = initialPrompt;
           setHasContent(true);
+          setPromptText(initialPrompt);
       }
   }, [initialPrompt]);
 
@@ -90,6 +87,58 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   const canGenerate = isPro || remaining > 0;
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
+  const hasSelection = !!selectedNode;
+  const selectedLayerName = selectedNode?.name || null;
+
+  const promptPlaceholder = hasSelection
+    ? `> Modify "${selectedLayerName}": keep layout, improve hierarchy and spacing.`
+    : uploadedImage
+      ? '> Using this screenshot as reference, recreate it with my design system.'
+      : '> Describe the screen to generate (you can also paste Figma frame links).';
+
+  const ctaLabel = knownZeroCredits
+    ? 'Unlock Unlimited AI'
+    : hasSelection
+      ? 'Modify Selection'
+      : uploadedImage
+        ? 'Generate From Screenshot'
+        : 'Create Wireframes';
+
+  const contextSuggestions = hasSelection
+    ? [
+        `Keep "${selectedLayerName}" structure but improve spacing and typography hierarchy.`,
+        `Adapt "${selectedLayerName}" for mobile while preserving content priority.`,
+        `Create two stronger variants for "${selectedLayerName}" aligned to ${selectedSystem}.`,
+      ]
+    : uploadedImage
+      ? [
+          `Recreate this screenshot using ${selectedSystem} tokens and components.`,
+          'Keep layout intent, but simplify visual density and improve contrast.',
+          userTier === 'PRO'
+            ? 'Generate two alternatives: one safe and one exploratory.'
+            : 'Use this screenshot as inspiration and make it production-ready.',
+        ]
+      : [
+          `Create a desktop login screen aligned to ${selectedSystem}.`,
+          'Create a mobile checkout summary with sticky CTA and trust cues.',
+          userTier === 'PRO'
+            ? 'Create a hero section with 2 variants and clear conversion hierarchy.'
+            : 'Create a hero section with headline, social proof, and primary CTA.',
+        ];
+
+  const promptHints: string[] = [];
+  if (promptText.trim().length > 0 && promptText.trim().length < 24) {
+    promptHints.push('Prompt is short: add a clear goal and expected outcome.');
+  }
+  if (!/(mobile|desktop|responsive|tablet)/i.test(promptText)) {
+    promptHints.push('Specify target viewport (mobile, desktop, responsive).');
+  }
+  if (!/(keep|avoid|do not|must|constraint|vincolo|non)/i.test(promptText)) {
+    promptHints.push('Add at least one constraint (what to keep or avoid).');
+  }
+  if (!/(cta|conversion|goal|obiettivo|hierarchy|accessibility|contrast)/i.test(promptText)) {
+    promptHints.push('Add success criteria (CTA clarity, hierarchy, accessibility, conversion).');
+  }
 
   // Helper to update content state - Ignores Chips, requires text
   const checkContent = () => {
@@ -99,7 +148,17 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
           chips.forEach(chip => chip.remove());
           const text = clone.innerText.trim();
           setHasContent(text.length > 0);
+          setPromptText(text);
       }
+  };
+
+  const appendPromptText = (snippet: string) => {
+    if (!inputRef.current) return;
+    const current = (inputRef.current.innerText || '').trim();
+    const next = current ? `${current}\n${snippet}` : snippet;
+    inputRef.current.innerText = next;
+    setPromptText(next);
+    setHasContent(next.trim().length > 0);
   };
 
   // Helper to insert chip and move cursor
@@ -149,10 +208,6 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
     checkContent();
   };
 
-  const handleSimulatePaste = () => {
-      insertChip("Checkout_Flow_Mobile", "https://figma.com/simulated");
-  };
-
   const handleContentClick = (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'SPAN' && target.innerText.includes('Ref:')) {
@@ -161,6 +216,37 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
               console.log("[Future Integration] Calling figma.viewport.scrollAndZoomIntoView for:", url);
           }
       }
+  };
+
+  const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (!loading && hasContent) handleGen();
+    }
+  };
+
+  const handleEnhancePrompt = () => {
+    const base = promptText.trim();
+    if (!base || !inputRef.current) return;
+    const context = hasSelection
+      ? `Target: ${selectedLayerName} (${selectedNode?.type}).`
+      : uploadedImage
+        ? 'Context: screenshot reference uploaded.'
+        : 'Context: create from scratch.';
+    const dsContext = `Design System: ${selectedSystem}.`;
+    const strictness = userTier === 'PRO'
+      ? 'Provide 2 variants and choose the best production-ready option.'
+      : 'Keep output concise and production-ready.';
+    const enhanced = [
+      `Goal: ${base}`,
+      context,
+      dsContext,
+      'Constraints: keep hierarchy clear, spacing consistent, and accessibility in mind.',
+      `Output expected: actionable wireframe plan in JSON. ${strictness}`,
+    ].join('\n');
+    inputRef.current.innerText = enhanced;
+    setPromptText(enhanced);
+    setHasContent(true);
   };
 
   const handleGen = async () => {
@@ -187,7 +273,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
       return;
     }
 
-    const mode = selectedLayer ? 'modify' : 'create';
+    const mode = hasSelection ? 'modify' : 'create';
     const dsSource = selectedSystem === 'Custom (Current)' ? 'custom' : selectedSystem;
 
     try {
@@ -233,10 +319,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   }
 
   const handleInsertInspiration = (txt: string) => {
-      if(inputRef.current) {
-          inputRef.current.innerText = txt;
-          setHasContent(true);
-      }
+      appendPromptText(txt);
   };
 
   const handleUpload = () => {
@@ -301,105 +384,108 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
         </div>
       )}
 
-      {/* Info Alert */}
       {!showReport && (
-        <div data-component="Generate: Info Alert" className="bg-white border-2 border-black p-3 text-[10px] font-medium leading-tight shadow-[4px_4px_0_0_#000]">
-            <span data-component="Generate: Info Title" className="font-bold uppercase block mb-1">ℹ️ Generation Logic</span>
-            <ul className="list-disc list-inside space-y-1 text-gray-600">
-                <li data-component="Generate: Info List Item 1"><strong>No Selection:</strong> Creates wireframes from scratch.</li>
-                <li data-component="Generate: Info List Item 2"><strong>Selection Active:</strong> Modifies a <u>copy</u> (originals are safe).</li>
-                <li data-component="Generate: Info List Item 3"><strong>Upload Screenshot:</strong> AI converts pixels to your Design System components.</li>
-                <li data-component="Generate: Info List Item 4"><strong>Paste Link:</strong> You can paste Figma wireframe links in the prompt to reference them.</li>
-            </ul>
+        <div className="flex justify-end -mt-1">
+          <button
+            type="button"
+            onClick={() => setShowReadFirstModal(true)}
+            className="text-[10px] font-black uppercase underline hover:text-[#ff90e8]"
+          >
+            Read First
+          </button>
         </div>
       )}
 
-       {/* Selection Area: Layer & Design System */}
-      <div data-component="Generate: Selection Card" className={`${BRUTAL.card} bg-white py-2 flex flex-col gap-2 relative z-[5]`}>
-        {/* Layer Context */}
+      {/* Context Layer */}
+      <div data-component="Generate: Context Card" className={`${BRUTAL.card} bg-white px-3 py-4 flex flex-col gap-3 relative z-[5]`}>
         <div className="flex justify-between items-center border-b border-black/10 pb-2">
-          <span data-component="Generate: Selection Label" className="text-xs font-bold uppercase">Context Layer</span>
-          <button 
-            data-component="Generate: Selection Toggle" 
-            onClick={() => { setSelectedLayer(selectedLayer ? null : "Hero_Section_V2"); setShowReport(false); }} 
-            className="text-[10px] font-bold bg-black text-white px-2 py-1"
-          >
-            {selectedLayer ? 'Clear Selection' : 'Select Layer'}
-          </button>
+          <span data-component="Generate: Context Label" className="text-xs font-bold uppercase">Context Layer</span>
+          <span className="text-[10px] font-bold uppercase text-gray-500">{hasSelection ? selectedNode?.type : 'No selection'}</span>
         </div>
-        
-        {selectedLayer ? (
-          <span data-component="Generate: Selection Value" className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate mb-1">Target: {selectedLayer}</span>
+
+        {hasSelection ? (
+          <>
+            <span data-component="Generate: Selection Value" className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate">
+              Target: {selectedLayerName}
+            </span>
+            <span className="text-[10px] text-gray-500">
+              Selection from canvas is active. Screenshot context is disabled until you deselect in Figma.
+            </span>
+          </>
+        ) : uploadedImage ? (
+          <div data-component="Generate: Uploaded File" className="flex justify-between items-center bg-gray-100 p-2 border border-black">
+            <span className="text-[10px] font-bold truncate">📄 {uploadedImage}</span>
+            <button onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
+          </div>
         ) : (
-            uploadedImage ? (
-                <div data-component="Generate: Uploaded File" className="flex justify-between items-center bg-gray-100 p-2 border border-black mb-1">
-                    <span className="text-[10px] font-bold truncate">📄 {uploadedImage}</span>
-                    <button onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
-                </div>
-            ) : (
-                <>
-                    <span data-component="Generate: Selection Empty" className="text-[10px] text-gray-400 italic mb-1">No layer selected. Creating new wireframes or upload a screenshot.</span>
-                    <button 
-                        data-component="Generate: Upload Button"
-                        onClick={handleUpload}
-                        className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-500"
-                    >
-                        Upload Image
-                    </button>
-                </>
-            )
-        )}
-
-        {/* Design System Dropdown */}
-        <div className="relative" ref={dsDropdownRef}>
-            <label className="text-[10px] font-bold uppercase block mb-1">Design System</label>
-            <div 
-                data-component="Generate: DS Selector"
-                onClick={() => setIsSystemOpen(!isSystemOpen)}
-                className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold"
+          <>
+            <span data-component="Generate: Selection Empty" className="text-[10px] text-gray-500 italic">
+              No layer selected. Upload a screenshot if you want to start from an existing product reference.
+            </span>
+            <button
+              data-component="Generate: Upload Button"
+              onClick={handleUpload}
+              className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-500"
             >
-                <span>{selectedSystem}</span>
-                <div className="flex items-center gap-2">
-                    {selectedSystem !== DESIGN_SYSTEMS[0] && (
-                        <span 
-                            onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
-                            className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
-                        >
-                            ✕
-                        </span>
-                    )}
-                    <span>{isSystemOpen ? '▲' : '▼'}</span>
-                </div>
-            </div>
+              Upload Image
+            </button>
+          </>
+        )}
+      </div>
 
-            {/* Dropdown Content */}
-            {isSystemOpen && (
-                <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] z-30 max-h-[200px] flex flex-col">
-                    <input 
-                        type="text" 
-                        placeholder="Search System..." 
-                        autoFocus
-                        value={systemSearch}
-                        onChange={(e) => setSystemSearch(e.target.value)}
-                        className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50"
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="overflow-y-auto flex-1 custom-scrollbar">
-                        {filteredSystems.map(sys => (
-                            <div 
-                                key={sys} 
-                                onClick={() => { setSelectedSystem(sys); setIsSystemOpen(false); setSystemSearch(''); }}
-                                className={`p-2 text-xs hover:bg-[#ff90e8] cursor-pointer border-b border-gray-100 last:border-0 ${selectedSystem === sys ? 'bg-black text-white' : ''}`}
-                            >
-                                {sys}
-                            </div>
-                        ))}
-                        {filteredSystems.length === 0 && (
-                            <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
-                        )}
-                    </div>
-                </div>
-            )}
+      {/* Design System */}
+      <div data-component="Generate: DS Card" className={`${BRUTAL.card} bg-white px-3 py-4 flex flex-col gap-3 relative z-[4]`}>
+        <span className="text-xs font-bold uppercase">Design System</span>
+        <p className="text-[10px] text-gray-500">
+          Define the component perimeter. Default uses your current/linked library and cannot be empty.
+        </p>
+        <div className="relative" ref={dsDropdownRef}>
+          <div
+            data-component="Generate: DS Selector"
+            onClick={() => setIsSystemOpen(!isSystemOpen)}
+            className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold"
+          >
+            <span>{selectedSystem}</span>
+            <div className="flex items-center gap-2">
+              {selectedSystem !== DESIGN_SYSTEMS[0] && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
+                  className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
+                >
+                  ✕
+                </span>
+              )}
+              <span>{isSystemOpen ? '▲' : '▼'}</span>
+            </div>
+          </div>
+
+          {isSystemOpen && (
+            <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] z-30 max-h-[200px] flex flex-col">
+              <input
+                type="text"
+                placeholder="Search System..."
+                autoFocus
+                value={systemSearch}
+                onChange={(e) => setSystemSearch(e.target.value)}
+                className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="overflow-y-auto flex-1 custom-scrollbar">
+                {filteredSystems.map(sys => (
+                  <div
+                    key={sys}
+                    onClick={() => { setSelectedSystem(sys); setIsSystemOpen(false); setSystemSearch(''); }}
+                    className={`p-2 text-xs hover:bg-[#ff90e8] cursor-pointer border-b border-gray-100 last:border-0 ${selectedSystem === sys ? 'bg-black text-white' : ''}`}
+                  >
+                    {sys}
+                  </div>
+                ))}
+                {filteredSystems.length === 0 && (
+                  <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -408,17 +494,17 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
             <div className="flex flex-col gap-0 relative z-[1]">
                 <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">
                   <span>AI Terminal</span>
-                  <span className="opacity-70 font-mono">v1.0</span>
-                </div>
-                
-                {/* TEST ONLY: Helper Controls */}
-                <div className="bg-gray-100 p-2 border-2 border-black border-b-0 flex gap-2">
-                    <button 
-                        onClick={handleSimulatePaste}
-                        className="text-[9px] bg-white border border-black px-2 py-1 font-bold uppercase hover:bg-black hover:text-white transition-colors"
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleEnhancePrompt}
+                      disabled={!hasContent || loading}
+                      className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${(!hasContent || loading) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
                     >
-                        🧪 Inject Fake Link
+                      Enhance Prompt
                     </button>
+                    <span className="opacity-70 font-mono">v1.1</span>
+                  </div>
                 </div>
 
                 {/* ContentEditable Div replacing Textarea */}
@@ -427,13 +513,24 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                   contentEditable
                   onPaste={handlePaste}
                   onInput={checkContent}
+                  onKeyDown={handlePromptKeyDown}
                   onClick={handleContentClick}
                   data-component="Generate: Rich Input"
-                  className={`${BRUTAL.input} h-[120px] text-sm bg-white focus:bg-white border-t-2 mt-[-2px] overflow-y-auto cursor-text`}
+                  className={`${BRUTAL.input} min-h-[120px] text-sm bg-white focus:bg-white overflow-y-auto cursor-text`}
                   style={{ whiteSpace: 'pre-wrap' }}
-                  data-placeholder={selectedLayer ? `> Modify ${selectedLayer}: e.g. "Make it pop"` : "> Describe your UI (or paste a Figma link)..."}
+                  data-placeholder={promptPlaceholder}
                 />
             </div>
+            <p className="text-[10px] text-gray-500 -mt-1">
+              Tip: include goal, constraints, and expected output. Press Cmd/Ctrl + Enter to run.
+            </p>
+            {promptHints.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-300 p-2 text-[10px] text-yellow-900">
+                {promptHints.slice(0, 2).map((hint) => (
+                  <p key={hint}>- {hint}</p>
+                ))}
+              </div>
+            )}
             
             <Button
               data-component="Generate: Generate Button"
@@ -444,18 +541,16 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
               disabled={!hasContent || loading || (!canGenerate && !isPro)}
               className="relative"
             >
-              {loading ? 'Weaving Magic...' : knownZeroCredits ? 'Unlock Unlimited AI' : (
-                selectedLayer ? 'Modify Component' : 'Create Wireframes'
-              )}
+              {loading ? 'Weaving Magic...' : ctaLabel}
               {!loading && canGenerate && (
                 <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-3 Credits</span>
               )}
             </Button>
 
             <div className="mt-2">
-                <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Try asking the stars:</p>
+                <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Prompt starters (context-aware):</p>
                 <div className="flex flex-wrap gap-2">
-                {INSPIRATION.map((txt, i) => (
+                {contextSuggestions.map((txt, i) => (
                     <button 
                     key={txt} 
                     data-component={`Generate: Inspiration Chip ${i+1}`}
@@ -590,6 +685,26 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
               </Button>
               <Button variant="black" onClick={handleFeedbackSubmit} className="flex-1 text-xs">
                 Send feedback
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Read First Modal */}
+      {showReadFirstModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowReadFirstModal(false)}>
+          <div className={`${BRUTAL.card} bg-white max-w-lg w-full mx-4 p-4`} onClick={e => e.stopPropagation()}>
+            <h3 className="font-black uppercase text-sm mb-2">Generation Logic</h3>
+            <ul className="list-disc list-inside space-y-1 text-[11px] text-gray-700 leading-tight">
+              <li><strong>Step 1 - Context:</strong> pick one visual source: a current Figma selection <strong>or</strong> an uploaded screenshot.</li>
+              <li><strong>Step 2 - Design System:</strong> choose the style perimeter (default is current/linked library).</li>
+              <li><strong>Step 3 - AI Prompt:</strong> write your intent in the terminal and optionally paste Figma frame links.</li>
+              <li><strong>Execution:</strong> Comtra runs the best A/B generation path in the background (A direct, B ASCII planning).</li>
+            </ul>
+            <div className="flex justify-end mt-4">
+              <Button variant="secondary" onClick={() => setShowReadFirstModal(false)} className="text-xs">
+                Close
               </Button>
             </div>
           </div>

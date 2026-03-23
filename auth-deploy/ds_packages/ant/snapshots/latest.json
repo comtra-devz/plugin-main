@@ -1,0 +1,66 @@
+{
+  "ds_id": "ant",
+  "extracted_at": "2026-03-23T17:45:05.182Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:8a063b2c85bc1404f3ac409b747826ed46d4bf4ca1a81c74bd655e34b22efd44",
+  "package_manifest_version": "2026.03.3",
+  "summary": {
+    "total": 4,
+    "ok": 4,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://ant.design/docs/spec/introduce",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Mon, 16 Mar 2026 08:55:28 GMT",
+      "body_sha256": "sha256:e598bd948bf208be83cc90c2ca9dec32aa7b7b328a1d97e40b529892b6dbf0e8",
+      "body_size": 215106,
+      "elapsed_ms": 426,
+      "fetched_at": "2026-03-23T17:45:04.029Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://ant.design/components/overview",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Mon, 16 Mar 2026 08:55:28 GMT",
+      "body_sha256": "sha256:57f0aabdb68cf6f37ca26bb2ded69031ab14715eb65679f6e2c337399288c491",
+      "body_size": 298567,
+      "elapsed_ms": 275,
+      "fetched_at": "2026-03-23T17:45:04.304Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://ant.design/docs/react/customize-theme",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Mon, 16 Mar 2026 08:55:28 GMT",
+      "body_sha256": "sha256:644faec921f3b941425dfad8352093bb4cc7da261d31703b0a084006591b3642",
+      "body_size": 572991,
+      "elapsed_ms": 292,
+      "fetched_at": "2026-03-23T17:45:04.596Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/ant-design/ant-design",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"301a31d5560ac73b25f6f841403171b4\"",
+      "last_modified": null,
+      "body_sha256": "sha256:f1903751b5185e4e88a9a218372518549a59c36063581685f28f397efc0bb614",
+      "body_size": 475983,
+      "elapsed_ms": 586,
+      "fetched_at": "2026-03-23T17:45:05.182Z",
+      "group": "components"
+    }
+  ]
+}

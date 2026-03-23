@@ -1,0 +1,66 @@
+{
+  "ds_id": "baseweb",
+  "extracted_at": "2026-03-23T17:45:10.020Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:814c45113be5a005e28ab80688c1b0edfddef87259294ebc3054ec9c917a1fe5",
+  "package_manifest_version": "2026.03.2",
+  "summary": {
+    "total": 4,
+    "ok": 4,
+    "failed": 0
+  },
+  "sources": [
+    {
+      "url": "https://baseweb.design/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": null,
+      "body_sha256": "sha256:cf81a52113fcaf99da79d893ea1f08d2fe0a4cabea93a5767ab3b07b393ee8bc",
+      "body_size": 5250,
+      "elapsed_ms": 187,
+      "fetched_at": "2026-03-23T17:45:09.324Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://baseweb.design/components/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": null,
+      "body_sha256": "sha256:dcc2d6b13757caf148cae626cbd51b924e56b53fa41d32f3cd4da9b5201d8eec",
+      "body_size": 5316,
+      "elapsed_ms": 26,
+      "fetched_at": "2026-03-23T17:45:09.351Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://baseweb.design/guides/theming/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": null,
+      "body_sha256": "sha256:9afeea5d7b216c8e15d8304e06498d53747c77cb0cae30699f0352d2a5b79d98",
+      "body_size": 8899,
+      "elapsed_ms": 28,
+      "fetched_at": "2026-03-23T17:45:09.379Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/uber/baseweb",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"5d70df6dafdb7d77ffd769573887ab4e\"",
+      "last_modified": null,
+      "body_sha256": "sha256:14d13e8510f586e53857d8166c581f9418c339cf92fce06c0ae9dc86ada251e6",
+      "body_size": 295351,
+      "elapsed_ms": 641,
+      "fetched_at": "2026-03-23T17:45:10.020Z",
+      "group": "components"
+    }
+  ]
+}

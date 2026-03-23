@@ -1,0 +1,27 @@
+{
+  "ds_id": "sls",
+  "official_sources": {
+    "docs": [
+      "https://github.com/salesforce-ux/design-system",
+      "https://github.com/salesforce-ux/design-system/tree/master/ui/components"
+    ],
+    "tokens": [
+      "https://github.com/salesforce-ux/design-system"
+    ],
+    "components": [
+      "https://github.com/salesforce-ux/design-system"
+    ],
+    "storybook": []
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

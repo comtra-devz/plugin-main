@@ -1,0 +1,43 @@
+{
+  "ds_id": "carbon",
+  "ds_name": "IBM Carbon",
+  "version": "2026.03.4",
+  "source_version": "current",
+  "source_url": "https://carbondesignsystem.com",
+  "source_type": "mixed",
+  "extraction_date": "2026-03-23T14:46:02Z",
+  "schema_version": "1.0.0",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "curated",
+    "components": "curated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "hash": "sha256:e31662d68c6ce65de940586339cdfe164728e57815177383a5b4d0b6acc11a38",
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "carbon P1 completed: no scaffold components, conformance pass"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T18:27:19.363Z",
+    "token_source_count": 200,
+    "component_path_count": 128
+  }
+}

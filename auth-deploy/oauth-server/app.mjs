@@ -21,6 +21,15 @@ import {
   isLevelWithDiscount,
   discountPercentForLevel,
 } from './lemon-discounts.mjs';
+import {
+  buildDsContextForPrompt,
+  loadDsPackage,
+  mapDsSourceToId,
+  resolveContextProfile,
+  resolveDsPackageForContext,
+  validateActionPlanAgainstDs,
+  validateActionPlanSchema,
+} from './ds-loader.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1007,7 +1016,7 @@ function normalizeDsAuditIssue(raw) {
   const severity = raw.severity === 'HIGH' || raw.severity === 'MED' || raw.severity === 'LOW' ? raw.severity : 'MED';
   const layerId = raw.layerId != null ? String(raw.layerId) : '';
   const fix = raw.fix != null ? String(raw.fix) : '';
-  return {
+  const out = {
     id,
     categoryId,
     msg,
@@ -1018,6 +1027,13 @@ function normalizeDsAuditIssue(raw) {
     tokenPath: raw.tokenPath != null ? String(raw.tokenPath) : undefined,
     pageName: raw.pageName != null ? String(raw.pageName) : undefined,
   };
+  if (raw.rule_id != null) out.rule_id = String(raw.rule_id);
+  if (raw.recommendation === true) out.recommendation = true;
+  if (raw.autoFixAvailable === true) out.autoFixAvailable = true;
+  if (raw.optimizationPayload && typeof raw.optimizationPayload === 'object') {
+    out.optimizationPayload = raw.optimizationPayload;
+  }
+  return out;
 }
 
 /** Count nodes in Figma file JSON (document tree) for size_band telemetry. */
@@ -1237,6 +1253,20 @@ async function callKimi(messages, maxTokens = 8192) {
   return { content: data?.choices?.[0]?.message?.content, usage: data?.usage };
 }
 
+async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, promptContext) {
+  const repairUserMsg = [
+    'Your previous JSON is invalid. Repair it and return only one valid JSON object.',
+    `Validation errors: ${(errors || []).join(' | ')}`,
+    'Keep intent unchanged and preserve DS constraints.',
+    `Prompt context:\n${promptContext}`,
+    `Previous JSON:\n${JSON.stringify(actionPlan || {}, null, 2)}`,
+  ].join('\n\n');
+  return callKimi(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: repairUserMsg }],
+    8192
+  );
+}
+
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -1245,6 +1275,10 @@ app.post('/api/agents/generate', async (req, res) => {
   const prompt = (body.prompt || body.promptText || '').trim();
   const mode = body.mode || 'create';
   const dsSource = body.ds_source || body.dsSource || 'custom';
+  const contextProfile = resolveContextProfile(body.context_profile || body.contextProfile || { input_mode: mode });
+  const resolvedDsId = mapDsSourceToId(dsSource);
+  const dsPackageRaw = loadDsPackage(dsSource);
+  const dsPackage = resolveDsPackageForContext(dsPackageRaw, contextProfile);
 
   if (!fileKey) return res.status(400).json({ error: 'file_key required' });
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
@@ -1297,7 +1331,16 @@ app.post('/api/agents/generate', async (req, res) => {
     }
 
     const pageCount = fileJson?.document?.children?.length ?? 0;
-    const contextBlob = `Mode: ${mode}. DS: ${dsSource}. File has ${pageCount} page(s). Use only variable references (no raw hex/px).`;
+    const dsContextBlock = dsPackage ? buildDsContextForPrompt(dsPackage, contextProfile) : 'Resolved DS package: unavailable (fallback to semantic DS hint only).';
+    const contextBlob = [
+      `Mode: ${mode}.`,
+      `DS source: ${dsSource}.`,
+      `Resolved DS id: ${resolvedDsId || 'none'}.`,
+      `Context profile: platform=${contextProfile.platform}, density=${contextProfile.density}, input_mode=${contextProfile.input_mode}, selection_type=${contextProfile.selection_type}.`,
+      `File has ${pageCount} page(s).`,
+      'Use only variable references (no raw hex/px).',
+      dsContextBlock,
+    ].join('\n');
 
     let actionPlan;
 
@@ -1342,9 +1385,52 @@ app.post('/api/agents/generate', async (req, res) => {
       console.error('Generate: invalid or missing JSON from Kimi');
       return res.status(502).json({ error: 'Invalid response from AI' });
     }
-    if (!actionPlan.version || !actionPlan.metadata || !actionPlan.frame || !Array.isArray(actionPlan.actions)) {
-      return res.status(502).json({ error: 'Action plan missing required fields' });
+
+    let schemaValidation = validateActionPlanSchema(actionPlan);
+    let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
+    const mustRepair = !schemaValidation.valid || !dsValidation.valid;
+    if (mustRepair) {
+      const firstPassErrors = [
+        ...schemaValidation.errors.map((e) => `schema: ${e}`),
+        ...dsValidation.errors.map((e) => `ds: ${e}`),
+      ];
+      const repair = await repairActionPlanWithKimi(systemPrompt, actionPlan, firstPassErrors, `User prompt: ${prompt}\n\n${contextBlob}`);
+      totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
+      totalOutputTokens += Math.max(0, Number(repair?.usage?.output_tokens ?? repair?.usage?.completion_tokens ?? 0));
+      const repaired = extractJsonFromContent(repair?.content);
+      if (repaired && typeof repaired === 'object') {
+        actionPlan = repaired;
+        schemaValidation = validateActionPlanSchema(actionPlan);
+        dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
+      }
     }
+
+    if (!schemaValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan schema validation failed',
+        code: 'ACTION_PLAN_SCHEMA_FAILED',
+        details: schemaValidation.errors,
+      });
+    }
+    if (!dsValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan violates DS package constraints',
+        code: 'DS_VALIDATION_FAILED',
+        ds_id: dsPackage?.ds_id || null,
+        details: dsValidation.errors,
+      });
+    }
+
+    if (!actionPlan.metadata || typeof actionPlan.metadata !== 'object') actionPlan.metadata = {};
+    actionPlan.metadata.ds_source = dsSource;
+    actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
+    actionPlan.metadata.context_profile = contextProfile;
+    actionPlan.metadata.ds_validation = {
+      valid: dsValidation.valid,
+      warnings: [...(schemaValidation.warnings || []), ...(dsValidation.warnings || [])],
+      token_refs_used: dsValidation.used.tokenRefs.length,
+      component_refs_used: dsValidation.used.componentRefs.length,
+    };
 
     const creditsConsumed = actionPlan.metadata?.estimated_credits ?? 3;
     const latencyMs = Date.now() - startMs;
@@ -1366,6 +1452,8 @@ app.post('/api/agents/generate', async (req, res) => {
         action_plan: actionPlan,
         variant,
         request_id: requestId,
+        ds_id: dsPackage?.ds_id || resolvedDsId || null,
+        ds_validation: actionPlan.metadata.ds_validation,
         ...(asciiWireframe && { ascii_wireframe: asciiWireframe }),
       });
     } else {
@@ -1373,6 +1461,8 @@ app.post('/api/agents/generate', async (req, res) => {
         action_plan: actionPlan,
         variant,
         request_id: null,
+        ds_id: dsPackage?.ds_id || resolvedDsId || null,
+        ds_validation: actionPlan.metadata.ds_validation,
         ...(asciiWireframe && { ascii_wireframe: asciiWireframe }),
       });
     }

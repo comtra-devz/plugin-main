@@ -23,14 +23,18 @@ Ogni elemento di `issues` deve rispettare questo schema:
 | Campo | Tipo | Obbligatorio | Descrizione |
 |-------|------|--------------|-------------|
 | id | string | Sì | Identificativo univoco (es. UUID, o "ds-1", "ds-2"). Non deve ripetersi nella risposta. |
-| categoryId | string | Sì | Una di: `adoption`, `coverage`, `naming`, `structure`, `consistency`, `copy`. |
+| categoryId | string | Sì | Una di: `adoption`, `coverage`, `naming`, `structure`, `consistency`, `copy`, `optimization`. |
 | msg | string | Sì | Messaggio breve per l’utente (es. "Hardcoded Hex in fill"). |
 | severity | string | Sì | Esattamente uno di: `HIGH`, `MED`, `LOW`. |
 | layerId | string | Sì | `id` del nodo nel documento (es. "12:3456"). Usare l’id reale dal JSON quando disponibile. |
-| layerIds | string[] | No | Se l’issue riguarda più nodi (es. set di istanze), elencare tutti gli id. |
-| fix | string | Sì | Suggerimento di fix testuale (es. "Use var(--primary)"). |
+| layerIds | string[] | No | Se l’issue riguarda più nodi (es. set di istanze o componenti da unire). |
+| fix | string | Sì | Suggerimento di fix (es. "Use var(--primary)" o "Merge into one with slot LeftIcon"). |
 | tokenPath | string | No | Path del token suggerito (es. "sys.color.primary.500"). |
 | pageName | string | No | Nome della pagina/canvas per contesto (es. "Home_Desktop"). |
+| rule_id | string | No | ID regola (es. "DS-2.1", "DS-OPT-1") per auto-fix e crediti. |
+| recommendation | boolean | No | Se `true`, è una raccomandazione di ottimizzazione. |
+| optimizationPayload | object | No | Solo per `categoryId: "optimization"`. Vedi sotto. |
+| autoFixAvailable | boolean | No | Se `true`, il plugin può applicare un auto-fix. |
 
 ---
 
@@ -92,7 +96,44 @@ Il backend Comtra può validare:
 
 - Presenza di `issues` (array).
 - Per ogni elemento: `id`, `categoryId`, `msg`, `severity`, `layerId`, `fix` presenti.
-- `categoryId` in `['adoption','coverage','naming','structure','consistency','copy']`.
+- `categoryId` in `['adoption','coverage','naming','structure','consistency','copy','optimization']`.
 - `severity` in `['HIGH','MED','LOW']`.
 
-Campi mancanti opzionali (`layerIds`, `tokenPath`, `pageName`) possono essere lasciati undefined o null; il frontend li gestisce come opzionali.
+Campi mancanti opzionali (`layerIds`, `tokenPath`, `pageName`, `rule_id`, `recommendation`, `optimizationPayload`, `autoFixAvailable`) possono essere lasciati undefined o null; il frontend li gestisce come opzionali.
+
+---
+
+## optimizationPayload (solo per categoryId: optimization)
+
+Quando `categoryId` è `optimization`, l'agente può includere un oggetto `optimizationPayload` con suggerimenti strutturati:
+
+| Campo | Tipo | Descrizione |
+|-------|------|-------------|
+| componentIdsToMerge | string[] | Id dei componenti da unire (es. Atom-accordion-macro, General-accordion). |
+| suggestedSlots | string[] | Nomi suggeriti per slot (es. "LeftIcon", "RightActions", "Label"). |
+| suggestedTokens | string[] | Path token da creare (es. "accordion.header.bg.default", "accordion.header.bg.section"). |
+| suggestedVariants | object | Assi di variante suggeriti: `{ "Background": ["Light", "Dark"], "LeftContent": ["None", "Radio", "Icon"] }`. |
+
+Esempio:
+
+```json
+{
+  "id": "ds-opt-1",
+  "categoryId": "optimization",
+  "msg": "Merge accordion families: Atom-accordion-macro and General-accordion share structure",
+  "severity": "MED",
+  "layerId": "12:3456",
+  "layerIds": ["12:3456", "12:3457", "12:3458"],
+  "fix": "Merge into one AccordionHeader: add slot LeftIcon, variant Background=Light|Dark, extract token accordion.header.bg",
+  "rule_id": "DS-OPT-2",
+  "recommendation": true,
+  "autoFixAvailable": false,
+  "optimizationPayload": {
+    "componentIdsToMerge": ["12:3456", "12:3457"],
+    "suggestedSlots": ["LeftIcon", "RightActions"],
+    "suggestedTokens": ["accordion.header.bg.default", "accordion.header.bg.section"],
+    "suggestedVariants": { "Background": ["Light", "Dark"], "LeftContent": ["None", "Radio", "Icon"] }
+  },
+  "pageName": "Components"
+}
+```

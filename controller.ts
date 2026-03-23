@@ -1487,6 +1487,16 @@ function postFlowStartingPointsToUi(): void {
   }
 }
 
+function postSelectionToUi(): void {
+  const selection = figma.currentPage.selection;
+  const nodes = selection.map((node: SceneNode) => ({
+    id: node.id,
+    name: node.name,
+    type: node.type,
+  }));
+  figma.ui.postMessage({ type: 'selection-changed', nodes });
+}
+
 figma.ui.onmessage = async (raw: any) => {
   const msg = raw?.pluginMessage ?? raw;
   if (msg.type === 'resize-window') {
@@ -1515,13 +1525,7 @@ figma.ui.onmessage = async (raw: any) => {
   }
 
   if (msg.type === 'get-selection') {
-    const selection = figma.currentPage.selection;
-    const nodes = selection.map((node: any) => ({
-      id: node.id,
-      name: node.name,
-      type: node.type
-    }));
-    figma.ui.postMessage({ type: 'selection-changed', nodes });
+    postSelectionToUi();
   }
 
   if (msg.type === 'get-pages') {
@@ -2042,4 +2046,9 @@ figma.ui.onmessage = async (raw: any) => {
 
 figma.on('currentpagechange', () => {
   postFlowStartingPointsToUi();
+  postSelectionToUi();
+});
+
+figma.on('selectionchange', () => {
+  postSelectionToUi();
 });

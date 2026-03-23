@@ -1,0 +1,46 @@
+{
+  "ds_id": "ios-hig",
+  "ds_name": "iOS HIG",
+  "version": "2026.03.3",
+  "source_version": "current",
+  "source_url": "https://developer.apple.com/design/human-interface-guidelines/",
+  "source_type": "mixed",
+  "extraction_date": "2026-03-23T15:40:28Z",
+  "schema_version": "1.0.0",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "curated",
+    "components": "curated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "hash": "sha256:617e5abcb24371fab551244525614ee103eaa5832fb024c4b3cdf031f82f56e5",
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "ios-hig P3 completed: no scaffold components, conformance pass"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T18:33:41.773Z",
+    "pages_fetched": 5,
+    "pages_failed": 0,
+    "token_heading_signals": 0,
+    "component_heading_signals": 0,
+    "keyword_signals": 2
+  }
+}

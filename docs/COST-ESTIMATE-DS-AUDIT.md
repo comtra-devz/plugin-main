@@ -1,7 +1,7 @@
 # Stima costi e ricavi — consumo crediti e piani
 
 Documento di **analisi finanziaria** in ottica **consumo crediti**: i crediti sono l’unità di valore (erogati dai piani, consumati dalle azioni). Qui si modellano costo Kimi, ricavo e netto **per credito consumato**; **quanti crediti consuma ogni azione** (Scan DS, Generate, Sync, A11Y, ecc.) è definito altrove (constants, product).  
-**Oggi** l’unica stima costo/credito disponibile è per il flusso DS Audit; quando ci saranno altre funzioni si aggiungeranno stime per credito (o per azione) e si ricalcolano cassa e margini.
+**Oggi** la baseline costo/credito resta DS Audit, ma è stata aggiunta anche una stima operativa per **Generate con A/B test** (A diretto, B con pianificazione ASCII) per aggiornare margini e buffer.
 
 ---
 
@@ -110,16 +110,41 @@ In altre parole:
 
 **Caso medio:** ~**$0.012–0.015** per scan.
 
-### 4.1 Generate (v1)
+### 4.1 Generate (v2, con A/B test 50/50)
 
-Per una generazione standard (action plan, contesto file depth=2): input stimato ~15–25K token, output ~1–3K token → costo Kimi ~**$0.008–0.015** per richiesta. Con 3 crediti addebitati il margine per credito resta nell’ordine di DS Audit. Telemetria: `kimi_usage_log` con `action_type = 'generate'` (senza size_band).
+Generate usa due pipeline:
+
+- **Variante A (50%)**: prompt -> action plan JSON (1 chiamata Kimi)
+- **Variante B (50%)**: prompt -> wireframe ASCII -> action plan JSON (2 chiamate Kimi)
+
+Stima token/costo per richiesta:
+
+| Variante | Token input stimati | Token output stimati | Costo stimato/richiesta |
+|----------|----------------------|----------------------|--------------------------|
+| **A** (1 call) | ~16K–28K | ~1K–3K | **~$0.008–0.017** |
+| **B** (2 call) | ~32K–53K | ~2K–5K | **~$0.017–0.031** |
+| **Mix reale A/B 50/50** | — | — | **~$0.013–0.024** (tipico ~**$0.018–0.020**) |
+
+Con addebito attuale **3 crediti** per generate standard:
+
+- costo/credito stimato (mix A/B): **~$0.0043–0.0080**
+- zona tipica: **~$0.006/credito**
+
+Nota screenshot: in product/UI è previsto un sovrapprezzo credito su screenshot conversion (`+2` sul tier), da mantenere allineato al costo reale perché tende ad alzare token input (descrizioni + contesto visuale).
+
+Telemetria consigliata: oltre a `kimi_usage_log` `action_type='generate'`, tracciare sempre la **variante** (`A`/`B`) e i token per richiesta (già presenti nelle tabelle `generate_ab_requests`/`generate_ab_feedback`).
 
 ---
 
 ## 5. Stima costo per credito e per utente (in ottica consumo crediti)
 
 In ottica **consumo crediti**: **costo Kimi per utente** = (crediti consumati dall’utente) × (costo medio per credito).  
-Il **costo per credito** (lato Kimi) oggi è stimato solo dal flusso DS Audit; quando altre azioni useranno Kimi si potrà definire un costo medio per credito per tipo di azione o un mix.
+Il **costo per credito** (lato Kimi) oggi va letto almeno su due blocchi:
+
+- **DS Audit baseline**: ~`$0.003–0.004/credito`
+- **Generate (mix A/B)**: ~`$0.0043–0.0080/credito` (tipico ~`$0.006/credito`)
+
+Per forecasting mensile conviene usare un **mix pesato per azione** (quota crediti DS vs Generate vs altri audit).
 
 **Costo per credito (lato Kimi, oggi da DS Audit):**  
 - Small 2 crediti → $0.008 → **~$0.004/credito**  
@@ -136,7 +161,7 @@ Il **costo per credito** (lato Kimi) oggi è stimato solo dal flusso DS Audit; q
 | PRO 6m (800 crediti) | 800 nel periodo | ~$2.08 |
 | PRO 1y (2000 crediti) | 2000 nell’anno | ~$5.20 |
 
-Quando il consumo è misto (Scan + Generate + altro), il costo per credito può variare per tipo di azione; la logica resta: **crediti consumati × costo per credito** (medio o per tipo).
+Quando il consumo è misto (Scan + Generate + altro), il costo per credito varia per tipo di azione; la logica resta: **crediti consumati × costo per credito** (medio pesato o per tipo).
 
 ---
 

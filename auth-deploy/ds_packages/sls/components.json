@@ -1,0 +1,4393 @@
+{
+  "$schema": "comtra://ds_package/components/1.0",
+  "components": {
+    "button-filled": {
+      "component_id": "button-filled",
+      "display_name": "Button Filled",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component button-filled",
+      "figma_component_key": "button/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-outlined": {
+      "component_id": "button-outlined",
+      "display_name": "Button Outlined",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component button-outlined",
+      "figma_component_key": "button/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-text": {
+      "component_id": "button-text",
+      "display_name": "Button Text",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component button-text",
+      "figma_component_key": "button/text",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-elevated": {
+      "component_id": "button-elevated",
+      "display_name": "Button Elevated",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component button-elevated",
+      "figma_component_key": "button/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-tonal": {
+      "component_id": "button-tonal",
+      "display_name": "Button Tonal",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component button-tonal",
+      "figma_component_key": "button/tonal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "icon-button": {
+      "component_id": "icon-button",
+      "display_name": "Icon Button",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component icon-button",
+      "figma_component_key": "icon/button",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab": {
+      "component_id": "fab",
+      "display_name": "Fab",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component fab",
+      "figma_component_key": "fab",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab-small": {
+      "component_id": "fab-small",
+      "display_name": "Fab Small",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component fab-small",
+      "figma_component_key": "fab/small",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "fab-large": {
+      "component_id": "fab-large",
+      "display_name": "Fab Large",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component fab-large",
+      "figma_component_key": "fab/large",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "extended-fab": {
+      "component_id": "extended-fab",
+      "display_name": "Extended Fab",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component extended-fab",
+      "figma_component_key": "extended/fab",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "text-field-outlined": {
+      "component_id": "text-field-outlined",
+      "display_name": "Text Field Outlined",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component text-field-outlined",
+      "figma_component_key": "text/field/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "text-field-filled": {
+      "component_id": "text-field-filled",
+      "display_name": "Text Field Filled",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component text-field-filled",
+      "figma_component_key": "text/field/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-bar": {
+      "component_id": "search-bar",
+      "display_name": "Search Bar",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component search-bar",
+      "figma_component_key": "search/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-view": {
+      "component_id": "search-view",
+      "display_name": "Search View",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component search-view",
+      "figma_component_key": "search/view",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-assist": {
+      "component_id": "chip-assist",
+      "display_name": "Chip Assist",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component chip-assist",
+      "figma_component_key": "chip/assist",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-filter": {
+      "component_id": "chip-filter",
+      "display_name": "Chip Filter",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component chip-filter",
+      "figma_component_key": "chip/filter",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-input": {
+      "component_id": "chip-input",
+      "display_name": "Chip Input",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component chip-input",
+      "figma_component_key": "chip/input",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-suggestion": {
+      "component_id": "chip-suggestion",
+      "display_name": "Chip Suggestion",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component chip-suggestion",
+      "figma_component_key": "chip/suggestion",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "navigation-bar": {
+      "component_id": "navigation-bar",
+      "display_name": "Navigation Bar",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component navigation-bar",
+      "figma_component_key": "navigation/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "navigation-drawer": {
+      "component_id": "navigation-drawer",
+      "display_name": "Navigation Drawer",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component navigation-drawer",
+      "figma_component_key": "navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "modal-navigation-drawer": {
+      "component_id": "modal-navigation-drawer",
+      "display_name": "Modal Navigation Drawer",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component modal-navigation-drawer",
+      "figma_component_key": "modal/navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "nav-rail": {
+      "component_id": "nav-rail",
+      "display_name": "Nav Rail",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component nav-rail",
+      "figma_component_key": "nav/rail",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "top-app-bar": {
+      "component_id": "top-app-bar",
+      "display_name": "Top App Bar",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component top-app-bar",
+      "figma_component_key": "top/app/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-app-bar": {
+      "component_id": "bottom-app-bar",
+      "display_name": "Bottom App Bar",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component bottom-app-bar",
+      "figma_component_key": "bottom/app/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-primary": {
+      "component_id": "tabs-primary",
+      "display_name": "Tabs Primary",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component tabs-primary",
+      "figma_component_key": "tabs/primary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-secondary": {
+      "component_id": "tabs-secondary",
+      "display_name": "Tabs Secondary",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component tabs-secondary",
+      "figma_component_key": "tabs/secondary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-elevated": {
+      "component_id": "card-elevated",
+      "display_name": "Card Elevated",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component card-elevated",
+      "figma_component_key": "card/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-filled": {
+      "component_id": "card-filled",
+      "display_name": "Card Filled",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component card-filled",
+      "figma_component_key": "card/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-outlined": {
+      "component_id": "card-outlined",
+      "display_name": "Card Outlined",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component card-outlined",
+      "figma_component_key": "card/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "dialog": {
+      "component_id": "dialog",
+      "display_name": "Dialog",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component dialog",
+      "figma_component_key": "dialog",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-sheet-modal": {
+      "component_id": "bottom-sheet-modal",
+      "display_name": "Bottom Sheet Modal",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component bottom-sheet-modal",
+      "figma_component_key": "bottom/sheet/modal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "bottom-sheet-standard": {
+      "component_id": "bottom-sheet-standard",
+      "display_name": "Bottom Sheet Standard",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component bottom-sheet-standard",
+      "figma_component_key": "bottom/sheet/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "snackbar": {
+      "component_id": "snackbar",
+      "display_name": "Snackbar",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component snackbar",
+      "figma_component_key": "snackbar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "list-item": {
+      "component_id": "list-item",
+      "display_name": "List Item",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component list-item",
+      "figma_component_key": "list/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "menu": {
+      "component_id": "menu",
+      "display_name": "Menu",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component menu",
+      "figma_component_key": "menu",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "menu-item": {
+      "component_id": "menu-item",
+      "display_name": "Menu Item",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component menu-item",
+      "figma_component_key": "menu/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "divider": {
+      "component_id": "divider",
+      "display_name": "Divider",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component divider",
+      "figma_component_key": "divider",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "badge": {
+      "component_id": "badge",
+      "display_name": "Badge",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component badge",
+      "figma_component_key": "badge",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "progress-linear": {
+      "component_id": "progress-linear",
+      "display_name": "Progress Linear",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component progress-linear",
+      "figma_component_key": "progress/linear",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "progress-circular": {
+      "component_id": "progress-circular",
+      "display_name": "Progress Circular",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component progress-circular",
+      "figma_component_key": "progress/circular",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "switch": {
+      "component_id": "switch",
+      "display_name": "Switch",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component switch",
+      "figma_component_key": "switch",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "checkbox": {
+      "component_id": "checkbox",
+      "display_name": "Checkbox",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component checkbox",
+      "figma_component_key": "checkbox",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "radio": {
+      "component_id": "radio",
+      "display_name": "Radio",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component radio",
+      "figma_component_key": "radio",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "slider": {
+      "component_id": "slider",
+      "display_name": "Slider",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component slider",
+      "figma_component_key": "slider",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "segmented-button": {
+      "component_id": "segmented-button",
+      "display_name": "Segmented Button",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component segmented-button",
+      "figma_component_key": "segmented/button",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "date-picker": {
+      "component_id": "date-picker",
+      "display_name": "Date Picker",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component date-picker",
+      "figma_component_key": "date/picker",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "time-picker": {
+      "component_id": "time-picker",
+      "display_name": "Time Picker",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component time-picker",
+      "figma_component_key": "time/picker",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tooltip": {
+      "component_id": "tooltip",
+      "display_name": "Tooltip",
+      "category": "core",
+      "description": "Salesforce Lightning normalized component tooltip",
+      "figma_component_key": "tooltip",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.md",
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "minHeight": 40
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "default": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "emphasis": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "container.opacity": "opacity.disabled-content"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "semantic-token-only",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "image",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    }
+  },
+  "official_import": {
+    "sls": {
+      "extracted_at": "2026-03-23T18:33:18.494Z",
+      "source_repo": "salesforce-ux/design-system",
+      "ref": "master",
+      "component_source_files": [
+        "__fixtures__/ui/components/buttons/_doc.scss",
+        "__fixtures__/ui/components/buttons/base/_index.scss",
+        "__fixtures__/ui/components/buttons/base/example.jsx",
+        "__fixtures__/ui/components/buttons/docs.mdx",
+        "__fixtures__/ui/components/buttons/stateful/_index.scss",
+        "__fixtures__/ui/components/buttons/stateful/example.jsx",
+        "__fixtures__/ui/components/buttons/with-icon/_index.scss",
+        "__fixtures__/ui/components/buttons/with-icon/example.jsx",
+        "__fixtures__/ui/components/data-tables/_doc.scss",
+        "__fixtures__/ui/components/data-tables/advanced/example.jsx",
+        "__fixtures__/ui/components/data-tables/base/_index.scss",
+        "__fixtures__/ui/components/data-tables/base/example.jsx",
+        "__fixtures__/ui/components/data-tables/fixed-header/_index.scss",
+        "__fixtures__/ui/components/data-tables/fixed-header/example.jsx",
+        "__fixtures__/ui/components/data-tables/fixed-header/index.markup.md",
+        "__fixtures__/ui/components/data-tables/inline-edit/_index.scss",
+        "__fixtures__/ui/components/data-tables/inline-edit/example.jsx",
+        "ui/components/_index.sanitized.scss",
+        "ui/components/_index.scss",
+        "ui/components/_kinetics.scss",
+        "ui/components/_touch.scss",
+        "ui/components/accordion/RELEASENOTES.md",
+        "ui/components/accordion/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/accordion/__tests__/index.spec.js",
+        "ui/components/accordion/_doc.scss",
+        "ui/components/accordion/base/_index.scss",
+        "ui/components/accordion/base/_touch.scss",
+        "ui/components/accordion/base/example.jsx",
+        "ui/components/accordion/docs.mdx",
+        "ui/components/accordion/index.jsx",
+        "ui/components/accordion/index.stories.js",
+        "ui/components/activity-timeline/RELEASENOTES.md",
+        "ui/components/activity-timeline/__tests__/__snapshots__/index.spec.jsx.snap",
+        "ui/components/activity-timeline/__tests__/index.spec.jsx",
+        "ui/components/activity-timeline/_doc.scss",
+        "ui/components/activity-timeline/base/_deprecate.scss",
+        "ui/components/activity-timeline/base/_index.scss",
+        "ui/components/activity-timeline/base/example.jsx",
+        "ui/components/activity-timeline/deprecated/example.jsx",
+        "ui/components/activity-timeline/docs.mdx",
+        "ui/components/activity-timeline/index.stories.js",
+        "ui/components/alert/RELEASENOTES.md",
+        "ui/components/alert/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/alert/__tests__/index.spec.js",
+        "ui/components/alert/_doc.scss",
+        "ui/components/alert/base/_index.scss",
+        "ui/components/alert/base/example.jsx",
+        "ui/components/alert/docs.mdx",
+        "ui/components/alert/index.jsx",
+        "ui/components/alert/index.stories.js",
+        "ui/components/app-launcher/RELEASENOTES.md",
+        "ui/components/app-launcher/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/app-launcher/__tests__/index.spec.js",
+        "ui/components/app-launcher/_doc.scss",
+        "ui/components/app-launcher/base/_deprecate.scss",
+        "ui/components/app-launcher/base/_index.scss",
+        "ui/components/app-launcher/base/example.jsx",
+        "ui/components/app-launcher/docs.mdx",
+        "ui/components/app-launcher/index.stories.js",
+        "ui/components/avatar-group/RELEASENOTES.md",
+        "ui/components/avatar-group/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/avatar-group/__tests__/enzyme.spec.js",
+        "ui/components/avatar-group/__tests__/index.spec.js",
+        "ui/components/avatar-group/_doc.scss",
+        "ui/components/avatar-group/base/_index.scss",
+        "ui/components/avatar-group/base/example.jsx",
+        "ui/components/avatar-group/docs.mdx",
+        "ui/components/avatar-group/index.jsx",
+        "ui/components/avatar-group/index.stories.js",
+        "ui/components/avatar-group/mixins/_index.scss",
+        "ui/components/avatar-group/tokens/background-color.yml",
+        "ui/components/avatar/RELEASENOTES.md",
+        "ui/components/avatar/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/avatar/__tests__/index.spec.js",
+        "ui/components/avatar/_doc.scss",
+        "ui/components/avatar/base/_index.scss",
+        "ui/components/avatar/base/example.jsx",
+        "ui/components/avatar/docs.mdx",
+        "ui/components/avatar/index.jsx",
+        "ui/components/avatar/index.stories.js",
+        "ui/components/avatar/initials/example.jsx",
+        "ui/components/badges/RELEASENOTES.md",
+        "ui/components/badges/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/badges/__tests__/enzyme.spec.js",
+        "ui/components/badges/__tests__/index.spec.js",
+        "ui/components/badges/_doc.scss",
+        "ui/components/badges/base/_index.scss",
+        "ui/components/badges/base/example.jsx",
+        "ui/components/badges/docs.mdx",
+        "ui/components/badges/index.jsx",
+        "ui/components/badges/index.stories.js",
+        "ui/components/badges/tokens/background-color.yml",
+        "ui/components/brand-band/RELEASENOTES.md",
+        "ui/components/brand-band/__tests__/__snapshots__/snapshot.spec.js.snap",
+        "ui/components/brand-band/__tests__/snapshot.spec.js",
+        "ui/components/brand-band/_doc.scss",
+        "ui/components/brand-band/base/_index.scss",
+        "ui/components/brand-band/base/example.jsx",
+        "ui/components/brand-band/docs.mdx",
+        "ui/components/brand-band/docs/BrandBand.jsx",
+        "ui/components/brand-band/index.jsx",
+        "ui/components/brand-band/index.stories.js",
+        "ui/components/brand-band/tokens/background-color.yml",
+        "ui/components/brand-band/tokens/sizing.yml",
+        "ui/components/brand-band/tokens/spacing.yml",
+        "ui/components/breadcrumbs/RELEASENOTES.md",
+        "ui/components/breadcrumbs/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/breadcrumbs/__tests__/index.spec.js",
+        "ui/components/breadcrumbs/_doc.scss",
+        "ui/components/breadcrumbs/base/_index.scss",
+        "ui/components/breadcrumbs/base/example.jsx",
+        "ui/components/breadcrumbs/docs.mdx",
+        "ui/components/breadcrumbs/index.react.jsx",
+        "ui/components/breadcrumbs/index.stories.js",
+        "ui/components/breadcrumbs/kinetics/_index.scss",
+        "ui/components/builder-header/RELEASENOTES.md",
+        "ui/components/builder-header/__tests__/__snapshots__/snapshot.spec.js.snap",
+        "ui/components/builder-header/__tests__/snapshot.spec.js",
+        "ui/components/builder-header/_doc.scss",
+        "ui/components/builder-header/base/_index.scss",
+        "ui/components/builder-header/base/example.jsx",
+        "ui/components/builder-header/docs.mdx",
+        "ui/components/builder-header/index.jsx",
+        "ui/components/builder-header/index.stories.js",
+        "ui/components/builder-header/toolbar/example.jsx",
+        "ui/components/button-groups/RELEASENOTES.md",
+        "ui/components/button-groups/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/button-groups/__tests__/index.spec.js",
+        "ui/components/button-groups/_doc.scss",
+        "ui/components/button-groups/base/_index.scss",
+        "ui/components/button-groups/base/example.jsx",
+        "ui/components/button-groups/docs.mdx",
+        "ui/components/button-groups/index.stories.js",
+        "ui/components/button-groups/list/_index.scss",
+        "ui/components/button-groups/list/example.jsx",
+        "ui/components/button-groups/row/_index.scss",
+        "ui/components/button-groups/row/example.jsx",
+        "ui/components/button-icons/RELEASENOTES.md",
+        "ui/components/button-icons/__tests__/__snapshots__/snapshot.spec.jsx.snap",
+        "ui/components/button-icons/__tests__/snapshot.spec.jsx",
+        "ui/components/button-icons/_doc.scss",
+        "ui/components/button-icons/base/_deprecate.scss",
+        "ui/components/button-icons/base/_index.scss",
+        "ui/components/button-icons/base/_touch.scss",
+        "ui/components/button-icons/base/example.jsx",
+        "ui/components/button-icons/bordered-filled-container/_index.scss",
+        "ui/components/button-icons/bordered-filled-container/example.jsx",
+        "ui/components/button-icons/bordered-inverse/_index.scss",
+        "ui/components/button-icons/bordered-inverse/example.jsx",
+        "ui/components/button-icons/bordered-transparent-container/_index.scss",
+        "ui/components/button-icons/bordered-transparent-container/example.jsx",
+        "ui/components/button-icons/brand/_index.scss",
+        "ui/components/button-icons/brand/example.jsx",
+        "ui/components/button-icons/docs.mdx",
+        "ui/components/button-icons/index.jsx",
+        "ui/components/button-icons/index.stories.js",
+        "ui/components/button-icons/inverse/_index.scss",
+        "ui/components/button-icons/inverse/example.jsx",
+        "ui/components/button-icons/menu/example.jsx",
+        "ui/components/button-icons/menu/index.jsx",
+        "ui/components/button-icons/mixins/_index.scss",
+        "ui/components/button-icons/stateful/_index.scss",
+        "ui/components/button-icons/stateful/example.jsx",
+        "ui/components/button-icons/tokens/border-color.yml",
+        "ui/components/button-icons/tokens/sizing.yml",
+        "ui/components/button-icons/transparent-container/_index.scss",
+        "ui/components/button-icons/transparent-container/example.jsx",
+        "ui/components/buttons/RELEASENOTES.md",
+        "ui/components/buttons/__tests__/__snapshots__/snapshot.spec.jsx.snap",
+        "ui/components/buttons/__tests__/snapshot.spec.jsx",
+        "ui/components/buttons/_doc.scss",
+        "ui/components/buttons/base/_deprecate.scss",
+        "ui/components/buttons/base/_index.scss",
+        "ui/components/buttons/base/_touch.scss",
+        "ui/components/buttons/base/example.jsx",
+        "ui/components/buttons/docs.mdx",
+        "ui/components/buttons/dual-stateful/_index.scss",
+        "ui/components/buttons/dual-stateful/example.jsx",
+        "ui/components/buttons/index.stories.js",
+        "ui/components/buttons/kinetics/_index.scss",
+        "ui/components/buttons/mixins/_index.scss",
+        "ui/components/buttons/stateful/_deprecate.scss",
+        "ui/components/buttons/stateful/_index.scss",
+        "ui/components/buttons/stateful/example.jsx",
+        "ui/components/buttons/tokens/border-color.yml",
+        "ui/components/buttons/tokens/border-radius.yml",
+        "ui/components/buttons/tokens/color.yml",
+        "ui/components/buttons/tokens/line-height.yml",
+        "ui/components/buttons/tokens/text-color.yml",
+        "ui/components/buttons/with-icon/example.jsx",
+        "ui/components/cards/RELEASENOTES.md",
+        "ui/components/cards/__tests__/__snapshots__/snapshot.spec.js.snap",
+        "ui/components/cards/__tests__/snapshot.spec.js",
+        "ui/components/cards/_doc.scss",
+        "ui/components/cards/base/_blame.scss",
+        "ui/components/cards/base/_deprecate.scss",
+        "ui/components/cards/base/_index.scss",
+        "ui/components/cards/base/_touch.scss",
+        "ui/components/cards/base/example.jsx",
+        "ui/components/cards/docs.mdx",
+        "ui/components/cards/einstein/_index.scss",
+        "ui/components/cards/einstein/example.jsx",
+        "ui/components/cards/index.jsx",
+        "ui/components/cards/index.stories.js",
+        "ui/components/cards/tokens/background-color.yml",
+        "ui/components/cards/tokens/border-color.yml",
+        "ui/components/cards/tokens/box-shadow.yml",
+        "ui/components/cards/tokens/font-weight.yml",
+        "ui/components/cards/tokens/spacing.yml",
+        "ui/components/cards/tokens/text-align.yml",
+        "ui/components/cards/wrapper/example.jsx",
+        "ui/components/carousel/RELEASENOTES.md",
+        "ui/components/carousel/__tests__/__snapshots__/snapshot.spec.jsx.snap",
+        "ui/components/carousel/__tests__/snapshot.spec.jsx",
+        "ui/components/carousel/_doc.scss",
+        "ui/components/carousel/base/_index.scss",
+        "ui/components/carousel/base/example.jsx",
+        "ui/components/carousel/docs.mdx",
+        "ui/components/carousel/index.jsx",
+        "ui/components/carousel/index.stories.js",
+        "ui/components/carousel/tokens/background-color.yml",
+        "ui/components/carousel/tokens/sizing.yml",
+        "ui/components/chat/RELEASENOTES.md",
+        "ui/components/chat/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/chat/__tests__/index.spec.js",
+        "ui/components/chat/_doc.scss",
+        "ui/components/chat/base/_index.scss",
+        "ui/components/chat/base/example.jsx",
+        "ui/components/chat/docs.mdx",
+        "ui/components/chat/index.jsx",
+        "ui/components/chat/index.stories.js",
+        "ui/components/chat/past/_index.scss",
+        "ui/components/chat/past/example.jsx",
+        "ui/components/chat/tokens/background-color.yml",
+        "ui/components/checkbox-button-group/RELEASENOTES.md",
+        "ui/components/checkbox-button-group/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/checkbox-button-group/__tests__/index.spec.js",
+        "ui/components/checkbox-button-group/_doc.scss",
+        "ui/components/checkbox-button-group/base/_index.scss",
+        "ui/components/checkbox-button-group/base/_touch.scss",
+        "ui/components/checkbox-button-group/base/example.jsx",
+        "ui/components/checkbox-button-group/docs.mdx",
+        "ui/components/checkbox-button-group/index.stories.js",
+        "ui/components/checkbox-button/RELEASENOTES.md",
+        "ui/components/checkbox-button/__tests__/__snapshots__/index.spec.js.snap",
+        "ui/components/checkbox-button/__tests__/index.spec.js",
+        "ui/components/checkbox-button/_doc.scss",
+        "ui/components/checkbox-button/base/_deprecate.scss",
+        "ui/components/checkbox-button/base/_index.scss",
+        "ui/components/checkbox-button/base/_touch.scss"
+      ],
+      "component_source_count": 250
+    }
+  }
+}

@@ -39,6 +39,7 @@ Le etichette UI sono in `views/Audit/data.ts` (`*_CATEGORIES_CONFIG`).
 | `structure` | Structure |
 | `consistency` | Consistency |
 | `copy` | Copywriting |
+| `optimization` | Optimization |
 
 ### Accessibility (`A11Y_CATEGORIES_CONFIG`)
 
@@ -153,6 +154,10 @@ Codice stabile proposto: **`DS-X.Y`** = sezione nel doc (es. `DS-2.1`). Oggi **n
 | DS-5.1–5.4 Consistency | `consistency` | **feasible** | Snap posizione/spacing/font a griglia e type scale |
 | DS-6.1–6.3 Copy | `copy` | **manual** | Testo: LLM suggestion, non auto-apply cieco |
 | DS-7.1–7.4 (library hygiene) | misto (`adoption` / `coverage`) | **manual** / **partial** | Vedi sezioni 7.x |
+| DS-OPT-1 Famiglie ridondanti | `optimization` | **manual** | Merge componenti; wizard Phase 2 |
+| DS-OPT-2 Slot mancanti | `optimization` | **feasible** | Aggiungere slot via componentPropertyDefinitions |
+| DS-OPT-3 Token da estrarre | `optimization` | **feasible** | Create variable + bind (come DS-2.1) |
+| DS-OPT-4 Varianti da introdurre | `optimization` | **partial** | Consolidare in component set; richiede wizard |
 
 Oggi in UI queste issue sono per lo più **stub** se l’utente preme Auto-Fix (stesso comportamento generico `apply-fix`).
 

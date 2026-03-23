@@ -1,0 +1,79 @@
+{
+  "ds_id": "carbon",
+  "extracted_at": "2026-03-23T17:28:56.549Z",
+  "extractor_version": "1.0.0",
+  "source_manifest_sha256": "sha256:4da84af1c9eb84f122e6c0c578a4e07df52f0cbce6f70cc512466cfd3b23f256",
+  "package_manifest_version": "2026.03.3",
+  "summary": {
+    "total": 5,
+    "ok": 4,
+    "failed": 1
+  },
+  "sources": [
+    {
+      "url": "https://carbondesignsystem.com/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Tue, 17 Mar 2026 18:13:36 GMT",
+      "body_sha256": "sha256:a4433ec81ddbd969e68023b1f0c647f751923a039976eec8869ea117300b9e55",
+      "body_size": 3119460,
+      "elapsed_ms": 218,
+      "fetched_at": "2026-03-23T17:28:55.658Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://carbondesignsystem.com/components/",
+      "ok": false,
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": null,
+      "body_sha256": "sha256:9df8b9301ee4187c7cb3a0b699842a4316f5a0d5a03b794f0904d4fa832fd6d5",
+      "body_size": 3085051,
+      "elapsed_ms": 248,
+      "fetched_at": "2026-03-23T17:28:55.932Z",
+      "group": "docs"
+    },
+    {
+      "url": "https://carbondesignsystem.com/elements/color/tokens/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Tue, 17 Mar 2026 18:13:37 GMT",
+      "body_sha256": "sha256:05d2555b4624eb375706971507cea7e8df98f2ba7fafdcaf5932411d615caf06",
+      "body_size": 3887899,
+      "elapsed_ms": 299,
+      "fetched_at": "2026-03-23T17:28:56.231Z",
+      "group": "tokens"
+    },
+    {
+      "url": "https://github.com/carbon-design-system/carbon",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": "W/\"7d9b2d50be6eb8c01e9b572a8ef39ee1\"",
+      "last_modified": null,
+      "body_sha256": "sha256:56229b4e894e474a0a769131d22ed94d4091ea6a199a9b597e4af90bd07842fa",
+      "body_size": 579214,
+      "elapsed_ms": 137,
+      "fetched_at": "2026-03-23T17:28:56.368Z",
+      "group": "components"
+    },
+    {
+      "url": "https://react.carbondesignsystem.com/",
+      "ok": true,
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "etag": null,
+      "last_modified": "Wed, 11 Mar 2026 16:46:06 GMT",
+      "body_sha256": "sha256:a67d3688359ae6fba0b6233066ea07464e08c6e9c3f5837647809be63104a9f5",
+      "body_size": 7182,
+      "elapsed_ms": 181,
+      "fetched_at": "2026-03-23T17:28:56.549Z",
+      "group": "storybook"
+    }
+  ]
+}

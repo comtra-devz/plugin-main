@@ -1,0 +1,43 @@
+{
+  "ds_id": "sls",
+  "ds_name": "Salesforce Lightning",
+  "version": "2026.03.3",
+  "source_version": "current",
+  "source_url": "https://www.lightningdesignsystem.com",
+  "source_type": "mixed",
+  "extraction_date": "2026-03-23T15:40:28Z",
+  "schema_version": "1.0.0",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "curated",
+    "components": "curated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "hash": "sha256:349f578b73f25f558a18d4d4e631732f258e7bdef11c61f775389e581c95cf91",
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "sls P3 completed: no scaffold components, conformance pass"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T18:33:18.496Z",
+    "token_source_count": 200,
+    "component_source_count": 250
+  }
+}

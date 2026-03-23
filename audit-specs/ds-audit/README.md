@@ -31,6 +31,7 @@ L’audit è fatto **rispetto alla library che l’utente sta controllando** (li
 - `structure` — Ghost node, nesting, auto-layout, constraints.
 - `consistency` — Griglia, spacing scale, type scale, line height.
 - `copy` — Placeholder, terminologia, overflow/localizzazione.
+- `optimization` — Raccomandazioni: merge famiglie, slot, token, varianti (sistemi più snelli).
 
 ## Riferimenti
 

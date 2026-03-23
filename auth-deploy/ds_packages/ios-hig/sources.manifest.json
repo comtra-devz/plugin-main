@@ -1,0 +1,28 @@
+{
+  "ds_id": "ios-hig",
+  "official_sources": {
+    "docs": [
+      "https://developer.apple.com/design/human-interface-guidelines/",
+      "https://developer.apple.com/design/human-interface-guidelines/components"
+    ],
+    "tokens": [
+      "https://developer.apple.com/design/human-interface-guidelines/foundations/color",
+      "https://developer.apple.com/design/human-interface-guidelines/foundations/typography"
+    ],
+    "components": [
+      "https://developer.apple.com/design/human-interface-guidelines/components"
+    ],
+    "storybook": []
+  },
+  "priority": [
+    "tokens",
+    "components",
+    "docs",
+    "storybook"
+  ],
+  "policy": {
+    "official_only": true,
+    "allow_private_sources": false,
+    "snapshot_required": true
+  }
+}

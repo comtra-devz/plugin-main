@@ -1,86 +1,62 @@
 # Documentazione Comtra
 
-Indice della documentazione del progetto (file `.md`) per orientarsi rapidamente.
+Indice principale della documentazione del progetto.
 
----
+## Struttura consigliata
 
-## Panoramica e setup
+- **Panoramica prodotto**: `README.md` (root)
+- **Plugin (funzioni e sezioni)**: `docs/plugin/README.md`
+- **Admin Dashboard**: `docs/admin/README.md`
+- **Operatività / troubleshooting**: `docs/ops/README.md`
+- **Archivio storico/proposte**: `docs/archive/README.md`
+- **Spec audit (fonte di verità regole)**: `audit-specs/README.md`
+- **Backend auth setup**: `auth-deploy/SETUP.md`
 
-| File | Contenuto |
-|------|-----------|
-| **README.md** (root) | Descrizione del plugin, flusso UI, tab Audit/Generate/Code/Stats, gamification. |
-| **auth-deploy/SETUP.md** | Setup backend (Vercel, DB, env, deploy). |
-| **docs/OAUTH-FIGMA.md** | OAuth Figma: flusso, redirect, scope, sviluppo locale. |
+## Regola di sicurezza (importante)
 
----
+Prima di rinominare/spostare `.md`, verificare path letti da codice:
 
-## Agenti Kimi e pipeline
+- `admin-dashboard/lib/plugin-doc-snapshot.mjs` usa path fissi in `DEFAULT_DOC_RELATIVE_PATHS`
+- script CI/ops: `scripts/notify-discord.mjs` e script admin vari
+- riferimenti inter-doc in `docs/**/*.md`, `audit-specs/**/*.md`, `admin-dashboard/**/*.md`
 
-| File | Contenuto |
-|------|-----------|
-| **docs/ACTION-PLAN-KIMI-AGENTS.md** | Piano d’azione completo: Fase 0 (setup), Fasi 1–6 per DS Audit, A11Y, UX, Prototype, Code, Generate. |
-| **docs/AUDIT-PIPELINE-AND-KNOWLEDGE.md** | Export JSON vs analisi reale; dove gestire la knowledge (prompts, audit-specs). |
-| **docs/KIMI-FOR-DUMMIES.md** | Guida pratica: account, API key, test prompt su kimi.com, replicare per altri agenti. |
-| **docs/DS-AUDIT-WHO-DOES-WHAT.md** | Chi fa cosa per l’agente DS Audit (tu vs assistente), in ordine. |
-| **docs/DS-AUDIT-FIRST-TEST.md** | Primo test DS Audit: come ottenere il JSON (export/Network), incollare su kimi.com, verificare output. |
-| **docs/A11Y-AUDIT-PLAN.md** | Piano agente Accessibilità: Kimi + API gratuite, regole WCAG-like su design, categorie. |
-| **docs/FEASIBILITY-KIMI-SWARM.md** | Studio di fattibilità multi-agente (Kimi K2.5, Swarm, MCP, axe-core, pipeline dati). |
+Per questo motivo questa ottimizzazione è **non distruttiva**: introduciamo indici per area, senza rompere i percorsi esistenti.
 
----
+## Accesso rapido (legacy ma attuale)
 
-## Specifiche audit (regole e output)
+### Core plugin
 
-| Cartella / file | Contenuto |
-|-----------------|-----------|
-| **audit-specs/README.md** | Struttura cartelle (ds-audit, a11y-audit, …), uso per backend e QA. |
-| **audit-specs/MAINTAINING-RULES.md** | Come modificare le regole, handoff, aggiungere categorie. |
-| **audit-specs/ds-audit/** | Design System Audit: regole, OUTPUT-SCHEMA, fonti, problematiche ricorrenti. |
-| **audit-specs/a11y-audit/** | Accessibility Audit: regole, OUTPUT-SCHEMA, Kimi + API gratuite. |
+- OAuth: `docs/OAUTH-FIGMA.md`
+- Generate: `docs/GENERATE-TAB-SPEC.md`
+- Sync: `docs/SYNC-INVESTIGATION.md`
+- Gamification: `docs/GAMIFICATION.md`
+- Trophies: `docs/TROPHIES.md`
+- Support tickets: `docs/SUPPORT-TICKETS-VERIFICATION.md`
 
-I **prompt** (system prompt per Kimi) stanno in **auth-deploy/prompts/** (vedi `auth-deploy/prompts/README.md`).
+### Costi e crediti
 
----
+- Overview DS: `docs/COST-ESTIMATE-DS-AUDIT.md`
+- A11Y: `docs/COST-ESTIMATE-A11Y.md`
+- UX: `docs/COST-ESTIMATE-UX-AUDIT.md`
+- Prototype: `docs/COST-ESTIMATE-PROTOTYPE-AUDIT.md`
+- Crediti troubleshooting: `docs/TROUBLESHOOTING-CREDITS.md`
 
-## Fonti prodotto (Notion → report → Git)
+### Audit specs
 
-| File | Contenuto |
-|------|-----------|
-| **docs/PRODUCT-SOURCES-GIT-WORKFLOW.md** | **Fase 7:** da report Markdown a branch/PR nel repo; naming in `docs/product-sources/archive/`, tracciamento URL PR in dashboard. |
-| **docs/product-sources/README.md** | Scopo cartella archivio report (opzionale, versionabile). |
-| **admin-dashboard/docs/NOTION-PRODUCT-SOURCES.md** | Pipeline completa (Notion, cron, Apify, web, snapshot, LLM, Fase 6). |
+- Hub: `audit-specs/README.md`
+- DS: `audit-specs/ds-audit/README.md`
+- A11Y: `audit-specs/a11y-audit/README.md`
+- UX: `audit-specs/ux-logic-audit/README.md`
+- Prototype: `audit-specs/prototype-audit/README.md`
 
----
+### Admin dashboard
 
-## Backend e integrazioni
+- Admin app overview: `admin-dashboard/README.md`
+- Auth setup: `admin-dashboard/docs/ADMIN-AUTH-SETUP.md`
+- Product sources (pipeline): `admin-dashboard/docs/NOTION-PRODUCT-SOURCES.md`
 
-| File | Contenuto |
-|------|-----------|
-| **auth-deploy/prompts/README.md** | Prompts per gli agenti (ds-audit-system.md, a11y-audit-system.md, …); dove gestire la knowledge. |
-| **auth-deploy/parked-endpoints/README.md** | Endpoint “parcheggiati” o non ancora attivi. |
-| **docs/TESTING-INTEGRATIONS.md** | Test e integrazioni (affiliate, referral, simulazioni). |
-| **docs/AFFILIATE.md** | Sistema affiliati e API. |
-| **docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md** | Architettura admin dashboard vs plugin Figma: nessun canale diretto; mapping API, DB, `postMessage`. |
-| **docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md** | Perché 500 sulle route admin, resilienza, riepilogo sezioni. |
-| **docs/GAMIFICATION.md** | XP, livelli, trofei, formula. |
-| **docs/COST-ESTIMATE-DS-AUDIT.md** | Stima costi e crediti DS Audit (Kimi, piani, cassa); include riferimento Generate. |
-| **docs/COST-ESTIMATE-A11Y.md** | Matrice crediti A11Y Audit v1.0 (senza Kimi, bande complessità). |
+### Backend auth
 
----
-
-## Generate (wireframe/layout da Design System)
-
-| File | Contenuto |
-|------|-----------|
-| **docs/GENERATION-ENGINE-RULESET.md** | Regole complete: modi, governance, schema action plan, crediti, validazione. |
-| **docs/GENERATION-ENGINE-FEASIBILITY.md** | Fattibilità tecnica (Kimi only, senza Claude), costi, fallimenti. |
-| **docs/GENERATE-TAB-SPEC.md** | Spec UI tab Generate (props, stato, copy, data-attribute). |
-| **auth-deploy/prompts/generate-system.md** | System prompt Kimi per generazione (action plan JSON). |
-
-Endpoint: **POST /api/agents/generate** (file_key, prompt, mode, ds_source). Crediti: 3 (standard); vedi backend `estimateCreditsByAction('generate')`.
-
----
-
-## Altri riferimenti
-
-- **oauth-server/README.md** — Server OAuth (se presente).
-- **audit-specs/ds-audit/SOURCES.md**, **RECURRING-PROBLEMS.md** — Fonti e problemi ricorrenti per DS Audit.
+- Deploy/setup: `auth-deploy/SETUP.md`
+- Prompts: `auth-deploy/prompts/README.md`
+- Parked endpoints: `auth-deploy/parked-endpoints/README.md`

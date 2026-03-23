@@ -14,6 +14,7 @@ export const DS_CATEGORIES_CONFIG: { id: string; label: string; desc: string; ic
   { id: 'structure', label: 'Structure', desc: 'Hierarchy, Auto-layout & Constraints', icon: '▣', color: 'bg-purple-200' },
   { id: 'consistency', label: 'Consistency', desc: 'Grid, Spacing & Type Scale', icon: '◫', color: 'bg-teal-200' },
   { id: 'copy', label: 'Copywriting', desc: 'Tone, Localization & Microcopy', icon: '¶', color: 'bg-orange-300' },
+  { id: 'optimization', label: 'Optimization', desc: 'Merge, Slots & Variants', icon: '◇', color: 'bg-indigo-200' },
 ];
 
 /** Build DS categories from issues (dynamic). Only categories that appear in config and in issues are included. */

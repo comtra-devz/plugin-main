@@ -1,0 +1,44 @@
+{
+  "ds_id": "material3",
+  "ds_name": "Material Design 3",
+  "version": "2026.03.5",
+  "source_version": "1.3.0",
+  "source_url": "https://github.com/material-foundation/material-tokens",
+  "source_type": "json",
+  "extraction_date": "2026-03-23T00:00:00Z",
+  "schema_version": "1.0.0",
+  "hash": "sha256:3731df71428bfc30e2d76df5fa1ac98d10077b1462ab9cdd80fc5df0b116a290",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "llm-extracted",
+    "components": "semi-automated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "M3 P0 completed: no scaffold components"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T17:44:17.562Z",
+    "token_files_scanned": 2,
+    "imported_tokens": 20,
+    "material_web_packages": 32
+  }
+}

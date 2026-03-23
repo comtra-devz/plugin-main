@@ -1,0 +1,2908 @@
+{
+  "$schema": "comtra://ds_package/components/1.0",
+  "components": {
+    "button-filled": {
+      "component_id": "button-filled",
+      "display_name": "Filled Button",
+      "category": "actions",
+      "description": "High emphasis button for primary actions",
+      "figma_component_key": "button/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.primary",
+            "borderRadius": "borderRadius.xl",
+            "minHeight": 40,
+            "minWidth": 48,
+            "paddingHorizontal": "spacing.xl",
+            "paddingVertical": "spacing.sm",
+            "elevation": "elevation.level0"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-primary"
+          }
+        },
+        "leading-icon": {
+          "type": "icon",
+          "required": false,
+          "tokens": {
+            "size": 18,
+            "color": "color.semantic.on-primary",
+            "spacing-to-label": "spacing.sm"
+          }
+        }
+      },
+      "variants": {
+        "filled": {
+          "default": true
+        },
+        "outlined": {
+          "overrides": {
+            "container.background": "transparent",
+            "container.border": "border.default",
+            "label.color": "color.semantic.primary"
+          }
+        },
+        "text": {
+          "overrides": {
+            "container.background": "transparent",
+            "container.paddingHorizontal": "spacing.md",
+            "label.color": "color.semantic.primary"
+          }
+        },
+        "tonal": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant",
+            "label.color": "color.semantic.primary"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-primary@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-primary@0.12"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12",
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "max-label-length",
+          "value": 24,
+          "unit": "chars"
+        },
+        {
+          "rule": "no-nesting-interactive",
+          "description": "Cannot contain other interactive elements"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "max": 1
+        },
+        "label": {
+          "accepts": [
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "card-elevated": {
+      "component_id": "card-elevated",
+      "display_name": "Elevated Card",
+      "category": "containment",
+      "description": "Container for grouped content",
+      "figma_component_key": "card/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md",
+            "elevation": "elevation.level1"
+          }
+        },
+        "headline": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.title-medium",
+            "color": "color.semantic.on-surface"
+          }
+        },
+        "body": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.body-medium",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "elevated": {
+          "default": true
+        },
+        "filled": {
+          "overrides": {
+            "container.elevation": "elevation.level0",
+            "container.background": "color.semantic.surface-variant"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.elevation": "elevation.level2"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-content-padding",
+          "value": 16,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "media": {
+          "accepts": [
+            "image"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "actions": {
+          "accepts": [
+            "button-filled",
+            "button-outlined",
+            "button-text"
+          ],
+          "min": 0,
+          "max": 3
+        }
+      }
+    },
+    "text-field-outlined": {
+      "component_id": "text-field-outlined",
+      "display_name": "Outlined Text Field",
+      "category": "text-input",
+      "description": "Single-line input field",
+      "figma_component_key": "text-field/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "borderRadius": "borderRadius.md",
+            "minHeight": 56,
+            "paddingHorizontal": "spacing.lg",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.body-medium",
+            "color": "color.semantic.on-surface"
+          }
+        },
+        "supporting-text": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-medium",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "outlined": {
+          "default": true
+        },
+        "filled": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant",
+            "container.borderWidth": 0
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "focused": {
+          "container.borderColor": "color.semantic.primary",
+          "container.borderWidth": "border.strong"
+        },
+        "error": {
+          "container.borderColor": "color.semantic.error",
+          "supporting-text.color": "color.semantic.error"
+        },
+        "disabled": {
+          "container.background": "color.semantic.surface-variant",
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "max": 1
+        },
+        "trailing-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "max": 1
+        }
+      }
+    },
+    "navigation-bar": {
+      "component_id": "navigation-bar",
+      "display_name": "Bottom Navigation",
+      "category": "navigation",
+      "description": "Primary mobile section navigation",
+      "figma_component_key": "navigation/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "height": 80,
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm",
+            "elevation": "elevation.level2"
+          }
+        },
+        "item": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "minWidth": 64,
+            "minHeight": 48,
+            "typography": "typography.scale.label-medium"
+          }
+        }
+      },
+      "variants": {
+        "filled": {
+          "default": true
+        }
+      },
+      "states": {
+        "active-item": {
+          "item.color": "color.semantic.primary"
+        },
+        "inactive-item": {
+          "item.color": "color.semantic.on-surface"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "items-range",
+          "value": [
+            3,
+            5
+          ],
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "items": {
+          "accepts": [
+            "navigation-item"
+          ],
+          "min": 3,
+          "max": 5
+        }
+      }
+    },
+    "fab": {
+      "component_id": "fab",
+      "display_name": "Floating Action Button",
+      "category": "actions",
+      "description": "High-priority floating action",
+      "figma_component_key": "fab/primary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.primary",
+            "borderRadius": "borderRadius.full",
+            "size": 56,
+            "elevation": "elevation.level3"
+          }
+        },
+        "icon": {
+          "type": "icon",
+          "required": true,
+          "tokens": {
+            "size": 24,
+            "color": "color.semantic.on-primary"
+          }
+        }
+      },
+      "variants": {
+        "primary": {
+          "default": true
+        },
+        "secondary": {
+          "overrides": {
+            "container.background": "color.semantic.secondary",
+            "icon.color": "color.semantic.on-secondary"
+          }
+        },
+        "tertiary": {
+          "overrides": {
+            "container.background": "color.semantic.tertiary",
+            "icon.color": "color.semantic.on-tertiary"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "pressed": {
+          "container.overlay": "color.semantic.on-primary@0.12"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "single-fab-per-screen",
+          "value": 1,
+          "unit": "count"
+        }
+      ],
+      "slots": {}
+    },
+    "top-app-bar": {
+      "component_id": "top-app-bar",
+      "display_name": "Top App Bar",
+      "category": "navigation",
+      "description": "Primary top navigation and title",
+      "figma_component_key": "app-bar/top",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "height": 64,
+            "paddingHorizontal": "spacing.lg",
+            "elevation": "elevation.level1"
+          }
+        },
+        "title": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.title-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "small": {
+          "default": true
+        },
+        "center-aligned": {
+          "overrides": {
+            "title.alignment": "CENTER"
+          }
+        },
+        "medium": {
+          "overrides": {
+            "container.height": 112
+          }
+        },
+        "large": {
+          "overrides": {
+            "container.height": 152
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "scrolled": {
+          "container.elevation": "elevation.level2"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "title-max-lines",
+          "value": 1,
+          "unit": "lines"
+        }
+      ],
+      "slots": {
+        "leading-action": {
+          "accepts": [
+            "icon-button"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing-actions": {
+          "accepts": [
+            "icon-button"
+          ],
+          "min": 0,
+          "max": 3
+        }
+      }
+    },
+    "nav-rail": {
+      "component_id": "nav-rail",
+      "display_name": "Navigation Rail",
+      "category": "navigation",
+      "description": "Medium/large viewport navigation",
+      "figma_component_key": "navigation/rail",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "width": 80,
+            "paddingVertical": "spacing.lg",
+            "gap": "spacing.md"
+          }
+        },
+        "item": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "minHeight": 56,
+            "typography": "typography.scale.label-medium"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "active-item": {
+          "item.indicator": "color.semantic.secondary",
+          "item.color": "color.semantic.on-surface"
+        },
+        "inactive-item": {
+          "item.color": "color.semantic.on-surface"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "items-range",
+          "value": [
+            3,
+            7
+          ],
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "items": {
+          "accepts": [
+            "navigation-item"
+          ],
+          "min": 3,
+          "max": 7
+        }
+      }
+    },
+    "chip-assist": {
+      "component_id": "chip-assist",
+      "display_name": "Assist Chip",
+      "category": "actions",
+      "description": "Compact action with optional icon",
+      "figma_component_key": "chips/assist",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 32,
+            "paddingHorizontal": "spacing.md"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "assist": {
+          "default": true
+        },
+        "filter": {
+          "overrides": {
+            "container.background": "color.semantic.surface-variant"
+          }
+        },
+        "input": {
+          "overrides": {
+            "container.background": "color.semantic.surface"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "container.background": "color.semantic.secondary",
+          "label.color": "color.semantic.on-secondary"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "label-max-length",
+          "value": 20,
+          "unit": "chars"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "dialog": {
+      "component_id": "dialog",
+      "display_name": "Dialog",
+      "category": "feedback",
+      "description": "Modal dialog for focused tasks",
+      "figma_component_key": "dialog/basic",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.xl",
+            "gap": "spacing.md",
+            "elevation": "elevation.level3",
+            "minWidth": 280,
+            "maxWidth": 560
+          }
+        },
+        "title": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.headline-large",
+            "color": "color.semantic.on-surface"
+          }
+        },
+        "content": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.body-medium",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "basic": {
+          "default": true
+        },
+        "full-screen": {
+          "overrides": {
+            "container.borderRadius": "borderRadius.none",
+            "container.maxWidth": 9999
+          }
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "must-have-dismiss-path",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "actions": {
+          "accepts": [
+            "button-filled",
+            "button-text",
+            "button-outlined"
+          ],
+          "min": 1,
+          "max": 3
+        }
+      }
+    },
+    "snackbar": {
+      "component_id": "snackbar",
+      "display_name": "Snackbar",
+      "category": "feedback",
+      "description": "Transient non-blocking feedback",
+      "figma_component_key": "snackbar/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.on-surface",
+            "borderRadius": "borderRadius.xs",
+            "minHeight": 48,
+            "paddingHorizontal": "spacing.lg",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "message": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.body-medium",
+            "color": "color.semantic.surface"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "max-lines",
+          "value": 2,
+          "unit": "lines"
+        },
+        {
+          "rule": "duration-range-ms",
+          "value": [
+            2000,
+            10000
+          ],
+          "unit": "ms"
+        }
+      ],
+      "slots": {
+        "action": {
+          "accepts": [
+            "button-text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "list-item": {
+      "component_id": "list-item",
+      "display_name": "List Item",
+      "category": "content",
+      "description": "Standard one-line or two-line list row",
+      "figma_component_key": "list/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "minHeight": 56,
+            "paddingHorizontal": "spacing.lg",
+            "paddingVertical": "spacing.sm",
+            "gap": "spacing.md"
+          }
+        },
+        "headline": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.body-large",
+            "color": "color.semantic.on-surface"
+          }
+        },
+        "supporting": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.body-medium",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "one-line": {
+          "default": true
+        },
+        "two-line": {
+          "overrides": {
+            "container.minHeight": 72
+          }
+        },
+        "three-line": {
+          "overrides": {
+            "container.minHeight": 88
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "container.background": "color.semantic.surface-variant"
+        },
+        "disabled": {
+          "headline.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "max-leading-control",
+          "value": 1,
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon",
+            "avatar",
+            "checkbox",
+            "radio"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "icon",
+            "switch",
+            "text"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-outlined": {
+      "component_id": "button-outlined",
+      "display_name": "Outlined Button",
+      "category": "actions",
+      "description": "Medium emphasis outlined action",
+      "figma_component_key": "button/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "transparent",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "borderRadius": "borderRadius.xl",
+            "minHeight": 40,
+            "paddingHorizontal": "spacing.xl",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.primary"
+          }
+        }
+      },
+      "variants": {
+        "outlined": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.primary@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.primary@0.12"
+        },
+        "disabled": {
+          "container.borderColor": "color.semantic.on-surface@0.12",
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-text": {
+      "component_id": "button-text",
+      "display_name": "Text Button",
+      "category": "actions",
+      "description": "Low emphasis text action",
+      "figma_component_key": "button/text",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "transparent",
+            "borderRadius": "borderRadius.xl",
+            "minHeight": 40,
+            "paddingHorizontal": "spacing.md",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.primary"
+          }
+        }
+      },
+      "variants": {
+        "text": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.primary@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.primary@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-elevated": {
+      "component_id": "button-elevated",
+      "display_name": "Elevated Button",
+      "category": "actions",
+      "description": "Elevated medium emphasis action",
+      "figma_component_key": "button/elevated",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.xl",
+            "minHeight": 40,
+            "paddingHorizontal": "spacing.xl",
+            "paddingVertical": "spacing.sm",
+            "elevation": "elevation.level1"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.primary"
+          }
+        }
+      },
+      "variants": {
+        "elevated": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.elevation": "elevation.level2"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.primary@0.12"
+        },
+        "disabled": {
+          "container.elevation": "elevation.level0",
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "button-tonal": {
+      "component_id": "button-tonal",
+      "display_name": "Tonal Button",
+      "category": "actions",
+      "description": "Medium emphasis tonal action",
+      "figma_component_key": "button/tonal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.secondary",
+            "borderRadius": "borderRadius.xl",
+            "minHeight": 40,
+            "paddingHorizontal": "spacing.xl",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-secondary"
+          }
+        }
+      },
+      "variants": {
+        "tonal": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-secondary@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-secondary@0.12"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12",
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "icon-button": {
+      "component_id": "icon-button",
+      "display_name": "Icon Button",
+      "category": "actions",
+      "description": "Compact icon-only action",
+      "figma_component_key": "button/icon",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "transparent",
+            "borderRadius": "borderRadius.full",
+            "size": 40
+          }
+        },
+        "icon": {
+          "type": "icon",
+          "required": true,
+          "tokens": {
+            "size": 24,
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        },
+        "filled": {
+          "overrides": {
+            "container.background": "color.semantic.primary",
+            "icon.color": "color.semantic.on-primary"
+          }
+        },
+        "tonal": {
+          "overrides": {
+            "container.background": "color.semantic.secondary",
+            "icon.color": "color.semantic.on-secondary"
+          }
+        },
+        "outlined": {
+          "overrides": {
+            "container.borderColor": "color.semantic.outline",
+            "container.borderWidth": "border.default"
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "hovered": {
+          "container.overlay": "color.semantic.on-surface@0.08"
+        },
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "icon.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        },
+        {
+          "rule": "aria-label-required",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {}
+    },
+    "fab-small": {
+      "component_id": "fab-small",
+      "display_name": "Small FAB",
+      "category": "actions",
+      "description": "Small floating action button",
+      "figma_component_key": "fab/small",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.primary",
+            "borderRadius": "borderRadius.full",
+            "size": 40,
+            "elevation": "elevation.level3"
+          }
+        },
+        "icon": {
+          "type": "icon",
+          "required": true,
+          "tokens": {
+            "size": 24,
+            "color": "color.semantic.on-primary"
+          }
+        }
+      },
+      "variants": {
+        "small": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "pressed": {
+          "container.overlay": "color.semantic.on-primary@0.12"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "single-fab-per-screen",
+          "value": 1,
+          "unit": "count"
+        }
+      ],
+      "slots": {}
+    },
+    "fab-large": {
+      "component_id": "fab-large",
+      "display_name": "Large FAB",
+      "category": "actions",
+      "description": "Large floating action button",
+      "figma_component_key": "fab/large",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.primary",
+            "borderRadius": "borderRadius.full",
+            "size": 96,
+            "elevation": "elevation.level3"
+          }
+        },
+        "icon": {
+          "type": "icon",
+          "required": true,
+          "tokens": {
+            "size": 36,
+            "color": "color.semantic.on-primary"
+          }
+        }
+      },
+      "variants": {
+        "large": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "pressed": {
+          "container.overlay": "color.semantic.on-primary@0.12"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "single-fab-per-screen",
+          "value": 1,
+          "unit": "count"
+        }
+      ],
+      "slots": {}
+    },
+    "extended-fab": {
+      "component_id": "extended-fab",
+      "display_name": "Extended FAB",
+      "category": "actions",
+      "description": "FAB with text label",
+      "figma_component_key": "fab/extended",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.primary",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 56,
+            "paddingHorizontal": "spacing.xl",
+            "gap": "spacing.sm",
+            "elevation": "elevation.level3"
+          }
+        },
+        "icon": {
+          "type": "icon",
+          "required": false,
+          "tokens": {
+            "size": 24,
+            "color": "color.semantic.on-primary"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-primary"
+          }
+        }
+      },
+      "variants": {
+        "extended": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "pressed": {
+          "container.overlay": "color.semantic.on-primary@0.12"
+        },
+        "disabled": {
+          "container.background": "color.semantic.on-surface@0.12",
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "single-fab-per-screen",
+          "value": 1,
+          "unit": "count"
+        }
+      ],
+      "slots": {}
+    },
+    "text-field-filled": {
+      "component_id": "text-field-filled",
+      "display_name": "Filled Text Field",
+      "category": "text-input",
+      "description": "Filled single-line input",
+      "figma_component_key": "text-field/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "borderRadius": "borderRadius.md",
+            "minHeight": 56,
+            "paddingHorizontal": "spacing.lg",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.body-medium",
+            "color": "color.semantic.on-surface"
+          }
+        },
+        "supporting-text": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-medium",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "filled": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "focused": {
+          "container.borderColor": "color.semantic.primary",
+          "container.borderWidth": "border.strong"
+        },
+        "error": {
+          "container.borderColor": "color.semantic.error",
+          "supporting-text.color": "color.semantic.error"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "search-bar": {
+      "component_id": "search-bar",
+      "display_name": "Search Bar",
+      "category": "text-input",
+      "description": "Collapsed search entry point",
+      "figma_component_key": "search/bar",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 56,
+            "paddingHorizontal": "spacing.lg",
+            "gap": "spacing.md"
+          }
+        },
+        "query": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.body-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "focused": {
+          "container.elevation": "elevation.level1"
+        },
+        "disabled": {
+          "query.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 56,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon-button"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing-actions": {
+          "accepts": [
+            "icon-button",
+            "avatar"
+          ],
+          "min": 0,
+          "max": 2
+        }
+      }
+    },
+    "search-view": {
+      "component_id": "search-view",
+      "display_name": "Search View",
+      "category": "text-input",
+      "description": "Expanded search results surface",
+      "figma_component_key": "search/view",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.none",
+            "paddingHorizontal": "spacing.lg",
+            "paddingVertical": "spacing.md",
+            "gap": "spacing.sm"
+          }
+        },
+        "search-bar": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "minHeight": 56
+          }
+        }
+      },
+      "variants": {
+        "expanded": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "must-include-search-bar",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "results": {
+          "accepts": [
+            "list-item",
+            "card-elevated"
+          ],
+          "min": 0,
+          "max": 999
+        }
+      }
+    },
+    "chip-filter": {
+      "component_id": "chip-filter",
+      "display_name": "Filter Chip",
+      "category": "actions",
+      "description": "Choice filter chip",
+      "figma_component_key": "chips/filter",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 32,
+            "paddingHorizontal": "spacing.md"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "filter": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "container.background": "color.semantic.secondary",
+          "label.color": "color.semantic.on-secondary"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "label-max-length",
+          "value": 20,
+          "unit": "chars"
+        }
+      ],
+      "slots": {
+        "leading-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-input": {
+      "component_id": "chip-input",
+      "display_name": "Input Chip",
+      "category": "actions",
+      "description": "Chip representing user input",
+      "figma_component_key": "chips/input",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 32,
+            "paddingHorizontal": "spacing.md",
+            "gap": "spacing.xs"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "input": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "container.background": "color.semantic.secondary"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "supports-dismiss-action",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "avatar": {
+          "accepts": [
+            "image"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing-icon": {
+          "accepts": [
+            "icon-button"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "chip-suggestion": {
+      "component_id": "chip-suggestion",
+      "display_name": "Suggestion Chip",
+      "category": "actions",
+      "description": "Suggested action chip",
+      "figma_component_key": "chips/suggestion",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 32,
+            "paddingHorizontal": "spacing.md"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "suggestion": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "pressed": {
+          "container.overlay": "color.semantic.on-surface@0.12"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "single-line-label",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {}
+    },
+    "navigation-drawer": {
+      "component_id": "navigation-drawer",
+      "display_name": "Navigation Drawer",
+      "category": "navigation",
+      "description": "Standard navigation drawer",
+      "figma_component_key": "navigation/drawer",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "width": 360,
+            "paddingVertical": "spacing.lg",
+            "gap": "spacing.xs"
+          }
+        },
+        "destination": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "minHeight": 56
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "active-destination": {
+          "destination.indicator": "color.semantic.secondary"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "destination-min-count",
+          "value": 3,
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "destinations": {
+          "accepts": [
+            "navigation-item"
+          ],
+          "min": 3,
+          "max": 15
+        }
+      }
+    },
+    "modal-navigation-drawer": {
+      "component_id": "modal-navigation-drawer",
+      "display_name": "Modal Navigation Drawer",
+      "category": "navigation",
+      "description": "Temporary overlay drawer",
+      "figma_component_key": "navigation/drawer-modal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "width": 320,
+            "paddingVertical": "spacing.lg",
+            "gap": "spacing.xs",
+            "elevation": "elevation.level3"
+          }
+        },
+        "scrim": {
+          "type": "frame",
+          "required": true,
+          "tokens": {
+            "background": "color.semantic.on-surface@0.38"
+          }
+        }
+      },
+      "variants": {
+        "modal": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "open": {
+          "scrim.background": "color.semantic.on-surface@0.38"
+        },
+        "closed": {}
+      },
+      "constraints": [
+        {
+          "rule": "dismiss-on-scrim-tap",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "destinations": {
+          "accepts": [
+            "navigation-item"
+          ],
+          "min": 3,
+          "max": 15
+        }
+      }
+    },
+    "bottom-app-bar": {
+      "component_id": "bottom-app-bar",
+      "display_name": "Bottom App Bar",
+      "category": "navigation",
+      "description": "Container for bottom actions + FAB cutout",
+      "figma_component_key": "app-bar/bottom",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "height": 80,
+            "paddingHorizontal": "spacing.lg",
+            "elevation": "elevation.level2"
+          }
+        },
+        "fab-slot": {
+          "type": "slot",
+          "required": false,
+          "tokens": {
+            "size": 56
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "max-actions",
+          "value": 4,
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "actions": {
+          "accepts": [
+            "icon-button"
+          ],
+          "min": 0,
+          "max": 4
+        },
+        "fab": {
+          "accepts": [
+            "fab",
+            "fab-small"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "tabs-primary": {
+      "component_id": "tabs-primary",
+      "display_name": "Primary Tabs",
+      "category": "navigation",
+      "description": "Primary navigation tabs",
+      "figma_component_key": "tabs/primary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "minHeight": 48,
+            "paddingHorizontal": "spacing.md"
+          }
+        },
+        "tab": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "minWidth": 90,
+            "typography": "typography.scale.title-medium"
+          }
+        }
+      },
+      "variants": {
+        "primary": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "active-tab": {
+          "tab.indicator": "color.semantic.primary",
+          "tab.label": "color.semantic.primary"
+        },
+        "inactive-tab": {
+          "tab.label": "color.semantic.on-surface"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "tab-count-range",
+          "value": [
+            2,
+            5
+          ],
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "tabs": {
+          "accepts": [
+            "tab-item"
+          ],
+          "min": 2,
+          "max": 5
+        }
+      }
+    },
+    "tabs-secondary": {
+      "component_id": "tabs-secondary",
+      "display_name": "Secondary Tabs",
+      "category": "navigation",
+      "description": "Secondary hierarchy tabs",
+      "figma_component_key": "tabs/secondary",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "minHeight": 48,
+            "paddingHorizontal": "spacing.md"
+          }
+        },
+        "tab": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "minWidth": 90,
+            "typography": "typography.scale.label-large"
+          }
+        }
+      },
+      "variants": {
+        "secondary": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "active-tab": {
+          "tab.indicator": "color.semantic.primary"
+        },
+        "inactive-tab": {}
+      },
+      "constraints": [
+        {
+          "rule": "tab-count-range",
+          "value": [
+            2,
+            6
+          ],
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "tabs": {
+          "accepts": [
+            "tab-item"
+          ],
+          "min": 2,
+          "max": 6
+        }
+      }
+    },
+    "card-filled": {
+      "component_id": "card-filled",
+      "display_name": "Filled Card",
+      "category": "containment",
+      "description": "Filled tonal card",
+      "figma_component_key": "card/filled",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md"
+          }
+        }
+      },
+      "variants": {
+        "filled": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "min-content-padding",
+          "value": 16,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "content": {
+          "accepts": [
+            "text",
+            "image",
+            "list-item"
+          ],
+          "min": 1,
+          "max": 999
+        }
+      }
+    },
+    "card-outlined": {
+      "component_id": "card-outlined",
+      "display_name": "Outlined Card",
+      "category": "containment",
+      "description": "Outlined card container",
+      "figma_component_key": "card/outlined",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md"
+          }
+        }
+      },
+      "variants": {
+        "outlined": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "min-content-padding",
+          "value": 16,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "content": {
+          "accepts": [
+            "text",
+            "image",
+            "list-item"
+          ],
+          "min": 1,
+          "max": 999
+        }
+      }
+    },
+    "bottom-sheet-modal": {
+      "component_id": "bottom-sheet-modal",
+      "display_name": "Modal Bottom Sheet",
+      "category": "feedback",
+      "description": "Temporary modal bottom sheet",
+      "figma_component_key": "bottom-sheet/modal",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md",
+            "elevation": "elevation.level3"
+          }
+        },
+        "handle": {
+          "type": "frame",
+          "required": true,
+          "tokens": {
+            "width": 32,
+            "height": 4,
+            "background": "color.semantic.outline-variant",
+            "borderRadius": "borderRadius.full"
+          }
+        }
+      },
+      "variants": {
+        "modal": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "drag-handle-required",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "content": {
+          "accepts": [
+            "text",
+            "list-item",
+            "menu-item"
+          ],
+          "min": 1,
+          "max": 999
+        }
+      }
+    },
+    "bottom-sheet-standard": {
+      "component_id": "bottom-sheet-standard",
+      "display_name": "Standard Bottom Sheet",
+      "category": "feedback",
+      "description": "Persistent sheet attached to content",
+      "figma_component_key": "bottom-sheet/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md",
+            "elevation": "elevation.level1"
+          }
+        },
+        "handle": {
+          "type": "frame",
+          "required": true,
+          "tokens": {
+            "width": 32,
+            "height": 4,
+            "background": "color.semantic.outline-variant",
+            "borderRadius": "borderRadius.full"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "drag-handle-required",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "content": {
+          "accepts": [
+            "text",
+            "list-item",
+            "menu-item"
+          ],
+          "min": 1,
+          "max": 999
+        }
+      }
+    },
+    "menu": {
+      "component_id": "menu",
+      "display_name": "Menu",
+      "category": "actions",
+      "description": "List of contextual actions",
+      "figma_component_key": "menu/container",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.sm",
+            "paddingVertical": "spacing.sm",
+            "elevation": "elevation.level2",
+            "minWidth": 112
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "menuitem-required",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "items": {
+          "accepts": [
+            "menu-item"
+          ],
+          "min": 1,
+          "max": 20
+        }
+      }
+    },
+    "menu-item": {
+      "component_id": "menu-item",
+      "display_name": "Menu Item",
+      "category": "actions",
+      "description": "Single menu action row",
+      "figma_component_key": "menu/item",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "minHeight": 48,
+            "paddingHorizontal": "spacing.lg",
+            "paddingVertical": "spacing.sm"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-large",
+            "color": "color.semantic.on-surface"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "container.background": "color.semantic.surface-variant"
+        },
+        "disabled": {
+          "label.color": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "leading": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "trailing": {
+          "accepts": [
+            "text",
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "divider": {
+      "component_id": "divider",
+      "display_name": "Divider",
+      "category": "content",
+      "description": "Visual separator line",
+      "figma_component_key": "divider/horizontal",
+      "anatomy": {
+        "line": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.outline-variant",
+            "height": 1
+          }
+        }
+      },
+      "variants": {
+        "horizontal": {
+          "default": true
+        },
+        "vertical": {
+          "overrides": {
+            "line.width": 1,
+            "line.height": "auto"
+          }
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "thickness",
+          "value": 1,
+          "unit": "px"
+        }
+      ],
+      "slots": {}
+    },
+    "badge": {
+      "component_id": "badge",
+      "display_name": "Badge",
+      "category": "feedback",
+      "description": "Small status counter",
+      "figma_component_key": "badge/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.error",
+            "borderRadius": "borderRadius.full",
+            "minHeight": 16,
+            "minWidth": 16,
+            "paddingHorizontal": "spacing.xs"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "tokens": {
+            "typography": "typography.scale.label-small",
+            "color": "color.semantic.on-error"
+          }
+        }
+      },
+      "variants": {
+        "dot": {
+          "default": true
+        },
+        "count": {
+          "overrides": {
+            "container.minWidth": 20
+          }
+        }
+      },
+      "states": {
+        "default": {}
+      },
+      "constraints": [
+        {
+          "rule": "max-count-display",
+          "value": 999,
+          "unit": "count"
+        }
+      ],
+      "slots": {}
+    },
+    "progress-linear": {
+      "component_id": "progress-linear",
+      "display_name": "Linear Progress",
+      "category": "feedback",
+      "description": "Linear determinate/indeterminate progress",
+      "figma_component_key": "progress/linear",
+      "anatomy": {
+        "track": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "height": 4,
+            "borderRadius": "borderRadius.full"
+          }
+        },
+        "indicator": {
+          "type": "frame",
+          "required": true,
+          "tokens": {
+            "background": "color.semantic.primary",
+            "height": 4,
+            "borderRadius": "borderRadius.full"
+          }
+        }
+      },
+      "variants": {
+        "linear": {
+          "default": true
+        }
+      },
+      "states": {
+        "determinate": {},
+        "indeterminate": {}
+      },
+      "constraints": [
+        {
+          "rule": "min-height",
+          "value": 4,
+          "unit": "px"
+        }
+      ],
+      "slots": {}
+    },
+    "progress-circular": {
+      "component_id": "progress-circular",
+      "display_name": "Circular Progress",
+      "category": "feedback",
+      "description": "Circular determinate/indeterminate progress",
+      "figma_component_key": "progress/circular",
+      "anatomy": {
+        "track": {
+          "type": "ellipse",
+          "tokens": {
+            "stroke": "color.semantic.surface-variant",
+            "size": 40
+          }
+        },
+        "indicator": {
+          "type": "ellipse",
+          "required": true,
+          "tokens": {
+            "stroke": "color.semantic.primary",
+            "size": 40
+          }
+        }
+      },
+      "variants": {
+        "circular": {
+          "default": true
+        }
+      },
+      "states": {
+        "determinate": {},
+        "indeterminate": {}
+      },
+      "constraints": [
+        {
+          "rule": "sizes",
+          "value": [
+            16,
+            24,
+            32,
+            40,
+            48
+          ],
+          "unit": "px"
+        }
+      ],
+      "slots": {}
+    },
+    "switch": {
+      "component_id": "switch",
+      "display_name": "Switch",
+      "category": "selection-controls",
+      "description": "Binary on/off control",
+      "figma_component_key": "switch/standard",
+      "anatomy": {
+        "track": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "width": 52,
+            "height": 32,
+            "borderRadius": "borderRadius.full"
+          }
+        },
+        "thumb": {
+          "type": "ellipse",
+          "required": true,
+          "tokens": {
+            "size": 16,
+            "color": "color.semantic.outline"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "off": {},
+        "on": {
+          "track.background": "color.semantic.primary",
+          "thumb.color": "color.semantic.on-primary"
+        },
+        "disabled": {
+          "track.background": "color.semantic.on-surface@0.12"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {}
+    },
+    "checkbox": {
+      "component_id": "checkbox",
+      "display_name": "Checkbox",
+      "category": "selection-controls",
+      "description": "Multiple-selection control",
+      "figma_component_key": "checkbox/standard",
+      "anatomy": {
+        "box": {
+          "type": "frame",
+          "tokens": {
+            "background": "transparent",
+            "borderColor": "color.semantic.on-surface",
+            "borderWidth": "border.default",
+            "size": 18,
+            "borderRadius": "borderRadius.xs"
+          }
+        },
+        "checkmark": {
+          "type": "icon",
+          "required": false,
+          "tokens": {
+            "size": 18,
+            "color": "color.semantic.on-primary"
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "unchecked": {},
+        "checked": {
+          "box.background": "color.semantic.primary",
+          "box.borderColor": "color.semantic.primary"
+        },
+        "indeterminate": {},
+        "disabled": {
+          "box.borderColor": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {}
+    },
+    "radio": {
+      "component_id": "radio",
+      "display_name": "Radio Button",
+      "category": "selection-controls",
+      "description": "Single-selection control",
+      "figma_component_key": "radio/standard",
+      "anatomy": {
+        "outer": {
+          "type": "ellipse",
+          "tokens": {
+            "stroke": "color.semantic.on-surface",
+            "size": 20
+          }
+        },
+        "inner": {
+          "type": "ellipse",
+          "required": false,
+          "tokens": {
+            "fill": "color.semantic.primary",
+            "size": 10
+          }
+        }
+      },
+      "variants": {
+        "standard": {
+          "default": true
+        }
+      },
+      "states": {
+        "unchecked": {},
+        "checked": {
+          "outer.stroke": "color.semantic.primary"
+        },
+        "disabled": {
+          "outer.stroke": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {}
+    },
+    "slider": {
+      "component_id": "slider",
+      "display_name": "Slider",
+      "category": "selection-controls",
+      "description": "Select value from range",
+      "figma_component_key": "slider/standard",
+      "anatomy": {
+        "track": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface-variant",
+            "height": 4,
+            "borderRadius": "borderRadius.full"
+          }
+        },
+        "active-track": {
+          "type": "frame",
+          "required": true,
+          "tokens": {
+            "background": "color.semantic.primary",
+            "height": 4
+          }
+        },
+        "thumb": {
+          "type": "ellipse",
+          "required": true,
+          "tokens": {
+            "size": 20,
+            "fill": "color.semantic.primary"
+          }
+        }
+      },
+      "variants": {
+        "single": {
+          "default": true
+        },
+        "range": {
+          "overrides": {
+            "thumb.count": 2
+          }
+        }
+      },
+      "states": {
+        "default": {},
+        "focused": {
+          "thumb.stroke": "color.semantic.primary"
+        },
+        "disabled": {
+          "thumb.fill": "color.semantic.on-surface@0.38"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "min-touch-target",
+          "value": 48,
+          "unit": "px"
+        }
+      ],
+      "slots": {
+        "start-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "end-icon": {
+          "accepts": [
+            "icon"
+          ],
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    "segmented-button": {
+      "component_id": "segmented-button",
+      "display_name": "Segmented Button",
+      "category": "selection-controls",
+      "description": "Group of mutually exclusive or multi-select options",
+      "figma_component_key": "segmented-button/standard",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.xl",
+            "borderColor": "color.semantic.outline",
+            "borderWidth": "border.default",
+            "minHeight": 40
+          }
+        },
+        "segment": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "paddingHorizontal": "spacing.lg",
+            "typography": "typography.scale.label-large"
+          }
+        }
+      },
+      "variants": {
+        "single-select": {
+          "default": true
+        },
+        "multi-select": {}
+      },
+      "states": {
+        "default": {},
+        "segment-selected": {
+          "segment.background": "color.semantic.secondary",
+          "segment.label": "color.semantic.on-secondary"
+        },
+        "disabled": {}
+      },
+      "constraints": [
+        {
+          "rule": "segment-count-range",
+          "value": [
+            2,
+            5
+          ],
+          "unit": "count"
+        }
+      ],
+      "slots": {
+        "segments": {
+          "accepts": [
+            "text",
+            "icon"
+          ],
+          "min": 2,
+          "max": 5
+        }
+      }
+    },
+    "date-picker": {
+      "component_id": "date-picker",
+      "display_name": "Date Picker",
+      "category": "pickers",
+      "description": "Date selection surface",
+      "figma_component_key": "picker/date",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md"
+          }
+        },
+        "day-cell": {
+          "type": "slot",
+          "required": true,
+          "tokens": {
+            "size": 40,
+            "typography": "typography.scale.label-large"
+          }
+        }
+      },
+      "variants": {
+        "docked": {
+          "default": true
+        },
+        "modal": {}
+      },
+      "states": {
+        "default": {},
+        "day-selected": {
+          "day-cell.background": "color.semantic.primary",
+          "day-cell.color": "color.semantic.on-primary"
+        },
+        "day-today": {
+          "day-cell.borderColor": "color.semantic.primary"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "supports-range-selection",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "header-actions": {
+          "accepts": [
+            "icon-button"
+          ],
+          "min": 0,
+          "max": 2
+        }
+      }
+    },
+    "time-picker": {
+      "component_id": "time-picker",
+      "display_name": "Time Picker",
+      "category": "pickers",
+      "description": "Time selection surface",
+      "figma_component_key": "picker/time",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.surface",
+            "borderRadius": "borderRadius.lg",
+            "padding": "spacing.lg",
+            "gap": "spacing.md"
+          }
+        },
+        "dial": {
+          "type": "frame",
+          "required": true,
+          "tokens": {
+            "size": 256,
+            "background": "color.semantic.surface-variant",
+            "borderRadius": "borderRadius.full"
+          }
+        }
+      },
+      "variants": {
+        "dial": {
+          "default": true
+        },
+        "input": {}
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "dial.hand": "color.semantic.primary"
+        }
+      },
+      "constraints": [
+        {
+          "rule": "supports-am-pm-toggle",
+          "value": 1,
+          "unit": "boolean"
+        }
+      ],
+      "slots": {
+        "actions": {
+          "accepts": [
+            "button-text",
+            "button-filled"
+          ],
+          "min": 1,
+          "max": 2
+        }
+      }
+    },
+    "tooltip": {
+      "component_id": "tooltip",
+      "display_name": "Tooltip",
+      "category": "feedback",
+      "description": "Contextual helper label",
+      "figma_component_key": "tooltip/plain",
+      "anatomy": {
+        "container": {
+          "type": "frame",
+          "tokens": {
+            "background": "color.semantic.on-surface",
+            "borderRadius": "borderRadius.xs",
+            "paddingHorizontal": "spacing.sm",
+            "paddingVertical": "spacing.xs"
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "tokens": {
+            "typography": "typography.scale.label-small",
+            "color": "color.semantic.surface"
+          }
+        }
+      },
+      "variants": {
+        "plain": {
+          "default": true
+        },
+        "rich": {}
+      },
+      "states": {
+        "hidden": {},
+        "visible": {}
+      },
+      "constraints": [
+        {
+          "rule": "non-critical-content-only",
+          "value": 1,
+          "unit": "boolean"
+        },
+        {
+          "rule": "max-lines",
+          "value": 2,
+          "unit": "lines"
+        }
+      ],
+      "slots": {}
+    }
+  },
+  "official_import": {
+    "material_web": {
+      "extracted_at": "2026-03-23T17:44:17.561Z",
+      "source_repo": "material-components/material-web",
+      "ref": "main",
+      "package_count": 32,
+      "packages": [
+        "LICENSE",
+        "button",
+        "checkbox",
+        "chips",
+        "color",
+        "commitlint.config.js",
+        "dialog",
+        "divider",
+        "elevation",
+        "fab",
+        "field",
+        "icon",
+        "iconbutton",
+        "list",
+        "menu",
+        "migrations",
+        "package-lock.json",
+        "package.json",
+        "progress",
+        "radio",
+        "release-please-config.json",
+        "ripple",
+        "sass",
+        "select",
+        "slider",
+        "switch",
+        "tabs",
+        "testing",
+        "textfield",
+        "tsconfig.json",
+        "typography",
+        "web-test-runner.config.js"
+      ]
+    }
+  }
+}

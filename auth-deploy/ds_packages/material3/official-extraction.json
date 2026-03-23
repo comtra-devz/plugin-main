@@ -1,0 +1,17 @@
+{
+  "ds_id": "material3",
+  "extracted_at": "2026-03-23T17:44:17.562Z",
+  "extractor": "material3-official-extractor",
+  "elapsed_ms": 269,
+  "token_source": {
+    "repo": "material-foundation/material-tokens",
+    "ref": "main",
+    "files_scanned": 2,
+    "imported_tokens": 20
+  },
+  "component_source": {
+    "repo": "material-components/material-web",
+    "ref": "main",
+    "package_count": 32
+  }
+}

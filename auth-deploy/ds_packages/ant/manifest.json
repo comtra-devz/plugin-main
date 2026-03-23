@@ -1,0 +1,43 @@
+{
+  "ds_id": "ant",
+  "ds_name": "Ant Design",
+  "version": "2026.03.4",
+  "source_version": "current",
+  "source_url": "https://ant.design",
+  "source_type": "mixed",
+  "extraction_date": "2026-03-23T14:46:02Z",
+  "schema_version": "1.0.0",
+  "files": {
+    "tokens": "tokens.json",
+    "rules": "rules.json",
+    "components": "components.json"
+  },
+  "confidence": {
+    "tokens": "verified",
+    "rules": "curated",
+    "components": "curated"
+  },
+  "supported_themes": [
+    "light",
+    "dark"
+  ],
+  "supported_densities": [
+    "default",
+    "comfortable",
+    "compact"
+  ],
+  "hash": "sha256:aaf1204a815b954efff2e102a80ba4b6c56deaab16a6043e59f39b5a4674fe83",
+  "coverage": {
+    "components": 48,
+    "rules": 32,
+    "scaffold_components": 0,
+    "note": "ant P1 completed: no scaffold components, conformance pass"
+  },
+  "official_extraction": {
+    "enabled": true,
+    "report_file": "official-extraction.json",
+    "extracted_at": "2026-03-23T18:27:16.223Z",
+    "token_source_count": 150,
+    "component_dir_count": 81
+  }
+}

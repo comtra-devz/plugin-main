@@ -93,6 +93,15 @@ export interface AuditIssue {
   isOnHiddenLayer?: boolean;
   /** When true, hide Select layer + Auto-fix (e.g. page-level prototype advisories with no actionable layer). */
   hideLayerActions?: boolean;
+  /** DS Optimization: true = recommendation (not critical issue). */
+  recommendation?: boolean;
+  /** DS Optimization: structured suggestions for merge/slots/tokens/variants. */
+  optimizationPayload?: {
+    componentIdsToMerge?: string[];
+    suggestedSlots?: string[];
+    suggestedTokens?: string[];
+    suggestedVariants?: Record<string, string[]>;
+  };
 }
 
 export interface NavProps {

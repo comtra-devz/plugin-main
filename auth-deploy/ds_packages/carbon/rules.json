@@ -1,0 +1,623 @@
+{
+  "$schema": "comtra://ds_package/rules/1.0",
+  "color_usage": [
+    {
+      "rule_id": "carbon-color-001",
+      "description": "Use semantic color tokens only.",
+      "severity": "error",
+      "context": [
+        "interactive",
+        "content"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-hex"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-color-002",
+      "description": "Use semantic color tokens only.",
+      "severity": "error",
+      "context": [
+        "interactive",
+        "content"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-hex"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-color-003",
+      "description": "Use semantic color tokens only.",
+      "severity": "warning",
+      "context": [
+        "interactive",
+        "content"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-hex"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-color-004",
+      "description": "Use semantic color tokens only.",
+      "severity": "warning",
+      "context": [
+        "interactive",
+        "content"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "usage-restriction",
+        "allowed_roles": [
+          "semantic-usage"
+        ],
+        "forbidden_roles": [
+          "raw-hex"
+        ]
+      }
+    }
+  ],
+  "typography_usage": [
+    {
+      "rule_id": "carbon-typo-001",
+      "description": "Typography must use scale tokens.",
+      "severity": "error",
+      "context": [
+        "content"
+      ],
+      "applies_to": [],
+      "token": "typography.scale.body-medium",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "body-medium",
+          "body-large",
+          "label-large",
+          "title-medium"
+        ],
+        "forbidden": [
+          "raw-font-size"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-typo-002",
+      "description": "Typography must use scale tokens.",
+      "severity": "error",
+      "context": [
+        "content"
+      ],
+      "applies_to": [],
+      "token": "typography.scale.body-medium",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "body-medium",
+          "body-large",
+          "label-large",
+          "title-medium"
+        ],
+        "forbidden": [
+          "raw-font-size"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-typo-003",
+      "description": "Typography must use scale tokens.",
+      "severity": "warning",
+      "context": [
+        "content"
+      ],
+      "applies_to": [],
+      "token": "typography.scale.body-medium",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "body-medium",
+          "body-large",
+          "label-large",
+          "title-medium"
+        ],
+        "forbidden": [
+          "raw-font-size"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-typo-004",
+      "description": "Typography must use scale tokens.",
+      "severity": "warning",
+      "context": [
+        "content"
+      ],
+      "applies_to": [],
+      "token": "typography.scale.body-medium",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "typography",
+        "context": "global",
+        "allowed": [
+          "body-medium",
+          "body-large",
+          "label-large",
+          "title-medium"
+        ],
+        "forbidden": [
+          "raw-font-size"
+        ]
+      }
+    }
+  ],
+  "spacing_usage": [
+    {
+      "rule_id": "carbon-space-001",
+      "description": "Spacing uses spacing tokens.",
+      "severity": "error",
+      "context": [
+        "layout"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "spacing.xs",
+          "spacing.sm",
+          "spacing.md",
+          "spacing.lg",
+          "spacing.xl",
+          "spacing.xxl"
+        ],
+        "forbidden": [
+          "raw-px"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-space-002",
+      "description": "Spacing uses spacing tokens.",
+      "severity": "error",
+      "context": [
+        "layout"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "spacing.xs",
+          "spacing.sm",
+          "spacing.md",
+          "spacing.lg",
+          "spacing.xl",
+          "spacing.xxl"
+        ],
+        "forbidden": [
+          "raw-px"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-space-003",
+      "description": "Spacing uses spacing tokens.",
+      "severity": "warning",
+      "context": [
+        "layout"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "spacing.xs",
+          "spacing.sm",
+          "spacing.md",
+          "spacing.lg",
+          "spacing.xl",
+          "spacing.xxl"
+        ],
+        "forbidden": [
+          "raw-px"
+        ]
+      }
+    },
+    {
+      "rule_id": "carbon-space-004",
+      "description": "Spacing uses spacing tokens.",
+      "severity": "warning",
+      "context": [
+        "layout"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "scale-enforcement",
+        "category": "spacing",
+        "context": "global",
+        "allowed": [
+          "spacing.xs",
+          "spacing.sm",
+          "spacing.md",
+          "spacing.lg",
+          "spacing.xl",
+          "spacing.xxl"
+        ],
+        "forbidden": [
+          "raw-px"
+        ]
+      }
+    }
+  ],
+  "layout_rules": [
+    {
+      "rule_id": "carbon-layout-001",
+      "description": "Layout and responsive constraints.",
+      "severity": "warning",
+      "context": [
+        "layout",
+        "responsive"
+      ],
+      "applies_to": [
+        "navigation-bar",
+        "nav-rail"
+      ],
+      "token": "breakpoints.medium",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": "adapt-by-breakpoint"
+      }
+    },
+    {
+      "rule_id": "carbon-layout-002",
+      "description": "Layout and responsive constraints.",
+      "severity": "warning",
+      "context": [
+        "layout",
+        "responsive"
+      ],
+      "applies_to": [
+        "navigation-bar",
+        "nav-rail"
+      ],
+      "token": "breakpoints.medium",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": "adapt-by-breakpoint"
+      }
+    },
+    {
+      "rule_id": "carbon-layout-003",
+      "description": "Layout and responsive constraints.",
+      "severity": "warning",
+      "context": [
+        "layout",
+        "responsive"
+      ],
+      "applies_to": [
+        "navigation-bar",
+        "nav-rail"
+      ],
+      "token": "breakpoints.medium",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": "adapt-by-breakpoint"
+      }
+    },
+    {
+      "rule_id": "carbon-layout-004",
+      "description": "Layout and responsive constraints.",
+      "severity": "warning",
+      "context": [
+        "layout",
+        "responsive"
+      ],
+      "applies_to": [
+        "navigation-bar",
+        "nav-rail"
+      ],
+      "token": "breakpoints.medium",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "responsive-layout",
+        "value": "adapt-by-breakpoint"
+      }
+    }
+  ],
+  "state_rules": [
+    {
+      "rule_id": "carbon-state-001",
+      "description": "Interactive components define core states.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "text-field-outlined",
+        "switch"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "carbon-state-002",
+      "description": "Interactive components define core states.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "text-field-outlined",
+        "switch"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "carbon-state-003",
+      "description": "Interactive components define core states.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "text-field-outlined",
+        "switch"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    },
+    {
+      "rule_id": "carbon-state-004",
+      "description": "Interactive components define core states.",
+      "severity": "error",
+      "context": [
+        "interactive"
+      ],
+      "applies_to": [
+        "button-filled",
+        "text-field-outlined",
+        "switch"
+      ],
+      "token": "color.semantic.primary",
+      "constraint": {
+        "type": "state-mapping",
+        "component": "interactive",
+        "states": {
+          "default": {},
+          "hovered": {},
+          "pressed": {},
+          "disabled": {}
+        }
+      }
+    }
+  ],
+  "composition_rules": [
+    {
+      "rule_id": "carbon-comp-001",
+      "description": "Composition and nesting constraints.",
+      "severity": "warning",
+      "context": [
+        "composition"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "no-invalid-nesting",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "carbon-comp-002",
+      "description": "Composition and nesting constraints.",
+      "severity": "warning",
+      "context": [
+        "composition"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "no-invalid-nesting",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "carbon-comp-003",
+      "description": "Composition and nesting constraints.",
+      "severity": "warning",
+      "context": [
+        "composition"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "no-invalid-nesting",
+        "value": 1,
+        "unit": "boolean"
+      }
+    },
+    {
+      "rule_id": "carbon-comp-004",
+      "description": "Composition and nesting constraints.",
+      "severity": "warning",
+      "context": [
+        "composition"
+      ],
+      "applies_to": [],
+      "token": "spacing.md",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "no-invalid-nesting",
+        "value": 1,
+        "unit": "boolean"
+      }
+    }
+  ],
+  "accessibility_rules": [
+    {
+      "rule_id": "carbon-a11y-001",
+      "description": "Accessibility baseline requirements.",
+      "severity": "error",
+      "context": [
+        "accessibility"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.on-surface",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    },
+    {
+      "rule_id": "carbon-a11y-002",
+      "description": "Accessibility baseline requirements.",
+      "severity": "warning",
+      "context": [
+        "accessibility"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.on-surface",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    },
+    {
+      "rule_id": "carbon-a11y-003",
+      "description": "Accessibility baseline requirements.",
+      "severity": "warning",
+      "context": [
+        "accessibility"
+      ],
+      "applies_to": [],
+      "token": "color.semantic.on-surface",
+      "constraint": {
+        "type": "layout-constraint",
+        "rule": "min-contrast-ratio",
+        "value": 4.5,
+        "unit": "ratio"
+      }
+    }
+  ],
+  "forbidden_patterns": [
+    {
+      "pattern_id": "carbon-fp-001",
+      "description": "Forbidden anti-patterns.",
+      "detect": {
+        "token": "hardcoded-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "carbon-fp-002",
+      "description": "Forbidden anti-patterns.",
+      "detect": {
+        "token": "hardcoded-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "carbon-fp-003",
+      "description": "Forbidden anti-patterns.",
+      "detect": {
+        "token": "hardcoded-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "carbon-fp-004",
+      "description": "Forbidden anti-patterns.",
+      "detect": {
+        "token": "hardcoded-values"
+      },
+      "severity": "error"
+    },
+    {
+      "pattern_id": "carbon-fp-005",
+      "description": "Avoid mixed semantic families in same control state.",
+      "detect": {
+        "token": "mixed-semantic-family"
+      },
+      "severity": "warning"
+    }
+  ]
+}

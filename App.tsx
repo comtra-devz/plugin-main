@@ -28,6 +28,12 @@ export interface CreditsState {
   used: number;
 }
 
+interface SelectedNodeInfo {
+  id: string;
+  name: string;
+  type: string;
+}
+
 function normalizeOAuthUser(raw: {
   id?: string; name?: string; email?: string; img_url?: string | null; plan?: string;
   stats?: User['stats']; authToken?: string;
@@ -142,6 +148,7 @@ export default function AppTest() {
   const [recentTransactions, setRecentTransactions] = useState<Array<{ action_type: string; credits_consumed: number; created_at: string }>>([]);
 
   const [genPrompt, setGenPrompt] = useState('');
+  const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null);
   const [credits, setCredits] = useState<CreditsState | null>(null);
   /** Diagnostic: why credits fetch failed (e.g. "401", "503", "network"). Cleared on success. */
   const [creditsFetchError, setCreditsFetchError] = useState<string | null>(null);
@@ -478,10 +485,32 @@ export default function AppTest() {
         fileContextResolveRef.current = null;
         resolve({ fileKey: msg.fileKey ?? null, error: msg.error ?? null });
       }
+      if (msg.type === 'selection-changed') {
+        const nodes = Array.isArray(msg.nodes) ? msg.nodes : [];
+        if (!nodes.length) {
+          setSelectedNode(null);
+          return;
+        }
+        const first = nodes[0];
+        if (!first?.id) {
+          setSelectedNode(null);
+          return;
+        }
+        setSelectedNode({
+          id: String(first.id),
+          name: String(first.name || 'Selection'),
+          type: String(first.type || 'SELECTION'),
+        });
+      }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
+
+  useEffect(() => {
+    if (view !== ViewState.GENERATE) return;
+    window.parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
+  }, [view]);
 
   // Chiedi al controller la sessione salvata al mount; timeout per non bloccare se il messaggio non arriva
   useEffect(() => {
@@ -986,6 +1015,7 @@ export default function AppTest() {
             fetchGenerate={fetchGenerate}
             requestFileContext={requestFileContext}
             fetchGenerateFeedback={fetchGenerateFeedback}
+            selectedNode={selectedNode}
           />
         </div>
 

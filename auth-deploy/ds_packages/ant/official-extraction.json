@@ -1,0 +1,12 @@
+{
+  "ds_id": "ant",
+  "extracted_at": "2026-03-23T18:27:16.223Z",
+  "extractor": "ant-official-extractor",
+  "elapsed_ms": 1016,
+  "source": {
+    "repo": "ant-design/ant-design",
+    "ref": "master",
+    "token_source_count": 150,
+    "component_dir_count": 81
+  }
+}
