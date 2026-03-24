@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
+import { BrutalSelect } from '../components/ui/BrutalSelect';
 import { Confetti } from '../components/Confetti';
 import { AUTH_BACKEND_URL } from '../constants';
 import type { User } from '../types';
@@ -52,6 +53,12 @@ const TUTORIALS = {
     )
   }
 };
+
+const SUPPORT_TICKET_TYPES = [
+  { value: 'BUG', label: '🐛 Report Bug' },
+  { value: 'FEATURE', label: '🚀 Feature Request' },
+  { value: 'LOVE', label: '❤️ Show some love' },
+] as const;
 
 const VIDEOS = [
   { id: 'v1', title: "Figma in 5 Minutes", time: "5:00", url: "https://www.youtube.com/watch?v=5V50GPV3Zts" },
@@ -224,15 +231,12 @@ export const Documentation: React.FC<DocumentationProps> = ({ user }) => {
                   <div className="space-y-4">
                       <div>
                           <label className="text-[10px] font-bold uppercase block mb-1">Ticket Type</label>
-                          <select 
-                            value={supportType} 
-                            onChange={(e) => setSupportType(e.target.value)}
-                            className="w-full border-2 border-black p-2 text-xs font-bold uppercase outline-none bg-white"
-                          >
-                              <option value="BUG">🐛 Report Bug</option>
-                              <option value="FEATURE">🚀 Feature Request</option>
-                              <option value="LOVE">❤️ Show some love</option>
-                          </select>
+                          <BrutalSelect
+                            value={supportType}
+                            onChange={(v) => setSupportType(v)}
+                            options={[...SUPPORT_TICKET_TYPES]}
+                            maxHeightClassName="max-h-56"
+                          />
                       </div>
                       <div>
                           <label className="text-[10px] font-bold uppercase block mb-1">Message</label>

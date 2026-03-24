@@ -508,8 +508,9 @@ export default function AppTest() {
   }, []);
 
   useEffect(() => {
-    if (view !== ViewState.GENERATE) return;
-    window.parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
+    if (view === ViewState.GENERATE || view === ViewState.CODE) {
+      window.parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
+    }
   }, [view]);
 
   // Chiedi al controller la sessione salvata al mount; timeout per non bloccare se il messaggio non arriva
@@ -859,6 +860,38 @@ export default function AppTest() {
     return { ok: data.ok === true, error: data.error as string | undefined };
   }, [user?.authToken]);
 
+  const fetchCodeGen = React.useCallback(
+    async (body: { format: string; node_json: object; file_key?: string | null }) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/code-gen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          format: body.format,
+          node_json: body.node_json,
+          ...(body.file_key ? { file_key: body.file_key } : {}),
+        }),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) {
+        const text = await r.text();
+        let msg = text;
+        try {
+          const j = JSON.parse(text) as { error?: string; hint?: string };
+          msg = j.hint ? `${j.error} — ${j.hint}` : j.error || text;
+        } catch {
+          // keep text
+        }
+        throw new Error(msg);
+      }
+      return r.json() as Promise<{ code?: string; error?: string; component_name?: string }>;
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
   const fetchGenerateFeedback = useCallback(async (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => {
     if (!user?.authToken) return;
     const r = await fetch(`${AUTH_BACKEND_URL}/api/feedback/generate`, {
@@ -1031,7 +1064,9 @@ export default function AppTest() {
             logFreeAction={logFreeAction}
             fetchSyncScan={fetchSyncScan}
             fetchCheckStorybook={fetchCheckStorybook}
+            fetchCodeGen={fetchCodeGen}
             onNavigateToStats={() => setView(ViewState.ANALYTICS)}
+            selectedNode={selectedNode}
           />
         </div>
 

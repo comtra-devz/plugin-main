@@ -83,6 +83,8 @@ Similarity is inferred from JSON only (no screenshot): structure (child types, l
 - **8.2 DS-OPT-2 Missing slots:** Variable areas (e.g. left icon, right actions) as fixed children instead of slots. autoFixAvailable: true (feasible).
 - **8.3 DS-OPT-3 Tokens to extract:** Hardcoded values repeated across many nodes. Suggest token paths. autoFixAvailable: true (feasible).
 - **8.4 DS-OPT-4 Variants to add:** Almost identical components differing by one axis (e.g. Light/Dark). Consolidate into component set. optimizationPayload: suggestedVariants.
+- **8.5 DS-OPT-5 Few tokens:** File has very few variables (< 10 or no color/typography tokens). Scan fills, strokes, font sizes used in the design and suggest creating primary tokens (e.g. color.primary, color.surface, typography.body). optimizationPayload: suggestedTokens. autoFixAvailable: true (feasible).
+- **8.6 DS-OPT-6 Non-scalable token names:** Variable names like "blue-500", "gray-100" instead of primitive/semantic structure (e.g. color.primary.500, semantic.text.on-surface). Recommend Tailwind-style or Design Tokens v3: primitives (color.blue.500) + semantics (color.primary). optimizationPayload: suggestedTokenStructure. autoFixAvailable: false (manual rename risky).
 
 ## Output format
 

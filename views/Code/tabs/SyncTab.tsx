@@ -1,8 +1,13 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { SyncTabProps, BRUTAL, COLORS } from '../types';
 import { Button } from '../../../components/ui/Button';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
+import {
+  BrutalDropdown,
+  brutalSelectOptionRowClass,
+  brutalSelectOptionSelectedClass,
+} from '../../../components/ui/BrutalSelect';
 
 const PRESET_STORYBOOKS: { label: string; value: string }[] = [
   { label: 'Custom URL…', value: '' },
@@ -120,17 +125,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [isPresetOpen, setIsPresetOpen] = useState(false);
-  const presetDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (presetDropdownRef.current && !presetDropdownRef.current.contains(e.target as Node)) {
-        setIsPresetOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
 
@@ -208,34 +202,42 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               {!isSbConnected ? (
                 <div className="space-y-3">
                   <p className="text-xs font-medium">Pick a public Storybook or enter your own URL. We’ll check that it exposes the stories API.</p>
-                  <div className="flex flex-col gap-2 relative z-20" ref={presetDropdownRef}>
+                  <div className="flex flex-col gap-2 relative z-20">
                     <label className="text-[10px] font-bold uppercase text-gray-600">Quick pick</label>
-                    <div
-                      onClick={() => setIsPresetOpen(!isPresetOpen)}
-                      className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2`}
+                    <BrutalDropdown
+                      open={isPresetOpen}
+                      onOpenChange={setIsPresetOpen}
+                      className="w-full"
+                      maxHeightClassName="max-h-48"
+                      trigger={
+                        <button
+                          type="button"
+                          onClick={() => setIsPresetOpen(!isPresetOpen)}
+                          className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2 text-left`}
+                        >
+                          <span className="text-xs font-bold uppercase truncate min-w-0" title={selectedPresetLabel}>
+                            {selectedPresetLabel}
+                          </span>
+                          <span className="shrink-0 text-[10px]" aria-hidden>
+                            {isPresetOpen ? '▲' : '▼'}
+                          </span>
+                        </button>
+                      }
                     >
-                      <span className="text-xs font-bold uppercase truncate min-w-0" title={selectedPresetLabel}>
-                        {selectedPresetLabel}
-                      </span>
-                      <span className="shrink-0 text-[10px]">{isPresetOpen ? '▲' : '▼'}</span>
-                    </div>
-                    {isPresetOpen && (
-                      <div className="absolute top-full left-0 right-0 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
-                        {PRESET_STORYBOOKS.map((p) => (
-                          <div
-                            key={p.value || 'custom'}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConnectInput(p.value);
-                              setIsPresetOpen(false);
-                            }}
-                            className={`p-2 text-xs cursor-pointer border-b border-gray-100 last:border-0 ${p.value === connectInput ? 'bg-black text-white' : 'hover:bg-[#ff90e8]'}`}
-                          >
-                            {p.label}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      {PRESET_STORYBOOKS.map((p) => (
+                        <div
+                          key={p.value || 'custom'}
+                          role="option"
+                          onClick={() => {
+                            setConnectInput(p.value);
+                            setIsPresetOpen(false);
+                          }}
+                          className={`${brutalSelectOptionRowClass} ${p.value === connectInput ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                        >
+                          {p.label}
+                        </div>
+                      ))}
+                    </BrutalDropdown>
                   </div>
                   <label className="text-[10px] font-bold uppercase text-gray-600 block mt-1">Or paste URL</label>
                   <input
@@ -283,9 +285,10 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     fullWidth
                     onClick={handleConnectClick}
                     disabled={!connectInput.trim() || isConnecting}
-                    className="bg-pink-100 hover:bg-pink-200"
+                    className="bg-pink-100 hover:bg-pink-200 relative"
                   >
                     {isConnecting ? 'Checking…' : 'Connect Storybook'}
+                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
                   </Button>
                   <div className="pt-2 mt-2 border-t border-gray-200">
                     <p className="text-[9px] text-gray-500 leading-relaxed">

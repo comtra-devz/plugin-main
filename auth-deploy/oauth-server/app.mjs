@@ -586,7 +586,8 @@ function estimateCreditsByAction(actionType, nodeCount) {
   if (actionType === 'ux_audit') return 4;
   if (actionType === 'sync') return 1;
   if (actionType === 'scan_sync') return 15;
-  if (actionType === 'sync_fix' || actionType === 'sync_storybook') return 5;
+  if (actionType === 'sync_fix' || actionType === 'sync_storybook' || actionType === 'comp_sync') return 5;
+  if (actionType === 'code_gen') return 0;
   return 5;
 }
 
@@ -1089,11 +1090,12 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
     const data = await res.json();
     const doc = data.document || { type: 'DOCUMENT', id: '0:0', children: [] };
     const children = Array.isArray(doc.children) ? doc.children : [];
-    return { document: { type: 'DOCUMENT', id: '0:0', children } };
+    return { document: { type: 'DOCUMENT', id: '0:0', children }, components: data.components };
   }
 
   if (scopeType === 'all' && pageIdsArr.length > 0) {
     const allChildren = [];
+    let components = undefined;
     for (const pid of pageIdsArr) {
       const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
       url.searchParams.set('ids', pid);
@@ -1104,8 +1106,9 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
       const doc = data.document || {};
       const kids = Array.isArray(doc.children) ? doc.children : [];
       allChildren.push(...kids);
+      if (data.components && components === undefined) components = data.components;
     }
-    return { document: { type: 'DOCUMENT', id: '0:0', children: allChildren } };
+    return { document: { type: 'DOCUMENT', id: '0:0', children: allChildren }, components };
   }
 
   if (scopeType === 'all') {
@@ -1114,7 +1117,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
     const res = await fetch(url.toString(), auth);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
-    return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] } };
+    return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] }, components: data.components };
   }
 
   const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
@@ -1122,7 +1125,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   const res = await fetch(url.toString(), auth);
   if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
   const data = await res.json();
-  return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] } };
+  return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] }, components: data.components };
 }
 
 app.post('/api/agents/ds-audit', async (req, res) => {
@@ -1186,6 +1189,22 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     } else {
       return res.status(400).json({ error: 'file_json must include document' });
     }
+
+    // Advisory: file senza design system (0 componenti) → suggerire Preline, skip Kimi
+    const components = fileJson?.components;
+    const componentCount = components && typeof components === 'object' ? Object.keys(components).length : null;
+    if (componentCount === 0) {
+      return res.json({
+        issues: [],
+        advisory: {
+          type: 'no_design_system',
+          message: 'Questo file non ha componenti definiti. Per partire da zero, ti consigliamo Preline: design system gratuito con 840+ componenti e template.',
+          ctaLabel: 'Scopri Preline',
+          ctaUrl: 'https://preline.co',
+        },
+      });
+    }
+
     const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.\n\n${JSON.stringify(fileJson)}`;
 
     const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
@@ -1809,6 +1828,95 @@ app.post('/api/agents/sync-scan', async (req, res) => {
   } catch (err) {
     console.error('POST /api/agents/sync-scan', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Code generation (Kimi): subtree JSON from plugin + format → source code
+const CODE_GEN_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'code-gen-system.md');
+
+function sanitizeCodeGenComponentName(raw) {
+  const s = String(raw || 'Generated').replace(/[^a-zA-Z0-9]+/g, ' ').trim();
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'GeneratedComponent';
+  return parts.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
+}
+
+function stripCodeFences(text) {
+  let t = String(text || '').trim();
+  if (!t.startsWith('```')) return t;
+  t = t.replace(/^```[a-zA-Z0-9_-]*\s*\n?/, '');
+  t = t.replace(/\n```[\s\S]*$/, '');
+  return t.trim();
+}
+
+app.post('/api/agents/code-gen', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const body = req.body || {};
+  const format = String(body.format || body.output_format || 'REACT').toUpperCase().trim();
+  const nodeJson = body.node_json || body.nodeJson;
+  const fileKey = (body.file_key || body.fileKey || '').trim() || undefined;
+
+  const ALLOWED = ['REACT', 'STORYBOOK', 'LIQUID', 'CSS', 'VUE', 'SVELTE', 'ANGULAR'];
+  if (!nodeJson || typeof nodeJson !== 'object') return res.status(400).json({ error: 'node_json required' });
+  if (!ALLOWED.includes(format)) return res.status(400).json({ error: 'invalid format' });
+  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+
+  let systemPrompt;
+  const pathsToTry = [CODE_GEN_PROMPT_PATH, path.join(process.cwd(), 'prompts', 'code-gen-system.md')];
+  for (const p of pathsToTry) {
+    try {
+      systemPrompt = readFileSync(p, 'utf8');
+      if (systemPrompt && systemPrompt.length > 0) break;
+    } catch (_) {}
+  }
+  if (!systemPrompt) {
+    console.error('Code gen: failed to read prompt', pathsToTry);
+    return res.status(500).json({ error: 'System prompt not found' });
+  }
+
+  const JSON_MAX = 320000;
+  let blob = JSON.stringify(nodeJson);
+  if (blob.length > JSON_MAX) blob = `${blob.slice(0, JSON_MAX)}\n…[truncated for model input]`;
+
+  const userMessage = [
+    `Output format: ${format}.`,
+    fileKey ? `Figma file_key (context only): ${fileKey}` : '',
+    'The JSON is the user-selected Figma node (root) and descendants. Generate code for this root as a whole — not a generic unrelated widget.',
+    'If root._meta.truncated is true, add a one-line top comment that descendants were capped in the export.',
+    '---',
+    blob,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  try {
+    const { content, usage } = await callKimi(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
+      12000,
+    );
+    const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
+    const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+    if (dbSql) {
+      dbSql`
+        INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+        VALUES ('code_gen', ${inputTokens}, ${outputTokens}, null, ${KIMI_MODEL})
+      `.catch((err) => console.error('Kimi usage log code_gen failed', err.message));
+    }
+    const code = stripCodeFences(content);
+    if (!code) return res.status(502).json({ error: 'Empty response from AI' });
+    const componentName = sanitizeCodeGenComponentName(nodeJson.name);
+    res.json({
+      code,
+      format,
+      component_name: componentName,
+      warnings: [],
+    });
+  } catch (err) {
+    console.error('POST /api/agents/code-gen', err);
+    const msg = err?.message || 'Server error';
+    if (String(msg).includes('429')) return res.status(429).json({ error: 'Rate limited; try again shortly.' });
+    res.status(500).json({ error: String(msg).length < 240 ? msg : 'Server error' });
   }
 });
 

@@ -42,6 +42,9 @@ export interface TargetTabProps {
   lastSyncedComp: Date | null;
   getRemainingTime: (key: string) => string | null;
   setLastSyncedComp: (date: Date | null) => void;
+  isPro: boolean;
+  onUnlockRequest: () => void;
+  isSbConnected: boolean;
 }
 
 export interface SyncTabProps {

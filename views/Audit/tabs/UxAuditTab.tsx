@@ -1,6 +1,7 @@
 import React from 'react';
 import { BRUTAL } from '../../../constants';
 import { Button } from '../../../components/ui/Button';
+import { BrutalDropdown, brutalMenuRowClass } from '../../../components/ui/BrutalSelect';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
@@ -104,35 +105,43 @@ export const UxAuditTab: React.FC<Props> = ({
             Run the UX Logic audit on your file. States, labels, feedback, copy and more.
           </p>
           <div className="relative z-20 text-left mb-2 px-4">
-            <div
-              onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
-              className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white`}
-            >
-              <span className="text-xs font-bold uppercase truncate min-w-0" title={scopeLabel}>{scopeLabel}</span>
-              <span className="shrink-0">{isScopeDropdownOpen ? '▲' : '▼'}</span>
-            </div>
-            {isScopeDropdownOpen && (
-              <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
-                <div
-                  onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+            <BrutalDropdown
+              open={isScopeDropdownOpen}
+              onOpenChange={setIsScopeDropdownOpen}
+              className="w-full"
+              maxHeightClassName="max-h-48"
+              trigger={
+                <button
+                  type="button"
+                  onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
+                  className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white w-full text-left`}
                 >
-                  <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' || scanScope === 'all' ? 'bg-black' : 'bg-white'}`} />
-                  <span className="text-xs font-bold">Current Selection</span>
-                </div>
-                <div className="border-t border-gray-200 my-0" aria-hidden />
-                {documentPages.map(page => (
-                  <div
-                    key={page.id}
-                    onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
-                  >
-                    <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`} />
-                    <span className="text-xs">{page.name}</span>
-                  </div>
-                ))}
+                  <span className="text-xs font-bold uppercase truncate min-w-0" title={scopeLabel}>{scopeLabel}</span>
+                  <span className="shrink-0" aria-hidden>{isScopeDropdownOpen ? '▲' : '▼'}</span>
+                </button>
+              }
+            >
+              <div
+                role="option"
+                onClick={() => { setScanScope('current'); setIsScopeDropdownOpen(false); }}
+                className={`${brutalMenuRowClass} border-b border-gray-100`}
+              >
+                <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' || scanScope === 'all' ? 'bg-black' : 'bg-white'}`} />
+                <span className="text-xs font-bold">Current Selection</span>
               </div>
-            )}
+              <div className="border-t border-gray-200 my-0" aria-hidden />
+              {documentPages.map((page) => (
+                <div
+                  key={page.id}
+                  role="option"
+                  onClick={() => { setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
+                  className={`${brutalMenuRowClass} border-b border-gray-100 last:border-b-0`}
+                >
+                  <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`} />
+                  <span className="text-xs">{page.name}</span>
+                </div>
+              ))}
+            </BrutalDropdown>
           </div>
           <div className="px-4">
             <Button
@@ -193,35 +202,43 @@ export const UxAuditTab: React.FC<Props> = ({
 
       {/* Scope: Current Selection + page list only (no "All Pages" option) */}
       <div className="relative z-20">
-        <div
-          onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
-          className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10`}
-        >
-          <span className="text-xs font-bold uppercase truncate min-w-0" title={scopeLabel}>{scopeLabel}</span>
-          <span className="shrink-0">{isScopeDropdownOpen ? '▲' : '▼'}</span>
-        </div>
-        {isScopeDropdownOpen && (
-          <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] max-h-48 overflow-y-auto custom-scrollbar">
-            <div
-              onClick={(e) => { e.stopPropagation(); setScanScope('current'); setIsScopeDropdownOpen(false); }}
-              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
+        <BrutalDropdown
+          open={isScopeDropdownOpen}
+          onOpenChange={setIsScopeDropdownOpen}
+          className="w-full"
+          maxHeightClassName="max-h-48"
+          trigger={
+            <button
+              type="button"
+              onClick={() => setIsScopeDropdownOpen(!isScopeDropdownOpen)}
+              className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 w-full text-left bg-white`}
             >
-              <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' || scanScope === 'all' ? 'bg-black' : 'bg-white'}`} />
-              <span className="text-xs font-bold">Current Selection</span>
-            </div>
-            <div className="border-t border-gray-200 my-0" aria-hidden />
-            {documentPages.map(page => (
-              <div
-                key={page.id}
-                onClick={(e) => { e.stopPropagation(); setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
-                className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
-              >
-                <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`} />
-                <span className="text-xs">{page.name}</span>
-              </div>
-            ))}
+              <span className="text-xs font-bold uppercase truncate min-w-0" title={scopeLabel}>{scopeLabel}</span>
+              <span className="shrink-0" aria-hidden>{isScopeDropdownOpen ? '▲' : '▼'}</span>
+            </button>
+          }
+        >
+          <div
+            role="option"
+            onClick={() => { setScanScope('current'); setIsScopeDropdownOpen(false); }}
+            className={`${brutalMenuRowClass} border-b border-gray-100`}
+          >
+            <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' || scanScope === 'all' ? 'bg-black' : 'bg-white'}`} />
+            <span className="text-xs font-bold">Current Selection</span>
           </div>
-        )}
+          <div className="border-t border-gray-200 my-0" aria-hidden />
+          {documentPages.map((page) => (
+            <div
+              key={page.id}
+              role="option"
+              onClick={() => { setScanScope('page'); setSelectedPageId(page.id); setIsScopeDropdownOpen(false); }}
+              className={`${brutalMenuRowClass} border-b border-gray-100 last:border-b-0`}
+            >
+              <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'page' && selectedPageId === page.id ? 'bg-black' : 'bg-white'}`} />
+              <span className="text-xs">{page.name}</span>
+            </div>
+          ))}
+        </BrutalDropdown>
       </div>
 
       <Button

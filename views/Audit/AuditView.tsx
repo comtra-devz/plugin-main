@@ -158,6 +158,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [dsAuditIssues, setDsAuditIssues] = useState<AuditIssue[] | null>(null);
   const [dsAuditLoading, setDsAuditLoading] = useState(false);
   const [dsAuditError, setDsAuditError] = useState<string | null>(null);
+  /** Advisory when file has no design system (0 components) — e.g. Preline CTA */
+  const [dsAdvisory, setDsAdvisory] = useState<{ type: string; message: string; ctaLabel: string; ctaUrl: string } | null>(null);
   // A11Y Audit agent: real issues from backend (no Kimi)
   const [a11yAuditIssues, setA11yAuditIssues] = useState<AuditIssue[] | null>(null);
   const [a11yAuditLoading, setA11yAuditLoading] = useState(false);
@@ -236,6 +238,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         }
         setDsAuditError(null);
         setDsAuditIssues(null);
+        setDsAdvisory(null);
       }
       if (isFigmaConnectionError(message)) {
         const opts = getSystemToastOptions('figma_connection_lost');
@@ -792,9 +795,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               }
             } else if (fetchDsAudit) {
               setDsAuditError(null);
+              setDsAdvisory(null);
               setDsAuditLoading(true);
               const data = await fetchDsAudit(auditBody);
               setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+              if (data?.advisory && typeof data.advisory === 'object' && data.advisory.message && data.advisory.ctaUrl) {
+                setDsAdvisory({
+                  type: data.advisory.type || 'no_design_system',
+                  message: data.advisory.message,
+                  ctaLabel: data.advisory.ctaLabel || 'Learn more',
+                  ctaUrl: data.advisory.ctaUrl,
+                });
+              }
             } else {
               setAuditError('Audit not available');
               return;
@@ -1465,6 +1477,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             issueListProps={issueListProps}
             dsAuditLoading={dsAuditLoading}
             dsAuditError={dsAuditError}
+            dsAdvisory={dsAdvisory}
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
             disableAllPages={false}

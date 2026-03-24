@@ -1,6 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { BRUTAL, getPrototypeAuditCost } from '../../../constants';
 import { Button } from '../../../components/ui/Button';
+import { BrutalDropdown, brutalMenuRowClass } from '../../../components/ui/BrutalSelect';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
@@ -107,18 +108,6 @@ export const PrototypeAuditTab: React.FC<Props> = ({
     setIsFlowDropdownOpen(false);
   };
 
-  const flowDropdownRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!isFlowDropdownOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (flowDropdownRef.current && !flowDropdownRef.current.contains(e.target as Node)) {
-        setIsFlowDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    return () => document.removeEventListener('mousedown', onMouseDown);
-  }, [isFlowDropdownOpen, setIsFlowDropdownOpen]);
-
   if (!hasProtoResult) {
     return (
       <div className="p-4 h-[60vh] flex flex-col gap-4 items-center justify-center">
@@ -158,43 +147,54 @@ export const PrototypeAuditTab: React.FC<Props> = ({
             </p>
           ) : (
             <>
-              <div ref={flowDropdownRef} className="relative z-20 text-left mb-2 px-4">
-                <div
-                  onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
-                  className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white ${flowStartingPoints.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+              <div className="relative z-20 text-left mb-2 px-4">
+                <BrutalDropdown
+                  open={isFlowDropdownOpen}
+                  onOpenChange={setIsFlowDropdownOpen}
+                  disabled={flowStartingPoints.length === 0}
+                  className="w-full"
+                  maxHeightClassName="max-h-48"
+                  trigger={
+                    <button
+                      type="button"
+                      disabled={flowStartingPoints.length === 0}
+                      onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
+                      className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white w-full text-left ${flowStartingPoints.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      <span className="text-xs font-bold uppercase truncate min-w-0" title={flowLabel}>{flowLabel}</span>
+                      <span className="shrink-0" aria-hidden>{isFlowDropdownOpen ? '▲' : '▼'}</span>
+                    </button>
+                  }
                 >
-                  <span className="text-xs font-bold uppercase truncate min-w-0" title={flowLabel}>{flowLabel}</span>
-                  <span className="shrink-0">{isFlowDropdownOpen ? '▲' : '▼'}</span>
-                </div>
-                {isFlowDropdownOpen && (
-                  <div className="absolute top-full left-4 right-4 bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] text-left z-30 max-h-48 overflow-y-auto custom-scrollbar">
-                    <div
-                      onClick={(e) => { e.stopPropagation(); selectAllFlows(); }}
-                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
-                    >
-                      <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedCount === flowStartingPoints.length ? 'bg-black' : 'bg-white'}`} />
-                      <span className="text-xs font-bold">All flows</span>
-                    </div>
-                    <div
-                      onClick={(e) => { e.stopPropagation(); clearFlows(); }}
-                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
-                    >
-                      <div className="w-3 h-3 shrink-0 border border-black bg-white" />
-                      <span className="text-xs">Clear</span>
-                    </div>
-                    <div className="border-t border-gray-200 my-0" aria-hidden />
-                    {flowStartingPoints.map(flow => (
-                      <div
-                        key={flow.nodeId}
-                        onClick={(e) => { e.stopPropagation(); toggleFlow(flow.nodeId); }}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
-                      >
-                        <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedFlowIds.includes(flow.nodeId) ? 'bg-black' : 'bg-white'}`} />
-                        <span className="text-xs truncate" title={flow.name}>{flow.name || flow.nodeId}</span>
-                      </div>
-                    ))}
+                  <div
+                    role="option"
+                    onClick={() => selectAllFlows()}
+                    className={`${brutalMenuRowClass} border-b border-gray-100`}
+                  >
+                    <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedCount === flowStartingPoints.length ? 'bg-black' : 'bg-white'}`} />
+                    <span className="text-xs font-bold">All flows</span>
                   </div>
-                )}
+                  <div
+                    role="option"
+                    onClick={() => clearFlows()}
+                    className={`${brutalMenuRowClass} border-b border-gray-100`}
+                  >
+                    <div className="w-3 h-3 shrink-0 border border-black bg-white" />
+                    <span className="text-xs">Clear</span>
+                  </div>
+                  <div className="border-t border-gray-200 my-0" aria-hidden />
+                  {flowStartingPoints.map((flow) => (
+                    <div
+                      key={flow.nodeId}
+                      role="option"
+                      onClick={() => toggleFlow(flow.nodeId)}
+                      className={`${brutalMenuRowClass} border-b border-gray-100 last:border-b-0`}
+                    >
+                      <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedFlowIds.includes(flow.nodeId) ? 'bg-black' : 'bg-white'}`} />
+                      <span className="text-xs truncate" title={flow.name}>{flow.name || flow.nodeId}</span>
+                    </div>
+                  ))}
+                </BrutalDropdown>
               </div>
               <div className="px-4">
                 {selectedCount > 0 && (
@@ -258,7 +258,7 @@ export const PrototypeAuditTab: React.FC<Props> = ({
       </div>
 
       {/* Flow multi-select */}
-      <div ref={flowDropdownRef} className="relative z-20">
+      <div className="relative z-20">
         <div className="flex items-center justify-between gap-2 mb-1 px-0.5">
           <span className="text-[9px] font-bold text-gray-500 uppercase truncate" title={prototypeCanvasPageName}>
             Page: {prototypeCanvasPageName || '—'}
@@ -273,36 +273,45 @@ export const PrototypeAuditTab: React.FC<Props> = ({
             </button>
           )}
         </div>
-        <div
-          onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
-          className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10`}
+        <BrutalDropdown
+          open={isFlowDropdownOpen}
+          onOpenChange={setIsFlowDropdownOpen}
+          disabled={flowStartingPoints.length === 0}
+          className="w-full"
+          maxHeightClassName="max-h-48"
+          trigger={
+            <button
+              type="button"
+              disabled={flowStartingPoints.length === 0}
+              onClick={() => flowStartingPoints.length > 0 && setIsFlowDropdownOpen(!isFlowDropdownOpen)}
+              className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 w-full text-left bg-white ${flowStartingPoints.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              <span className="text-xs font-bold uppercase truncate min-w-0" title={flowLabel}>{flowLabel}</span>
+              <span className="shrink-0" aria-hidden>{isFlowDropdownOpen ? '▲' : '▼'}</span>
+            </button>
+          }
         >
-          <span className="text-xs font-bold uppercase truncate min-w-0" title={flowLabel}>{flowLabel}</span>
-          <span className="shrink-0">{isFlowDropdownOpen ? '▲' : '▼'}</span>
-        </div>
-        {isFlowDropdownOpen && (
-          <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] max-h-48 overflow-y-auto custom-scrollbar">
-            <div onClick={(e) => { e.stopPropagation(); selectAllFlows(); }} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2">
-              <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedCount === flowStartingPoints.length ? 'bg-black' : 'bg-white'}`} />
-              <span className="text-xs font-bold">All flows</span>
-            </div>
-            <div onClick={(e) => { e.stopPropagation(); clearFlows(); }} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2">
-              <div className="w-3 h-3 shrink-0 border border-black bg-white" />
-              <span className="text-xs">Clear</span>
-            </div>
-            <div className="border-t border-gray-200 my-0" aria-hidden />
-            {flowStartingPoints.map(flow => (
-              <div
-                key={flow.nodeId}
-                onClick={(e) => { e.stopPropagation(); toggleFlow(flow.nodeId); }}
-                className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2"
-              >
-                <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedFlowIds.includes(flow.nodeId) ? 'bg-black' : 'bg-white'}`} />
-                <span className="text-xs truncate" title={flow.name}>{flow.name || flow.nodeId}</span>
-              </div>
-            ))}
+          <div role="option" onClick={() => selectAllFlows()} className={`${brutalMenuRowClass} border-b border-gray-100`}>
+            <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedCount === flowStartingPoints.length ? 'bg-black' : 'bg-white'}`} />
+            <span className="text-xs font-bold">All flows</span>
           </div>
-        )}
+          <div role="option" onClick={() => clearFlows()} className={`${brutalMenuRowClass} border-b border-gray-100`}>
+            <div className="w-3 h-3 shrink-0 border border-black bg-white" />
+            <span className="text-xs">Clear</span>
+          </div>
+          <div className="border-t border-gray-200 my-0" aria-hidden />
+          {flowStartingPoints.map((flow) => (
+            <div
+              key={flow.nodeId}
+              role="option"
+              onClick={() => toggleFlow(flow.nodeId)}
+              className={`${brutalMenuRowClass} border-b border-gray-100 last:border-b-0`}
+            >
+              <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${selectedFlowIds.includes(flow.nodeId) ? 'bg-black' : 'bg-white'}`} />
+              <span className="text-xs truncate" title={flow.name}>{flow.name || flow.nodeId}</span>
+            </div>
+          ))}
+        </BrutalDropdown>
       </div>
 
       <Button

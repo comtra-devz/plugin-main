@@ -45,7 +45,7 @@ audit-specs/
 
 In futuro, stessa struttura per altri agenti:
 
-- `code-gen/` — Code generation
+- `code-gen/` — Code generation (CODE-GEN-RULES.md: React, Storybook, Liquid, CSS, Vue, Svelte, Angular)
 - `generate/` — Wireframe/variant generation
 
 ## Uso

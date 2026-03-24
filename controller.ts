@@ -1667,6 +1667,113 @@ figma.ui.onmessage = async (raw: any) => {
     };
   }
 
+  /** Extra fields for Code → Target generation (layout + text). */
+  function augmentCodeGenNode(node: BaseNode, out: any): void {
+    if (node.type === 'TEXT') {
+      const tn = node as TextNode;
+      try {
+        const t = tn.characters;
+        if (typeof t === 'string' && t.length > 0) {
+          out.characters = t.length > 400 ? `${t.slice(0, 400)}…` : t;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') {
+      const f = node as FrameNode;
+      if (f.layoutMode && f.layoutMode !== 'NONE') {
+        out.layout = {
+          mode: f.layoutMode,
+          primaryAxisAlignItems: f.primaryAxisAlignItems,
+          counterAxisAlignItems: f.counterAxisAlignItems,
+          itemSpacing: typeof f.itemSpacing === 'number' ? f.itemSpacing : undefined,
+          paddingTop: f.paddingTop,
+          paddingRight: f.paddingRight,
+          paddingBottom: f.paddingBottom,
+          paddingLeft: f.paddingLeft,
+        };
+      }
+    }
+  }
+
+  const CODE_GEN_MAX_DEPTH = 12;
+  const CODE_GEN_MAX_NODES = 350;
+  type CodeGenQueueItem = { node: BaseNode; depth: number; parentSer: any };
+
+  async function buildCodeGenSubtreeFromSelection(): Promise<{ root?: any; error?: string; fileKey: string | null }> {
+    await figma.loadAllPagesAsync();
+    const sel = figma.currentPage.selection;
+    const fileKey = ((figma as any).fileKey ?? null) as string | null;
+    if (!sel.length) return { error: 'No layer selected', fileKey };
+    const first = sel[0] as BaseNode;
+    const rootSer = serializeNodeShallow(first);
+    augmentCodeGenNode(first, rootSer);
+    let nodeCount = 1;
+    const queue: CodeGenQueueItem[] = [];
+    if ('children' in first && CODE_GEN_MAX_DEPTH > 1) {
+      const kids = (first as ChildrenMixin).children as BaseNode[];
+      for (const c of kids) queue.push({ node: c, depth: CODE_GEN_MAX_DEPTH - 1, parentSer: rootSer });
+    }
+    while (queue.length > 0 && nodeCount < CODE_GEN_MAX_NODES) {
+      const batch = queue.splice(0, SERIALIZE_CHUNK);
+      for (const { node, depth, parentSer } of batch) {
+        if (nodeCount >= CODE_GEN_MAX_NODES) break;
+        if (depth <= 0) continue;
+        const ser = serializeNodeShallow(node);
+        augmentCodeGenNode(node, ser);
+        parentSer.children.push(ser);
+        nodeCount++;
+        if (depth > 1 && 'children' in node && nodeCount < CODE_GEN_MAX_NODES) {
+          const kids = (node as ChildrenMixin).children as BaseNode[];
+          for (const c of kids) queue.push({ node: c, depth: depth - 1, parentSer: ser });
+        }
+      }
+      if (queue.length > 0) await yieldToMain();
+    }
+    if (queue.length > 0) {
+      rootSer._meta = {
+        ...(rootSer._meta && typeof rootSer._meta === 'object' ? rootSer._meta : {}),
+        truncated: true,
+        reason: 'node_cap',
+        nodeCount,
+        maxNodes: CODE_GEN_MAX_NODES,
+      };
+    }
+    return { root: rootSer, fileKey };
+  }
+
+  if (msg.type === 'get-code-gen-subtree') {
+    (async () => {
+      try {
+        const built = await buildCodeGenSubtreeFromSelection();
+        if (built.error) {
+          figma.ui.postMessage({ type: 'code-gen-subtree-result', error: built.error, fileKey: built.fileKey });
+          return;
+        }
+        if (!built.root) {
+          figma.ui.postMessage({ type: 'code-gen-subtree-result', error: 'Empty selection', fileKey: built.fileKey });
+          return;
+        }
+        const payload = JSON.stringify(built.root);
+        const LIMIT = 900000;
+        if (payload.length > LIMIT) {
+          figma.ui.postMessage({
+            type: 'code-gen-subtree-result',
+            error: 'Selection too large to send; select a smaller frame or component.',
+            fileKey: built.fileKey,
+          });
+          return;
+        }
+        figma.ui.postMessage({ type: 'code-gen-subtree-result', root: built.root, fileKey: built.fileKey });
+      } catch (e) {
+        console.error('[get-code-gen-subtree]', e);
+        figma.ui.postMessage({ type: 'code-gen-subtree-result', error: String(e) });
+      }
+    })();
+    return;
+  }
+
   // File context: for "current" selection we send fileJson from plugin (no token needed). For all/page we send identifiers and backend fetches via REST API (requires fileKey).
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;

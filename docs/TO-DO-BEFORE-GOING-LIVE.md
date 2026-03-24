@@ -64,6 +64,7 @@ Checklist di azioni e link da completare o verificare **prima di pubblicare il p
 ## 8. Design System Audit — migliorie post-MVP
 
 - [ ] **Similarità via screenshot**: estendere DS Audit con input screenshot multimodale (Kimi) per rilevare somiglianze visive tra componenti quando il JSON non basta. Per ora la similarità è deducibile da JSON (struttura, fill, layout, naming). Vedi `audit-specs/ds-audit/DS-AUDIT-RULES.md` sezione 8.
+- [ ] **Link Preline (partner)**: l'advisory "file senza design system" suggerisce Preline (https://preline.co). **Prima del go-live**: sostituire con link referral/partner se previsto accordo con Preline — cercare `PRELINE_URL` o `preline.co` in constants/codice.
 
 ---
 

@@ -66,6 +66,8 @@ export const CREDITS_BY_RULE: Record<string, number> = {
   'DS-OPT-2': 2,
   'DS-OPT-3': 2,
   'DS-OPT-4': 2,
+  'DS-OPT-5': 2,
+  'DS-OPT-6': 2,
 };
 
 /**

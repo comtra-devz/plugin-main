@@ -26,7 +26,11 @@ interface Props {
   logFreeAction?: (actionType: string) => Promise<void>;
   fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string }>;
+  /** POST /api/agents/code-gen — subtree from plugin + format → code */
+  fetchCodeGen?: (body: { format: string; node_json: object; file_key?: string | null }) => Promise<{ code?: string; error?: string; component_name?: string }>;
   onNavigateToStats?: () => void;
+  /** Selezione canvas Figma (automatica). */
+  selectedNode?: { id: string; name: string; type: string } | null;
 }
 
 const SYNC_ITEMS_MOCK = [
@@ -39,15 +43,20 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, onNavigateToStats }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchCodeGen, onNavigateToStats, selectedNode }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
   const [cooldowns, setCooldowns] = useState<{ [key: string]: number }>({});
   const [now, setNow] = useState(Date.now());
 
-  // Single Target State
-  const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
+  // Target: selezione automatica da Figma (selectedNode)
+  const selectedLayer = selectedNode?.name ?? null;
+
+  // Reset sync status quando cambia la selezione
+  useEffect(() => {
+    setLastSyncedComp(null);
+  }, [selectedNode?.id]);
   const [lang, setLang] = useState('REACT');
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -95,6 +104,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // Sync scan: waiting for file-context-result
   const pendingSyncScanRef = useRef(false);
   const chunkedSyncScanRef = useRef<{ totalChunks: number; meta: any; chunks: Record<number, string> } | null>(null);
+  const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
   const isPro = plan === 'PRO';
   const isAnnual = userTier === '1y';
@@ -120,6 +130,17 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     const handler = (event: MessageEvent) => {
       const msg = event.data?.pluginMessage ?? event.data;
       if (!msg?.type) return;
+
+      if (msg.type === 'code-gen-subtree-result') {
+        const cb = pendingCodeGenRef.current;
+        pendingCodeGenRef.current = null;
+        cb?.({
+          root: msg.root,
+          error: msg.error != null ? String(msg.error) : undefined,
+          fileKey: msg.fileKey != null ? msg.fileKey : null,
+        });
+        return;
+      }
 
       // --- Sync Scan: file-context ---
       if (msg.type === 'file-context-chunked-start' && pendingSyncScanRef.current) {
@@ -268,15 +289,23 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   const getTimeStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // --- MOCK GENERATORS ---
-  const generateCodeString = () => {
-    const ts = getTimeStamp();
-    if (lang === 'CSS') return `/* Generated on ${ts} */\n.btn {\n  background: #ff90e8;\n  border: 2px solid #000;\n  padding: 8px 16px;\n  cursor: pointer;\n}`;
-    if (lang === 'VUE') return `<!-- Generated on ${ts} -->\n<template>\n  <button class="btn">Click me</button>\n</template>`;
-    if (lang === 'LIQUID') return `{% comment %} Generated on ${ts} {% endcomment %}\n{% render 'button', label: 'Click me', class: 'btn-primary' %}`;
-    if (lang === 'STORYBOOK') return `// Generated on ${ts}\nimport type { Meta, StoryObj } from '@storybook/react';\nimport { Button } from './Button';\n\nconst meta: Meta<typeof Button> = {\n  component: Button,\n};\nexport default meta;\n\ntype Story = StoryObj<typeof Button>;\n\nexport const Primary: Story = {\n  args: {\n    primary: true,\n    label: 'Button',\n  },\n};`;
-    return `// Generated on ${ts}\nexport const Button = () => (\n  <button className="bg-[#ff90e8] border-2 border-black p-2 hover:bg-[#ffc900] transition-all">\n    Click me\n  </button>\n);`;
-  };
+  const requestCodeGenSubtree = () =>
+    new Promise<{ root?: unknown; error?: string; fileKey?: string | null }>((resolve) => {
+      let settled = false;
+      const t = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        pendingCodeGenRef.current = null;
+        resolve({ error: 'Timed out reading selection from Figma.' });
+      }, 25000);
+      pendingCodeGenRef.current = (v) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(t);
+        resolve(v);
+      };
+      window.parent.postMessage({ pluginMessage: { type: 'get-code-gen-subtree' } }, '*');
+    });
 
   const getRawCss = () => {
     return `/* Generated on ${getTimeStamp()} */\n:root {\n  --primary: #ff90e8;\n  --surface: #ffffff;\n  --border: 2px solid #000;\n}\n\n.component-base {\n  background: var(--primary);\n  border: var(--border);\n}`;
@@ -305,16 +334,46 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   // --- HANDLERS ---
-  const handleGenerate = () => {
-     handleAction(() => {
-        setIsGenerating(true);
-        setTimeout(() => {
-          setGeneratedCode(generateCodeString());
-          setIsGenerating(false);
-          // Reset sync if code changes
-          setLastSyncedComp(null);
-        }, 1500);
-     });
+  // Generate Code: FREE (0 crediti) — richiede sessione per Kimi sul backend
+  const handleGenerate = async () => {
+    if (!fetchCodeGen) {
+      setGeneratedCode('// Sign in and ensure the server exposes POST /api/agents/code-gen to generate from your selection.\n');
+      return;
+    }
+    setIsGenerating(true);
+    setGeneratedCode(null);
+    try {
+      if (logFreeAction) await logFreeAction('code_gen');
+    } catch {
+      /* best-effort */
+    }
+    try {
+      const sub = await requestCodeGenSubtree();
+      if (sub.error) {
+        setGeneratedCode(`// ${sub.error}\n`);
+        return;
+      }
+      if (!sub.root || typeof sub.root !== 'object') {
+        setGeneratedCode('// No node data from Figma.\n');
+        return;
+      }
+      const data = await fetchCodeGen({
+        format: lang,
+        node_json: sub.root as object,
+        file_key: sub.fileKey,
+      });
+      const code = data.code;
+      if (!code) {
+        setGeneratedCode(`// ${data.error || 'Empty response from code generation.'}\n`);
+        return;
+      }
+      setGeneratedCode(code);
+    } catch (e) {
+      setGeneratedCode(`// Error: ${e instanceof Error ? e.message : String(e)}\n`);
+    } finally {
+      setIsGenerating(false);
+      setLastSyncedComp(null);
+    }
   };
 
   // Tokens (CSS / JSON): always free (no credits consumed), but logged as 0-credit activities for Stats + dashboard
@@ -369,13 +428,30 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setTimeout(() => setCopiedJson(false), 2000);
   };
   
-  const handleSyncComp = (target: 'SB' | 'GH' | 'BB') => {
+  const handleSyncComp = async (target: 'SB' | 'GH' | 'BB') => {
     if (!isPro) {
       onUnlockRequest();
       return;
     }
     if (!selectedLayer) return;
-    if (target === 'GH' || target === 'BB') return; 
+    if (target === 'GH' || target === 'BB') return;
+    if (getRemainingTime('comp_sync')) return;
+
+    const cost = 5;
+    if (!useInfiniteCreditsForTest && !isPro && creditsRemaining !== null && creditsRemaining < cost) {
+      onUnlockRequest();
+      return;
+    }
+
+    try {
+      const consumeResult = await consumeCredits({ action_type: 'comp_sync', credits_consumed: cost });
+      if (consumeResult?.error) {
+        if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
+        return;
+      }
+    } catch {
+      return;
+    }
 
     setIsSyncingComp(true);
     setTimeout(() => {
@@ -585,7 +661,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       {activeTab === 'TARGET' && (
         <TargetTab
             selectedLayer={selectedLayer}
-            setSelectedLayer={setSelectedLayer}
+            setSelectedLayer={() => {}}
             lang={lang}
             setLang={setLang}
             generatedCode={generatedCode}
@@ -599,6 +675,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             lastSyncedComp={lastSyncedComp}
             getRemainingTime={getRemainingTime}
             setLastSyncedComp={setLastSyncedComp}
+            isPro={isPro}
+            onUnlockRequest={onUnlockRequest}
+            isSbConnected={isSbConnected}
         />
       )}
 

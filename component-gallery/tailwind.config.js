@@ -6,7 +6,6 @@ export default {
     '../components/**/*.{tsx,ts,jsx,js}',
     '../constants.ts',
   ],
-  safelist: [{ pattern: /bg-\[#ff90e8\]/ }],
   theme: {
     extend: {},
   },

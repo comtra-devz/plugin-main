@@ -2,6 +2,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
+import {
+  BrutalDropdown,
+  brutalSelectOptionRowClass,
+  brutalSelectOptionSelectedClass,
+} from '../components/ui/BrutalSelect';
 import { UserPlan } from '../types';
 import { getSystemToastOptions } from '../lib/errorCopy';
 
@@ -50,7 +55,6 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   const [selectedSystem, setSelectedSystem] = useState(DESIGN_SYSTEMS[0]);
   const [isSystemOpen, setIsSystemOpen] = useState(false);
   const [systemSearch, setSystemSearch] = useState('');
-  const dsDropdownRef = useRef<HTMLDivElement>(null);
 
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
@@ -67,19 +71,6 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
           setPromptText(initialPrompt);
       }
   }, [initialPrompt]);
-
-  // Click Outside for Dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (dsDropdownRef.current && !dsDropdownRef.current.contains(event.target as Node)) {
-            setIsSystemOpen(false);
-        }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   const isPro = plan === 'PRO';
   const infiniteForTest = !!useInfiniteCreditsForTest;
@@ -439,54 +430,65 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
         <p className="text-[10px] text-gray-500">
           Define the component perimeter. Default uses your current/linked library and cannot be empty.
         </p>
-        <div className="relative" ref={dsDropdownRef}>
-          <div
-            data-component="Generate: DS Selector"
-            onClick={() => setIsSystemOpen(!isSystemOpen)}
-            className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold"
-          >
-            <span>{selectedSystem}</span>
-            <div className="flex items-center gap-2">
-              {selectedSystem !== DESIGN_SYSTEMS[0] && (
-                <span
-                  onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
-                  className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
-                >
-                  ✕
-                </span>
-              )}
-              <span>{isSystemOpen ? '▲' : '▼'}</span>
-            </div>
-          </div>
-
-          {isSystemOpen && (
-            <div className="absolute top-full left-0 w-full bg-white border-2 border-black border-t-0 shadow-[4px_4px_0_0_#000] z-30 max-h-[200px] flex flex-col">
-              <input
-                type="text"
-                placeholder="Search System..."
-                autoFocus
-                value={systemSearch}
-                onChange={(e) => setSystemSearch(e.target.value)}
-                className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div className="overflow-y-auto flex-1 custom-scrollbar">
-                {filteredSystems.map(sys => (
-                  <div
-                    key={sys}
-                    onClick={() => { setSelectedSystem(sys); setIsSystemOpen(false); setSystemSearch(''); }}
-                    className={`p-2 text-xs hover:bg-[#ff90e8] cursor-pointer border-b border-gray-100 last:border-0 ${selectedSystem === sys ? 'bg-black text-white' : ''}`}
+        <BrutalDropdown
+          open={isSystemOpen}
+          onOpenChange={setIsSystemOpen}
+          maxHeightClassName="max-h-[240px]"
+          panelClassName="!overflow-hidden flex flex-col p-0"
+          trigger={
+            <button
+              type="button"
+              data-component="Generate: DS Selector"
+              onClick={() => setIsSystemOpen(!isSystemOpen)}
+              className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
+            >
+              <span className="truncate min-w-0">{selectedSystem}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedSystem !== DESIGN_SYSTEMS[0] && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); } }}
+                    className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
                   >
-                    {sys}
-                  </div>
-                ))}
-                {filteredSystems.length === 0 && (
-                  <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+                    ✕
+                  </span>
                 )}
+                <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
               </div>
-            </div>
-          )}
-        </div>
+            </button>
+          }
+        >
+          <input
+            type="text"
+            placeholder="Search System..."
+            autoFocus
+            value={systemSearch}
+            onChange={(e) => setSystemSearch(e.target.value)}
+            className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+            {filteredSystems.map((sys) => (
+              <div
+                key={sys}
+                role="option"
+                onClick={() => {
+                  setSelectedSystem(sys);
+                  setIsSystemOpen(false);
+                  setSystemSearch('');
+                }}
+                className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+              >
+                {sys}
+              </div>
+            ))}
+            {filteredSystems.length === 0 && (
+              <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+            )}
+          </div>
+        </BrutalDropdown>
       </div>
 
       {!showReport ? (

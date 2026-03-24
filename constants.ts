@@ -9,6 +9,9 @@ export const AUTH_BACKEND_URL =
 /** Plugin ID (manifest); usato per postMessage sicuro verso Figma */
 export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
 
+/** Preline library — partner per utenti senza design system. Prima del go-live: valutare link referral/partner. Vedi TO-DO-BEFORE-GOING-LIVE. */
+export const PRELINE_URL = 'https://preline.co';
+
 /** Email degli utenti di test: crediti infiniti di default; opzione "Simula Free Tier" per testare logica reale. Vuoto = tutti gli account sono effettivi (detrazioni, storico, badge, livelli e dashboard al 100%). */
 export const TEST_USER_EMAILS: string[] = [];
 

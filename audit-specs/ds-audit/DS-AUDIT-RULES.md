@@ -493,6 +493,8 @@ Producono **raccomandazioni** (`categoryId: optimization`, `recommendation: true
 - **8.2 DS-OPT-2** Slot mancanti: aree variabili come slot. `autoFixAvailable`: feasible.
 - **8.3 DS-OPT-3** Token da estrarre: valori ripetuti. `autoFixAvailable`: feasible.
 - **8.4 DS-OPT-4** Varianti da introdurre: component set. `optimizationPayload`: suggestedVariants.
+- **8.5 DS-OPT-5** Pochi token: scansionare design e proporre token primari. `optimizationPayload`: suggestedTokens. autoFixAvailable: feasible.
+- **8.6 DS-OPT-6** Nomi token non scalabili: proporre struttura primitivo/semantico (Tailwind). autoFixAvailable: false.
 
 ---
 
@@ -507,7 +509,7 @@ Producono **raccomandazioni** (`categoryId: optimization`, `recommendation: true
 | 5.1–5.4 | consistency |
 | 6.1–6.3 | copy |
 | 7.1–7.4 | adoption / coverage / naming / consistency (come più appropriato) |
-| 8.1–8.4 | optimization |
+| 8.1–8.6 | optimization |
 
 ---
 

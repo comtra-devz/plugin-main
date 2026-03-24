@@ -7,9 +7,6 @@ export default {
     '!./dist/**',
     '!./build.mjs',
   ],
-  safelist: [
-    { pattern: /bg-\[#ff90e8\]/ }, // primary CTA rosa: non deve essere rimosso dalla purge
-  ],
   theme: {
     extend: {},
   },

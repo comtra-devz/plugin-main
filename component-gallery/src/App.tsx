@@ -1,13 +1,21 @@
 import React, { useState } from 'react';
 import { Button } from '@comtra/components/ui/Button';
+import {
+  BrutalDropdown,
+  BrutalSelect,
+  brutalMenuRowClass,
+  brutalSelectOptionRowClass,
+  brutalSelectOptionSelectedClass,
+} from '@comtra/components/ui/BrutalSelect';
 import { BRUTAL, COLORS } from '@comtra/constants';
 
-type SectionId = 'buttons' | 'cards' | 'form' | 'navigation' | 'tokens';
+type SectionId = 'buttons' | 'cards' | 'form' | 'selects' | 'navigation' | 'tokens';
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: 'buttons', label: 'Buttons' },
   { id: 'cards', label: 'Cards' },
   { id: 'form', label: 'Form & Inputs' },
+  { id: 'selects', label: 'Selects' },
   { id: 'navigation', label: 'Navigation' },
   { id: 'tokens', label: 'Colours & Tokens' },
 ];
@@ -41,6 +49,7 @@ export default function App() {
         {active === 'buttons' && <ButtonsSection />}
         {active === 'cards' && <CardsSection />}
         {active === 'form' && <FormSection />}
+        {active === 'selects' && <SelectsSection />}
         {active === 'navigation' && <NavigationSection />}
         {active === 'tokens' && <TokensSection />}
       </main>
@@ -137,6 +146,62 @@ function CardsSection() {
         <div className={`${BRUTAL.card} max-w-sm`}>
           <h3 className="font-black uppercase text-sm mb-2">Current Status</h3>
           <p className="text-xs text-gray-600">Testo secondario nella card.</p>
+        </div>
+      </Block>
+    </>
+  );
+}
+
+function SelectsSection() {
+  const [lang, setLang] = useState('tsx');
+  const [customOpen, setCustomOpen] = useState(false);
+
+  return (
+    <>
+      <SectionTitle
+        title="Selects"
+        desc="BrutalSelect / BrutalDropdown: bordo nero, ombra, hover opzioni giallo brand (#ffc900), selezione nera."
+      />
+      <Block title="BrutalSelect (singola)">
+        <div className="max-w-md">
+          <BrutalSelect
+            value={lang}
+            onChange={setLang}
+            options={[
+              { value: 'tsx', label: 'React + Tailwind' },
+              { value: 'html', label: 'HTML + Clean CSS' },
+              { value: 'vue', label: 'Vue 3' },
+            ]}
+            maxHeightClassName="max-h-56"
+          />
+        </div>
+      </Block>
+      <Block title="BrutalDropdown (pannello custom)">
+        <div className="max-w-md">
+          <BrutalDropdown
+            open={customOpen}
+            onOpenChange={setCustomOpen}
+            maxHeightClassName="max-h-48"
+            trigger={
+              <button
+                type="button"
+                onClick={() => setCustomOpen(!customOpen)}
+                className={`${BRUTAL.input} flex justify-between items-center gap-2 cursor-pointer h-10 bg-white w-full text-left`}
+              >
+                <span className="text-xs font-bold uppercase">Menu custom</span>
+                <span aria-hidden>{customOpen ? '▲' : '▼'}</span>
+              </button>
+            }
+          >
+            <div className={`${brutalMenuRowClass} border-b border-gray-100`}>
+              <span className="w-3 h-3 shrink-0 border border-black bg-white" />
+              <span className="text-xs font-bold">Con checkbox</span>
+            </div>
+            <div className={`${brutalSelectOptionRowClass} ${brutalSelectOptionSelectedClass}`.trim()}>
+              Riga selezionata (nero)
+            </div>
+            <div className={brutalSelectOptionRowClass}>Altra opzione</div>
+          </BrutalDropdown>
         </div>
       </Block>
     </>
