@@ -31,6 +31,7 @@ interface IssueListProps {
   onUndoDiscard: (e: React.MouseEvent, id: string) => void;
   onOpenFeedback: (e: React.MouseEvent, id: string, type: 'DISCARD' | 'BAD_FIX') => void;
   onSelectLayer: (e: React.MouseEvent, layerId: string) => void;
+  onSelectFlow?: (e: React.MouseEvent, flowName: string) => void;
   onNavDeviation: (e: React.MouseEvent, issueId: string, layerIds: string[], direction: 'prev' | 'next') => void;
   onFixAll: () => void;
   onUnlockRequest: () => void;
@@ -61,6 +62,7 @@ export const IssueList: React.FC<IssueListProps> = ({
   onUndoDiscard,
   onOpenFeedback,
   onSelectLayer,
+  onSelectFlow,
   onNavDeviation,
   onFixAll,
   onUnlockRequest,
@@ -74,7 +76,14 @@ export const IssueList: React.FC<IssueListProps> = ({
   showHiddenLayers = false,
   setShowHiddenLayers,
 }) => {
-  const remainingIssues = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id));
+  const remainingIssues = activeIssues.filter(
+    (i) =>
+      !fixedIds.has(i.id) &&
+      i.id !== 'p2' &&
+      !discardedIds.has(i.id) &&
+      !(i.categoryId === 'touch' && i.passes === true) &&
+      i.rule_id !== 'CLR-002'
+  );
   const getCredits = getCreditsForIssueProp ?? (() => 2);
   const fixAllCost = remainingIssues.reduce((sum, i) => sum + getCredits(i), 0);
 
@@ -147,6 +156,10 @@ export const IssueList: React.FC<IssueListProps> = ({
                     const isFeedbackSent = feedbackSentIds.has(i.id);
                     const isWireframeIssue = i.id === 'p2';
                     const isDeviationGroup = i.layerIds && i.layerIds.length > 1;
+                    const isTouchPassAdvisory = i.categoryId === 'touch' && i.passes === true;
+                  const flowScopedRules = new Set(['P-03', 'P-05', 'P-06', 'P-07', 'P-11', 'P-18']);
+                  const canSelectFlow = activeTab === 'PROTOTYPE' && !!i.flowName && !!onSelectFlow && !!i.rule_id && flowScopedRules.has(i.rule_id);
+                    const isOklchAdvisory = i.rule_id === 'CLR-002';
                     const currentIndex = deviationNavIndex[i.id] || 0;
                     
                     if (isDiscarded) {
@@ -226,7 +239,8 @@ export const IssueList: React.FC<IssueListProps> = ({
                         {expanded && !isFixed && !isFeedbackSent && (
                         <div className="mt-4 pt-3 border-t-2 border-dashed border-black animate-in slide-in-from-top-1">
                             <p className="text-xs font-medium mb-4 leading-relaxed">
-                            Problem: {i.msg}.<br/>Suggestion: {i.fix}.
+                            {isOklchAdvisory ? 'Maturity advisory' : 'Problem'}: {i.msg}.<br/>
+                            {isOklchAdvisory ? 'Recommended direction' : 'Suggestion'}: {i.fix}.
                             </p>
                             {i.categoryId === 'contrast' && (i.foregroundHex || i.backgroundHex) && (
                               <div className="flex flex-wrap items-center gap-3 mb-4 p-2 bg-gray-50 border border-black/10 rounded">
@@ -270,23 +284,28 @@ export const IssueList: React.FC<IssueListProps> = ({
                                 </div>
                             ) : (
                                 <button 
-                                    onClick={(e) => onSelectLayer(e, i.layerId)}
+                                    onClick={(e) => {
+                                      if (canSelectFlow) onSelectFlow?.(e, i.flowName!);
+                                      else onSelectLayer(e, i.layerId);
+                                    }}
                                     className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === i.layerId ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'}`}
                                 >
-                                    {layerSelectionFeedback === i.layerId ? 'SELECTED!' : 'Select Layer'}
+                                    {canSelectFlow ? 'Select Flow' : (layerSelectionFeedback === i.layerId ? 'SELECTED!' : 'Select Layer')}
                                 </button>
                             )}
                             
-                            {!(i.categoryId === 'touch' && i.passes === true) && (
-                            <Button
-                                variant="primary"
-                                layout="row"
-                                onClick={(e) => onFix(e, i.id)}
-                                className="flex-1 text-[10px] h-12 relative"
-                            >
-                                {isWireframeIssue ? 'Create Wireframe' : 'Auto-Fix Layer'}
-                                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
-                            </Button>
+                            {!isTouchPassAdvisory && (
+                              <Button
+                                  variant="primary"
+                                  layout="row"
+                                  onClick={(e) => onFix(e, i.id)}
+                                  className="flex-1 text-[10px] h-12 relative"
+                              >
+                                  {isWireframeIssue ? 'Create Wireframe' : isOklchAdvisory ? 'View Suggestion' : 'Auto-Fix Layer'}
+                                  {!isOklchAdvisory && (
+                                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
+                                  )}
+                              </Button>
                             )}
                             </div>
                             )}

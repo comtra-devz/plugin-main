@@ -107,7 +107,11 @@ async function selectLayerAndReveal(layerId: string): Promise<boolean> {
     await new Promise<void>((r) => setTimeout(r, 0));
   }
 
-  figma.currentPage.selection = [sceneNode];
+  try {
+    figma.currentPage.selection = [sceneNode];
+  } catch (_) {
+    return false;
+  }
 
   await new Promise<void>((r) => setTimeout(r, 0));
   try {
@@ -295,6 +299,7 @@ async function getContrastFixPreview(layerId: string): Promise<ContrastFixPrevie
 
   const fill = getFillFromNode(node);
   if (!fill) return null;
+  const currentHex = rgbToHex(fill.r, fill.g, fill.b);
   const bgLum = getBackgroundLuminanceFromNode(node);
   const target = adjustForContrast(fill.r, fill.g, fill.b, bgLum, CONTRAST_AA_MIN);
   const targetHex = rgbToHex(target.r, target.g, target.b);
@@ -334,10 +339,12 @@ async function getContrastFixPreview(layerId: string): Promise<ContrastFixPrevie
       }
     }
     if (best) {
+      const picked = primitives.find((p) => p.id === best.id);
+      const pickedHex = picked ? rgbToHex(picked.r, picked.g, picked.b) : null;
       return {
         source: 'variable',
         label: best.name,
-        message: `We'll use your variable «${best.name}» (same tone) to meet WCAG AA contrast.${instanceNote}`,
+        message: `We'll bind text color to variable «${best.name}»${pickedHex ? ` (${pickedHex})` : ''} to meet WCAG AA contrast (same tone).${instanceNote}`,
         variableId: best.id,
         instanceLocalMain: instCtx === 'local_instance',
       };
@@ -357,10 +364,11 @@ async function getContrastFixPreview(layerId: string): Promise<ContrastFixPrevie
     }
     if (withSameHue.length > 0) {
       const chosen = withSameHue[0];
+      const styleHex = rgbToHex(chosen.r, chosen.g, chosen.b);
       return {
         source: 'style',
         label: chosen.name,
-        message: `We'll apply the style «${chosen.name}» (same tone) to meet WCAG AA.${instanceNote}`,
+        message: `We'll apply paint style «${chosen.name}» (${styleHex}) to the text fill to meet WCAG AA (same tone).${instanceNote}`,
         styleId: chosen.id,
         instanceLocalMain: instCtx === 'local_instance',
       };
@@ -370,7 +378,7 @@ async function getContrastFixPreview(layerId: string): Promise<ContrastFixPrevie
   return {
     source: 'hardcoded',
     label: targetHex,
-    message: `No variables or styles found. We'll set this color (same tone) to meet WCAG AA: ${targetHex}.${instanceNote}`,
+    message: `No variables or styles found. We'll apply a direct text fill update: ${currentHex} -> ${targetHex} (same tone) to meet WCAG AA.${instanceNote}`,
     r: target.r,
     g: target.g,
     b: target.b,
@@ -1970,6 +1978,7 @@ figma.ui.onmessage = async (raw: any) => {
     const layerId = msg.layerId;
     if (layerId) {
       const ok = await selectLayerAndReveal(layerId);
+      figma.ui.postMessage({ type: 'select-layer-result', layerId, ok });
       if (!ok) {
         figma.notify('Could not open that layer — it may be deleted or in an unloaded page.', {
           error: true,

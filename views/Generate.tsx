@@ -702,7 +702,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
               <li><strong>Step 1 - Context:</strong> pick one visual source: a current Figma selection <strong>or</strong> an uploaded screenshot.</li>
               <li><strong>Step 2 - Design System:</strong> choose the style perimeter (default is current/linked library).</li>
               <li><strong>Step 3 - AI Prompt:</strong> write your intent in the terminal and optionally paste Figma frame links.</li>
-              <li><strong>Execution:</strong> Comtra runs the best A/B generation path in the background (A direct, B ASCII planning).</li>
+              <li><strong>Execution:</strong> Comtra selects the best generation strategy in the background and returns a production-ready action plan.</li>
             </ul>
             <div className="flex justify-end mt-4">
               <Button variant="secondary" onClick={() => setShowReadFirstModal(false)} className="text-xs">

@@ -476,10 +476,10 @@ function collectOKLCHIssues(fileJson, issues, idGen) {
       id: idGen(),
       categoryId: 'color',
       rule_id: 'CLR-002',
-      msg: 'File uses RGB/hex fills — consider OKLCH tokens for perceptual consistency',
+      msg: 'Token maturity advisory: this file relies on RGB/hex fills; consider OKLCH token definitions for more perceptual consistency',
       severity: 'LOW',
       layerId: document.children[0]?.id || document.id,
-      fix: 'Use OKLCH for tokens (e.g. oklch(0.65 0.15 250)) and ensure contrast ≥ 4.5:1.',
+      fix: 'Define/maintain colors in OKLCH in your design-system source, keep WCAG contrast checks (AA/AAA), and sync HEX/sRGB fallbacks to Figma (e.g. oklch(0.65 0.15 250) -> mapped token in Figma).',
       pageName: document.children[0]?.name || '',
     });
   }

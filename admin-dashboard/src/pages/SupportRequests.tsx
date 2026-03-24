@@ -2,6 +2,22 @@ import { useCallback, useEffect, useState } from 'react';
 import { fetchSupportFeedback, type SupportFeedbackItem } from '../api';
 import PageHeader from '../components/PageHeader';
 
+function renderSignal(item: SupportFeedbackItem): string {
+  if (item.source !== 'Support Ticket') {
+    if (item.thumbs === 'up') return '👍 Positivo';
+    if (item.thumbs === 'down') return '👎 Negativo';
+    return '—';
+  }
+
+  const ticketType = (item.variant || '').toUpperCase().trim();
+  if (ticketType === 'BUG') return '🐛 Bug';
+  if (ticketType === 'FEATURE') return '🚀 Feature';
+  if (ticketType === 'AUDIT') return '🛠 Audit';
+  if (ticketType === 'DISCARD') return '🗂 Discard';
+  if (ticketType === 'DOCS') return '📚 Docs';
+  return `📝 ${item.variant || 'Ticket'}`;
+}
+
 export default function SupportRequests() {
   const [items, setItems] = useState<SupportFeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +65,7 @@ export default function SupportRequests() {
                 <th scope="col">Data</th>
                 <th scope="col">Origine</th>
                 <th scope="col">Variante</th>
-                <th scope="col">Valutazione</th>
+                <th scope="col">Segnale</th>
                 <th scope="col">Commento</th>
                 <th scope="col">Utente</th>
               </tr>
@@ -62,7 +78,7 @@ export default function SupportRequests() {
                   </td>
                   <td>{r.source}</td>
                   <td><strong>{r.variant}</strong></td>
-                  <td>{r.source === 'Support Ticket' ? (r.variant === 'BUG' ? '🐛' : r.variant === 'FEATURE' ? '🚀' : '❤️') : (r.thumbs === 'up' ? '👍' : '👎')}</td>
+                  <td>{renderSignal(r)}</td>
                   <td style={{ maxWidth: 280 }}>{r.comment || '—'}</td>
                   <td className="mono" style={{ fontSize: '0.85rem' }}>{r.user_masked}</td>
                 </tr>

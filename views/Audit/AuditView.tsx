@@ -104,7 +104,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [protoAuditError, setProtoAuditError] = useState<string | null>(null);
   /** Figma canvas page for prototype flows (synced on tab open + currentpagechange). */
   const [prototypeCanvasPageId, setPrototypeCanvasPageId] = useState<string>('');
-  const [prototypeCanvasPageName, setPrototypeCanvasPageName] = useState<string>('');
   /** Prototype full-page loader: indeterminate-style bar (never sits at 100% until done). */
   const [protoLoaderBarPercent, setProtoLoaderBarPercent] = useState(0);
   const protoCostRef = useRef<number>(0);
@@ -124,6 +123,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     isOpen: boolean;
     title: string;
     message: string;
+    details?: {
+      rule?: string;
+      method?: string;
+      action?: string;
+      target?: string;
+      scope?: string;
+      dsPriority?: string;
+      note?: string;
+      costLabel?: string;
+    };
     isWarning?: boolean;
     confirmLabel?: string;
     onConfirm: () => void;
@@ -138,6 +147,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [isScopeDropdownOpen, setIsScopeDropdownOpen] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
+  // True right after "Authorize" click to prevent any frame where underlying UI becomes visible.
+  const [isLaunchingAudit, setIsLaunchingAudit] = useState(false);
   const [scanProgress, setScanProgress] = useState({ percent: 0, count: 0 });
   const [fakeProgressPercent, setFakeProgressPercent] = useState(0);
   const fakeProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -145,6 +156,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
   const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
+  const [pendingLayerSelectionId, setPendingLayerSelectionId] = useState<string | null>(null);
   /** When user clicks Auto-Fix on a contrast issue we request a preview; this holds pending data until we get the response. */
   const pendingContrastFixRef = useRef<{ issueId: string; layerId: string; cost: number } | null>(null);
   const pendingTouchFixRef = useRef<{ issueId: string; layerId: string; cost: number; targetMin: number } | null>(null);
@@ -212,6 +224,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     (message: string, isA11y: boolean, isUx?: boolean) => {
       setPendingScanType(null);
       setWaitingForFileContext(false);
+      setIsLaunchingAudit(false);
       if (isUx) {
         setUxAuditLoading(false);
         if (isFileNotSavedError(message)) {
@@ -267,11 +280,11 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
 
-  // A11Y: filter by scope (all vs page/current) when we have results
+  // A11Y: filter by page only when scope is explicitly "page".
+  // For "current" selection, issues already come scoped by selected nodes and can be on any page:
+  // filtering again by selectedPageId (dropdown state) can hide valid issues.
   const a11yIssuesRaw = a11yAuditIssues != null ? a11yAuditIssues : A11Y_ISSUES;
-  // When scope is "page" OR "current selection", we still know which page we're on,
-  // so treat both as "page-scoped" for purposes of grouping/filtering issues by pageName.
-  const isPageScoped = (scanScope === 'page' || scanScope === 'current') && !!selectedPageId;
+  const isPageScoped = scanScope === 'page' && !!selectedPageId;
   const selectedPageName = isPageScoped && selectedPageId
     ? documentPages.find(p => p.id === selectedPageId)?.name
     : null;
@@ -473,7 +486,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       if (msg.type === 'flow-starting-points-result' && Array.isArray(msg.flows)) {
         setFlowStartingPoints(msg.flows);
         if (typeof msg.pageId === 'string') setPrototypeCanvasPageId(msg.pageId);
-        if (typeof msg.pageName === 'string') setPrototypeCanvasPageName(msg.pageName);
         setSelectedFlowIds((prev) => {
           const valid = new Set((msg.flows as { nodeId: string }[]).map((f) => f.nodeId));
           return prev.filter((id) => valid.has(id));
@@ -482,6 +494,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       if (msg.type === 'proto-audit-result') {
         const issues = Array.isArray(msg.issues) ? msg.issues as AuditIssue[] : [];
         const err = msg.error as string | undefined;
+        setIsLaunchingAudit(false);
         setProtoAuditIssues(issues);
         setProtoLoaderBarPercent(100);
         setProtoAuditLoading(false);
@@ -502,6 +515,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               else if (result.error) setProtoAuditError(result.error);
             });
           }
+        }
+      }
+      if (msg.type === 'select-layer-result') {
+        const ok = msg.ok === true;
+        const selectedId = typeof msg.layerId === 'string' ? msg.layerId : pendingLayerSelectionId;
+        setPendingLayerSelectionId(null);
+        if (ok && selectedId) {
+          setLayerSelectionFeedback(selectedId);
+          setTimeout(() => setLayerSelectionFeedback(null), 2000);
         }
       }
       if (msg.type === 'count-nodes-progress') {
@@ -537,6 +559,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           const preview = msg.preview as {
             source: string;
             message: string;
+            label?: string;
             variableId?: string;
             styleId?: string;
             r?: number;
@@ -567,12 +590,24 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             return;
           }
           const cost = pending.cost;
-          const dsBanner =
-            '\n\nA11Y priority: we fix at the design-system source (color variables / text styles when possible) so every screen stays consistent.';
+          const action =
+            preview.source === 'variable'
+              ? `Bind text fill to variable "${preview.label ?? 'selected token'}".`
+              : preview.source === 'style'
+                ? `Apply paint style "${preview.label ?? 'selected style'}" to text fill.`
+                : 'Update text fill directly with computed accessible color.';
           setConfirmConfig({
             isOpen: true,
             title: 'Confirm Auto-Fix',
-            message: `${preview.message}${dsBanner}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            message: `${preview.message}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            details: {
+              method: preview.source === 'hardcoded' ? 'Direct update' : preview.source === 'style' ? 'Paint style' : 'Variable token',
+              action,
+              target: 'Text fill',
+              scope: 'Current layer',
+              dsPriority: 'A11Y priority: fix at design-system source when possible.',
+              costLabel: `${cost} credit${cost !== 1 ? 's' : ''}`,
+            },
             confirmLabel: `Apply Fix (-${cost} Credits)`,
             onConfirm: async () => {
               const result = await consumeCredits({ action_type: ACTION_AUTO_FIX, credits_consumed: cost });
@@ -632,12 +667,25 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             setAuditFixError('Unexpected preview state.');
             return;
           }
-          const dsBanner =
-            '\n\nA11Y priority: we fix at the design-system source (main component + spacing tokens when possible) so every screen stays consistent.';
+          const method = preview.source === 'variable' ? 'Spacing token' : preview.source === 'hardcoded' ? 'Padding update' : 'Resize';
+          const action =
+            preview.source === 'variable'
+              ? `Apply spacing variable to auto-layout paddings${preview.paddingDelta ? ` (>= ${preview.paddingDelta}px target delta)` : ''}.`
+              : preview.source === 'hardcoded'
+                ? `Add ${preview.paddingDelta ?? 0}px padding on each side of the auto-layout host.`
+                : `Resize layer to ${Math.round(preview.newWidth ?? 0)} x ${Math.round(preview.newHeight ?? 0)} px.`;
           setConfirmConfig({
             isOpen: true,
             title: 'Confirm Auto-Fix',
-            message: `${preview.message}${dsBanner}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            message: `${preview.message}\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+            details: {
+              method,
+              action,
+              target: preview.source === 'resize' ? 'Layer size' : 'Hit area',
+              scope: preview.appliesToMainComponent ? 'Main component in this file' : 'Current layer',
+              dsPriority: 'A11Y priority: fix at design-system source (main + spacing tokens when possible).',
+              costLabel: `${cost} credit${cost !== 1 ? 's' : ''}`,
+            },
             confirmLabel: `Apply Fix (-${cost} Credits)`,
             onConfirm: async () => {
               const result = await consumeCredits({
@@ -705,7 +753,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         msg = { type: 'file-context-result', ...state.meta, fileJson };
       }
       if (msg.type === 'file-context-result') {
-        setWaitingForFileContext(false);
         const payload = confirmPayloadRef.current;
         if (!payload) return;
         confirmPayloadRef.current = null;
@@ -736,15 +783,16 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         else setAuditScopeLabel('Page');
         setAuditScopeName(typeof msg.selectionName === 'string' ? msg.selectionName : '');
         setAuditScopeIsCurrent(msg.scope === 'current');
-        const auditBody = hasFileJson
-          ? { file_json: msg.fileJson as object }
-          : {
+        // Prefer file_key whenever available to keep request payload small and avoid 413 on large files.
+        const auditBody = hasFileKey
+          ? {
               file_key: msg.fileKey as string,
               scope: msg.scope ?? 'all',
               page_id: msg.pageId ?? undefined,
               node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
               page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
-            };
+            }
+          : { file_json: msg.fileJson as object };
 
         const setAuditError = (message: string) => {
           showAuditError(message, isA11yScan, isUxScan);
@@ -811,7 +859,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setAuditError('Audit not available');
               return;
             }
-            if (payload.pendingScanType === 'MAIN') setIsScanning(true);
+            if (payload.pendingScanType === 'MAIN') {
+              setHasAudited(true);
+              setLastAuditDate(new Date());
+            }
             else if (payload.pendingScanType === 'DEEP' || payload.pendingScanType === 'A11Y') {
               setIsDeepScanning(true);
               setTimeout(() => {
@@ -833,6 +884,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           } finally {
             setPendingScanType(null);
             setWaitingForFileContext(false);
+            setIsLaunchingAudit(false);
             setA11yAuditLoading((prev) => (isA11yScan ? false : prev));
             setDsAuditLoading((prev) => (!isA11yScan ? false : prev));
             setUxAuditLoading((prev) => (isUxScan ? false : prev));
@@ -887,6 +939,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       message: `This audit will use ${cost} credit${cost !== 1 ? 's' : ''}. Continue?`,
       confirmLabel: `Run (-${cost} credit${cost !== 1 ? 's' : ''})`,
       onConfirm: () => {
+        setIsLaunchingAudit(true);
         setConfirmConfig(null);
         setUxAuditError(null);
         confirmPayloadRef.current = { cost, score: 0, pendingScanType: 'UX' };
@@ -921,6 +974,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       message: `This audit will use ${cost} credit${cost !== 1 ? 's' : ''} (${selectedFlowIds.length} ${flowWord}). Continue?`,
       confirmLabel: 'Authorize Charge',
       onConfirm: () => {
+        setIsLaunchingAudit(true);
         setConfirmConfig(null);
         setProtoAuditError(null);
         setProtoAuditLoading(true);
@@ -934,15 +988,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     });
   }, [flowStartingPoints.length, selectedFlowIds, knownZeroCredits, onUnlockRequest]);
 
-  const handleRefreshPrototypeFlows = useCallback(() => {
-    window.parent.postMessage({ pluginMessage: { type: 'get-flow-starting-points' } }, '*');
-  }, []);
-
   const handleConfirmScan = () => {
     const cost = scanStats.cost;
     const scanType = pendingScanTypeRef.current ?? pendingScanType ?? (activeTab === 'A11Y' ? 'A11Y' : 'MAIN');
     if (!scanType) return;
     pendingScanTypeRef.current = null;
+    setIsLaunchingAudit(true);
     confirmPayloadRef.current = { cost, score, pendingScanType: scanType };
     setShowReceipt(false);
     setWaitingForFileContext(true);
@@ -968,6 +1019,29 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     const issue = activeIssues.find(i => i.id === id);
     const cost = issue ? getCreditsForIssue(issue) : 2;
     const layerId = issue?.layerIds?.[deviationNavIndex[id] ?? 0] ?? issue?.layerId;
+    const isOklchAdvisory = issue?.rule_id === 'CLR-002';
+
+    if (isOklchAdvisory) {
+      setConfirmConfig({
+        isOpen: true,
+        title: 'OKLCH Suggestion',
+        message:
+          'Figma does not support native OKLCH variables yet, so this is a design-system recommendation (no direct canvas auto-fix).',
+        details: {
+          rule: 'CLR-002',
+          method: 'Advisory (no auto-apply)',
+          action: 'Define/adjust the token in OKLCH in your DS source, then sync its HEX/sRGB fallback to Figma.',
+          target: 'Color tokens',
+          scope: 'Design system source',
+          dsPriority: 'Check contrast using WCAG as usual; use OKLCH for more perceptual consistency across steps.',
+          note: issue?.fix,
+          costLabel: '0 credits',
+        },
+        confirmLabel: 'OK',
+        onConfirm: () => setConfirmConfig(null),
+      });
+      return;
+    }
 
     if (issue?.categoryId === 'contrast' && layerId) {
       pendingContrastFixRef.current = { issueId: id, layerId, cost };
@@ -992,7 +1066,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     setConfirmConfig({
         isOpen: true,
         title: "Confirm Auto-Fix",
-        message: `This action will apply changes to your layer and consume ${cost} credit${cost !== 1 ? 's' : ''}. Are you sure?`,
+        message: `This action will apply changes to your layer.\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
+        details: {
+          method: 'Automatic fix',
+          action: 'Apply suggested fix for this issue category.',
+          target: issue?.categoryId ? `Category: ${issue.categoryId}` : 'Selected issue layer',
+          scope: 'Current layer',
+          costLabel: `${cost} credit${cost !== 1 ? 's' : ''}`,
+        },
         confirmLabel: `Apply Fix (-${cost} Credits)`,
         onConfirm: async () => {
             const result = await consumeCredits({
@@ -1027,7 +1108,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   }
 
   const handleFixAll = () => {
-      const unfixed = activeIssues.filter(i => !fixedIds.has(i.id) && i.id !== 'p2' && !discardedIds.has(i.id)); 
+      const unfixed = activeIssues.filter(
+        (i) =>
+          !fixedIds.has(i.id) &&
+          i.id !== 'p2' &&
+          !discardedIds.has(i.id) &&
+          !(i.categoryId === 'touch' && i.passes === true) &&
+          i.rule_id !== 'CLR-002'
+      );
       if (unfixed.length === 0) return;
 
       const totalCredits = getCreditsForFixAll(unfixed);
@@ -1222,11 +1310,24 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       setFeedbackOpen(false);
   };
 
+  const postSelectLayer = (layerId: string) => {
+    setPendingLayerSelectionId(layerId);
+    window.parent.postMessage({ pluginMessage: { type: 'select-layer', layerId } }, '*');
+  };
+
   const handleSelectLayer = (e: React.MouseEvent, layerId: string) => {
     e.stopPropagation();
-    setLayerSelectionFeedback(layerId);
-    setTimeout(() => setLayerSelectionFeedback(null), 2000);
-    window.parent.postMessage({ pluginMessage: { type: 'select-layer', layerId } }, '*');
+    postSelectLayer(layerId);
+  };
+
+  const handleSelectFlow = (e: React.MouseEvent, flowName: string) => {
+    e.stopPropagation();
+    const normalize = (v: string) => v.trim().toLowerCase();
+    const byName = flowStartingPoints.find((f) => normalize(f.name || '') === normalize(flowName));
+    const fallback = !byName ? flowStartingPoints.find((f) => selectedFlowIds.includes(f.nodeId)) : null;
+    const targetNodeId = byName?.nodeId || fallback?.nodeId;
+    if (!targetNodeId) return;
+    postSelectLayer(targetNodeId);
   };
 
   const handleShare = () => {
@@ -1266,6 +1367,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     onUndoDiscard: handleUndoDiscard,
     onOpenFeedback: handleOpenFeedback,
     onSelectLayer: handleSelectLayer,
+    onSelectFlow: handleSelectFlow,
     onNavDeviation: handleNavDeviation,
     onFixAll: handleFixAll,
     onUnlockRequest: onUnlockRequest,
@@ -1279,8 +1381,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const wordCount = feedbackText.trim().split(/\s+/).filter(w => w.length > 0).length;
   const canSubmitFeedback = wordCount >= 2;
 
-  // Full-page loader only after Authorize (not during first scan / count nodes). DS: isScanning. A11Y/UX: waitingForFileContext + auditLoading. Prototype: protoAuditLoading.
-  const showFullPageLoader = isScanning || waitingForFileContext || (activeTab === 'A11Y' && a11yAuditLoading) || (activeTab === 'UX' && uxAuditLoading) || (activeTab === 'PROTOTYPE' && protoAuditLoading);
+  // Keep one continuous blocking loader during the whole audit pipeline, avoiding visual "back-and-forth" flashes.
+  const showFullPageLoader =
+    isLaunchingAudit ||
+    waitingForFileContext ||
+    dsAuditLoading ||
+    (activeTab === 'A11Y' && a11yAuditLoading) ||
+    (activeTab === 'UX' && uxAuditLoading) ||
+    (activeTab === 'PROTOTYPE' && protoAuditLoading);
   const fullPageLoaderMsg = isProtoLoader ? protoLoaderMsg : isA11yLoader ? a11yLoaderMsg : loadingMsg;
   const nodeCount = scanStats.nodes || 0;
   const loaderBarDuration = nodeCount >= 10000 ? 28 : nodeCount >= 5000 ? 20 : nodeCount >= 2000 ? 14 : nodeCount >= 500 ? 9 : 6;
@@ -1309,19 +1417,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
            />
          )}
       </div>
-      {isLargeFile && !isProtoLoader && (
-        <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
-          Large file — analysis may take a minute or more.
-        </p>
-      )}
-      {isProtoLoader && (
-        <p className="mt-4 text-xs font-medium text-gray-600 max-w-xs">
-          Checking flows, connections and interactions…
-          <span className="block mt-2 text-[10px] text-gray-500">
-            Progress is approximate — it slows before the end and completes when analysis finishes.
-          </span>
-        </p>
-      )}
     </div>
   );
 
@@ -1343,6 +1438,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           <ConfirmationModal
             title={confirmConfig.title}
             message={confirmConfig.message}
+            details={confirmConfig.details}
             onConfirm={confirmConfig.onConfirm}
             onCancel={() => { setConfirmConfig(null); setAuditFixError(null); }}
             confirmLabel={confirmConfig.confirmLabel}
@@ -1552,8 +1648,6 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       {activeTab === 'PROTOTYPE' && (
         <PrototypeAuditTab
           flowStartingPoints={flowStartingPoints}
-          prototypeCanvasPageName={prototypeCanvasPageName}
-          onRefreshPrototypeFlows={handleRefreshPrototypeFlows}
           selectedFlowIds={selectedFlowIds}
           setSelectedFlowIds={setSelectedFlowIds}
           isFlowDropdownOpen={isFlowDropdownOpen}

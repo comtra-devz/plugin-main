@@ -14,10 +14,6 @@ export interface FlowStartingPoint {
 
 interface Props {
   flowStartingPoints: FlowStartingPoint[];
-  /** Name of the Figma canvas page the flow list refers to (current page in the editor). */
-  prototypeCanvasPageName?: string;
-  /** Re-request flows from the plugin (same as switching page). */
-  onRefreshPrototypeFlows?: () => void;
   selectedFlowIds: string[];
   setSelectedFlowIds: (ids: string[]) => void;
   isFlowDropdownOpen: boolean;
@@ -60,8 +56,6 @@ function getFlowSelectorLabel(selectedIds: string[], flows: FlowStartingPoint[])
  */
 export const PrototypeAuditTab: React.FC<Props> = ({
   flowStartingPoints,
-  prototypeCanvasPageName = '',
-  onRefreshPrototypeFlows,
   selectedFlowIds,
   setSelectedFlowIds,
   isFlowDropdownOpen,
@@ -121,29 +115,9 @@ export const PrototypeAuditTab: React.FC<Props> = ({
           <p className="text-xs font-medium text-gray-500 mt-4 px-4 mb-2">
             Run the Prototype audit on selected flows. Dead-ends, back nav, variables and more.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 mb-3 text-[10px] font-medium text-gray-600">
-            <span>
-              Flows follow your{' '}
-              <span className="font-black text-black">current Figma page</span>
-              {prototypeCanvasPageName ? (
-                <>
-                  : <span className="font-mono font-bold">{prototypeCanvasPageName}</span>
-                </>
-              ) : null}
-            </span>
-            {onRefreshPrototypeFlows && (
-              <button
-                type="button"
-                onClick={() => onRefreshPrototypeFlows()}
-                className="font-bold uppercase underline decoration-2 underline-offset-2 hover:text-black"
-              >
-                Refresh list
-              </button>
-            )}
-          </div>
           {flowStartingPoints.length === 0 ? (
             <p className="text-[10px] font-bold text-amber-700 bg-amber-50 border-2 border-amber-300 px-3 py-2 mx-4">
-              No flow starting points on this page. Switch to a page that has flows (or add a starting point in the Prototype panel), then use Refresh list if needed.
+              No flow starting points on this page. Set at least one in the Prototype panel.
             </p>
           ) : (
             <>
@@ -259,20 +233,6 @@ export const PrototypeAuditTab: React.FC<Props> = ({
 
       {/* Flow multi-select */}
       <div className="relative z-20">
-        <div className="flex items-center justify-between gap-2 mb-1 px-0.5">
-          <span className="text-[9px] font-bold text-gray-500 uppercase truncate" title={prototypeCanvasPageName}>
-            Page: {prototypeCanvasPageName || '—'}
-          </span>
-          {onRefreshPrototypeFlows && (
-            <button
-              type="button"
-              onClick={() => onRefreshPrototypeFlows()}
-              className="text-[9px] font-bold uppercase underline hover:text-black shrink-0"
-            >
-              Refresh
-            </button>
-          )}
-        </div>
         <BrutalDropdown
           open={isFlowDropdownOpen}
           onOpenChange={setIsFlowDropdownOpen}

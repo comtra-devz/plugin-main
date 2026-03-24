@@ -58,7 +58,8 @@ export const CREDITS_BY_RULE: Record<string, number> = {
   'TGT-001': 2,
   'TGT-003': 2,
   'CVD-001': 2,
-  'CLR-002': 2,
+  // OKLCH in Figma is advisory-only for now (no native token space auto-apply)
+  'CLR-002': 0,
   // Component deviation (multiple layers) could cost more
   // adoption + layerIds: already handled as single fix per issue
   // DS Optimization (audit-specs/ds-audit/DS-AUDIT-RULES.md §8)
