@@ -1443,9 +1443,17 @@ function parseConventionalMessage(fullMessage) {
 }
 
 async function handleWeeklyUpdates(req, res) {
-  const repo = (process.env.GITHUB_REPO || '').trim();
+  const explicitRepo = (process.env.GITHUB_REPO || '').trim();
+  const vercelOwner = (process.env.VERCEL_GIT_REPO_OWNER || '').trim();
+  const vercelSlug = (process.env.VERCEL_GIT_REPO_SLUG || '').trim();
+  const inferredRepo = vercelOwner && vercelSlug ? `${vercelOwner}/${vercelSlug}` : '';
+  const repo = explicitRepo || inferredRepo;
   if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-    return res.status(200).json({ updates: [], source: 'none', message: 'Set GITHUB_REPO (owner/repo) to enable' });
+    return res.status(200).json({
+      updates: [],
+      source: 'none',
+      message: 'Set GITHUB_REPO (owner/repo) or connect repository in Vercel to enable updates',
+    });
   }
   const token = (process.env.GITHUB_TOKEN || '').trim();
   const perPage = Math.min(50, Math.max(10, parseInt(req.query?.per_page, 10) || 30));

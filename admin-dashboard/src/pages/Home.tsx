@@ -4,7 +4,7 @@ import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExec
 import DualLineChart from '../components/DualLineChart';
 import HealthBadge from '../components/HealthBadge';
 import NotificationsBell from '../components/NotificationsBell';
-import { PLACEHOLDER_WEEKLY_UPDATES, type UpdateCategory } from '../data/weeklyUpdates';
+import { type UpdateCategory } from '../data/weeklyUpdates';
 
 const WEEKLY_UPDATES_PREVIEW = 3;
 const CATEGORY_BADGE_STYLE: Record<string, { bg: string }> = {
@@ -136,7 +136,7 @@ export default function Home() {
   if (!data) return null;
 
   const { users, credits, kimi, affiliates, funnel } = data;
-  const recentUpdates = weeklyUpdates.length > 0 ? weeklyUpdates.slice(0, WEEKLY_UPDATES_PREVIEW) : PLACEHOLDER_WEEKLY_UPDATES.slice(0, WEEKLY_UPDATES_PREVIEW);
+  const recentUpdates = weeklyUpdates.slice(0, WEEKLY_UPDATES_PREVIEW);
 
   return (
     <>
@@ -494,33 +494,39 @@ export default function Home() {
               <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1rem' }}>
                 Ultimi aggiornamenti in linguaggio semplice (derivati dai commit).
               </p>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-            {recentUpdates.map((u) => (
-              <li
-                key={u.id}
-                style={{
-                  padding: '0.5rem 0',
-                  borderBottom: '2px solid var(--black)',
-                }}
-              >
-                <span
-                  className="badge"
-                  style={{
-                    marginRight: '0.5rem',
-                    background: (CATEGORY_BADGE_STYLE[u.category] || CATEGORY_BADGE_STYLE.CHORE).bg,
-                    border: '2px solid var(--black)',
-                    fontSize: '0.65rem',
-                  }}
-                >
-                  {u.category}
-                </span>
-                <strong>{u.title}</strong>
-                <span style={{ color: 'var(--muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
-                  {new Date(u.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
-                </span>
-              </li>
-            ))}
-          </ul>
+              {recentUpdates.length > 0 ? (
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {recentUpdates.map((u) => (
+                    <li
+                      key={u.id}
+                      style={{
+                        padding: '0.5rem 0',
+                        borderBottom: '2px solid var(--black)',
+                      }}
+                    >
+                      <span
+                        className="badge"
+                        style={{
+                          marginRight: '0.5rem',
+                          background: (CATEGORY_BADGE_STYLE[u.category] || CATEGORY_BADGE_STYLE.CHORE).bg,
+                          border: '2px solid var(--black)',
+                          fontSize: '0.65rem',
+                        }}
+                      >
+                        {u.category}
+                      </span>
+                      <strong>{u.title}</strong>
+                      <span style={{ color: 'var(--muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                        {new Date(u.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ fontSize: '0.9rem', color: 'var(--muted)', margin: 0 }}>
+                  Nessun aggiornamento disponibile dal repository. Configura `GITHUB_REPO` su Vercel.
+                </p>
+              )}
           <Link to="/weekly-updates" className="brutal-btn primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
             Tutti gli aggiornamenti →
           </Link>

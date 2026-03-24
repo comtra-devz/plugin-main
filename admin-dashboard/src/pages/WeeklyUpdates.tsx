@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { fetchWeeklyUpdates, type WeeklyUpdateItem } from '../api';
 import PageHeader from '../components/PageHeader';
 import {
-  PLACEHOLDER_WEEKLY_UPDATES,
   UPDATE_CATEGORY_LABELS,
   type UpdateCategory,
 } from '../data/weeklyUpdates';
@@ -21,22 +20,20 @@ export default function WeeklyUpdates() {
   const [updatesList, setUpdatesList] = useState<WeeklyUpdateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<'github' | 'placeholder'>('placeholder');
+  const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<UpdateCategory | 'ALL'>('ALL');
 
   const load = () => {
     fetchWeeklyUpdates(50)
       .then((r) => {
-        if (r.updates?.length) {
-          setUpdatesList(r.updates);
-          setSource(r.source === 'github' ? 'github' : 'placeholder');
-        } else {
-          setUpdatesList(PLACEHOLDER_WEEKLY_UPDATES);
-          setSource('placeholder');
-        }
+        setUpdatesList(r.updates || []);
+        setSource(r.source === 'github' ? 'github' : 'placeholder');
+        setApiMessage(r.message || null);
       })
       .catch(() => {
-        setUpdatesList(PLACEHOLDER_WEEKLY_UPDATES);
+        setUpdatesList([]);
         setSource('placeholder');
+        setApiMessage('Aggiornamenti non disponibili ora. Riprova piu tardi.');
       })
       .finally(() => setLoading(false));
   };
@@ -69,6 +66,20 @@ export default function WeeklyUpdates() {
           ? 'Aggiornamenti derivati automaticamente dai commit del repository (conventional commits).'
           : 'Aggiornamenti da repository: imposta GITHUB_REPO (e opzionale GITHUB_TOKEN) nel progetto dashboard per abilitare il sync automatico.'}
       </p>
+      {source !== 'github' && apiMessage && (
+        <p
+          style={{
+            marginTop: 0,
+            marginBottom: '1rem',
+            padding: '0.5rem 0.65rem',
+            border: '2px solid var(--black)',
+            background: 'var(--yellow)',
+            fontSize: '0.85rem',
+          }}
+        >
+          {apiMessage}
+        </p>
+      )}
       {loading && <p className="loading">Caricamento…</p>}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
