@@ -11,11 +11,23 @@ import { sql } from '../../oauth-server/db.mjs';
 export const config = { api: { bodyParser: false } };
 
 // variant_id (Lemon) -> { credits_total, days } per plan_expires_at
+// Nota: nel nuovo store i checkout share usano variant numeriche diverse; manteniamo anche i vecchi ID come fallback.
 const VARIANT_TO_PRO = {
-  '1345293': { credits_total: 20, days: 7 },   // 1w
-  '1345303': { credits_total: 100, days: 30 }, // 1m
-  '1345310': { credits_total: 800, days: 180 }, // 6m
-  '1345319': { credits_total: 2000, days: 365 }, // 1y
+  // 1w
+  '1345293': { credits_total: 20, days: 7 },
+  '1450263': { credits_total: 20, days: 7 },
+
+  // 1m
+  '1345303': { credits_total: 100, days: 30 },
+  '1450299': { credits_total: 100, days: 30 },
+
+  // 6m
+  '1345310': { credits_total: 800, days: 180 },
+  '1450304': { credits_total: 800, days: 180 },
+
+  // 1y
+  '1345319': { credits_total: 2000, days: 365 },
+  '1450315': { credits_total: 2000, days: 365 },
 };
 
 function readRawBody(req) {

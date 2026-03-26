@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import PageHeader from '../components/PageHeader';
-import { scanNotionProductSources, type NotionProductSourcesResponse } from '../api';
+import {
+  scanNotionProductSources,
+  fetchProductSourcesStatus,
+  type NotionProductSourcesResponse,
+  type ProductSourcesStatusResponse,
+} from '../api';
 import ProductSourcesHistory from './ProductSourcesHistory';
 
-type Tab = 'scan' | 'history';
+type Tab = 'scan' | 'history' | 'status';
 
 export default function ProductImprovement() {
   const [tab, setTab] = useState<Tab>('scan');
@@ -12,6 +17,8 @@ export default function ProductImprovement() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NotionProductSourcesResponse | null>(null);
+  const [status, setStatus] = useState<ProductSourcesStatusResponse | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
   const [gitStep, setGitStep] = useState<0 | 1 | 2>(0);
   const [gitConfirmText, setGitConfirmText] = useState('');
   const [enrichLinkedIn, setEnrichLinkedIn] = useState(false);
@@ -25,6 +32,49 @@ export default function ProductImprovement() {
       setGitConfirmText('');
     }
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'status') return;
+    let cancelled = false;
+    setLoadingStatus(true);
+    setError(null);
+    fetchProductSourcesStatus()
+      .then((r) => {
+        if (cancelled) return;
+        setStatus(r);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setStatus(null);
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoadingStatus(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (tab !== 'status') return;
+    const t = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [tab]);
+
+  function formatMs(ms: number) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  }
 
   const runScan = () => {
     const p = pageId.trim();
@@ -93,6 +143,14 @@ export default function ProductImprovement() {
         </button>
         <button
           type="button"
+          className={`brutal-btn ${tab === 'status' ? 'primary' : ''}`}
+          style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+          onClick={() => setTab('status')}
+        >
+          Status / Timer
+        </button>
+        <button
+          type="button"
           className={`brutal-btn ${tab === 'history' ? 'primary' : ''}`}
           style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
           onClick={() => setTab('history')}
@@ -102,6 +160,79 @@ export default function ProductImprovement() {
       </div>
 
       {tab === 'history' && <ProductSourcesHistory />}
+
+      {tab === 'status' && (
+        <>
+          <section className="brutal-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+            <h2 className="section-title" style={{ marginTop: 0 }}>
+              Prossima analisi approfondita
+            </h2>
+            <p style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem' }}>
+              Il cron Vercel “pingga” ogni giorno, ma il lavoro profondo parte solo quando passa il gate (Fase 0/3/4/5/6 deep run).
+              Qui vedi il countdown stimato in base all’ultima run <code>ok</code> non <code>skipped</code>.
+            </p>
+
+            {loadingStatus && <p style={{ fontSize: '0.85rem' }}>Caricamento…</p>}
+            {!loadingStatus && !status && <p style={{ fontSize: '0.85rem' }}>Nessun dato disponibile.</p>}
+
+            {status && (
+              <>
+                <div
+                  style={{
+                    height: 12,
+                    borderRadius: 999,
+                    overflow: 'hidden',
+                    background: 'var(--card-bg, #eee)',
+                    border: '1px solid var(--muted-fg, #ddd)',
+                    marginBottom: '0.6rem',
+                  }}
+                >
+                  {(() => {
+                    const gateMs = status.gateMs;
+                    const remainingMs = Math.max(0, status.nextAtMs - nowMs);
+                    const elapsedMs = gateMs - remainingMs;
+                    const percent = gateMs > 0 ? Math.max(0, Math.min(1, elapsedMs / gateMs)) : 0;
+                    return (
+                      <div
+                        style={{
+                          width: `${Math.round(percent * 100)}%`,
+                          height: '100%',
+                          background: 'var(--primary, #0bf)',
+                        }}
+                      />
+                    );
+                  })()}
+                </div>
+
+                <div style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>
+                  <div>
+                    <strong>Gate:</strong> {status.gateDays} giorni
+                  </div>
+                  <div>
+                    <strong>Ultima run ok:</strong>{' '}
+                    {status.lastOkRanAtIso ? (
+                      <span>{new Date(status.lastOkRanAtIso).toLocaleString('it-IT')}</span>
+                    ) : (
+                      <span>n/d</span>
+                    )}
+                  </div>
+                  <div>
+                    <strong>Prossima:</strong> <span>{new Date(status.nextAtIso).toLocaleString('it-IT')}</span>
+                  </div>
+                  <div>
+                    <strong>Mancano:</strong> <span>{formatMs(Math.max(0, status.nextAtMs - nowMs))}</span>
+                  </div>
+                  {status.queuePending && (
+                    <div style={{ marginTop: '0.5rem', color: 'var(--muted-fg, #555)' }}>
+                      <strong>Coda attiva:</strong> batch #{status.queueBatchId}. Il cron in quella modalità bypassa il gate e “draina” i job.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        </>
+      )}
 
       {tab === 'scan' && (
         <>

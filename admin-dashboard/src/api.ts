@@ -863,3 +863,28 @@ export async function fetchProductSourcesQueue(params?: { limit?: number }): Pro
     migrationNeeded?: boolean;
   };
 }
+
+// --- Stato “quando parte la prossima analisi profonda” (Fase 0/3/4/5/6 deep run)
+export interface ProductSourcesStatusResponse {
+  ok: boolean;
+  serverNowMs: number;
+  serverNowIso: string;
+  gateDays: number;
+  gateMs: number;
+  lastOkRanAtMs: number | null;
+  lastOkRanAtIso: string | null;
+  nextAtMs: number;
+  nextAtIso: string;
+  remainingMs: number;
+  queuePending: boolean;
+  queueBatchId: number | null;
+}
+
+export async function fetchProductSourcesStatus(): Promise<ProductSourcesStatusResponse> {
+  const r = await fetch(`${BASE}/api/product-sources-status`, { headers: headers() });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as ProductSourcesStatusResponse;
+}
