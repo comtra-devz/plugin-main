@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchSupportFeedback, type SupportFeedbackItem } from '../api';
 import PageHeader from '../components/PageHeader';
 
@@ -65,12 +65,56 @@ function renderSignal(item: SupportFeedbackItem): string {
   return `📝 ${item.variant || 'Ticket'}`;
 }
 
+interface ParsedSupportRow {
+  requestId: string;
+  sourceDetail: string;
+  issueType: string;
+  issueCategory: string;
+  commentText: string;
+}
+
+interface SupportTableRow {
+  rowKey: string;
+  item: SupportFeedbackItem;
+  parsed: ParsedSupportRow;
+}
+
+function parseSupportRow(item: SupportFeedbackItem): ParsedSupportRow {
+  if (item.source !== 'Support Ticket') {
+    return {
+      requestId: item.id || '—',
+      sourceDetail: item.source,
+      issueType: item.variant || 'A/B',
+      issueCategory: 'Feedback',
+      commentText: item.comment || '—',
+    };
+  }
+
+  const raw = item.comment || '';
+  const issueCategory = (raw.match(/\[([^\]]+)\]/)?.[1] || 'Support').trim();
+  const tab = (raw.match(/Tab:\s*([^.\n]+)/i)?.[1] || '').trim();
+  const scope = (raw.match(/Scope:\s*([^.\n]+)/i)?.[1] || '').trim();
+  const issueId = (raw.match(/IssueId:\s*([A-Za-z0-9_-]+)/i)?.[1] || item.id || '—').trim();
+  const commentMatch = raw.match(/Comment:\s*([\s\S]*)$/i);
+  const commentText = (commentMatch?.[1] || raw || '—').trim();
+  const sourceDetail = [tab ? `Tab ${tab}` : '', scope ? `Scope ${scope}` : ''].filter(Boolean).join(' · ') || '—';
+
+  return {
+    requestId: issueId,
+    sourceDetail,
+    issueType: (item.variant || 'Ticket').toUpperCase(),
+    issueCategory,
+    commentText,
+  };
+}
+
 export default function SupportRequests() {
   const [items, setItems] = useState<SupportFeedbackItem[]>([]);
   const [metaById, setMetaById] = useState<RowMetaMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [replyItem, setReplyItem] = useState<SupportFeedbackItem | null>(null);
+  const tableWrapRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -95,16 +139,25 @@ export default function SupportRequests() {
     setMetaById(loadMeta());
   }, []);
 
+  const tableRows = useMemo<SupportTableRow[]>(
+    () =>
+      items.map((item) => {
+        const rowKey = `${item.source}-${item.id}-${item.created_at}`;
+        return { rowKey, item, parsed: parseSupportRow(item) };
+      }),
+    [items]
+  );
+
   const getMeta = useCallback(
-    (itemId: string): RowMeta => metaById[itemId] || defaultMeta(),
+    (rowKey: string): RowMeta => metaById[rowKey] || defaultMeta(),
     [metaById]
   );
 
-  const updateMeta = useCallback((itemId: string, patch: Partial<RowMeta>) => {
+  const updateMeta = useCallback((rowKey: string, patch: Partial<RowMeta>) => {
     setMetaById((prev) => {
       const next = {
         ...prev,
-        [itemId]: { ...(prev[itemId] || defaultMeta()), ...patch },
+        [rowKey]: { ...(prev[rowKey] || defaultMeta()), ...patch },
       };
       saveMeta(next);
       return next;
@@ -112,12 +165,18 @@ export default function SupportRequests() {
   }, []);
 
   const stats = {
-    total: items.length,
-    supportTickets: items.filter((i) => i.source === 'Support Ticket').length,
-    abFeedback: items.filter((i) => i.source !== 'Support Ticket').length,
-    highPriority: items.filter((i) => getMeta(i.id).priority === 'high').length,
-    solvedYes: items.filter((i) => getMeta(i.id).solved === 'yes').length,
-    onHold: items.filter((i) => getMeta(i.id).solved === 'on_hold').length,
+    total: tableRows.length,
+    supportTickets: tableRows.filter((r) => r.item.source === 'Support Ticket').length,
+    abFeedback: tableRows.filter((r) => r.item.source !== 'Support Ticket').length,
+    highPriority: tableRows.filter((r) => getMeta(r.rowKey).priority === 'high').length,
+    solvedYes: tableRows.filter((r) => getMeta(r.rowKey).solved === 'yes').length,
+    onHold: tableRows.filter((r) => getMeta(r.rowKey).solved === 'on_hold').length,
+  };
+
+  const scrollTable = (dir: 'left' | 'right') => {
+    const wrap = tableWrapRef.current;
+    if (!wrap) return;
+    wrap.scrollBy({ left: dir === 'left' ? -360 : 360, behavior: 'smooth' });
   };
 
   return (
@@ -154,13 +213,27 @@ export default function SupportRequests() {
       )}
 
       {!loading && !error && (
-        <div className="brutal-table-wrap">
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.5rem' }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+              Tabella estesa: usa le frecce per vedere tutte le colonne.
+            </p>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              <button type="button" className="brutal-btn" onClick={() => scrollTable('left')}>←</button>
+              <button type="button" className="brutal-btn" onClick={() => scrollTable('right')}>→</button>
+            </div>
+          </div>
+        <div className="brutal-table-wrap" ref={tableWrapRef}>
           <table className="brutal-table">
             <thead>
               <tr>
                 <th scope="col">Data</th>
                 <th scope="col">Origine</th>
                 <th scope="col">Tipo / Segnale</th>
+                <th scope="col">ID richiesta</th>
+                <th scope="col">Dettaglio provenienza</th>
+                <th scope="col">Tipologia issue</th>
+                <th scope="col">Categoria</th>
                 <th scope="col">Priorita</th>
                 <th scope="col">Reply</th>
                 <th scope="col">Solved</th>
@@ -169,24 +242,37 @@ export default function SupportRequests() {
               </tr>
             </thead>
             <tbody>
-              {items.map((r) => (
-                <tr key={`${r.source}-${r.id}-${r.created_at}`}>
+              {tableRows.map(({ rowKey, item: r, parsed }) => (
+                <tr key={rowKey}>
                   <td className="mono" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                     {new Date(r.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td>{r.source}</td>
                   <td>{renderSignal(r)}</td>
+                  <td className="mono" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{parsed.requestId}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{parsed.sourceDetail}</td>
+                  <td><strong>{parsed.issueType}</strong></td>
+                  <td>{parsed.issueCategory}</td>
                   <td>
                     <PrioritySelector
-                      value={getMeta(r.id).priority}
-                      onChange={(priority) => updateMeta(r.id, { priority })}
+                      value={getMeta(rowKey).priority}
+                      onChange={(priority) => updateMeta(rowKey, { priority })}
                     />
                   </td>
                   <td>
                     <button
                       type="button"
-                      className="brutal-btn"
-                      style={{ opacity: 0.6 }}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        margin: 0,
+                        textDecoration: 'underline',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        color: 'var(--black)',
+                        opacity: 0.75,
+                      }}
                       onClick={() => setReplyItem(r)}
                     >
                       Reply (preview)
@@ -194,17 +280,18 @@ export default function SupportRequests() {
                   </td>
                   <td>
                     <SolvedSelector
-                      value={getMeta(r.id).solved}
-                      onChange={(solved) => updateMeta(r.id, { solved })}
+                      value={getMeta(rowKey).solved}
+                      onChange={(solved) => updateMeta(rowKey, { solved })}
                     />
                   </td>
-                  <td style={{ maxWidth: 280 }}>{r.comment || '—'}</td>
+                  <td style={{ minWidth: 320, maxWidth: 420 }}>{parsed.commentText}</td>
                   <td className="mono" style={{ fontSize: '0.85rem' }}>{r.user_masked}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {!loading && !error && items.length === 0 && (
@@ -239,33 +326,24 @@ function PrioritySelector({
   value: PriorityLevel;
   onChange: (next: PriorityLevel) => void;
 }) {
+  const style = PRIORITY_STYLE[value];
   return (
-    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-      {(['low', 'medium', 'high'] as PriorityLevel[]).map((level) => {
-        const style = PRIORITY_STYLE[level];
-        const active = value === level;
-        return (
-          <button
-            key={level}
-            type="button"
-            onClick={() => onChange(level)}
-            style={{
-              border: '2px solid var(--black)',
-              background: style.bg,
-              color: style.color,
-              fontWeight: 700,
-              fontSize: '0.72rem',
-              padding: '0.2rem 0.45rem',
-              opacity: active ? 1 : 0.45,
-              cursor: 'pointer',
-            }}
-            title={`Priorita ${style.label}`}
-          >
-            {style.label}
-          </button>
-        );
-      })}
-    </div>
+    <select
+      className="brutal-select"
+      value={value}
+      onChange={(e) => onChange(e.target.value as PriorityLevel)}
+      style={{
+        minWidth: 112,
+        background: style.bg,
+        color: style.color,
+        fontWeight: 700,
+      }}
+      title="Priorita"
+    >
+      <option value="low">{PRIORITY_STYLE.low.label}</option>
+      <option value="medium">{PRIORITY_STYLE.medium.label}</option>
+      <option value="high">{PRIORITY_STYLE.high.label}</option>
+    </select>
   );
 }
 

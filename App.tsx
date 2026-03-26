@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Layout } from './components/Layout';
 import { Audit } from './views/Audit';
 import { Generate } from './views/Generate';
@@ -26,6 +26,29 @@ export interface CreditsState {
   remaining: number;
   total: number;
   used: number;
+}
+
+const CREDITS_CACHE_KEY = 'comtra.credits.v1';
+
+function readCreditsCache(userId: string): CreditsState | null {
+  try {
+    const raw = sessionStorage.getItem(CREDITS_CACHE_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as { userId?: string; remaining?: number; total?: number; used?: number };
+    if (o.userId !== userId) return null;
+    if (typeof o.remaining !== 'number' || typeof o.total !== 'number' || typeof o.used !== 'number') return null;
+    return { remaining: o.remaining, total: o.total, used: o.used };
+  } catch {
+    return null;
+  }
+}
+
+function writeCreditsCache(userId: string, c: CreditsState) {
+  try {
+    sessionStorage.setItem(CREDITS_CACHE_KEY, JSON.stringify({ userId, ...c }));
+  } catch {
+    // private mode / quota
+  }
 }
 
 interface SelectedNodeInfo {
@@ -184,6 +207,17 @@ export default function AppTest() {
     creditsValueRef.current = credits;
   }, [credits]);
 
+  /** Stale-while-revalidate: show last known balance immediately on open (same user), then refresh from API. */
+  useLayoutEffect(() => {
+    if (!user?.authToken || !user.id) return;
+    if (isTestUser && simulateFreeTier) return;
+    const cached = readCreditsCache(user.id);
+    if (cached) {
+      setCredits(cached);
+      setCreditsFetchError(null);
+    }
+  }, [user?.authToken, user?.id, isTestUser, simulateFreeTier]);
+
   const effectiveCredits: CreditsState | null = credits !== null
     ? credits
     : isTestUser && simulateFreeTier && user
@@ -253,8 +287,8 @@ export default function AppTest() {
     if (!creditsFetchSilentRef.current) setCreditsFetchError(null);
     try {
       const controller = new AbortController();
-      // Timeout 12s: al primo carico il backend può essere lento; 4s causava AbortError e crediti mai caricati
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      // Cold serverless / DB: 25s evita abort prematuri; cache sessionStorage copre l’UX nel frattempo.
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
       const attemptId = ++creditsFetchAttemptSeqRef.current;
       const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
         headers: { Authorization: `Bearer ${user.authToken}` },
@@ -295,11 +329,13 @@ export default function AppTest() {
         return { ok: false, retryable };
       }
       const data = await r.json();
-      setCredits({
+      const next: CreditsState = {
         remaining: data.credits_remaining ?? 0,
         total: data.credits_total ?? 0,
         used: data.credits_used ?? 0,
-      });
+      };
+      setCredits(next);
+      if (user?.id) writeCreditsCache(user.id, next);
       setCreditsFetchError(null);
       setUser(prev => {
         if (!prev) return prev;
@@ -342,12 +378,12 @@ export default function AppTest() {
       if (shouldLogCreditsDebug()) {
         const name = e instanceof Error ? e.name : 'unknown';
         const msg = e instanceof Error ? e.message : String(e);
-        const hint = name === 'AbortError' ? ' (timeout after 12s)' : '';
+        const hint = name === 'AbortError' ? ' (timeout after 25s)' : '';
         console.warn(`[CreditsDebug] GET /api/credits exception name=${name} message=${msg.slice(0, 200)}${hint}`);
       }
       return { ok: false, retryable: true };
     }
-  }, [user?.authToken, handle503]);
+  }, [user?.authToken, user?.id, handle503]);
 
   /** True after we gave up loading credits (all retries failed). Reset on logout. */
   const [creditsLoadGaveUp, setCreditsLoadGaveUp] = useState(false);
@@ -356,8 +392,8 @@ export default function AppTest() {
   /** Timestamp del primo rendering dello skeleton crediti: evita reset continui del timer. */
   const creditsSkeletonStartAtRef = useRef<number | null>(null);
 
-  const CREDITS_MAX_ATTEMPTS = 5;
-  const CREDITS_RETRY_DELAYS_MS = [2000, 3000, 4000, 5000]; // delays between attempt 0→1, 1→2, 2→3, 3→4
+  const CREDITS_MAX_ATTEMPTS = 3;
+  const CREDITS_RETRY_DELAYS_MS = [800, 1600]; // tra tentativo 0→1 e 1→2
 
   useEffect(() => {
     if (!user?.authToken) {
@@ -692,7 +728,13 @@ export default function AppTest() {
     if (r.status === 503) { handle503(); return { error: 'Server error' as 'Server error' }; }
     if (r.status === 402) return { error: 'Insufficient credits' as const, credits_remaining: data.credits_remaining };
     if (!r.ok) return { error: (data?.error || 'Server error') as 'Server error' };
-    setCredits({ remaining: data.credits_remaining, total: data.credits_total, used: data.credits_used });
+    const consumed: CreditsState = {
+      remaining: data.credits_remaining,
+      total: data.credits_total,
+      used: data.credits_used,
+    };
+    setCredits(consumed);
+    if (user?.id) writeCreditsCache(user.id, consumed);
     setUser(prev => prev && (data.current_level != null || data.total_xp != null)
       ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
       : prev);
@@ -712,7 +754,7 @@ export default function AppTest() {
       fetchTrophies();
     }
     return { credits_remaining: data.credits_remaining, level_up: data.level_up };
-  }, [user?.authToken, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies, handle503, setNewTrophiesToast]);
+  }, [user?.authToken, user?.id, user?.email, user?.current_level, isTestUser, simulateFreeTier, credits, simulatedCredits, fetchTrophies, handle503, setNewTrophiesToast]);
 
   // Log free (0-credit) actions into credit_transactions for activity tracking (Stats + dashboard), without modifying balance
   const logFreeAction = React.useCallback(

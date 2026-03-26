@@ -2167,16 +2167,24 @@ app.post('/api/affiliates/register', async (req, res) => {
 // --- Checkout redirect: reindirizza al checkout Lemon Squeezy (evita 404 se il plugin apre auth.comtra.dev per sbaglio).
 const LEMON_CHECKOUT_BASE = process.env.LEMON_SQUEEZY_CHECKOUT_BASE || 'https://comtra.lemonsqueezy.com/checkout/buy';
 const LEMON_VARIANT_IDS = {
-  '1w': process.env.LEMON_VARIANT_1W || '1345293',
-  '1m': process.env.LEMON_VARIANT_1M || '1345303',
-  '6m': process.env.LEMON_VARIANT_6M || '1345310',
-  '1y': process.env.LEMON_VARIANT_1Y || '1345319',
+  '1w': process.env.LEMON_VARIANT_1W || '1450263',
+  '1m': process.env.LEMON_VARIANT_1M || '1450299',
+  '6m': process.env.LEMON_VARIANT_6M || '1450304',
+  '1y': process.env.LEMON_VARIANT_1Y || '1450315',
+};
+const LEMON_CHECKOUT_URLS = {
+  '1w': process.env.LEMON_CHECKOUT_URL_1W || '',
+  '1m': process.env.LEMON_CHECKOUT_URL_1M || '',
+  '6m': process.env.LEMON_CHECKOUT_URL_6M || '',
+  '1y': process.env.LEMON_CHECKOUT_URL_1Y || '',
 };
 app.get('/api/checkout/redirect', (req, res) => {
   const tier = (req.query.tier || '6m').toLowerCase();
+  const directUrl = (LEMON_CHECKOUT_URLS[tier] || LEMON_CHECKOUT_URLS['6m'] || '').trim();
   const variantId = LEMON_VARIANT_IDS[tier] || LEMON_VARIANT_IDS['6m'];
-  const base = `${LEMON_CHECKOUT_BASE}/${variantId}`;
-  const params = new URLSearchParams();
+  const base = directUrl || `${LEMON_CHECKOUT_BASE}/${variantId}`;
+  const u = new URL(base);
+  const params = u.searchParams;
   const aff = (req.query.aff || '').trim();
   const email = (req.query.email || '').trim();
   if (aff) {
@@ -2184,8 +2192,8 @@ app.get('/api/checkout/redirect', (req, res) => {
     params.set('checkout[custom][aff]', aff);
   }
   if (email) params.set('checkout[custom][email]', email);
-  const url = params.toString() ? `${base}?${params.toString()}` : base;
-  res.redirect(302, url);
+  u.search = params.toString();
+  res.redirect(302, u.toString());
 });
 
 // --- Test: simula un referral affiliato (senza webhook Lemon). Solo se TEST_AFFILIATE_SECRET è impostato.
