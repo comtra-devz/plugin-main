@@ -2,11 +2,12 @@
  * Fase 5 — Sintesi migliorie via LLM (OpenAI-compatible **o** Google Gemini).
  *
  * Scelta del modello (env):
- * - `PRODUCT_SOURCES_LLM_PROVIDER` = `moonshot` (default) | `openai` | `custom` | **`gemini`**
+ * - `PRODUCT_SOURCES_LLM_PROVIDER` = `moonshot` (default) | `openai` | `custom` | **`gemini`** | **`groq`**
  * - **moonshot** (Kimi): base `https://api.moonshot.ai/v1`, key `PRODUCT_SOURCES_LLM_API_KEY` o fallback **`KIMI_API_KEY`**, modello `PRODUCT_SOURCES_LLM_MODEL` o **`KIMI_MODEL`** o `kimi-k2-0905-preview`
  * - **openai**: base `https://api.openai.com/v1`, key `OPENAI_API_KEY` o `PRODUCT_SOURCES_LLM_API_KEY`, modello `PRODUCT_SOURCES_LLM_MODEL` o `gpt-4o-mini`
  * - **custom**: `PRODUCT_SOURCES_LLM_BASE_URL` (es. `https://api.example.com/v1`), `PRODUCT_SOURCES_LLM_API_KEY`, `PRODUCT_SOURCES_LLM_MODEL`
- * - **gemini** (Google AI Studio / free tier): key **`GEMINI_API_KEY`** o **`GOOGLE_AI_API_KEY`**, modello default `gemini-2.0-flash` (`PRODUCT_SOURCES_LLM_MODEL` per override). API: `generativelanguage.googleapis.com` `generateContent`. Se quota/rate limit: messaggio nel report e **retry automatico** alla run successiva (nessun flag manuale).
+ * - **groq** (OpenAI-compatible, free tier veloce): base `https://api.groq.com/openai/v1`, key **`GROQ_API_KEY`** (o `PRODUCT_SOURCES_LLM_API_KEY`), modello default `llama-3.3-70b-versatile`
+ * - **gemini** (Google AI Studio): key **`GEMINI_API_KEY`** o **`GOOGLE_AI_API_KEY`**, modello default **`gemini-2.5-flash`** (Gemini 2.0 Flash è deprecato). Path API: `PRODUCT_SOURCES_GEMINI_API_VERSION` = `v1` (default, stabile) o `v1beta`. Se quota/rate limit: messaggio nel report e **retry automatico** alla run successiva.
  *
  * Abilitazione costi: `PRODUCT_SOURCES_LLM_SYNTHESIS=1`
  *
@@ -33,7 +34,7 @@ export function getProductSourcesLlmConfig() {
   const provider = (process.env.PRODUCT_SOURCES_LLM_PROVIDER || 'moonshot').toLowerCase().trim();
 
   if (provider === 'gemini') {
-    const model = (process.env.PRODUCT_SOURCES_LLM_MODEL || 'gemini-2.0-flash').replace(/^models\//, '');
+    const model = (process.env.PRODUCT_SOURCES_LLM_MODEL || 'gemini-2.5-flash').replace(/^models\//, '');
     return {
       provider: 'gemini',
       baseUrl: '',
@@ -43,6 +44,15 @@ export function getProductSourcesLlmConfig() {
         process.env.GOOGLE_API_KEY ||
         '',
       model,
+    };
+  }
+
+  if (provider === 'groq') {
+    return {
+      provider: 'groq',
+      baseUrl: (process.env.PRODUCT_SOURCES_LLM_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/$/, ''),
+      apiKey: process.env.GROQ_API_KEY || process.env.PRODUCT_SOURCES_LLM_API_KEY || '',
+      model: process.env.PRODUCT_SOURCES_LLM_MODEL || 'llama-3.3-70b-versatile',
     };
   }
 
@@ -208,6 +218,62 @@ function extractGeminiResponseText(data) {
 }
 
 /**
+ * API stabile consigliata (`v1`); `v1beta` solo se serve un modello preview non ancora su v1.
+ * @returns {string}
+ */
+function getGeminiApiVersionPath() {
+  const raw = (process.env.PRODUCT_SOURCES_GEMINI_API_VERSION || 'v1').toLowerCase().trim();
+  if (raw === 'v1beta' || raw === 'beta') return 'v1beta';
+  return 'v1';
+}
+
+/** Soglie meno aggressive: il testo prodotto/notizie spesso scatta su MEDIUM con i default Google. */
+function geminiSafetySettingsPayload() {
+  const categories = [
+    'HARM_CATEGORY_HARASSMENT',
+    'HARM_CATEGORY_HATE_SPEECH',
+    'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+    'HARM_CATEGORY_DANGEROUS_CONTENT',
+  ];
+  return categories.map((category) => ({
+    category,
+    threshold: 'BLOCK_ONLY_HIGH',
+  }));
+}
+
+/**
+ * @param {object} data — body JSON 200 OK ma senza testo utile
+ * @returns {string}
+ */
+function buildGeminiDiagnosticMarkdown(data) {
+  const pf = data?.promptFeedback;
+  const cand = data?.candidates;
+  const candLen = Array.isArray(cand) ? cand.length : 0;
+  const c0 = cand?.[0];
+  const finish = c0?.finishReason != null ? String(c0.finishReason) : '';
+  const promptBlock = pf?.blockReason != null ? String(pf.blockReason) : '';
+  const safetyRatings = Array.isArray(c0?.safetyRatings)
+    ? c0.safetyRatings
+        .map((x) => `${x.category || '?'}:${x.probability || '?'}`)
+        .slice(0, 6)
+        .join('; ')
+    : '';
+  const lines = [
+    `_(Fase 5 — **Gemini**: risposta senza testo generato.)_`,
+    ``,
+    `- **candidates.length:** ${candLen}`,
+    `- **promptFeedback.blockReason:** ${promptBlock || '—'}`,
+    `- **candidates[0].finishReason:** ${finish || '—'}`,
+  ];
+  if (safetyRatings) lines.push(`- **safetyRatings:** ${safetyRatings}`);
+  lines.push(
+    ``,
+    `_Suggerimenti: usa un modello stabile (\`PRODUCT_SOURCES_LLM_MODEL=gemini-2.5-flash\`), verifica \`PRODUCT_SOURCES_GEMINI_API_VERSION=v1\`, riduci \`PRODUCT_SOURCES_LLM_MAX_BUNDLE_CHARS\` se il prompt è enorme, oppure passa a **\`PRODUCT_SOURCES_LLM_PROVIDER=groq\`** + \`GROQ_API_KEY\`._`,
+  );
+  return lines.join('\n');
+}
+
+/**
  * @param {{ apiKey: string, model: string }} cfg
  * @param {string} userBundle
  * @returns {Promise<string>}
@@ -217,7 +283,8 @@ async function runGeminiGenerateContent(cfg, userBundle) {
   if (!modelId) throw new Error('model Gemini mancante');
   if (!cfg.apiKey) throw new Error('API key Gemini mancante');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+  const ver = getGeminiApiVersionPath();
+  const url = `https://generativelanguage.googleapis.com/${ver}/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
 
   const body = {
     systemInstruction: {
@@ -233,6 +300,7 @@ async function runGeminiGenerateContent(cfg, userBundle) {
       temperature: getTemperature(),
       maxOutputTokens: getMaxOutTokens(),
     },
+    safetySettings: geminiSafetySettingsPayload(),
   };
 
   const r = await fetch(url, {
@@ -254,17 +322,26 @@ async function runGeminiGenerateContent(cfg, userBundle) {
       return buildGeminiQuotaSkippedMarkdown(data);
     }
     const msg = data?.error?.message ? String(data.error.message) : clip(raw, 800);
-    throw new Error(`Gemini API ${r.status}: ${msg}`);
+    const hint404 =
+      r.status === 404
+        ? ' Modello sconosciuto o non disponibile per questa API: prova gemini-2.5-flash e PRODUCT_SOURCES_GEMINI_API_VERSION=v1.'
+        : '';
+    throw new Error(`Gemini API ${r.status}: ${msg}${hint404}`);
+  }
+
+  const promptBlockReason = data?.promptFeedback?.blockReason;
+  if (promptBlockReason && String(promptBlockReason).trim() && promptBlockReason !== 'BLOCK_REASON_UNSPECIFIED') {
+    return `_(Fase 5 — Gemini: **prompt bloccato** (\`${promptBlockReason}\`). Contenuti delle fonti o istruzioni di sistema in conflitto con le safety policy; riduci il bundle o cambia provider es. Groq.)_`;
   }
 
   const blockReason = data?.candidates?.[0]?.finishReason;
   if (blockReason === 'SAFETY' || blockReason === 'BLOCKLIST') {
-    return `_(Fase 5 — Gemini: output bloccato per policy (\`${blockReason}\`). Riprovare riducendo il bundle o rivedendo i contenuti.)_`;
+    return `_(Fase 5 — Gemini: output bloccato per policy (\`${blockReason}\`). Riprovare riducendo il bundle o rivedendo i contenuti; oppure \`PRODUCT_SOURCES_LLM_PROVIDER=groq\`.)_`;
   }
 
   const text = extractGeminiResponseText(data);
   if (!String(text).trim()) {
-    throw new Error('Gemini: contenuto vuoto (nessun testo in candidates[0].content.parts)');
+    return buildGeminiDiagnosticMarkdown(data);
   }
   return text.trim();
 }
@@ -417,7 +494,7 @@ export function buildProductSourcesMcpDelegationMarkdown(ctx) {
     `_Su questo deploy **non** è stata eseguita alcuna chiamata LLM (risparmio token). Completare così:_`,
     ``,
     `1. **Cursor** → MCP \`comtra-product-sources\` → tool **\`synthesize_product_sources\`** (\`bundle\` = JSON sotto o solo \`userBundle\`).`,
-    `2. Env MCP: \`PRODUCT_SOURCES_LLM_PROVIDER=gemini\` + \`GEMINI_API_KEY\` (free tier) oppure Moonshot/OpenAI come in \`lib/product-sources-llm.mjs\`.`,
+    `2. Env MCP: \`PRODUCT_SOURCES_LLM_PROVIDER=gemini\` + \`GEMINI_API_KEY\`, oppure \`groq\` + \`GROQ_API_KEY\`, oppure Moonshot/OpenAI come in \`lib/product-sources-llm.mjs\`.`,
     `3. Incolla l’output Markdown del tool nella PR / nello storico report se serve.`,
     ``,
     `\`\`\`product-sources-llm-bundle`,
@@ -452,7 +529,7 @@ export async function synthesizeProductImprovementsMarkdown(ctx) {
 
   const cfg = getProductSourcesLlmConfig();
   if (!cfg.apiKey) {
-    return `\n\n_(Fase 5 LLM: nessuna API key — per **Gemini** \`GEMINI_API_KEY\` / \`GOOGLE_AI_API_KEY\`; Moonshot \`KIMI_API_KEY\`; OpenAI \`OPENAI_API_KEY\`; oppure \`PRODUCT_SOURCES_LLM_EXECUTION=mcp\`.)_\n`;
+    return `\n\n_(Fase 5 LLM: nessuna API key — **Gemini** \`GEMINI_API_KEY\`; **Groq** \`GROQ_API_KEY\`; Moonshot \`KIMI_API_KEY\`; OpenAI \`OPENAI_API_KEY\`; oppure \`PRODUCT_SOURCES_LLM_EXECUTION=mcp\`.)_\n`;
   }
   if (cfg.provider !== 'gemini' && (!cfg.baseUrl || !cfg.model)) {
     return '\n\n_(Fase 5 LLM: \`PRODUCT_SOURCES_LLM_BASE_URL\` o \`PRODUCT_SOURCES_LLM_MODEL\` mancanti per provider custom.)_\n';

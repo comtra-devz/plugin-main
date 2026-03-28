@@ -24,7 +24,7 @@ cd mcp/product-sources-synthesis && npm install
 
 In **Cursor Settings → MCP** aggiungi un server (adatta il path assoluto al tuo clone).
 
-**Esempio Gemini (free tier consigliato):**
+**Esempio Gemini (Google AI Studio):** default model nel codice `gemini-2.5-flash` (evitare 2.0 Flash, deprecato).
 
 ```json
 {
@@ -40,6 +40,8 @@ In **Cursor Settings → MCP** aggiungi un server (adatta il path assoluto al tu
   }
 }
 ```
+
+**Esempio Groq** (spesso più stabile del free tier Gemini): `PRODUCT_SOURCES_LLM_PROVIDER=groq` + `GROQ_API_KEY`.
 
 **Esempio Kimi (Moonshot):** `PRODUCT_SOURCES_LLM_PROVIDER=moonshot` (o omesso) + `KIMI_API_KEY`.
 

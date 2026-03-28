@@ -30,7 +30,7 @@ Nessuna delle funzioni sopra **apre PR su GitHub da sola**: il passaggio “mett
 | File | Contenuto |
 |------|-----------|
 | **[`docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md`](../docs/DASHBOARD-PLUGIN-COMUNICAZIONI.md)** | Come dialogano dashboard e plugin Figma (nessun canale diretto “segreto”). |
-| **[`docs/NOTION-PRODUCT-SOURCES.md`](docs/NOTION-PRODUCT-SOURCES.md)** | Guida completa Notion + cron + env (Apify, web, snapshot doc, **Gemini/Kimi**, Fase 6 leggera, **MCP** opzionale, Discord, Postgres). |
+| **[`docs/NOTION-PRODUCT-SOURCES.md`](docs/NOTION-PRODUCT-SOURCES.md)** | Guida completa Notion + cron + env (Apify, web, snapshot doc, **Gemini/Groq/Kimi**, Fase 6 leggera, **MCP** opzionale, Discord, Postgres). |
 | **[`docs/PRODUCT-SOURCES-ROADMAP.md`](docs/PRODUCT-SOURCES-ROADMAP.md)** | Roadmap a fasi (0→7) del progetto “intelligence da Notion”. |
 | **[`docs/PRODUCT-SOURCES-GIT-WORKFLOW.md`](../docs/PRODUCT-SOURCES-GIT-WORKFLOW.md)** | Fase 7: dal report Markdown al branch/PR nel repo. |
 | **[`../docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md`](../docs/ADMIN-DASHBOARD-500-E-RIEPILOGO-SEZIONI.md)** | Perché a volte le API rispondono 500 e riepilogo sezioni. |
@@ -106,7 +106,7 @@ Oltre a **`/api/admin`** (router unico con `?route=…`), ci sono handler dedica
 **Notion / fonti prodotto** (solo se usi quella sezione)
 
 - `NOTION_INTEGRATION_TOKEN`, `NOTION_PRODUCT_SOURCES_PAGE_ID` **o** `NOTION_PRODUCT_SOURCES_DATABASE_ID`
-- Opzionali: Apify (`APIFY_*`), fetch web (`PRODUCT_SOURCES_FETCH_WEB`), snapshot doc plugin (`PRODUCT_SOURCES_DOC_*`), coda (`PRODUCT_SOURCES_QUEUE_MODE`), Fase 6 (`PRODUCT_SOURCES_SKIP_HEAVY_*`, `…SNAPSHOT_ON_NO_NEW`), LLM (`PRODUCT_SOURCES_LLM_*`, `GEMINI_API_KEY`), Discord webhook, ecc.
+- Opzionali: Apify (`APIFY_*`), fetch web (`PRODUCT_SOURCES_FETCH_WEB`), snapshot doc plugin (`PRODUCT_SOURCES_DOC_*`), coda (`PRODUCT_SOURCES_QUEUE_MODE`), Fase 6 (`PRODUCT_SOURCES_SKIP_HEAVY_*`, `…SNAPSHOT_ON_NO_NEW`), LLM (`PRODUCT_SOURCES_LLM_*`, `GEMINI_API_KEY`, `GROQ_API_KEY`), Discord webhook, ecc.
 
 La lista completa e i default stanno in **`docs/NOTION-PRODUCT-SOURCES.md`**.
 
@@ -146,4 +146,4 @@ npm run build
 
 ## Riepilogo
 
-La dashboard è il **pannello operativo** del backend Comtra; la parte **Notion** aggiunge un flusso automatico/manuale per **raccogliere fonti**, **generare un documento Markdown**, opzionalmente **sintetizzarlo con un LLM** (es. Gemini free tier), e **tracciare** su DB/Discord/Git **senza** modificare il repo da sola. Per il resto delle funzioni, usa le voci menu e la documentazione linkata sopra.
+La dashboard è il **pannello operativo** del backend Comtra; la parte **Notion** aggiunge un flusso automatico/manuale per **raccogliere fonti**, **generare un documento Markdown**, opzionalmente **sintetizzarlo con un LLM** (es. Gemini o Groq), e **tracciare** su DB/Discord/Git **senza** modificare il repo da sola. Per il resto delle funzioni, usa le voci menu e la documentazione linkata sopra.

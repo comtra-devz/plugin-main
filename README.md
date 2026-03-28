@@ -4,6 +4,36 @@
 
 ---
 
+## Build, deploy e progetti Vercel
+
+- **Plugin UI (questa repo, root):** in sviluppo `npm run dev`; per Figma **`npm run build`** genera il bundle (es. `dist/ui.html` + asset) che carichi come versione del plugin. Gli utenti dalla Community **non** eseguono npm.
+- **Backend auth/API:** cartella **`auth-deploy/`** — su Vercel imposta **Root Directory = `auth-deploy`**. Non deployare l’intera monorepo come un solo progetto se in root esistono altre cartelle `api/` (si sommano le Serverless Functions e sul piano **Hobby** il limite è **12** funzioni per deployment).
+- **Admin dashboard:** progetto separato con root **`admin-dashboard/`**.
+- **Component gallery (Storybook-like locale):** `component-gallery/` — Vite + React, opzionale per design system UI.
+
+---
+
+## Cosa è “vero” (backend / motore) vs demo in UI
+
+Il plugin parla con **`AUTH_BACKEND_URL`** (es. `https://auth.comtra.dev`). Dove serve un servizio reale:
+
+| Area | Integrazione | Note |
+|------|----------------|------|
+| **Design System audit** | **Kimi** (Moonshot) sul server | `POST /api/agents/ds-audit` — richiede `KIMI_API_KEY`, prompt `ds-audit-system.md`, token Figma utente per `file_key`. |
+| **UX Logic audit** | **Kimi** | `POST /api/agents/ux-audit` — prompt `ux-audit-system.md`. |
+| **Accessibility audit** | **Motore deterministico Node** (`a11y-audit-engine.mjs`) | **Non** passa da Kimi: fetch JSON Figma (o `file_json`) + regole (contrasto, touch, focus, alt, …). Richiede DB/token Figma come da endpoint. |
+| **Prototype audit** | **Solo plugin (controller Figma)** | Analisi flussi nel file; risultato via `proto-audit-result`. Nessun LLM. |
+| **Generate (wireframe / action plan)** | **Kimi** | `POST /api/agents/generate` — il file `services/geminiService.ts` nel client è uno **stub non usato** dal flusso principale; la generazione passa dal backend. |
+| **Code → Target (code export)** | **Kimi** | `POST /api/agents/code-gen` — subtree dal plugin + formato. |
+| **Deep Sync / drift Storybook** | **Backend** (`sync-scan-engine` + route in `oauth-server/app.mjs`) | Il client chiama `POST /api/agents/sync-scan`. GitHub/Bitbucket possono essere ancora parziali (vedi `docs/SYNC-INVESTIGATION.md`). |
+| **Crediti, trofei, OAuth Figma, checkout** | **Backend + Postgres** | `credits-trophies`, `figma-oauth`, webhook Lemon, ecc. |
+
+**Fallback demo in plugin:** in `views/Audit/data.ts` esistono liste **DS_ISSUES** / **A11Y_ISSUES** (e mock UX/Prototype per spec) usate dalla UI **solo finché** non arrivano issue dall’API o per stati iniziali — non sostituiscono il backend in produzione.
+
+**Crediti in UI:** saldo mostrato subito con **cache sessionStorage** (stesso `userId`) mentre `GET /api/credits` aggiorna in background.
+
+---
+
 ## Flusso del Plugin
 
 ### 1. Schermata di Login — "Login with Figma"
@@ -74,18 +104,15 @@ La schermata principale del plugin. Mostra un **banner crediti** in giallo rotat
 
 **Tab 2 — Accessibility (A11Y)**
 
-Stessa struttura della tab Design System ma con issue di accessibilità (contrasto, alt text, focus states...). Usa **Deep Analysis** con selezione layer:
-- Dropdown "Select Layer" per scegliere il layer su cui eseguire l'analisi profonda
-- **Pulsante "Deep Scan"**: Scan Receipt Modal, poi analisi in ~1.5s
-- Lista issue specifica per l'accessibilità con stesse azioni (Fix/Undo/Discard)
+Stessa struttura della tab Design System (scope, receipt, Authorize). Dopo la conferma il backend esegue **`runA11yAudit`** sui dati Figma (nessun LLM). Lista issue (contrasto, touch target, focus, alt, …) con Fix / Undo / Discard.
 
 **Tab 3 — UX Audit**
 
-Stessa struttura Deep Analysis per problemi UX (flussi mancanti, micro-interazioni, stati vuoti...).
+Scope **Current selection** o **pagina** (no “All Pages”). Dopo conferma: **`POST /api/agents/ux-audit`** (Kimi) e lista issue UX Logic.
 
 **Tab 4 — Prototype**
 
-Stessa struttura Deep Analysis per problemi nel prototipo (link rotti, stati mancanti, flussi incompleti...). Alcune issue possono redirigere direttamente a **Generate** (es. "Create a confirmation wireframe for the checkout flow").
+Multi-select dei **flow starting point** sulla pagina corrente; audit eseguito **nel plugin** (`run-proto-audit`). Alcune issue possono puntare a **Generate** (es. wireframe mancante).
 
 ---
 
@@ -279,8 +306,9 @@ Costo per operazione:
 
 - **React 19** + **TypeScript 5.8**
 - **Vite 6** (build tool)
-- **Tailwind CSS** (via CDN)
-- **@google/genai** — Gemini API per la generazione AI
+- **Tailwind CSS** (config progetto)
+- **AI produzione (audit DS/UX, generate, code-gen):** **Kimi / Moonshot** lato server (`auth-deploy/oauth-server`), non nel webview del plugin
+- **@google/genai** — presente in `package.json` per altri percorsi; il file `services/geminiService.ts` è uno **stub** non collegato al flusso Generate principale
 - **Font**: Space Grotesk + Tiny5 (titoli hero)
 - **Platform**: Figma Plugin API (manifest con `documentAccess: "dynamic-page"`; uso di `loadAllPagesAsync` dove richiesto)
 
@@ -296,9 +324,9 @@ Il flusso "Login with Figma" usa un server OAuth deployato separatamente (es. au
 
 **Prerequisites:** Node.js
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Install dependencies: `npm install`
+2. Per la sola UI plugin: `npm run dev` (variabili come `VITE_*` / backend URL da `constants` o env)
+3. Per generazione/audit reali servono anche backend **`auth-deploy`** configurato (vedi `auth-deploy/SETUP.md`) con **Postgres**, **JWT**, **Kimi**, token **Figma OAuth**, ecc.
+
+Build produzione plugin: `npm run build` (output in `dist/`).
 

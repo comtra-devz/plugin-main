@@ -23,7 +23,7 @@
  * - PRODUCT_SOURCES_FETCH_WEB=1 opzionale — Fase 1+2: fetch / strategia per tipo su URL **nuovi** non-LinkedIn (allow/block list, GitHub raw, stub YouTube/X, PDF rilevato)
  * - PRODUCT_SOURCES_QUEUE_MODE=1 opzionale — Fase 3: coda job in Postgres; più hit cron (bypass gate se c’è batch con job pending). Vedi PRODUCT_SOURCES_QUEUE_MAX_JOBS, QUEUE_LINKEDIN_CHUNK.
  * - Fase 4 snapshot doc: `PRODUCT_SOURCES_DOC_FETCH_URLS` (raw URL) e/o `PRODUCT_SOURCES_DOC_REPO_ROOT` (path repo sul runner). Disabilita: `PRODUCT_SOURCES_PLUGIN_DOC_SNAPSHOT_DISABLE=1`.
- * - Fase 5 LLM: `PRODUCT_SOURCES_LLM_SYNTHESIS=1`, `PRODUCT_SOURCES_LLM_PROVIDER` (moonshot|openai|custom|**gemini**), key/model — vedi `lib/product-sources-llm.mjs`. **Gemini free tier:** `PROVIDER=gemini` + `GEMINI_API_KEY`; se quota esaurita, messaggio nel report e retry alla prossima run. **Senza API sul deploy:** `PRODUCT_SOURCES_LLM_EXECUTION=mcp` + MCP locale.
+ * - Fase 5 LLM: `PRODUCT_SOURCES_LLM_SYNTHESIS=1`, `PRODUCT_SOURCES_LLM_PROVIDER` (moonshot|openai|custom|**gemini**|**groq**), key/model — vedi `lib/product-sources-llm.mjs`. **Gemini:** `GEMINI_API_KEY`, default model `gemini-2.5-flash`, API `v1`. **Groq:** `GROQ_API_KEY`. Se quota Gemini esaurita, messaggio nel report e retry. **Senza API sul deploy:** `PRODUCT_SOURCES_LLM_EXECUTION=mcp` + MCP locale.
  * - Fase 6: `PRODUCT_SOURCES_SKIP_HEAVY_IF_NO_NEW_URLS` (default on: salta Apify/web se nessun URL nuovo e nessun batch; disattiva con `0`); `PRODUCT_SOURCES_SNAPSHOT_ON_NO_NEW=1` forza snapshot anche senza URL nuovi.
  */
 import { sql } from '../lib/db.mjs';

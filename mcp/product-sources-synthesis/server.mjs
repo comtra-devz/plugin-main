@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * MCP server (stdio) — completa la Fase 5 LLM in locale (stesso codice del cron).
- * Consigliato free tier: `PRODUCT_SOURCES_LLM_PROVIDER=gemini` + `GEMINI_API_KEY`.
+ * Free tier: `PRODUCT_SOURCES_LLM_PROVIDER=groq` + `GROQ_API_KEY`, oppure Gemini + `GEMINI_API_KEY`.
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,6 +20,9 @@ function missingApiKeyMessage(cfg) {
   const p = cfg.provider;
   if (p === 'gemini') {
     return 'Imposta GEMINI_API_KEY o GOOGLE_AI_API_KEY nel env del server MCP (Cursor → MCP).';
+  }
+  if (p === 'groq') {
+    return 'Imposta GROQ_API_KEY nel env MCP (console.groq.com).';
   }
   if (p === 'openai') {
     return 'Imposta OPENAI_API_KEY o PRODUCT_SOURCES_LLM_API_KEY nel env MCP.';
@@ -89,7 +92,7 @@ const server = new McpServer(
   { name: 'comtra-product-sources', version: '1.0.0' },
   {
     instructions:
-      'Sintesi fonti prodotto (Comtra). Env: PRODUCT_SOURCES_LLM_PROVIDER=gemini|moonshot|openai|custom e la key corrispondente (es. GEMINI_API_KEY). Tool: synthesize_product_sources oppure alias kimi_synthesize_product_sources.',
+      'Sintesi fonti prodotto (Comtra). Env: PRODUCT_SOURCES_LLM_PROVIDER=gemini|groq|moonshot|openai|custom e la key corrispondente. Tool: synthesize_product_sources oppure alias kimi_synthesize_product_sources.',
   },
 );
 

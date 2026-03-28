@@ -159,10 +159,12 @@ Modulo `lib/product-sources-llm.mjs`. **Opt-in costi:** `PRODUCT_SOURCES_LLM_SYN
 
 | Variabile | Ruolo |
 |-----------|--------|
-| `PRODUCT_SOURCES_LLM_PROVIDER` | `moonshot` (default, Kimi), `openai`, `custom`, **`gemini`** (Google AI Studio, free tier) |
-| `PRODUCT_SOURCES_LLM_API_KEY` | Secret API (Moonshot/OpenAI/custom); Moonshot accetta anche `KIMI_API_KEY` |
+| `PRODUCT_SOURCES_LLM_PROVIDER` | `moonshot` (default, Kimi), `openai`, `custom`, **`gemini`** (Google AI Studio), **`groq`** ([Groq](https://console.groq.com), API compatibile OpenAI) |
+| `PRODUCT_SOURCES_LLM_API_KEY` | Secret API (Moonshot/OpenAI/custom/**Groq** se non usi `GROQ_API_KEY`); Moonshot accetta anche `KIMI_API_KEY` |
 | `GEMINI_API_KEY` / `GOOGLE_AI_API_KEY` | Chiave da [Google AI Studio](https://aistudio.google.com/apikey) se `PROVIDER=gemini` |
-| `PRODUCT_SOURCES_LLM_MODEL` | Modello (Gemini default: `gemini-2.0-flash`; Moonshot: `kimi-k2-0905-preview` / `KIMI_MODEL`; OpenAI: `gpt-4o-mini`) |
+| `GROQ_API_KEY` | Chiave Groq se `PROVIDER=groq` (consigliato; altrimenti fallback su `PRODUCT_SOURCES_LLM_API_KEY`) |
+| `PRODUCT_SOURCES_LLM_MODEL` | Modello (Gemini default: **`gemini-2.5-flash`** — evitare `gemini-2.0-flash`, deprecato; Groq default: `llama-3.3-70b-versatile`; Moonshot: `kimi-k2-0905-preview` / `KIMI_MODEL`; OpenAI: `gpt-4o-mini`) |
+| `PRODUCT_SOURCES_GEMINI_API_VERSION` | `v1` (default, API stabile) o `v1beta` se serve un modello solo in beta |
 | `PRODUCT_SOURCES_LLM_BASE_URL` | Solo **custom** (es. `https://api.example.com/v1`); opzionale override per openai |
 | `PRODUCT_SOURCES_LLM_MAX_BUNDLE_CHARS` | Max caratteri inviati nel prompt utente (default ~100k) |
 | `PRODUCT_SOURCES_LLM_MAX_TOKENS` / `PRODUCT_SOURCES_LLM_TEMPERATURE` | Parametri generazione |
@@ -170,7 +172,9 @@ Modulo `lib/product-sources-llm.mjs`. **Opt-in costi:** `PRODUCT_SOURCES_LLM_SYN
 
 Il cron e la scansione manuale appendono al report la sezione **«Sintesi proposte (LLM, Fase 5)»** quando c’è output (o messaggio di errore/config in Markdown se la sintesi è richiesta ma manca la key).
 
-**Gemini — quota free tier:** se Google risponde con rate limit / `RESOURCE_EXHAUSTED`, il report include un messaggio esplicito e **nessun intervento**: alla **prossima run** la sintesi viene **riprovata** automaticamente (stessi env), senza flag o DB.
+**Gemini — quota free tier:** se Google risponde con rate limit / `RESOURCE_EXHAUSTED`, il report include un messaggio esplicito e **nessun intervento**: alla **prossima run** la sintesi viene **riprovata** automaticamente (stessi env), senza flag o DB. Se ottieni risposte vuote o 404 sul modello, aggiorna a **`gemini-2.5-flash`** e **`PRODUCT_SOURCES_GEMINI_API_VERSION=v1`** (valori default nel codice).
+
+**Groq:** stesso flusso di sintesi via `/chat/completions`; limite e modelli sono quelli del piano Groq. Utile se Gemini risulta instabile o esaurito sul free tier.
 
 **Manuale:** checkbox *Sintesi LLM* oppure `"includeLlmSynthesis": true`.
 

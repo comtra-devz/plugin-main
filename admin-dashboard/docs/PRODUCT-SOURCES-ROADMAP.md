@@ -70,7 +70,7 @@ Descrizione **semplice** delle fasi. L’ordine conta: ogni fase si appoggia all
 
 ## Fase 5 — Sintesi intelligente (LLM) — **implementata (opt-in)**
 
-- Modulo `lib/product-sources-llm.mjs`; abilitazione: **`PRODUCT_SOURCES_LLM_SYNTHESIS=1`** + key/model (`PRODUCT_SOURCES_LLM_PROVIDER` moonshot | openai | custom | **gemini**). **Gemini** (Google AI Studio): free tier; se quota/rate limit → messaggio nel report e retry automatico alla run successiva.
+- Modulo `lib/product-sources-llm.mjs`; abilitazione: **`PRODUCT_SOURCES_LLM_SYNTHESIS=1`** + key/model (`PRODUCT_SOURCES_LLM_PROVIDER` moonshot | openai | custom | **gemini** | **groq**). **Gemini:** default `gemini-2.5-flash`, API `v1`. **Groq:** `GROQ_API_KEY`. Se quota/rate limit Gemini → messaggio nel report e retry automatico.
 - Input: URL **nuovi** Notion, estratti **LinkedIn/web**, **snapshot doc** (se presente e non skipped).
 - Output: sezione Markdown **«Sintesi proposte (LLM, Fase 5)»** nel report (struttura fissa: priorità, idee tecniche/strategiche, rischi, fonti).
 - **Guardrail** in prompt: niente proposte “peggiorative”, niente breaking non richiesti, incertezza esplicita.
