@@ -22,6 +22,8 @@ import BrandAwareness from './pages/BrandAwareness';
 import TouchpointFunnel from './pages/TouchpointFunnel';
 import Notifications from './pages/Notifications';
 import { InactivityTimerBadge } from './components/InactivityTimerBadge';
+import { touchAdminActivity } from './lib/adminIdle';
+import { useIdleAutoLogout } from './useIdleAutoLogout';
 
 /** Dopo login o con `?redirect=/path` da Discord: porta alla pagina fonte. */
 function PostLoginRedirect() {
@@ -54,6 +56,14 @@ export default function App() {
     setAuthenticated(isAdminLoggedIn());
     setChecking(false);
   }, []);
+
+  useIdleAutoLogout(authenticated);
+
+  useEffect(() => {
+    if (authenticated) {
+      touchAdminActivity();
+    }
+  }, [authenticated]);
 
   useEffect(() => {
     if (authenticated && mainRef.current) {

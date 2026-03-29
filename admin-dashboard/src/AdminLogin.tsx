@@ -1,8 +1,9 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { requestMagicLink } from './api';
+import { requestMagicLink, setStoredToken } from './api';
 import { isSafeAdminRedirectPath } from './utils/adminRedirect';
 
 const AUTH_TOKEN_KEY = 'admin_token';
+const LOGOUT_NOTICE_KEY = 'admin_logout_notice';
 
 export function setAdminLoggedIn(token: string): void {
   setStoredToken(token);
@@ -12,9 +13,29 @@ export function isAdminLoggedIn(): boolean {
   return !!sessionStorage.getItem(AUTH_TOKEN_KEY);
 }
 
-export function logout(): void {
+export type LogoutReason = 'idle' | 'manual';
+
+export function logout(reason?: LogoutReason): void {
+  if (reason === 'idle') {
+    try {
+      sessionStorage.setItem(LOGOUT_NOTICE_KEY, 'idle');
+    } catch {
+      // ignore
+    }
+  }
   setStoredToken(null);
   window.location.reload();
+}
+
+export function consumeLogoutNotice(): LogoutReason | null {
+  try {
+    const v = sessionStorage.getItem(LOGOUT_NOTICE_KEY);
+    sessionStorage.removeItem(LOGOUT_NOTICE_KEY);
+    if (v === 'idle') return 'idle';
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 interface AdminLoginProps {
@@ -26,6 +47,11 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [idleLogoutNotice, setIdleLogoutNotice] = useState(false);
+
+  useEffect(() => {
+    if (consumeLogoutNotice() === 'idle') setIdleLogoutNotice(true);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -81,6 +107,20 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
   return (
     <div className="admin-login-wrap">
       <div className="brutal-card" style={{ maxWidth: 360 }}>
+        {idleLogoutNotice && (
+          <p
+            role="status"
+            style={{
+              margin: '0 0 1rem',
+              padding: '0.5rem 0.65rem',
+              border: '2px solid var(--black)',
+              background: 'var(--yellow)',
+              fontSize: '0.85rem',
+            }}
+          >
+            Sessione chiusa per inattività. Accedi di nuovo per continuare.
+          </p>
+        )}
         <div style={{ marginBottom: '1rem' }}>
           <span className="badge" style={{ background: 'var(--yellow)', color: 'var(--black)' }}>
             Accesso riservato

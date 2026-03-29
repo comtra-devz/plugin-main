@@ -1,25 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-
-/** Chiave separata dal plugin Figma (non condividere stato tra app). */
-const STORAGE_KEY = 'comtra:admin:last-activity-at';
+import { ADMIN_LAST_ACTIVITY_KEY, getIdleLogoutMinutes, readLastActivityAt } from '../lib/adminIdle';
 
 /** Non aggiornare React a ogni mousemove: blocca il main thread e rallenta tutta la SPA. */
 const ACTIVITY_SAMPLE_MS = 3000;
-
-function readLastActivityAt(): number {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? Number(raw) : NaN;
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      const now = Date.now();
-      window.localStorage.setItem(STORAGE_KEY, String(now));
-      return now;
-    }
-    return parsed;
-  } catch {
-    return Date.now();
-  }
-}
 
 function formatIdle(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -38,6 +21,7 @@ export function InactivityTimerBadge() {
   const lastSampleAtRef = useRef<number>(0);
   /** Solo per forzare 1 re-render al secondo (display), mai su mousemove. */
   const [tick, setTick] = useState(0);
+  const idleMins = getIdleLogoutMinutes();
 
   useEffect(() => {
     const markActivity = (ts: number) => {
@@ -46,7 +30,7 @@ export function InactivityTimerBadge() {
       if (ts - prev < ACTIVITY_SAMPLE_MS) return;
       lastSampleAtRef.current = ts;
       try {
-        window.localStorage.setItem(STORAGE_KEY, String(ts));
+        window.localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, String(ts));
       } catch {
         // ignore
       }
@@ -69,7 +53,7 @@ export function InactivityTimerBadge() {
     const intervalId = window.setInterval(() => {
       setTick((n) => n + 1);
       try {
-        window.localStorage.setItem(STORAGE_KEY, String(lastAtRef.current));
+        window.localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, String(lastAtRef.current));
       } catch {
         // ignore
       }
@@ -85,7 +69,7 @@ export function InactivityTimerBadge() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.clearInterval(intervalId);
       try {
-        window.localStorage.setItem(STORAGE_KEY, String(lastAtRef.current));
+        window.localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, String(lastAtRef.current));
       } catch {
         // ignore
       }
@@ -97,7 +81,7 @@ export function InactivityTimerBadge() {
   return (
     <div
       aria-live="polite"
-      title="Tempo dall’ultima interazione (mouse, tastiera, scroll, focus). Persiste al refresh."
+      title={`Tempo dall’ultima interazione (mouse, tastiera, scroll, focus). Persiste al refresh. Logout automatico dopo ${idleMins} min di inattività.`}
       style={{
         position: 'fixed',
         right: '12px',
