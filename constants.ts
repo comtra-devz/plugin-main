@@ -71,7 +71,7 @@ export const BRUTAL = {
 
 export const TIER_LIMITS: Record<string, number> = {
   'FREE': 10,
-  '1w': 20,
+  '1w': 25,
   '1m': 100,
   '6m': 600,
   '1y': 3000,

@@ -14,8 +14,8 @@ export const config = { api: { bodyParser: false } };
 // Nota: nel nuovo store i checkout share usano variant numeriche diverse; manteniamo anche i vecchi ID come fallback.
 const VARIANT_TO_PRO = {
   // 1w
-  '1345293': { credits_total: 20, days: 7 },
-  '1450263': { credits_total: 20, days: 7 },
+  '1345293': { credits_total: 25, days: 7 },
+  '1450263': { credits_total: 25, days: 7 },
 
   // 1m
   '1345303': { credits_total: 100, days: 30 },

@@ -166,7 +166,13 @@ export default function Home() {
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{users.by_plan.PRO ?? 0}</div>
             {users.pro_by_variant.length > 0 && (
               <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.9 }}>
-                {users.pro_by_variant.map((v) => `${v.label}: ${v.count}`).join(' · ')}
+                {users.pro_by_variant
+                  .map((v) => {
+                    const plan =
+                      v.label === '1w' ? `${v.label} (${v.credits_total} cr)` : v.label;
+                    return `${plan}: ${v.count}`;
+                  })
+                  .join(' · ')}
               </p>
             )}
           </div>

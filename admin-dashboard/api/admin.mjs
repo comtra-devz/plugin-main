@@ -209,9 +209,10 @@ async function handleStats(req, res) {
   const freeActiveCount = freeActive.rows[0]?.c ?? 0;
 
   const planMap = Object.fromEntries((usersByPlan.rows || []).map(r => [r.plan, r.c]));
+  // Raggruppa PRO per credits_total (allineato a VARIANT_TO_PRO in auth-deploy/api/webhooks/lemonsqueezy.mjs). 1w attuale = 25 cr; 20 = acquisti precedenti.
   const proByVariant = (proByCredits.rows || []).map(r => ({
     credits_total: r.credits_total,
-    label: r.credits_total === 20 ? '1w' : r.credits_total === 100 ? '1m' : r.credits_total === 800 ? '6m' : r.credits_total === 2000 ? '1y' : String(r.credits_total),
+    label: r.credits_total === 25 || r.credits_total === 20 ? '1w' : r.credits_total === 100 ? '1m' : r.credits_total === 800 ? '6m' : r.credits_total === 2000 ? '1y' : String(r.credits_total),
     count: r.c,
   }));
 

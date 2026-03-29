@@ -74,7 +74,7 @@ const FAQS = [
   { q: "Can I export to Tailwind?", a: "Yes! React + Tailwind is our default and most optimized export format. It respects your Figma Variables mapping." },
   { q: "Do unused credits roll over?", a: "Free tier: 25 credits are a one-time welcome bonus (no reset, no expiry). Pro subscription credits are valid for the duration of your subscription cycle." },
   { q: "Is Deep Sync available on Free tier?", a: "No. The Code tab → Sync (drift detection, push to Storybook/GitHub) requires a PRO subscription. Generate CSS/JSON tokens are always free for everyone." },
-  { q: "How do I get more credits?", a: "Upgrade to PRO from Profile → Manage Subscription. Plans start at €7/week (20 credits) up to €250/year (unlimited). You can also use an affiliate code at checkout for perks." },
+  { q: "How do I get more credits?", a: "Upgrade to PRO from Profile → Manage Subscription. Plans start at €7/week (25 credits) up to €250/year (unlimited). You can also use an affiliate code at checkout for perks." },
 ];
 
 interface DocumentationProps {

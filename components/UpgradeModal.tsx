@@ -4,7 +4,7 @@ import { BRUTAL } from '../constants';
 import { Button } from './ui/Button';
 
 const TIERS = [
-  { id: '1w', label: '1 Week', price: '€7', sub: 'Just trying', limit: '20 credits' },
+  { id: '1w', label: '1 Week', price: '€7', sub: 'Just trying', limit: '25 credits' },
   { id: '1m', label: '1 Month', price: '€25', sub: 'Standard', limit: '100 credits/mo' },
   { id: '6m', label: '6 Months', price: '€99', sub: 'Save 30%', rec: true, limit: '800 credits' },
   { id: '1y', label: '1 Year', price: '€250', sub: 'Best Value', limit: 'Unlimited credits' },

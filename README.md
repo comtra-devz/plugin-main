@@ -244,7 +244,7 @@ Si apre quando i crediti sono esauriti oppure dalla view Subscription.
 
 | Piano | Prezzo | Crediti / note |
 |---|---|---|
-| 1 Week | €7 | 20 crediti |
+| 1 Week | €7 | 25 crediti |
 | 1 Month | €25 | 100 crediti/mese |
 | 6 Months *(RECOMMENDED)* | €99 | 800 crediti |
 | 1 Year | €250 | Illimitati |
@@ -285,7 +285,7 @@ Setup backend e webhook: **[auth-deploy/SETUP.md](auth-deploy/SETUP.md)** (sezio
 | Piano | Crediti | Note |
 |---|---|---|
 | FREE | 25 una tantum | Non si resettano; paywall a 0 |
-| PRO 1 Week | 20 | — |
+| PRO 1 Week | 25 | — |
 | PRO 1 Month | 100/mese | — |
 | PRO 6 Months | 800 | Consigliato |
 | PRO 1 Year | Illimitati | Sync senza cooldown |

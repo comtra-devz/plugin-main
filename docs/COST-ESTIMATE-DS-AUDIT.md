@@ -14,7 +14,7 @@ I crediti effettivamente assegnati al pagamento sono definiti in **`auth-deploy/
 | Piano | Variant ID | Crediti inclusi | Durata |
 |-------|------------|------------------|--------|
 | FREE | — | 25 (una tantum) | — |
-| 1w | 1345293 | 20 | 7 giorni |
+| 1w | 1345293 | 25 | 7 giorni |
 | 1m | 1345303 | 100 | 30 giorni |
 | 6m | 1345310 | 800 | 180 giorni |
 | 1y | 1345319 | 2 000 | 365 giorni |
@@ -234,7 +234,7 @@ I prezzi mostrati nel plugin sono in **`components/UpgradeModal.tsx`** e README,
 
 | Piano | Prezzo vendita | Crediti | Prezzo/credito (vendita) | Fonte |
 |-------|----------------|---------|--------------------------|--------|
-| 1w | **€7** | 20 | €0,35 | UpgradeModal, README |
+| 1w | **€7** | 25 | €0,28 | UpgradeModal, README |
 | 1m | **€25** | 100 | €0,25 | UpgradeModal, README |
 | 6m | **€99** | 800 | €0,124 | UpgradeModal, README |
 | 1y | **€250** | 2 000 | €0,125 | UpgradeModal, README (crediti da webhook) |
@@ -246,7 +246,7 @@ Oggi il **costo per credito** è stimato da DS Audit (medio ≈ **$0,0026** per 
 
 | Piano | Crediti (erogati/consumabili) | Costo Kimi (max, costo/credito da DS Audit) |
 |-------|------------------------------|--------------------------------------------|
-| 1w | 20 | ~$0,05 |
+| 1w | 25 | ~$0,06 |
 | 1m | 100 | ~$0,26 |
 | 6m | 800 | ~$2,08 |
 | 1y | 2 000 | ~$5,20 |
@@ -259,7 +259,7 @@ Con i prezzi da UpgradeModal/README (€ → USD appross. 1,08):
 
 | Piano | Ricavo (vendita) | Costo Kimi (solo DS) | Margine lordo | % costo Kimi su ricavo |
 |-------|------------------|----------------------|---------------|--------------------------|
-| 1w | ~$7,55 (€7) | ~$0,05 | ~$7,50 | ~0,7% |
+| 1w | ~$7,55 (€7) | ~$0,06 | ~$7,49 | ~0,8% |
 | 1m | ~$27 (€25) | ~$0,26 | ~$26,74 | ~1% |
 | 6m | ~$107 (€99) | ~$2,08 | ~$105 | ~2% |
 | 1y | ~$270 (€250) | ~$5,20 | ~$265 | ~2% |
@@ -282,7 +282,7 @@ Assunzioni:
 
 | Piano | Ricavo | − Kimi | − LS (5%+€0,50) | = Lordo (utile prima tasse) | − 30% tasse | = **Netto (in tasca)** |
 |-------|--------|--------|------------------|-----------------------------|-------------|------------------------|
-| 1w | €7,00 | €0,05 | €0,85 | €6,10 | €1,83 | **€4,27** |
+| 1w | €7,00 | €0,06 | €0,85 | €6,09 | €1,83 | **€4,26** |
 | 1m | €25,00 | €0,24 | €1,75 | €23,01 | €6,90 | **€16,11** |
 | 6m | €99,00 | €1,93 | €5,45 | €91,62 | €27,49 | **€64,13** |
 | 1y | €250,00 | €4,81 | €13,00 | €232,19 | €69,66 | **€162,53** |
@@ -354,7 +354,7 @@ Sotto questa soglia (es. pochi PRO e molti FREE) il netto non copre i fissi: i F
 - **Mix tra piani PRO** (sul totale PRO): 10% 1w, 25% 1m, 35% 6m, 30% 1y (6m consigliato in UI).
 - **Costo Kimi per utente FREE (consumo crediti):** 25 crediti in dotazione, uso medio ~40% → **~10 crediti consumati** per free user; 10 × €0,005 ≈ **€0,05** (costo una tantum sui crediti bonus). *Indipendente da come sono consumati (Scan, Generate, ecc.).*
 
-**Netto per singola vendita** (da § 7.4): 1w **€4,27** | 1m **€16,11** | 6m **€64,13** | 1y **€162,53**.
+**Netto per singola vendita** (da § 7.4): 1w **€4,26** | 1m **€16,11** | 6m **€64,13** | 1y **€162,53**.
 
 Crescita **esponenziale** del totale utenti: 100 → 500 → 2 500 → 12 500 (×5 per step).
 
@@ -365,7 +365,7 @@ Crescita **esponenziale** del totale utenti: 100 → 500 → 2 500 → 12 500 (�
 | Tipologia | N. utenti | Ricavo | Netto (in tasca) |
 |-----------|-----------|--------|-------------------|
 | FREE | 80 | €0 | −€4,00 (costo Kimi stimato) |
-| PRO 1w | 2 | €14 | €8,54 |
+| PRO 1w | 2 | €14 | €8,52 |
 | PRO 1m | 5 | €125 | €80,55 |
 | PRO 6m | 7 | €693 | €448,91 |
 | PRO 1y | 6 | €1 500 | €975,18 |
@@ -378,7 +378,7 @@ Crescita **esponenziale** del totale utenti: 100 → 500 → 2 500 → 12 500 (�
 | Tipologia | N. utenti | Ricavo | Netto (in tasca) |
 |-----------|-----------|--------|-------------------|
 | FREE | 375 | €0 | −€18,75 |
-| PRO 1w | 12 | €84 | €51,24 |
+| PRO 1w | 12 | €84 | €51,12 |
 | PRO 1m | 31 | €775 | €499,41 |
 | PRO 6m | 44 | €4 356 | €2 821,72 |
 | PRO 1y | 38 | €9 500 | €6 176,14 |
@@ -391,7 +391,7 @@ Crescita **esponenziale** del totale utenti: 100 → 500 → 2 500 → 12 500 (�
 | Tipologia | N. utenti | Ricavo | Netto (in tasca) |
 |-----------|-----------|--------|-------------------|
 | FREE | 1 750 | €0 | −€87,50 |
-| PRO 1w | 75 | €525 | €320,25 |
+| PRO 1w | 75 | €525 | €319,50 |
 | PRO 1m | 187 | €4 675 | €3 012,57 |
 | PRO 6m | 262 | €25 938 | €16 802,06 |
 | PRO 1y | 226 | €56 500 | €36 731,78 |
@@ -404,7 +404,7 @@ Crescita **esponenziale** del totale utenti: 100 → 500 → 2 500 → 12 500 (�
 | Tipologia | N. utenti | Ricavo | Netto (in tasca) |
 |-----------|-----------|--------|-------------------|
 | FREE | 8 125 | €0 | −€406,25 |
-| PRO 1w | 437 | €3 059 | €1 865,99 |
+| PRO 1w | 437 | €3 059 | €1 861,62 |
 | PRO 1m | 1 094 | €27 350 | €17 624,34 |
 | PRO 6m | 1 531 | €151 569 | €98 189,03 |
 | PRO 1y | 1 313 | €328 250 | €213 401,89 |

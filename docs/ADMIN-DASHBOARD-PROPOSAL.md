@@ -14,7 +14,7 @@ Tutti i dati sotto sono già presenti in **Postgres** (auth-deploy/schema.sql) o
 |--------|--------|------|
 | Utenti totali | `users` | Conteggio |
 | Utenti per piano (FREE / PRO) | `users.plan` | Conteggio per plan |
-| PRO per variante (1w, 1m, 6m, 1y) | `users.plan` + `plan_expires_at` / crediti | Derivabile da credits_total (20, 100, 800, 2000) |
+| PRO per variante (1w, 1m, 6m, 1y) | `users.plan` + `plan_expires_at` / crediti | Derivabile da credits_total (25, 100, 800, 2000; storico 1w anche 20) |
 | Nuovi signup (oggi / 7d / 30d) | `users.created_at` | Filtro su data |
 | Scadenze PRO imminenti (es. prossimi 7 gg) | `users.plan_expires_at` | Per reminder rinnovi |
 
