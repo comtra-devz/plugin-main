@@ -91,7 +91,8 @@ app.use(cors({
     }
   },
 }));
-app.use(express.json());
+// Code-gen / audit inviano file_json o node_json che superano il default 100kb di express.json()
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
 
 app.get('/auth/figma/init', async (req, res) => {
   const store = await getFlowStore();
