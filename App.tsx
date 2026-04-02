@@ -29,6 +29,7 @@ export interface CreditsState {
 }
 
 const CREDITS_CACHE_KEY = 'comtra.credits.v1';
+const CREDITS_GIFT_SEEN_KEY = 'comtra.creditGiftSeen.v1';
 
 function readCreditsCache(userId: string): CreditsState | null {
   try {
@@ -46,6 +47,26 @@ function readCreditsCache(userId: string): CreditsState | null {
 function writeCreditsCache(userId: string, c: CreditsState) {
   try {
     sessionStorage.setItem(CREDITS_CACHE_KEY, JSON.stringify({ userId, ...c }));
+  } catch {
+    // private mode / quota
+  }
+}
+
+function readCreditGiftSeenMarker(userId: string): string | null {
+  try {
+    const raw = sessionStorage.getItem(CREDITS_GIFT_SEEN_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as { userId?: string; marker?: string };
+    if (o.userId !== userId) return null;
+    return typeof o.marker === 'string' && o.marker.length > 0 ? o.marker : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCreditGiftSeenMarker(userId: string, marker: string) {
+  try {
+    sessionStorage.setItem(CREDITS_GIFT_SEEN_KEY, JSON.stringify({ userId, marker }));
   } catch {
     // private mode / quota
   }
@@ -355,17 +376,34 @@ export default function AppTest() {
         return { ...prev, ...updates };
       });
       if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
-      if (data.gift && typeof data.gift.credits_added === 'number' && data.gift.credits_added > 0 && user?.authToken) {
+      if (
+        data.gift &&
+        typeof data.gift.credits_added === 'number' &&
+        data.gift.credits_added > 0 &&
+        user?.authToken &&
+        user?.id
+      ) {
+        const giftMarker = `${String(data.gift.created_at || 'unknown')}::${data.gift.credits_added}`;
+        const alreadyShownInThisSession = readCreditGiftSeenMarker(user.id) === giftMarker;
         try {
           const r = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
           });
           if (r.ok) {
-            setCreditGiftAmount(data.gift.credits_added);
-            setShowCreditGiftModal(true);
+            writeCreditGiftSeenMarker(user.id, giftMarker);
+            if (!alreadyShownInThisSession) {
+              setCreditGiftAmount(data.gift.credits_added);
+              setShowCreditGiftModal(true);
+            }
+          } else if (shouldLogCreditsDebug()) {
+            console.warn(`[CreditsDebug] POST /api/credit-gift-seen status=${r.status}`);
           }
-        } catch {
+        } catch (e) {
+          if (shouldLogCreditsDebug()) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.warn(`[CreditsDebug] POST /api/credit-gift-seen exception=${msg.slice(0, 200)}`);
+          }
           // POST fallito: al prossimo accesso riproverà
         }
       }
