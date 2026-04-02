@@ -1859,7 +1859,7 @@ app.post('/api/agents/code-gen', async (req, res) => {
   const nodeJson = body.node_json || body.nodeJson;
   const fileKey = (body.file_key || body.fileKey || '').trim() || undefined;
 
-  const ALLOWED = ['REACT', 'STORYBOOK', 'LIQUID', 'CSS', 'VUE', 'SVELTE', 'ANGULAR'];
+  const ALLOWED = ['REACT', 'REACT_INLINE', 'STORYBOOK', 'LIQUID', 'CSS', 'VUE', 'SVELTE', 'ANGULAR'];
   if (!nodeJson || typeof nodeJson !== 'object') return res.status(400).json({ error: 'node_json required' });
   if (!ALLOWED.includes(format)) return res.status(400).json({ error: 'invalid format' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });

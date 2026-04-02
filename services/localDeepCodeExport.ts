@@ -1,7 +1,8 @@
 /**
  * Export deterministico e in profondità dal subtree Figma (get-code-gen-subtree).
- * FREE tier: nessuna chiamata AI — struttura + testi + stili base da JSON.
- * Supporta tutti i formati della tab Target.
+ * FREE tier: nessuna chiamata AI — struttura + testi + stili da JSON.
+ * - REACT: Tailwind (utility + valori arbitrari es. w-[343px], bg-[rgb(...)]).
+ * - REACT_INLINE: React con style={{}} come prima.
  */
 
 export type FigmaExportNode = {
@@ -45,6 +46,103 @@ function rgbFromFill(n: FigmaExportNode): string | null {
   return `rgb(${R}, ${G}, ${B})`;
 }
 
+/** rgb senza spazi per classi Tailwind arbitrary */
+function rgbTwToken(n: FigmaExportNode): string | null {
+  const rgb = rgbFromFill(n);
+  return rgb ? rgb.replace(/\s/g, '') : null;
+}
+
+function pxArbitrary(n: number, prefix: 'w' | 'min-h'): string {
+  return `${prefix}-[${Math.round(n)}px]`;
+}
+
+function gapToTw(gap: number): string {
+  const exact: Record<number, string> = {
+    0: 'gap-0',
+    4: 'gap-1',
+    8: 'gap-2',
+    12: 'gap-3',
+    16: 'gap-4',
+    20: 'gap-5',
+    24: 'gap-6',
+    32: 'gap-8',
+  };
+  return exact[gap] ?? `gap-[${gap}px]`;
+}
+
+function paddingToTw(lay: NonNullable<FigmaExportNode['layout']>): string[] {
+  const pt = lay.paddingTop ?? 0;
+  const pr = lay.paddingRight ?? 0;
+  const pb = lay.paddingBottom ?? 0;
+  const pl = lay.paddingLeft ?? 0;
+  if (!pt && !pr && !pb && !pl) return [];
+  if (pt === pr && pr === pb && pb === pl) {
+    const m: Record<number, string> = {
+      2: 'p-0.5',
+      4: 'p-1',
+      6: 'p-1.5',
+      8: 'p-2',
+      12: 'p-3',
+      16: 'p-4',
+      24: 'p-6',
+    };
+    return [m[pt] ?? `p-[${pt}px]`];
+  }
+  const out: string[] = [];
+  const one = (v: number, axis: 'pt' | 'pr' | 'pb' | 'pl') => {
+    if (!v) return;
+    const m: Record<number, string> = { 4: `${axis}-1`, 8: `${axis}-2`, 12: `${axis}-3`, 16: `${axis}-4`, 24: `${axis}-6` };
+    out.push(m[v] ?? `${axis}-[${v}px]`);
+  };
+  one(pt, 'pt');
+  one(pr, 'pr');
+  one(pb, 'pb');
+  one(pl, 'pl');
+  return out;
+}
+
+function flexLayoutTw(n: FigmaExportNode): string[] {
+  const cls: string[] = [];
+  const lay = n.layout;
+  if (lay?.mode === 'HORIZONTAL') {
+    cls.push('flex', 'flex-row', 'items-stretch');
+    if (typeof lay.itemSpacing === 'number') cls.push(gapToTw(lay.itemSpacing));
+  } else if (lay?.mode === 'VERTICAL') {
+    cls.push('flex', 'flex-col', 'items-stretch');
+    if (typeof lay.itemSpacing === 'number') cls.push(gapToTw(lay.itemSpacing));
+  }
+  if (lay) cls.push(...paddingToTw(lay));
+  return cls;
+}
+
+function boxSizeTw(n: FigmaExportNode): string[] {
+  const c: string[] = [];
+  const box = n.absoluteBoundingBox;
+  if (box && typeof box.width === 'number') c.push(pxArbitrary(box.width, 'w'));
+  if (box && typeof box.height === 'number') c.push(pxArbitrary(box.height, 'min-h'));
+  return c;
+}
+
+/** Colore testo vs sfondo: TEXT → text-[…], altri nodi → bg-[…] */
+function colorTw(n: FigmaExportNode): string[] {
+  const tok = rgbTwToken(n);
+  if (!tok) return [];
+  if (n.type === 'TEXT') return [`text-[${tok}]`];
+  return [`bg-[${tok}]`];
+}
+
+function tailwindClassString(n: FigmaExportNode): string {
+  if (n.type === 'TEXT') {
+    return [...boxSizeTw(n), ...colorTw(n)].filter(Boolean).join(' ');
+  }
+  return [...boxSizeTw(n), ...flexLayoutTw(n), ...colorTw(n)].filter(Boolean).join(' ');
+}
+
+function reactTailwindClassAttr(n: FigmaExportNode): string {
+  const s = tailwindClassString(n);
+  return s ? ` className="${s}"` : '';
+}
+
 function cssBox(n: FigmaExportNode): string {
   const parts: string[] = [];
   const box = n.absoluteBoundingBox;
@@ -70,7 +168,6 @@ function cssBox(n: FigmaExportNode): string {
   return parts.join('; ');
 }
 
-/** React: oggetto style inline */
 function reactStyleObject(n: FigmaExportNode): string {
   const parts: string[] = [];
   const box = n.absoluteBoundingBox;
@@ -104,14 +201,24 @@ function escapeHtml(t: string): string {
   return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function walkReact(n: FigmaExportNode, depth: number): string {
+function walkReactInline(n: FigmaExportNode, depth: number): string {
   const pad = '  '.repeat(depth);
   if (n.visible === false) return '';
   if (n.type === 'TEXT' && n.characters) {
     return `${pad}<span${reactStyleObject(n)}>${escapeJsxText(n.characters)}</span>\n`;
   }
-  const children = (n.children || []).map((c) => walkReact(c, depth + 1)).join('');
+  const children = (n.children || []).map((c) => walkReactInline(c, depth + 1)).join('');
   return `${pad}<div data-figma-id="${safeId(n.id, 'n')}" data-figma-type="${n.type || 'NODE'}"${reactStyleObject(n)}>\n${children}${pad}</div>\n`;
+}
+
+function walkReactTailwind(n: FigmaExportNode, depth: number): string {
+  const pad = '  '.repeat(depth);
+  if (n.visible === false) return '';
+  if (n.type === 'TEXT' && n.characters) {
+    return `${pad}<span${reactTailwindClassAttr(n)}>${escapeJsxText(n.characters)}</span>\n`;
+  }
+  const children = (n.children || []).map((c) => walkReactTailwind(c, depth + 1)).join('');
+  return `${pad}<div data-figma-id="${safeId(n.id, 'n')}" data-figma-type="${n.type || 'NODE'}"${reactTailwindClassAttr(n)}>\n${children}${pad}</div>\n`;
 }
 
 function walkHtml(n: FigmaExportNode, depth: number, classPrefix: string): string {
@@ -160,7 +267,7 @@ function walkVueInline(n: FigmaExportNode, depth: number): string {
   return `${pad}<div data-figma-id="${safeId(n.id, 'n')}"${styleAttr}>\n${children}${pad}</div>\n`;
 }
 
-/** Public: export locale profondo per formato Target */
+/** Export locale profondo per formato Target */
 export function exportLocalDeepCode(format: string, root: unknown): string {
   const fmt = String(format || 'REACT').toUpperCase();
   if (!root || typeof root !== 'object') {
@@ -169,43 +276,49 @@ export function exportLocalDeepCode(format: string, root: unknown): string {
   const node = root as FigmaExportNode;
   const comp = pascalCase(node.name || 'Exported');
   const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const header = `/* Comtra local export — ${ts} — FREE tier (deterministic, full subtree) */\n`;
+  const headerBase = `/* Comtra local export — ${ts} — FREE tier (deterministic, full subtree) */\n`;
 
   switch (fmt) {
     case 'REACT': {
-      const body = walkReact(node, 2);
+      const body = walkReactTailwind(node, 2);
       const trunc = node._meta?.truncated ? `\n  {/* Note: export was truncated at source (_meta.truncated) */}\n` : '';
-      return `${header}export const ${comp} = () => (\n  <div className="figma-export-root">${trunc}\n${body}  </div>\n);\n`;
+      const hint = `\n/* Tailwind: use gap-*, p-*, flex, w-[…px], bg-[rgb(…)], text-[rgb(…)] — configure content paths to include this file. */\n`;
+      return `${headerBase}${hint}export const ${comp} = () => (\n  <div className="figma-export-root box-border">${trunc}\n${body}  </div>\n);\n`;
+    }
+    case 'REACT_INLINE': {
+      const body = walkReactInline(node, 2);
+      const trunc = node._meta?.truncated ? `\n  {/* Note: export was truncated at source (_meta.truncated) */}\n` : '';
+      return `${headerBase}export const ${comp} = () => (\n  <div className="figma-export-root">${trunc}\n${body}  </div>\n);\n`;
     }
     case 'STORYBOOK': {
-      const body = walkReact(node, 2);
-      return `${header}import type { Meta, StoryObj } from '@storybook/react';\n\nexport const ${comp} = () => (\n  <div className="figma-export-root">\n${body}  </div>\n);\n\nconst meta = {\n  component: ${comp},\n  title: 'Figma/${comp}',\n} satisfies Meta<typeof ${comp}>;\nexport default meta;\n\ntype Story = StoryObj<typeof ${comp}>;\n\nexport const FromFigma: Story = {\n  render: () => <${comp} />,\n};\n`;
+      const body = walkReactTailwind(node, 2);
+      return `${headerBase}import type { Meta, StoryObj } from '@storybook/react';\n\nexport const ${comp} = () => (\n  <div className="figma-export-root box-border">\n${body}  </div>\n);\n\nconst meta = {\n  component: ${comp},\n  title: 'Figma/${comp}',\n} satisfies Meta<typeof ${comp}>;\nexport default meta;\n\ntype Story = StoryObj<typeof ${comp}>;\n\nexport const FromFigma: Story = {\n  render: () => <${comp} />,\n};\n`;
     }
     case 'LIQUID': {
       const body = walkLiquid(node, 0);
-      return `${header}{% comment %} Local export — full subtree {% endcomment %}\n<div class="figma-root figma-${safeId(node.id, 'root')}">\n${body}</div>\n`;
+      return `${headerBase}{% comment %} Local export — full subtree {% endcomment %}\n<div class="figma-root figma-${safeId(node.id, 'root')}">\n${body}</div>\n`;
     }
     case 'CSS': {
       const prefix = `fe_${safeId(node.id, 'r')}`;
       const html = walkHtml(node, 0, prefix);
       const rules: string[] = [];
       collectCssRules(node, prefix, rules);
-      return `${header}<style>\n${rules.join('\n')}\n</style>\n<section class="${prefix}-${safeId(node.id, 'n')}">\n${html}</section>\n`;
+      return `${headerBase}<style>\n${rules.join('\n')}\n</style>\n<section class="${prefix}-${safeId(node.id, 'n')}">\n${html}</section>\n`;
     }
     case 'VUE': {
       const body = walkVueInline(node, 2);
-      return `${header}<template>\n  <div class="figma-export-root">\n${body}  </div>\n</template>\n\n<script setup lang="ts">\n</script>\n`;
+      return `${headerBase}<template>\n  <div class="figma-export-root">\n${body}  </div>\n</template>\n\n<script setup lang="ts">\n</script>\n`;
     }
     case 'SVELTE': {
-      const inner = walkReact(node, 2).replace(/className=/g, 'class=');
-      return `${header}<script lang="ts">\n</script>\n\n<div class="figma-export-root">\n${inner}</div>\n`;
+      const inner = walkReactTailwind(node, 2).replace(/className=/g, 'class=');
+      return `${headerBase}<script lang="ts">\n</script>\n\n<div class="figma-export-root box-border">\n${inner}</div>\n`;
     }
     case 'ANGULAR': {
       const tpl = walkHtml(node, 0, 'ang').replace(/\n/g, '\n    ');
-      return `${header}import { Component } from '@angular/core';\n\n@Component({\n  selector: 'app-${safeId(node.name, 'x').toLowerCase()}',\n  standalone: true,\n  template: \`\n    <section class="figma-export-root">\n    ${tpl}\n    </section>\n  \`,\n  styles: [\`\n    .figma-export-root { box-sizing: border-box; }\n  \`],\n})\nexport class ${comp}Component {}\n`;
+      return `${headerBase}import { Component } from '@angular/core';\n\n@Component({\n  selector: 'app-${safeId(node.name, 'x').toLowerCase()}',\n  standalone: true,\n  template: \`\n    <section class="figma-export-root">\n    ${tpl}\n    </section>\n  \`,\n  styles: [\`\n    .figma-export-root { box-sizing: border-box; }\n  \`],\n})\nexport class ${comp}Component {}\n`;
     }
     default:
-      return `${header}// Unsupported format: ${fmt}\n`;
+      return `${headerBase}// Unsupported format: ${fmt}\n`;
   }
 }
 
