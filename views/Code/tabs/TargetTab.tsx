@@ -32,9 +32,11 @@ export const TargetTab: React.FC<TargetTabProps> = ({
   setLastSyncedComp,
   isPro,
   onUnlockRequest,
-  isSbConnected
+  isSbConnected,
+  proCodeGenAiCredits
 }) => {
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [showProAiInfo, setShowProAiInfo] = useState(false);
   const [isCodeLangOpen, setIsCodeLangOpen] = useState(false);
   const codeLangDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -111,9 +113,13 @@ export const TargetTab: React.FC<TargetTabProps> = ({
           <div className="flex flex-col gap-1 border-2 border-black bg-black p-4 text-white shadow-[4px_4px_0_0_#000] animate-in slide-in-from-top-2">
             <div className="flex justify-between items-start mb-2 border-b border-gray-700 pb-2">
               <label className="text-[10px] font-bold uppercase pl-1 inline-block w-fit px-1 text-[#ff90e8] self-end">Generate Code</label>
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 border ${isPro ? 'border-[#ffc900] text-[#ffc900]' : 'border-gray-500 text-gray-400'}`}>
+                {isPro ? 'PRO · AI' : 'Free · local'}
+              </span>
             </div>
 
             {!generatedCode ? (
+              <>
               <Button
                 variant="primary"
                 fullWidth
@@ -124,6 +130,27 @@ export const TargetTab: React.FC<TargetTabProps> = ({
               >
                 {isGenerating ? 'Generating...' : 'Generate Code'}
               </Button>
+              {isPro ? (
+                <div className="mt-2 rounded border border-gray-600 bg-[#111] p-2 text-[9px] text-gray-300 leading-snug">
+                  <span className="text-gray-400">PRO export uses Kimi on the server</span>
+                  {proCodeGenAiCredits != null ? (
+                    <span className="text-[#ffc900] font-bold"> · ~{proCodeGenAiCredits} credits</span>
+                  ) : null}
+                  <span className="text-gray-500"> · Optional Storybook hints when Sync layers match your selection.</span>
+                  <button
+                    type="button"
+                    className="mt-1 block text-left text-[9px] font-bold uppercase text-[#ff90e8] underline"
+                    onClick={() => setShowProAiInfo(true)}
+                  >
+                    How it works
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-2 text-[9px] text-gray-500 leading-snug">
+                  Free: full-depth export from Figma JSON (all formats). No AI — runs locally in the plugin.
+                </p>
+              )}
+              </>
             ) : (
               <div className="animate-in fade-in">
                 <div className="flex justify-between items-center mb-1">
@@ -205,6 +232,24 @@ export const TargetTab: React.FC<TargetTabProps> = ({
             </Button>
           </div>
         </>
+      )}
+
+      {showProAiInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowProAiInfo(false)}>
+          <div className={`${BRUTAL.card} bg-white max-w-md w-full mx-4 p-4`} onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-black uppercase text-sm mb-2">PRO · Target export</h3>
+            <ul className="list-disc list-inside space-y-2 text-[11px] text-gray-700">
+              <li>Uses <strong>Kimi</strong> on Comtra servers to turn your <strong>full selection subtree</strong> into code.</li>
+              <li>Consumes credits per run (see estimate above). Connect Storybook in <strong>Sync</strong> first for better naming when layer IDs match.</li>
+              <li>Free tier instead uses a <strong>local deterministic</strong> exporter (no AI), still walking the whole tree.</li>
+            </ul>
+            <div className="flex justify-end mt-4">
+              <Button variant="secondary" onClick={() => setShowProAiInfo(false)} className="text-xs">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Workflow Info Modal — stesso pattern di Generate (Read First / Generation Logic) */}

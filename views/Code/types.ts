@@ -45,6 +45,8 @@ export interface TargetTabProps {
   isPro: boolean;
   onUnlockRequest: () => void;
   isSbConnected: boolean;
+  /** Stima crediti per export PRO AI (Kimi), da GET estimate code_gen_ai */
+  proCodeGenAiCredits: number | null;
 }
 
 export interface SyncTabProps {

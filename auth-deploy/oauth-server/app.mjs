@@ -589,6 +589,7 @@ function estimateCreditsByAction(actionType, nodeCount) {
   if (actionType === 'scan_sync') return 15;
   if (actionType === 'sync_fix' || actionType === 'sync_storybook' || actionType === 'comp_sync') return 5;
   if (actionType === 'code_gen') return 0;
+  if (actionType === 'code_gen_ai') return 40;
   return 5;
 }
 
@@ -1880,11 +1881,23 @@ app.post('/api/agents/code-gen', async (req, res) => {
   let blob = JSON.stringify(nodeJson);
   if (blob.length > JSON_MAX) blob = `${blob.slice(0, JSON_MAX)}\n…[truncated for model input]`;
 
+  const sbCtx = body.storybook_context || body.storybookContext;
+  let sbBlock = '';
+  if (sbCtx && typeof sbCtx === 'object') {
+    try {
+      const s = JSON.stringify(sbCtx);
+      sbBlock = s.length > 12000 ? `${s.slice(0, 12000)}\n…[truncated]` : s;
+    } catch (_) {}
+  }
+
   const userMessage = [
     `Output format: ${format}.`,
     fileKey ? `Figma file_key (context only): ${fileKey}` : '',
     'The JSON is the user-selected Figma node (root) and descendants. Generate code for this root as a whole — not a generic unrelated widget.',
     'If root._meta.truncated is true, add a one-line top comment that descendants were capped in the export.',
+    sbBlock
+      ? `Optional Storybook sync hints (prefer imports/names when layer IDs match; do not shrink scope):\n${sbBlock}`
+      : '',
     '---',
     blob,
   ]

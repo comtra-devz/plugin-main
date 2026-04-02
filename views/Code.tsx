@@ -13,6 +13,7 @@ import {
   type FigmaDesignTokensPayload
 } from '../services/tokenGeneration';
 import { getSystemToastOptions } from '../lib/errorCopy';
+import { collectSubtreeNodeIds, exportLocalDeepCode } from '../services/localDeepCodeExport';
 
 interface Props {
   plan: UserPlan;
@@ -27,7 +28,15 @@ interface Props {
   fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string }>;
   /** POST /api/agents/code-gen — subtree from plugin + format → code */
-  fetchCodeGen?: (body: { format: string; node_json: object; file_key?: string | null }) => Promise<{ code?: string; error?: string; component_name?: string }>;
+  fetchCodeGen?: (body: {
+    format: string;
+    node_json: object;
+    file_key?: string | null;
+    storybook_context?: {
+      storybook_base_url?: string;
+      matched_layers?: Array<{ figma_layer_id?: string | null; name: string; note?: string }>;
+    };
+  }) => Promise<{ code?: string; error?: string; component_name?: string }>;
   onNavigateToStats?: () => void;
   /** Selezione canvas Figma (automatica). */
   selectedNode?: { id: string; name: string; type: string } | null;
@@ -53,11 +62,13 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // Target: selezione automatica da Figma (selectedNode)
   const selectedLayer = selectedNode?.name ?? null;
 
-  // Reset sync status quando cambia la selezione
+  // Reset sync + output generato quando cambia la selezione
   useEffect(() => {
     setLastSyncedComp(null);
+    setGeneratedCode(null);
   }, [selectedNode?.id]);
   const [lang, setLang] = useState('REACT');
+  const [proCodeGenAiCredits, setProCodeGenAiCredits] = useState<number | null>(null);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -118,6 +129,21 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // If Storybook date is newer or equal to CSS/JSON date, we are synced.
   const isTokensSynced = lastSyncedStorybookDate && lastGeneratedCssDate && lastSyncedStorybookDate >= lastGeneratedCssDate;
   const isJsonSynced = lastSyncedStorybookDate && lastGeneratedJsonDate && lastSyncedStorybookDate >= lastGeneratedJsonDate;
+
+  useEffect(() => {
+    if (!isPro || activeTab !== 'TARGET') return;
+    let cancelled = false;
+    estimateCredits({ action_type: 'code_gen_ai' })
+      .then((r) => {
+        if (!cancelled) setProCodeGenAiCredits(r.estimated_credits ?? 40);
+      })
+      .catch(() => {
+        if (!cancelled) setProCodeGenAiCredits(40);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro, activeTab, estimateCredits]);
 
   // Timer Tick
   useEffect(() => {
@@ -334,19 +360,16 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   // --- HANDLERS ---
-  // Generate Code: FREE (0 crediti) — richiede sessione per Kimi sul backend
+  /** FREE: export locale ricorsivo. PRO: Kimi (code_gen_ai) + hint Storybook se disponibili. */
+  const CODE_GEN_AI = 'code_gen_ai';
+
   const handleGenerate = async () => {
-    if (!fetchCodeGen) {
-      setGeneratedCode('// Sign in and ensure the server exposes POST /api/agents/code-gen to generate from your selection.\n');
+    if (!canUseFeature) {
+      onUnlockRequest();
       return;
     }
     setIsGenerating(true);
     setGeneratedCode(null);
-    try {
-      if (logFreeAction) await logFreeAction('code_gen');
-    } catch {
-      /* best-effort */
-    }
     try {
       const sub = await requestCodeGenSubtree();
       if (sub.error) {
@@ -357,10 +380,61 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         setGeneratedCode('// No node data from Figma.\n');
         return;
       }
+
+      if (!isPro) {
+        try {
+          if (logFreeAction) await logFreeAction('code_gen_free');
+        } catch {
+          /* best-effort */
+        }
+        setGeneratedCode(exportLocalDeepCode(lang, sub.root));
+        return;
+      }
+
+      if (!fetchCodeGen) {
+        setGeneratedCode('// Sign in to run PRO AI export.\n');
+        return;
+      }
+
+      const { estimated_credits } = await estimateCredits({ action_type: CODE_GEN_AI });
+      const cost = estimated_credits ?? 40;
+      if (!useInfiniteCreditsForTest && creditsRemaining !== null && creditsRemaining < cost) {
+        onUnlockRequest();
+        return;
+      }
+
+      const consumeResult = await consumeCredits({
+        action_type: CODE_GEN_AI,
+        credits_consumed: cost,
+        file_id: sub.fileKey ?? undefined,
+      });
+      if (consumeResult?.error) {
+        if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
+        setGeneratedCode(`// ${consumeResult.error}\n`);
+        return;
+      }
+
+      const ids = collectSubtreeNodeIds(sub.root);
+      const matched = syncItems
+        .filter((i) => i.layerId && ids.has(String(i.layerId)))
+        .map((i) => ({
+          figma_layer_id: i.layerId,
+          name: i.name,
+          note: i.desc,
+        }));
+      const storybook_context =
+        matched.length > 0 || storybookUrl
+          ? {
+              storybook_base_url: storybookUrl ?? undefined,
+              matched_layers: matched,
+            }
+          : undefined;
+
       const data = await fetchCodeGen({
         format: lang,
         node_json: sub.root as object,
         file_key: sub.fileKey,
+        storybook_context,
       });
       const code = data.code;
       if (!code) {
@@ -678,6 +752,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             isPro={isPro}
             onUnlockRequest={onUnlockRequest}
             isSbConnected={isSbConnected}
+            proCodeGenAiCredits={proCodeGenAiCredits}
         />
       )}
 

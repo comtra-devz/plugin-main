@@ -941,7 +941,15 @@ export default function AppTest() {
   }, [user?.authToken]);
 
   const fetchCodeGen = React.useCallback(
-    async (body: { format: string; node_json: object; file_key?: string | null }) => {
+    async (body: {
+      format: string;
+      node_json: object;
+      file_key?: string | null;
+      storybook_context?: {
+        storybook_base_url?: string;
+        matched_layers?: Array<{ figma_layer_id?: string | null; name: string; note?: string }>;
+      };
+    }) => {
       if (!user?.authToken) throw new Error('Unauthorized');
       const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/code-gen`, {
         method: 'POST',
@@ -950,6 +958,7 @@ export default function AppTest() {
           format: body.format,
           node_json: body.node_json,
           ...(body.file_key ? { file_key: body.file_key } : {}),
+          ...(body.storybook_context ? { storybook_context: body.storybook_context } : {}),
         }),
       });
       if (r.status === 503) {
