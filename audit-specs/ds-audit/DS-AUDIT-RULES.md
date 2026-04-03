@@ -222,10 +222,12 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 ### 3.1 Nome generico (Frame 123, Rectangle 456)
 
-**Descrizione:** Nome di layer che non descrive ruolo o contenuto (es. "Frame", "Rectangle", "Group" con o senza suffisso numerico). Le best practice e le linee guida citate raccomandano **naming semantico**: nomi che riflettono funzione e significato (es. `color-warning`, `surface-primary`, `Card_Container`) anziché aspetto o tipo di nodo.
+**Descrizione:** Nome di layer che non descrive ruolo o contenuto (es. "Frame", "Rectangle", "Group" con o senza suffisso numerico). Le best practice e le linee guida citate raccomandano **naming semantico**: nomi che riflettono funzione e significato (es. `color-warning`, `surface-primary`) anziché aspetto o tipo di nodo.
+
+**Esclusione (non segnalare 3.1):** nome del nodo (trim) uguale in modo **case-insensitive** a **`section`**, **`wrapper`** o **`container`** — vocaboli strutturali comuni (HTML/layout/codice), non placeholder generici.
 
 **Dove nel JSON del file:**
-- Ogni nodo: `name`. Pattern come `/^Frame\s*\d*$/i`, `/^Rectangle\s*\d*$/i`, `/^Group\s*\d*$/i`, `/^Copy\s*\d*$/i`.
+- Ogni nodo: `name`. Pattern come `/^Frame\s*\d*$/i`, `/^Rectangle\s*\d*$/i`, `/^Group\s*\d*$/i`, `/^Copy\s*\d*$/i`. **Non** applicare 3.1 ai tre nomi esclusi sopra.
 
 **Severity:** HIGH per componenti e frame riutilizzabili; MED per gruppi; LOW per elementi puramente grafici.
 
@@ -347,10 +349,11 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 ### 5.1 Allineamento fuori griglia (es. 4px o 8px)
 
-**Descrizione:** Posizione (x, y) del nodo non multipla della base di griglia (4 o 8). Si considerano solo le coordinate, non width/height (le dimensioni possono essere variabili e dipendere dal contenuto).
+**Descrizione:** Posizione **assoluta** su tela (non confondere con X/Y nel pannello proprietà, spesso **relative al genitore**). `absoluteBoundingBox.x`/`y` possono essere molto negativi mentre il figlio ha X=144 nel pannello: somma posizione genitore + offset relativo.
 
 **Dove nel JSON del file:**
-- `absoluteBoundingBox`: `x`, `y`. Calcolare resto modulo 4 (o 8). Se non multiplo → fuori griglia. Non controllare `width` né `height`.
+- `absoluteBoundingBox`: `x`, `y`. Modulo 4 (o 8). Non controllare `width`/`height`.
+- **Non applicare 5.1** al nodo se il **genitore** ha `layoutMode` ≠ `"NONE"` (auto-layout) e il nodo **non** ha `layoutPositioning: "ABSOLUTE"` — il flusso è gestito dal layout; segnalare solo per frame liberi o figli esplicitamente assoluti.
 
 **Severity:** MED per layout; LOW per illustrazioni/icone.
 
@@ -496,7 +499,9 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 Producono **raccomandazioni** (`categoryId: optimization`, `recommendation: true`). **Similarità via JSON**: struttura (tipi figlio, layout, padding), fills/strokes, naming. Se il JSON non basta, non emettere. *Screenshot: TO-DO-BEFORE-GOING-LIVE.*
 
-- **8.1 DS-OPT-1** Famiglie ridondanti: merge con slot/varianti. `optimizationPayload`: componentIdsToMerge, suggestedSlots, suggestedVariants, suggestedTokens.
+**Severity:** per default **LOW** — sono migliorie opzionali (file funzionante). **MED** solo se il debito è ampio e ripetuto; evitare **HIGH** salvo confusione grave per gli autori.
+
+- **8.1 DS-OPT-1** Famiglie ridondanti / componenti **separati** molto simili: merge con slot/varianti — **LOW**; chiarire che non è un difetto funzionale ma consolidamento facoltativo. `optimizationPayload`: componentIdsToMerge, suggestedSlots, suggestedVariants, suggestedTokens.
 - **8.2 DS-OPT-2** Slot mancanti: aree variabili come slot. `autoFixAvailable`: feasible.
 - **8.3 DS-OPT-3** Token da estrarre: valori ripetuti. `autoFixAvailable`: feasible.
 - **8.4 DS-OPT-4** Varianti da introdurre: component set. `optimizationPayload`: suggestedVariants.

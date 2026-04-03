@@ -272,9 +272,18 @@ export const IssueList: React.FC<IssueListProps> = ({
                                     >
                                         ←
                                     </button>
-                                    <div className="flex min-w-0 flex-1 items-center justify-center px-2 py-2 text-center text-[10px] font-bold uppercase leading-snug">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const lid = i.layerIds![currentIndex];
+                                          if (lid) onSelectLayer(e, lid);
+                                        }}
+                                        title="Select this layer in Figma"
+                                        className={`flex min-w-0 flex-1 cursor-pointer items-center justify-center px-2 py-2 text-center text-[10px] font-bold uppercase leading-snug transition-colors hover:bg-white ${layerSelectionFeedback === i.layerIds![currentIndex] ? 'bg-white' : ''}`}
+                                    >
                                         Layer {currentIndex + 1} of {i.layerIds!.length} selected
-                                    </div>
+                                    </button>
                                     <button 
                                         onClick={(e) => onNavDeviation(e, i.id, i.layerIds!, 'next')}
                                         className="shrink-0 px-3 hover:bg-black hover:text-white font-bold border-l border-black"

@@ -34,6 +34,8 @@ Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues tha
 - **Styles vs variables vs raw hex:** Nodes may use **color styles** via `fillStyleId` / `strokeStyleId` (paint still shows `fills[].color` as resolved RGB in many exports). If those style IDs are set, the paint is **style-driven**, not arbitrary hardcoded. Prefer variables when building a token system, but **do not** treat style-linked fills/strokes as rule **2.1** / **2.2** hardcoded unless there is no style ID and no variable binding and the paint is truly local-only.
 - **Overrides that are *not* overrides:** When comparing INSTANCE to its main (`components[componentId]` / definition), if `fillStyleId` / `strokeStyleId` (and matching indices) are **the same** as on the main, **do not** count fills/strokes as meaningful overrides — even if hex values appear in `fills` / `strokes`.
 - **Library link:** Component definitions often include **`remote`**: `true` = from a published team library, `false` = **local** to this file. A file that only has local component definitions (no / few remotes) may reflect a **broken or missing library link** (copy-pasted file, library disconnected). That is a separate **adoption / governance** signal (suggest reconnecting or publishing from source) — **not** the same as “detached instance”.
+- **absoluteBoundingBox vs Figma inspector X/Y:** `absoluteBoundingBox.x` / `y` are **canvas-absolute** (page space). The properties panel often shows **position relative to the parent frame**. Example: parent at x = −2365, child **relative** X = 144 → **absolute** x ≈ −2221. A “negative” or odd absolute value with a normal-looking relative X is **not** a layout bug by itself. If you cite x/y from `absoluteBoundingBox` in `msg`, **say they are absolute** so users are not confused.
+- **INSTANCE vs main in the same file JSON:** If `componentId` resolves to a **`COMPONENT` (or main frame) node present in the same document JSON** (typical when the library link is broken but the master was published or copied into the file), only report adoption **override / drift** when **root-level** layout, padding, and paints **actually differ** from that node after ignoring inherited empty fields (instance omits keys that match main). Do **not** claim “5+ overrides” or “fills/layout differ from main” from vibes alone — the pipeline may drop unsubstantiated rows.
 
 ## Rules (where to look in the JSON)
 
@@ -55,7 +57,7 @@ Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues tha
 - **2.7 Opacity hardcoded:** `opacity` not from scale (e.g. 0.73) → LOW.
 
 **Naming**
-- **3.1 Generic name:** Node `name` matches Frame 123, Rectangle 456, Group, Copy 123 → HIGH for components/frames, MED for groups.
+- **3.1 Generic name:** Node `name` matches Figma defaults like Frame 123, Rectangle 456, Group, Copy 123 → HIGH for components/frames, MED for groups. **Exclude (never report 3.1):** trimmed `name` equals case-insensitively exactly **`section`**, **`wrapper`**, or **`container`** — these are accepted layout vocabulary from code/HTML and are not generic placeholders.
 - **3.2 Inconsistent convention:** Mix of PascalCase, snake_case, kebab-case, spaces in sibling or similar branches → MED.
 - **3.3 Component name without variant:** Components with similar names but no variant/state in name (e.g. "Button" repeated) → MED.
 - **3.4 Page/frame non-descriptive:** CANVAS or root frame `name` like "Page 1", "Copy 2", "Final" → LOW–MED.
@@ -68,7 +70,7 @@ Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues tha
 - **4.5 Inconsistent constraints:** constraints vary without clear policy → LOW–MED.
 
 **Consistency**
-- **5.1 Off grid:** absoluteBoundingBox **x, y** (position only; do not check width/height) not aligned to the file/library grid (common base: 4 or 8—use file/library grid when detectable) → MED.
+- **5.1 Off grid:** On **absolute** `absoluteBoundingBox` **x, y** only where the designer **directly** controls canvas placement. **Do not** apply 5.1 to a node whose **parent** has `layoutMode` other than `"NONE"` (auto-layout / grid on parent) **unless** the node uses `layoutPositioning: "ABSOLUTE"` — flow children are positioned by layout; absolute coords often look off-grid while the design (relative X/Y) is intentional (see Definitions). For free‑standing frames/groups or absolute children, modulo grid check → MED. In `msg`, prefer phrasing like “absolute position …” if you reference coordinates.
 - **5.2 Spacing between elements:** Gap between siblings not in the file/library spacing scale → MED.
 - **5.3 Font size not in type scale:** style.fontSize not in the file/library type scale (use defined scale when detectable; otherwise common examples: 12, 14, 16, 18, 20, 24, 32) → HIGH.
 - **5.4 Line height:** lineHeightPx/lineHeightUnit not consistent with the file/library typography scale → MED.
@@ -87,7 +89,9 @@ Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues tha
 **Optimization (recommendations; categoryId: optimization, recommendation: true)**
 Similarity is inferred from JSON only (no screenshot): structure (child types, layout, padding), fills/strokes, naming patterns.
 
-- **8.1 DS-OPT-1 Redundant families:** Two or more components with equivalent structure (same child types, layout, fills). Recommend merge with slots and variants. Include optimizationPayload: componentIdsToMerge, suggestedSlots, suggestedVariants, suggestedTokens.
+**Severity for optimization:** Default to **LOW** for advisory consolidation (merge variants, redundant *separate* components in `components`, fewer tokens). These are **housekeeping** — the file still works; you are suggesting a leaner system. Use **MED** only for optimization issues that clearly multiply maintenance cost across many screens (say so in `msg`). **HIGH** is rare for pure optimization; reserve for cases that actively confuse authors (e.g. many indistinguishable duplicates in production paths).
+
+- **8.1 DS-OPT-1 Redundant families:** Two or more **separate** components in `components` with very similar structure (or many instances of the same pattern). Recommend merge with slots and variants — **LOW** if they are valid, intentional splits that could be unified later; explain briefly that this is **optional consolidation**, not broken behavior. Include optimizationPayload: componentIdsToMerge, suggestedSlots, suggestedVariants, suggestedTokens.
 - **8.2 DS-OPT-2 Missing slots:** Variable areas (e.g. left icon, right actions) as fixed children instead of slots. autoFixAvailable: true (feasible).
 - **8.3 DS-OPT-3 Tokens to extract:** Hardcoded values repeated across many nodes. Suggest token paths. autoFixAvailable: true (feasible).
 - **8.4 DS-OPT-4 Variants to add:** Almost identical components differing by one axis (e.g. Light/Dark). Consolidate into component set. optimizationPayload: suggestedVariants.

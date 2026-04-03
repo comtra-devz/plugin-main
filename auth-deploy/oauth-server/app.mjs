@@ -1206,6 +1206,227 @@ function getLibraryContextHint(fileJson) {
   };
 }
 
+/** Layout vocabulary (HTML/code); do not report as generic naming (3.1). */
+const NAMING_STRUCTURAL_ALLOWLIST = new Set(['section', 'wrapper', 'container']);
+
+function filterAllowedStructuralLayerNames(issues) {
+  if (!Array.isArray(issues)) return issues;
+  return issues.filter((issue) => {
+    if (!issue || issue.categoryId !== 'naming') return true;
+    const raw =
+      (issue.nodeName && String(issue.nodeName).trim()) || extractNameFromMsgDs(issue.msg || '') || '';
+    const key = raw.trim().toLowerCase();
+    if (key && NAMING_STRUCTURAL_ALLOWLIST.has(key)) return false;
+    return true;
+  });
+}
+
+function findNodeWithParent(node, targetId, parent = null) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.id != null && String(node.id) === String(targetId)) return { node, parent };
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) {
+      const r = findNodeWithParent(c, targetId, node);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+/** absoluteBoundingBox off-grid is misleading for auto-layout flow children (inspector shows relative X/Y). */
+function filterOffGridAutoLayoutFalsePositives(issues, fileJson) {
+  if (!Array.isArray(issues) || !fileJson?.document) return issues;
+  const doc = fileJson.document;
+  const gridMsg =
+    /off[-\s]?grid|fuori griglia|allineamento.{0,12}griglia|not aligned to.{0,32}grid|aligned to.{0,16}\d+px/i;
+  return issues.filter((issue) => {
+    if (!issue || issue.categoryId !== 'consistency') return true;
+    const msg = String(issue.msg || '');
+    if (!gridMsg.test(msg)) return true;
+    const lid = issue.layerId && String(issue.layerId).trim();
+    if (!lid) return true;
+    const hit = findNodeWithParent(doc, lid);
+    if (!hit || !hit.parent) return true;
+    const lm = hit.parent.layoutMode;
+    if (lm == null || lm === 'NONE') return true;
+    const lp = hit.node.layoutPositioning;
+    if (lp === 'ABSOLUTE') return true;
+    return false;
+  });
+}
+
+/** Multi-layer “merge redundant components” tips: separate definitions → severity LOW (advisory). */
+function downgradeRedundantComponentMergeSeverity(issues) {
+  if (!Array.isArray(issues)) return issues;
+  const mergeHint = (t) =>
+    /redundant|merge into (a |one |single )?component|single component with variant|consolidat(e|ing)|ds-opt-1\b|ds-opt-4\b|equivalent structure|duplicate famil/i.test(
+      t,
+    );
+  return issues.map((issue) => {
+    if (!issue || !Array.isArray(issue.layerIds) || issue.layerIds.length < 2) return issue;
+    const blob = `${issue.msg || ''} ${issue.fix || ''}`;
+    const rule = String(issue.rule_id || '');
+    const isMergeFamily =
+      mergeHint(blob) ||
+      /^DS-OPT-[14]\b/i.test(rule) ||
+      (issue.categoryId === 'optimization' && /redundant|merge into|consolidat/i.test(blob));
+    if (!isMergeFamily) return issue;
+    if (issue.severity === 'HIGH' || issue.severity === 'MED') {
+      return { ...issue, severity: 'LOW' };
+    }
+    return issue;
+  });
+}
+
+function findNodeByIdInDocument(node, targetId) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.id != null && String(node.id) === String(targetId)) return node;
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) {
+      const r = findNodeByIdInDocument(c, targetId);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+const INSTANCE_MAIN_COMPARE_KEYS = [
+  'layoutMode',
+  'primaryAxisSizingMode',
+  'counterAxisSizingMode',
+  'primaryAxisAlignItems',
+  'counterAxisAlignItems',
+  'layoutWrap',
+  'paddingLeft',
+  'paddingRight',
+  'paddingTop',
+  'paddingBottom',
+  'itemSpacing',
+  'counterAxisSpacing',
+  'strokeWeight',
+];
+
+function looseEqualJson(a, b) {
+  if (a === b) return true;
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 0.001;
+  if (a === undefined || a === null) return b === undefined || b === null;
+  if (b === undefined || b === null) return a === undefined || a === null;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+function inheritVal(inst, main, key) {
+  if (inst[key] !== undefined && inst[key] !== null) return inst[key];
+  return main[key];
+}
+
+function normalizeFillsForCompare(fills) {
+  if (!Array.isArray(fills)) return [];
+  return fills.map((f) => {
+    if (!f || typeof f !== 'object') return f;
+    const o = { type: f.type, visible: f.visible !== false };
+    if (f.type === 'SOLID' && f.color && typeof f.color === 'object') {
+      const c = f.color;
+      o.color = {
+        r: typeof c.r === 'number' ? Math.round(c.r * 10000) / 10000 : c.r,
+        g: typeof c.g === 'number' ? Math.round(c.g * 10000) / 10000 : c.g,
+        b: typeof c.b === 'number' ? Math.round(c.b * 10000) / 10000 : c.b,
+        a: typeof c.a === 'number' ? Math.round(c.a * 10000) / 10000 : 1,
+      };
+    }
+    return o;
+  });
+}
+
+/**
+ * True when INSTANCE root matches local COMPONENT (or FRAME) master in same file JSON for layout / paint.
+ * Does not deep-walk children (TEXT overrides etc.) — targets false positives on “overrides vs main” for root.
+ */
+function instanceRootMatchesMainInFileJson(inst, main) {
+  if (!inst || !main || inst.type !== 'INSTANCE') return false;
+  if (main.type !== 'COMPONENT' && main.type !== 'FRAME') return false;
+
+  for (const k of INSTANCE_MAIN_COMPARE_KEYS) {
+    const iv = inheritVal(inst, main, k);
+    const mv = main[k];
+    if (iv === undefined && mv === undefined) continue;
+    if (!looseEqualJson(iv, mv)) return false;
+  }
+
+  const instEffFs =
+    inst.fillStyleId != null && String(inst.fillStyleId).trim() !== ''
+      ? String(inst.fillStyleId)
+      : main.fillStyleId != null && String(main.fillStyleId).trim() !== ''
+        ? String(main.fillStyleId)
+        : '';
+  const mainEffFs =
+    main.fillStyleId != null && String(main.fillStyleId).trim() !== '' ? String(main.fillStyleId) : '';
+  if (instEffFs !== mainEffFs) return false;
+
+  const instEffSs =
+    inst.strokeStyleId != null && String(inst.strokeStyleId).trim() !== ''
+      ? String(inst.strokeStyleId)
+      : main.strokeStyleId != null && String(main.strokeStyleId).trim() !== ''
+        ? String(main.strokeStyleId)
+        : '';
+  const mainEffSs =
+    main.strokeStyleId != null && String(main.strokeStyleId).trim() !== '' ? String(main.strokeStyleId) : '';
+  if (instEffSs !== mainEffSs) return false;
+
+  const instFillsSrc = Array.isArray(inst.fills) && inst.fills.length > 0 ? inst.fills : main.fills;
+  const mainFillsSrc = main.fills;
+  if (
+    JSON.stringify(normalizeFillsForCompare(instFillsSrc || [])) !==
+    JSON.stringify(normalizeFillsForCompare(mainFillsSrc || []))
+  )
+    return false;
+
+  const instStrSrc = Array.isArray(inst.strokes) && inst.strokes.length > 0 ? inst.strokes : main.strokes;
+  const mainStrSrc = main.strokes;
+  if (
+    JSON.stringify(normalizeFillsForCompare(instStrSrc || [])) !==
+    JSON.stringify(normalizeFillsForCompare(mainStrSrc || []))
+  )
+    return false;
+
+  const iCr = inheritVal(inst, main, 'cornerRadius');
+  const mCr = main.cornerRadius;
+  if (!looseEqualJson(iCr, mCr)) return false;
+
+  const instRcEff =
+    Array.isArray(inst.rectangleCornerRadii) && inst.rectangleCornerRadii.length > 0
+      ? inst.rectangleCornerRadii
+      : main.rectangleCornerRadii;
+  const mainRc = main.rectangleCornerRadii;
+  if (!looseEqualJson(instRcEff || [], mainRc || [])) return false;
+
+  return true;
+}
+
+const ADOPTION_FALSE_OVERRIDE_MSG =
+  /override|differ( from| with)? (the )?main|vs\.?\s*main|deviation.*main|fields changed|changed \(/i;
+
+function filterFalsePositiveInstanceVsMainAdoption(issues, fileJson) {
+  const doc = fileJson?.document;
+  if (!doc || !Array.isArray(issues)) return issues;
+  return issues.filter((issue) => {
+    if (!issue || issue.categoryId !== 'adoption') return true;
+    const blob = `${issue.msg || ''} ${issue.fix || ''}`;
+    if (!ADOPTION_FALSE_OVERRIDE_MSG.test(blob)) return true;
+    const lid = issue.layerId && String(issue.layerId).trim();
+    if (!lid) return true;
+    const inst = findNodeByIdInDocument(doc, lid);
+    if (!inst || inst.type !== 'INSTANCE' || !inst.componentId) return true;
+    const main = findNodeByIdInDocument(doc, String(inst.componentId));
+    if (!main) return true;
+    if (instanceRootMatchesMainInFileJson(inst, main)) return false;
+    return true;
+  });
+}
+
 /** Count nodes in Figma file JSON (document tree) for size_band telemetry. */
 function countFigmaNodes(obj) {
   if (!obj || typeof obj !== 'object') return 0;
@@ -1407,6 +1628,10 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     } catch (resolveErr) {
       console.error('DS Audit: resolveDsAuditIssuesFromSnapshot', resolveErr?.message || resolveErr);
     }
+    issues = filterAllowedStructuralLayerNames(issues);
+    issues = filterOffGridAutoLayoutFalsePositives(issues, fileJson);
+    issues = downgradeRedundantComponentMergeSeverity(issues);
+    issues = filterFalsePositiveInstanceVsMainAdoption(issues, fileJson);
 
     // Telemetria uso token (anonima): log per dashboard. Vedi docs/TOKEN-USAGE-TELEMETRY.md
     const { inputTokens, outputTokens } = normalizeMoonshotUsage(kimiData?.usage);
