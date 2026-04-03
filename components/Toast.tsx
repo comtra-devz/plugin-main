@@ -55,13 +55,13 @@ export const Toast: React.FC<Props> = ({
   return (
     <div
       role="alert"
-      className={`border-2 shadow-[4px_4px_0_0_#000] p-3 max-w-full animate-in slide-in-from-bottom-2 duration-200 ${v}`}
+      className={`border-2 shadow-[4px_4px_0_0_#000] pt-4 px-3 pb-3 max-w-full animate-in slide-in-from-bottom-2 duration-200 ${v}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className={`text-xs font-black uppercase ${titleCls}`}>{title}</p>
+          <p className={`text-base font-black uppercase leading-snug ${titleCls}`}>{title}</p>
           {description && (
-            <p className={`text-[10px] mt-1 leading-relaxed ${descCls}`}>{description}</p>
+            <p className={`text-sm mt-2 leading-relaxed ${descCls}`}>{description}</p>
           )}
         </div>
         {dismissible && (
