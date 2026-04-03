@@ -29,6 +29,19 @@ function headers(): HeadersInit {
   return authHeaders();
 }
 
+/** GET verso API dashboard: retry su errori transitori (cold start, DB, rate limit). */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  const retryable = new Set([429, 500, 502, 503, 504]);
+  const maxAttempts = 3;
+  let last: Response | undefined;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    last = await fetch(url, init);
+    if (last.ok || !retryable.has(last.status) || attempt === maxAttempts - 1) return last;
+    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+  }
+  return last!;
+}
+
 function authApiUrl(): string {
   return `${BASE}/api/admin-auth`;
 }
@@ -173,13 +186,13 @@ export interface AdminNotificationsResponse {
 }
 
 export async function fetchNotifications(): Promise<AdminNotificationsResponse> {
-  const r = await fetch(apiUrl('notifications'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('notifications'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
 export async function fetchStats(): Promise<AdminStats> {
-  const r = await fetch(apiUrl('stats'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('stats'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -187,7 +200,7 @@ export async function fetchStats(): Promise<AdminStats> {
 export async function fetchCreditsTimeline(period = 30, plan?: 'PRO' | 'FREE'): Promise<CreditsTimeline> {
   const params: Record<string, string | number> = { period };
   if (plan === 'PRO' || plan === 'FREE') params.plan = plan;
-  const r = await fetch(apiUrl('credits-timeline', params), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('credits-timeline', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -195,7 +208,7 @@ export async function fetchCreditsTimeline(period = 30, plan?: 'PRO' | 'FREE'): 
 export async function fetchUsers(limit = 50, offset = 0, country?: string): Promise<AdminUsersResponse> {
   const params: Record<string, string | number> = { limit, offset };
   if (country && country.trim()) params.country = country.trim().toUpperCase().slice(0, 2);
-  const r = await fetch(apiUrl('users', params), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('users', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -234,19 +247,19 @@ export async function rechargeConfirm(
 }
 
 export async function fetchUsersCountries(): Promise<{ countries: string[] }> {
-  const r = await fetch(apiUrl('users-countries'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('users-countries'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
 export async function fetchAffiliates(): Promise<AdminAffiliatesResponse> {
-  const r = await fetch(apiUrl('affiliates'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('affiliates'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
 
 export async function fetchTokenUsage(period = 30): Promise<TokenUsageResponse> {
-  const r = await fetch(apiUrl('token-usage', { period }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('token-usage', { period }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -267,7 +280,7 @@ export interface WeeklyUpdatesResponse {
 }
 
 export async function fetchWeeklyUpdates(perPage = 30): Promise<WeeklyUpdatesResponse> {
-  const r = await fetch(apiUrl('weekly-updates', { per_page: perPage }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('weekly-updates', { per_page: perPage }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -289,7 +302,7 @@ export interface HealthResponse {
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
-  const r = await fetch(apiUrl('health'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('health'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -301,7 +314,7 @@ export interface ThrottleEventsResponse {
 }
 
 export async function fetchThrottleEvents(): Promise<ThrottleEventsResponse> {
-  const r = await fetch(apiUrl('throttle-events'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('throttle-events'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -444,7 +457,7 @@ export async function fetchFunctionExecutions(
   if (filters?.user_id) params.user_id = filters.user_id;
   if (filters?.country) params.country = filters.country.trim().toUpperCase().slice(0, 2);
   if (filters?.plan === 'PRO' || filters?.plan === 'FREE') params.plan = filters.plan;
-  const r = await fetch(apiUrl('function-executions', params), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('function-executions', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -460,7 +473,7 @@ export async function fetchExecutionsUsers(
   if (dateTo) params.date_to = dateTo;
   if (country && country.trim()) params.country = country.trim().toUpperCase().slice(0, 2);
   if (plan === 'PRO' || plan === 'FREE') params.plan = plan;
-  const r = await fetch(apiUrl('executions-users', params), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('executions-users', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -472,7 +485,7 @@ export interface DiscountsStats {
 }
 
 export async function fetchDiscountsStats(): Promise<DiscountsStats> {
-  const r = await fetch(apiUrl('discounts-stats'), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('discounts-stats'), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -495,7 +508,7 @@ export interface DiscountsLevelResponse {
 export async function fetchDiscountsLevel(limit: number, offset: number, level?: number): Promise<DiscountsLevelResponse> {
   const params: Record<string, string | number> = { limit, offset };
   if (level != null && [5, 10, 15, 20].includes(level)) params.level = level;
-  const r = await fetch(apiUrl('discounts-level', params), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('discounts-level', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -523,7 +536,7 @@ export async function fetchDiscountsThrottle(
 ): Promise<DiscountsThrottleResponse> {
   const params: Record<string, string | number> = { limit, offset };
   if (status) params.status = status;
-  const r = await fetch(apiUrl('discounts-throttle', params), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('discounts-throttle', params), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -566,7 +579,7 @@ export interface GenerateABStatsResponse {
 }
 
 export async function fetchGenerateABStats(period = 30): Promise<GenerateABStatsResponse> {
-  const r = await fetch(apiUrl('generate-ab-stats', { period }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('generate-ab-stats', { period }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -587,7 +600,7 @@ export interface SupportFeedbackResponse {
 }
 
 export async function fetchSupportFeedback(limit = 100): Promise<SupportFeedbackResponse> {
-  const r = await fetch(apiUrl('support-feedback', { limit }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('support-feedback', { limit }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -609,7 +622,7 @@ export interface PluginLogsResponse {
 }
 
 export async function fetchPluginLogs(limit = 100): Promise<PluginLogsResponse> {
-  const r = await fetch(apiUrl('plugin-logs', { limit }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('plugin-logs', { limit }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -639,7 +652,7 @@ export interface BrandAwarenessResponse {
 }
 
 export async function fetchBrandAwareness(period = 30, limit = 100, offset = 0): Promise<BrandAwarenessResponse> {
-  const r = await fetch(apiUrl('brand-awareness', { period, limit, offset }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('brand-awareness', { period, limit, offset }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -665,7 +678,7 @@ export interface TouchpointFunnelResponse {
 }
 
 export async function fetchTouchpointFunnel(period = 30): Promise<TouchpointFunnelResponse> {
-  const r = await fetch(apiUrl('touchpoint-funnel', { period }), { headers: headers() });
+  const r = await fetchWithRetry(apiUrl('touchpoint-funnel', { period }), { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -683,7 +696,7 @@ export interface DocContentResponse {
 }
 
 export async function fetchDocContent(): Promise<DocContentResponse> {
-  const r = await fetch(`${BASE}/api/doc-content`, { headers: headers() });
+  const r = await fetchWithRetry(`${BASE}/api/doc-content`, { headers: headers() });
   if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
   return r.json();
 }
@@ -785,7 +798,7 @@ export async function fetchProductSourcesRuns(params?: {
   const q = new URLSearchParams();
   if (params?.limit != null) q.set('limit', String(params.limit));
   if (params?.offset != null) q.set('offset', String(params.offset));
-  const r = await fetch(`${BASE}/api/product-sources-runs?${q}`, { headers: headers() });
+  const r = await fetchWithRetry(`${BASE}/api/product-sources-runs?${q}`, { headers: headers() });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
@@ -802,7 +815,7 @@ export async function fetchProductSourcesRuns(params?: {
 export async function fetchProductSourcesRunById(
   id: number,
 ): Promise<{ ok: boolean; run: ProductSourcesRunRow }> {
-  const r = await fetch(`${BASE}/api/product-sources-runs?id=${encodeURIComponent(String(id))}`, {
+  const r = await fetchWithRetry(`${BASE}/api/product-sources-runs?id=${encodeURIComponent(String(id))}`, {
     headers: headers(),
   });
   const data = await r.json().catch(() => ({}));
@@ -852,7 +865,7 @@ export async function fetchProductSourcesQueue(params?: { limit?: number }): Pro
 }> {
   const q = new URLSearchParams();
   if (params?.limit != null) q.set('limit', String(params.limit));
-  const r = await fetch(`${BASE}/api/product-sources-queue?${q}`, { headers: headers() });
+  const r = await fetchWithRetry(`${BASE}/api/product-sources-queue?${q}`, { headers: headers() });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
@@ -881,7 +894,7 @@ export interface ProductSourcesStatusResponse {
 }
 
 export async function fetchProductSourcesStatus(): Promise<ProductSourcesStatusResponse> {
-  const r = await fetch(`${BASE}/api/product-sources-status`, { headers: headers() });
+  const r = await fetchWithRetry(`${BASE}/api/product-sources-status`, { headers: headers() });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     throw new Error((data as { error?: string }).error || `Errore ${r.status}`);

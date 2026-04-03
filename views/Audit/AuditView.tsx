@@ -58,7 +58,10 @@ interface Props {
   /** Pipeline to agents: fetch file JSON from backend (Figma REST). Called after confirm scan when fileKey is available. */
   fetchFigmaFile?: (body: FetchFigmaFileBody) => Promise<unknown>;
   /** DS Audit agent: fetch issues from backend (Kimi). Called after confirm scan when fileKey is available. */
-  fetchDsAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
+  fetchDsAudit?: (body: { file_key: string; depth?: number }) => Promise<{
+    issues: AuditIssue[];
+    libraryContextHint?: { type: string; message: string };
+  }>;
   /** A11Y Audit agent: fetch issues from backend (no Kimi). Called after confirm when fileKey is available. */
   fetchA11yAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
   /** UX Audit agent: fetch issues from backend (Kimi). Called after confirm when fileKey/fileJson is available. */
@@ -172,6 +175,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [dsAuditError, setDsAuditError] = useState<string | null>(null);
   /** Advisory when file has no design system (0 components) — e.g. Preline CTA */
   const [dsAdvisory, setDsAdvisory] = useState<{ type: string; message: string; ctaLabel: string; ctaUrl: string } | null>(null);
+  /** In-file-only masters (no remote components in JSON) — explains audit scope vs external library */
+  const [dsLibraryContextHint, setDsLibraryContextHint] = useState<{ type: string; message: string } | null>(null);
   // A11Y Audit agent: real issues from backend (no Kimi)
   const [a11yAuditIssues, setA11yAuditIssues] = useState<AuditIssue[] | null>(null);
   const [a11yAuditLoading, setA11yAuditLoading] = useState(false);
@@ -247,11 +252,13 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           const opts = getSystemToastOptions('file_link_unavailable');
           setDsAuditError(opts.description ?? opts.title);
           setDsAuditIssues(null);
+          setDsLibraryContextHint(null);
           return;
         }
         setDsAuditError(null);
         setDsAuditIssues(null);
         setDsAdvisory(null);
+        setDsLibraryContextHint(null);
       }
       if (isFigmaConnectionError(message)) {
         const opts = getSystemToastOptions('figma_connection_lost');
@@ -850,6 +857,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             } else if (fetchDsAudit) {
               setDsAuditError(null);
               setDsAdvisory(null);
+              setDsLibraryContextHint(null);
               setDsAuditLoading(true);
               const data = await fetchDsAudit(auditBody);
               setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
@@ -860,6 +868,12 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                   ctaLabel: data.advisory.ctaLabel || 'Learn more',
                   ctaUrl: data.advisory.ctaUrl,
                 });
+              }
+              const hint = data?.libraryContextHint;
+              if (hint && typeof hint.message === 'string' && hint.message.trim() && typeof hint.type === 'string') {
+                setDsLibraryContextHint({ type: hint.type, message: hint.message.trim() });
+              } else {
+                setDsLibraryContextHint(null);
               }
             } else {
               setAuditError('Audit not available');
@@ -1580,6 +1594,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             dsAuditLoading={dsAuditLoading}
             dsAuditError={dsAuditError}
             dsAdvisory={dsAdvisory}
+            dsLibraryContextHint={dsLibraryContextHint}
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
             disableAllPages={false}

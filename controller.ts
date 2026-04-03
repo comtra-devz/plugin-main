@@ -40,16 +40,18 @@ let nodeCountCache: { scope: string; pageId: string | undefined; count: number; 
 
 /**
  * Switch to the page containing the node, select it, and reveal it in the viewport.
- * Works regardless of which page is currently active (Audit, Code/Sync, apply-fix, undo-fix).
+ * Works whether the user is already on that page or on another tab (dynamic-page safe).
  *
- * With manifest `documentAccess: "dynamic-page"`, nodes on non-active pages are not loaded until
- * we call `loadAllPagesAsync()` or `page.loadAsync()`. Without that, `getNodeByIdAsync` can return
- * null. After changing `figma.currentPage`, selection must run only after the editor has applied
- * the active page — otherwise the selection is dropped or stays on the previous page.
+ * With manifest `documentAccess: "dynamic-page"`: use `loadAllPagesAsync` / `page.loadAsync` so
+ * `getNodeByIdAsync` resolves; use `setCurrentPageAsync` to change page (sync assignment forbidden).
+ * Re-resolve the node by id after async work — handles can go stale after load/switch.
  */
 async function selectLayerAndReveal(layerId: string): Promise<boolean> {
-  async function resolveNode(): Promise<{ sceneNode: SceneNode; pageNode: PageNode } | null> {
-    const n = await figma.getNodeByIdAsync(layerId);
+  const id = typeof layerId === 'string' ? layerId.trim() : '';
+  if (!id) return false;
+
+  async function resolveSceneAndPage(): Promise<{ sceneNode: SceneNode; pageNode: PageNode } | null> {
+    const n = await figma.getNodeByIdAsync(id);
     if (!n || !('id' in n)) return null;
     const sceneNode = n as SceneNode;
     let pageNode: PageNode | null = null;
@@ -63,37 +65,43 @@ async function selectLayerAndReveal(layerId: string): Promise<boolean> {
     return { sceneNode, pageNode };
   }
 
-  let resolved = await resolveNode();
+  let resolved = await resolveSceneAndPage();
   if (!resolved) {
     try {
       await figma.loadAllPagesAsync();
     } catch (_) {
-      /* continue; retry below */
+      /* continue */
     }
-    resolved = await resolveNode();
+    resolved = await resolveSceneAndPage();
   }
   if (!resolved) return false;
 
-  const { sceneNode, pageNode } = resolved;
+  const targetPageId = resolved.pageNode.id;
+  const needPageSwitch = figma.currentPage.id !== targetPageId;
 
-  // Switching away from the current page: load everything so the target page tree is available.
-  if (figma.currentPage.id !== pageNode.id) {
+  if (needPageSwitch) {
     try {
       await figma.loadAllPagesAsync();
     } catch (_) {
-      /* still try page.loadAsync below */
+      /* still try page.loadAsync */
     }
   }
 
+  const pageNode = resolved.pageNode;
   try {
     await pageNode.loadAsync();
   } catch (_) {
     /* proceed */
   }
 
-  figma.currentPage = pageNode;
+  if (needPageSwitch) {
+    try {
+      await figma.setCurrentPageAsync(pageNode);
+    } catch (_) {
+      return false;
+    }
+  }
 
-  // Yield so Figma applies the new active page before we set selection (critical for dynamic-page).
   await new Promise<void>((r) => setTimeout(r, 0));
 
   try {
@@ -102,10 +110,18 @@ async function selectLayerAndReveal(layerId: string): Promise<boolean> {
     /* proceed */
   }
 
-  if (figma.currentPage.id !== pageNode.id) {
-    figma.currentPage = pageNode;
+  if (figma.currentPage.id !== targetPageId) {
+    try {
+      await figma.setCurrentPageAsync(pageNode);
+    } catch (_) {
+      return false;
+    }
     await new Promise<void>((r) => setTimeout(r, 0));
   }
+
+  const fresh = await resolveSceneAndPage();
+  if (!fresh || fresh.pageNode.id !== targetPageId) return false;
+  const sceneNode = fresh.sceneNode;
 
   try {
     figma.currentPage.selection = [sceneNode];
@@ -1977,7 +1993,13 @@ figma.ui.onmessage = async (raw: any) => {
   if (msg.type === 'select-layer') {
     const layerId = typeof msg.layerId === 'string' ? msg.layerId : '';
     if (layerId.trim()) {
-      const ok = await selectLayerAndReveal(layerId);
+      let ok = false;
+      try {
+        ok = await selectLayerAndReveal(layerId);
+      } catch (e) {
+        console.error('[select-layer]', e);
+        ok = false;
+      }
       figma.ui.postMessage({
         type: 'select-layer-result',
         layerId,
@@ -1999,7 +2021,14 @@ figma.ui.onmessage = async (raw: any) => {
     const pageId = msg.pageId as string | undefined;
     if (pageId) {
       const page = (await figma.getNodeByIdAsync(pageId)) as PageNode | null;
-      if (page && page.type === 'PAGE') figma.currentPage = page;
+      if (page && page.type === 'PAGE') {
+        try {
+          await figma.setCurrentPageAsync(page);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          figma.notify(`Could not switch page: ${errMsg}`, { error: true });
+        }
+      }
     }
   }
 

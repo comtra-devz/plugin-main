@@ -26,20 +26,28 @@ You must use exactly one of these for each issue:
 
 ## Severity
 
-Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues that break single source of truth or core UI (e.g. detached instances, hardcoded primary colors, generic component names). MED for drift, redundancy, maintainability. LOW for minor or cosmetic.
+Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues that break single source of truth or core UI (e.g. real instance detachment, heavy overrides vs main, raw colors with no style or variable, generic component names). MED for drift, redundancy, maintainability. LOW for minor or cosmetic.
+
+## Definitions — Figma REST JSON (read before applying rules)
+
+- **Detached vs linked instance:** In Figma, **Detach instance** removes the link to the component definition. In the file JSON, a **still-linked** instance is `type: "INSTANCE"` with a `componentId` that exists in the `components` map (or equivalent). If you see that, the instance is **not** detached — **do not** say "detached" in `msg`. Use **"Instance overrides"**, **"Overrides differ from main component"**, or **"Visual deviation from main"** when props differ from the main; reserve **"Detached"** only if the node is clearly not a linked INSTANCE (e.g. no valid `componentId` / not INSTANCE type) per the JSON you have.
+- **Styles vs variables vs raw hex:** Nodes may use **color styles** via `fillStyleId` / `strokeStyleId` (paint still shows `fills[].color` as resolved RGB in many exports). If those style IDs are set, the paint is **style-driven**, not arbitrary hardcoded. Prefer variables when building a token system, but **do not** treat style-linked fills/strokes as rule **2.1** / **2.2** hardcoded unless there is no style ID and no variable binding and the paint is truly local-only.
+- **Overrides that are *not* overrides:** When comparing INSTANCE to its main (`components[componentId]` / definition), if `fillStyleId` / `strokeStyleId` (and matching indices) are **the same** as on the main, **do not** count fills/strokes as meaningful overrides — even if hex values appear in `fills` / `strokes`.
+- **Library link:** Component definitions often include **`remote`**: `true` = from a published team library, `false` = **local** to this file. A file that only has local component definitions (no / few remotes) may reflect a **broken or missing library link** (copy-pasted file, library disconnected). That is a separate **adoption / governance** signal (suggest reconnecting or publishing from source) — **not** the same as “detached instance”.
 
 ## Rules (where to look in the JSON)
 
 **Adoption**
-- **1.1 Detached instance:** Nodes `type: "INSTANCE"` with `componentId`. Compare node props (fills, strokes, layoutMode, padding*, etc.) to main component; if significant overrides → HIGH.
+- **1.1 Instance vs main (linked INSTANCE — never call it "detached"):** For `type: "INSTANCE"` with valid `componentId`, compare fills, strokes, layoutMode, padding*, etc. to the main component. Only report if there are **meaningful** differences **after** ignoring matching `fillStyleId` / `strokeStyleId` (see Definitions). **HIGH** only when overrides clearly break DS consistency; **MED** for moderate drift. **Forbidden:** calling these "detached" if `componentId` is valid and type is INSTANCE.
 - **1.2 Orphan component:** `components` / `componentSets`: component never referenced by any `type: "INSTANCE"` in the tree → MED.
 - **1.3 Duplicate component:** Two components in `components` with same/similar name and equivalent structure (same child types, props) → HIGH.
 - **1.4 Group instead of component:** `type: "GROUP"` or `"FRAME"` with complex children repeated in multiple places (same structure) → MED.
-- **1.5 Many overrides:** INSTANCE with ≥5 meaningful overrides or ≥3 on layout (layoutMode, padding*, itemSpacing) → MED (risk of breakage on library update).
+- **1.5 Many overrides:** INSTANCE with ≥5 meaningful overrides or ≥3 on layout (layoutMode, padding*, itemSpacing) → MED (risk of breakage on library update). Do not count fill/stroke when style IDs match main (Definitions).
+- **1.6 Library / local drift:** If most or all `components` entries are `remote: false` and the file looks like a consumer of a system (many instances, naming hints), flag **MED** once: e.g. file relies on **local** components — reconnect published library or confirm source of truth; distinct from per-instance override issues.
 
 **Coverage**
-- **2.1 Hardcoded fill:** Node has `fills` with `color` and no `boundVariables.fills` for that index → HIGH for UI core, MED for decorative.
-- **2.2 Hardcoded stroke:** `strokes` with color without `boundVariables.strokes`; strokeWeight not from scale → HIGH/LOW.
+- **2.1 Hardcoded fill:** Apply only when fills use resolved `color` **and** there is **no** `boundVariables.fills` for that index **and** the node has **no** `fillStyleId` (or equivalent style binding). Style or variable = not this rule. → HIGH for UI core, MED for decorative.
+- **2.2 Hardcoded stroke:** Same idea: flag only if stroke color is local **and** no `boundVariables.strokes` **and** no `strokeStyleId`. → HIGH/LOW by prominence.
 - **2.3 Hardcoded typography:** TEXT nodes with `style.fontFamily`, `fontSize`, `fontWeight`, `lineHeightPx` without `styles.text` or boundVariables → HIGH for body/heading.
 - **2.4 Spacing not from scale:** padding*, itemSpacing, grid*Gap with values that do not match the file/library spacing scale (examples of common scales: 4, 8, 16, 24, 32) → MED.
 - **2.5 Radius not from token:** cornerRadius / rectangleCornerRadii with values not from the file/library token set → LOW–MED.

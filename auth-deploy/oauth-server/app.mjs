@@ -999,6 +999,25 @@ const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
 const DS_AUDIT_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'ds-audit-system.md');
 
+/** Risposta Moonshot/OpenAI: campi usage variabili; a volte solo total_tokens (dashboard costi). */
+function normalizeMoonshotUsage(usage) {
+  if (!usage || typeof usage !== 'object') return { inputTokens: 0, outputTokens: 0 };
+  let inputTokens = Math.max(
+    0,
+    Number(usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokens ?? 0),
+  );
+  let outputTokens = Math.max(
+    0,
+    Number(usage.output_tokens ?? usage.completion_tokens ?? usage.completionTokens ?? 0),
+  );
+  const total = Math.max(0, Number(usage.total_tokens ?? usage.totalTokens ?? 0));
+  if (total > 0 && inputTokens === 0 && outputTokens === 0) {
+    inputTokens = Math.floor(total * 0.45);
+    outputTokens = total - inputTokens;
+  }
+  return { inputTokens, outputTokens };
+}
+
 function extractJsonFromContent(text) {
   if (!text || typeof text !== 'string') return null;
   const trimmed = text.trim();
@@ -1149,6 +1168,42 @@ function resolveDsAuditIssuesFromSnapshot(issues, fileJson) {
     }
     return out;
   });
+}
+
+function documentTreeHasInstance(node) {
+  if (!node || typeof node !== 'object') return false;
+  if (node.type === 'INSTANCE') return true;
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) {
+      if (documentTreeHasInstance(c)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Hint when the REST export has INSTANCE nodes but zero components with remote:true.
+ * Audit then uses only in-file definitions — not live team-library payloads in this JSON.
+ * Copy stays soft: the file might be an intentional local DS, not a “broken” link.
+ */
+function getLibraryContextHint(fileJson) {
+  const doc = fileJson?.document;
+  const comps = fileJson?.components;
+  if (!doc || !comps || typeof comps !== 'object') return null;
+  if (!documentTreeHasInstance(doc)) return null;
+  const keys = Object.keys(comps);
+  if (keys.length === 0) return null;
+  let remoteCount = 0;
+  for (const k of keys) {
+    const c = comps[k];
+    if (c && c.remote === true) remoteCount++;
+  }
+  if (remoteCount > 0) return null;
+  return {
+    type: 'local_definitions_only',
+    message:
+      "In questo export non risulta nessun componente da team library (remoto). L'audit confronta istanze e master presenti in questo file. Se ti aspettavi la library esterna, verifica in Figma: Assets → librerie, e che il collegamento non sia saltato.",
+  };
 }
 
 /** Count nodes in Figma file JSON (document tree) for size_band telemetry. */
@@ -1347,12 +1402,14 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     const parsed = extractJsonFromContent(content);
     const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
     let issues = rawIssues.map(normalizeDsAuditIssue).filter(Boolean);
-    issues = resolveDsAuditIssuesFromSnapshot(issues, fileJson);
+    try {
+      issues = resolveDsAuditIssuesFromSnapshot(issues, fileJson);
+    } catch (resolveErr) {
+      console.error('DS Audit: resolveDsAuditIssuesFromSnapshot', resolveErr?.message || resolveErr);
+    }
 
     // Telemetria uso token (anonima): log per dashboard. Vedi docs/TOKEN-USAGE-TELEMETRY.md
-    const usage = kimiData?.usage;
-    const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
-    const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+    const { inputTokens, outputTokens } = normalizeMoonshotUsage(kimiData?.usage);
     if (dbSql && (inputTokens > 0 || outputTokens > 0)) {
       const nodeCount = countFigmaNodes(fileJson?.document);
       const sizeBand = nodeCount > 0 ? sizeBandFromNodeCount(nodeCount) : null;
@@ -1362,7 +1419,8 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       `.catch((err) => console.error('Kimi usage log insert failed', err.message));
     }
 
-    res.json({ issues });
+    const libraryContextHint = getLibraryContextHint(fileJson);
+    res.json({ issues, ...(libraryContextHint ? { libraryContextHint } : {}) });
   } catch (err) {
     console.error('POST /api/agents/ds-audit', err);
     res.status(500).json({ error: 'Server error' });
@@ -1839,9 +1897,7 @@ app.post('/api/agents/ux-audit', async (req, res) => {
     const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
     const issues = rawIssues.map(normalizeUxAuditIssue).filter(Boolean);
 
-    const usage = kimiData?.usage;
-    const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
-    const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+    const { inputTokens, outputTokens } = normalizeMoonshotUsage(kimiData?.usage);
     if (dbSql && (inputTokens > 0 || outputTokens > 0)) {
       const nodeCount = countFigmaNodes(fileJson?.document);
       const sizeBand = nodeCount > 0 ? sizeBandFromNodeCount(nodeCount) : null;
@@ -2022,8 +2078,7 @@ app.post('/api/agents/code-gen', async (req, res) => {
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
       12000,
     );
-    const inputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
-    const outputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+    const { inputTokens, outputTokens } = normalizeMoonshotUsage(usage);
     if (dbSql) {
       dbSql`
         INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)

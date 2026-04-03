@@ -606,8 +606,9 @@ async function handleCreditsTimeline(req, res) {
   for (const r of kimiByDay) {
     kimiByDate[r.day] = { kimi_calls: r.count, kimi_cost_usd: r.cost_usd };
   }
+  // Kimi è sempre anonimo: mostra chiamate/costo su tutti i giorni anche con filtro PRO/FREE su scan/crediti.
   for (const d of days) {
-    if (!effectivePlanFilter && kimiByDate[d.date]) {
+    if (kimiByDate[d.date]) {
       d.kimi_calls = kimiByDate[d.date].kimi_calls;
       d.kimi_cost_usd = kimiByDate[d.date].kimi_cost_usd;
     }
@@ -620,7 +621,7 @@ async function handleCreditsTimeline(req, res) {
     by_action_per_day: byAction,
     plan_filter: effectivePlanFilter,
     kimi_note: planFilterFallbackNote || (effectivePlanFilter
-      ? 'Kimi (rosa/verde) non filtrato per piano: la telemetria token è anonima. Solo scan/crediti sono per piano selezionato.'
+      ? 'Kimi (rosa/verde): telemetria anonima globale; scan/crediti sono filtrati per piano.'
       : null),
   });
   } catch (err) {

@@ -36,18 +36,26 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 ## 1. Adoption (componenti e library)
 
-### 1.1 Istanza staccata / Detached instance
+### 1.1 Istanza: override / deviazione dal main (non “detached” se è ancora INSTANCE)
 
-**Descrizione:** Un’istanza di componente è stata modificata (override) e non è più allineata al main component. Rompe la single source of truth.
+**Descrizione:** Un’istanza **ancora collegata** (`type: "INSTANCE"`, `componentId` valido in `components`) può avere override rispetto al main. In Figma **detached** significa istanza scollegata dal componente (il nodo non è più un INSTANCE collegato). **Confondere override con “detached”** genera falsi positivi.
 
 **Dove nel JSON del file:**
-- Nodi con `type: "INSTANCE"` e `componentId`.
-- Confrontare proprietà del nodo (es. `fills`, `strokes`, `layoutMode`, `paddingLeft`, ecc.) con il main component (cercare in `components` o nel tree il nodo con quell’`id` come definizione).
-- Se l’istanza ha override significativi rispetto al main (colori, dimensioni, testo, visibilità figli) → considerare “detached” o “deviation”.
+- Nodi con `type: "INSTANCE"` e `componentId` che risolve in `components`.
+- Confrontare proprietà (fills, strokes, layout, padding*, testo, visibilità figli) con il main **ignorando** fill/stroke quando `fillStyleId` / `strokeStyleId` coincidono con il main (l’API espone spesso `color` risolto anche con stile applicato).
+- Solo override **reali** → segnalare come **deviazione / override**, non come detached.
 
-**Severity:** HIGH (impatto su manutenzione e consistenza).
+**Detached (termine corretto):** solo se il JSON indica istanza non collegata (es. non INSTANCE, o `componentId` non risolvibile), non per semplice differenza visiva su INSTANCE collegata.
 
-**Esempio fix:** "Reattach to main component or create a proper variant (e.g. Size/Small) and apply to all instances."
+**Severity:** HIGH solo se la deviazione rompe chiaramente la DS; altrimenti MED.
+
+**Esempio fix:** "Allinea al main, crea variante, o riduci override; se il file è disallineato dalla library, riconnetti la library pubblicata."
+
+### 1.1b Collegamento library vs componenti **local** (`remote`)
+
+**Descrizione:** In `components`, il campo **`remote`** distingue definizioni da library di team (`remote: true`) da copie **locali** al file (`remote: false`). Un file “consumatore” che non ha remotes può indicare **library scollegata** o file duplicato — problema di **governorship**, distinto da override su singola istanza.
+
+**Severity:** MED (segnale unico per file, non duplicare per ogni layer).
 
 ---
 
@@ -99,7 +107,7 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 **Descrizione:** Un’istanza di componente ha un numero elevato di override (proprietà sovrascritte rispetto al main). Nei forum di utenti è uno dei problemi più segnalati: aggiornamenti alla library o publish possono “rompere” layout, allineamenti e direzioni di auto‑layout, con ore di fix manuale. Segnalare come **rischio** piuttosto che come errore certo.
 
 **Dove nel JSON del file:**
-- Nodi `type: "INSTANCE"` con `componentId`: contare gli override (differenze rispetto al main component su fills, strokes, layoutMode, padding*, itemSpacing, dimensioni, testo, visibilità figli, constraints). Soglia euristica: es. ≥ 5 override significativi su una singola istanza, o ≥ 3 override su proprietà di layout (layoutMode, padding*, itemSpacing).
+- Nodi `type: "INSTANCE"` con `componentId`: contare gli override (differenze rispetto al main su layoutMode, padding*, itemSpacing, dimensioni, testo, visibilità figli, constraints, ecc.). **Escludere** fill/stroke dall’incremento se `fillStyleId` / `strokeStyleId` coincidono col main. Soglia euristica: es. ≥ 5 override significativi, o ≥ 3 su layout.
 - Opzionale: istanze con override su `layoutMode` o su nodi nested (figli che sono a loro volta INSTANCE) sono a maggior rischio di breakage.
 
 **Severity:** MED (risk signal; impatto potenziale alto in caso di update library, severity community 4–5).
@@ -112,11 +120,10 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 ### 2.1 Colore hardcoded (fills)
 
-**Descrizione:** Un fill usa un colore letterale (hex/rgb/rgba) invece di una variabile (bound variable).
+**Descrizione:** Un fill è “hardcoded” solo se il colore è **locale** al nodo: nessuna variabile **e** nessuno **stile colore** Figma. Se il nodo ha `fillStyleId` (o equivalente nell’API), il fill è **stile-driven**: non è lo stesso problema del hex libero (variabili restano preferibili per token, ma non è 2.1).
 
 **Dove nel JSON del file:**
-- Su ogni nodo con `fills` (FRAME, RECTANGLE, TEXT, ecc.): se `fills[i].color` è presente e non c’è corrispondente in `boundVariables.fills` (o equivalente per la versione API), oppure il paint non ha binding a variabile.
-- Paint: `color: { r, g, b, a }` senza che il nodo abbia `boundVariables.fills` con lo stesso indice.
+- Nodi con `fills`: applicare 2.1 solo se `fills[i].color` è presente **senza** `boundVariables.fills` per quell’indice **e senza** `fillStyleId` / binding a paint style sul nodo.
 
 **Severity:** HIGH per elementi UI core (bottoni, testo, sfondi); MED per decorativi.
 
@@ -128,11 +135,11 @@ Scale, token, variabili e componenti da usare come **riferimento** (cosa è “c
 
 ### 2.2 Stroke hardcoded
 
-**Descrizione:** Stroke con colore o spessore letterale invece che da variabile/token.
+**Descrizione:** Come per 2.1: stroke con `color` risolto in JSON ma **`strokeStyleId`** presente = stile colore stroke, **non** 2.2. Segnalare solo colore **locale** senza variabile e senza stroke style.
 
 **Dove nel JSON del file:**
-- `strokes` array: presenza di `color` senza binding in `boundVariables.strokes`.
-- `strokeWeight` numerico non riconducibile a uno scale (es. 1, 2, 4, 8) o non legato a variabile se l’API lo supporta.
+- `strokes` con `color` **senza** `boundVariables.strokes` **e senza** `strokeStyleId` sul nodo.
+- `strokeWeight` numerico anomalo (opzionale) se totalmente scollegato da scale/variabili.
 
 **Severity:** HIGH per bordi interattivi/visibili, LOW per divisori sottili.
 

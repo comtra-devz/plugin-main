@@ -46,6 +46,8 @@ interface Props {
   dsAuditError?: string | null;
   /** Advisory when file has no design system (e.g. Preline CTA) */
   dsAdvisory?: { type: string; message: string; ctaLabel: string; ctaUrl: string } | null;
+  /** No remote components in API export: audit uses in-file masters only */
+  dsLibraryContextHint?: { type: string; message: string } | null;
   onRetryConnection?: () => void;
   onCheckTokenStatus?: () => void;
   /** When true, "All Pages" is visible but disabled with "Coming soon" message */
@@ -87,6 +89,7 @@ export const DesignSystemTab: React.FC<Props> = ({
   dsAuditLoading,
   dsAuditError,
   dsAdvisory,
+  dsLibraryContextHint,
   onRetryConnection,
   onCheckTokenStatus,
   disableAllPages = false,
@@ -213,6 +216,12 @@ export const DesignSystemTab: React.FC<Props> = ({
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
             </svg>
           </button>
+        </div>
+      )}
+      {dsLibraryContextHint && !dsAuditLoading && (
+        <div className={`${BRUTAL.card} bg-amber-50 border-2 border-amber-400 p-3`}>
+          <p className="text-[10px] font-black uppercase text-amber-900 mb-1.5">Contesto library</p>
+          <p className="text-xs font-medium text-amber-950 leading-relaxed">{dsLibraryContextHint.message}</p>
         </div>
       )}
       {/* Header Stat Card */}

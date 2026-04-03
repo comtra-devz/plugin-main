@@ -5,7 +5,8 @@
 import postgres from 'postgres';
 
 const URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-const raw = URL ? postgres(URL, { max: 1 }) : null;
+/** max>1: evita coda e timeout quando più route admin girano in parallelo (es. Home). */
+const raw = URL ? postgres(URL, { max: 8 }) : null;
 
 export const sql = raw
   ? (strings, ...values) =>
