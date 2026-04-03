@@ -7,9 +7,17 @@ import {
   brutalSelectOptionRowClass,
   brutalSelectOptionSelectedClass,
 } from '@comtra/components/ui/BrutalSelect';
+import { Toast } from '@comtra/components/Toast';
 import { BRUTAL, COLORS } from '@comtra/constants';
 
-type SectionId = 'buttons' | 'cards' | 'form' | 'selects' | 'navigation' | 'tokens';
+type SectionId =
+  | 'buttons'
+  | 'cards'
+  | 'form'
+  | 'selects'
+  | 'navigation'
+  | 'feedback'
+  | 'tokens';
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: 'buttons', label: 'Buttons' },
@@ -17,6 +25,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: 'form', label: 'Form & Inputs' },
   { id: 'selects', label: 'Selects' },
   { id: 'navigation', label: 'Navigation' },
+  { id: 'feedback', label: 'Feedback & Notification' },
   { id: 'tokens', label: 'Colours & Tokens' },
 ];
 
@@ -51,6 +60,7 @@ export default function App() {
         {active === 'form' && <FormSection />}
         {active === 'selects' && <SelectsSection />}
         {active === 'navigation' && <NavigationSection />}
+        {active === 'feedback' && <FeedbackSection />}
         {active === 'tokens' && <TokensSection />}
       </main>
     </div>
@@ -248,6 +258,57 @@ function NavigationSection() {
               {label}
             </button>
           ))}
+        </div>
+      </Block>
+    </>
+  );
+}
+
+function FeedbackSection() {
+  return (
+    <>
+      <SectionTitle
+        title="Feedback & Notification"
+        desc="Toast bottom-stack per messaggi brevi e di sistema."
+      />
+      <Block title="Toast — default">
+        <div className="max-w-sm">
+          <Toast
+            id="preview-default"
+            title="Design scanned"
+            description="We saved your latest scan."
+            variant="default"
+            onDismiss={() => {}}
+          />
+        </div>
+      </Block>
+      <Block title="Toast — error">
+        <div className="max-w-sm">
+          <Toast
+            id="preview-error"
+            title="Something went wrong"
+            description="Comtra couldn't complete the action. Try again."
+            variant="error"
+            onDismiss={() => {}}
+          />
+        </div>
+      </Block>
+      <Block title="Toast — warning / info">
+        <div className="flex flex-col gap-4 max-w-sm">
+          <Toast
+            id="preview-warning"
+            title="Connection is a bit slow"
+            description="You might see longer waits than usual."
+            variant="warning"
+            onDismiss={() => {}}
+          />
+          <Toast
+            id="preview-info"
+            title="Heads up"
+            description="New audit types will land in the next update."
+            variant="info"
+            onDismiss={() => {}}
+          />
         </div>
       </Block>
     </>
