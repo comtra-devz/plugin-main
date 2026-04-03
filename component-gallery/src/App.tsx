@@ -8,6 +8,7 @@ import {
   brutalSelectOptionSelectedClass,
 } from '@comtra/components/ui/BrutalSelect';
 import { Toast } from '@comtra/components/Toast';
+import { AlertBanner } from '@comtra/components/AlertBanner';
 import { BRUTAL, COLORS } from '@comtra/constants';
 
 type SectionId =
@@ -269,8 +270,15 @@ function FeedbackSection() {
     <>
       <SectionTitle
         title="Feedback & Notification"
-        desc="Toast bottom-stack per messaggi brevi e di sistema."
+        desc="Toast e alert per messaggi brevi e di sistema."
       />
+      <Block title="Alert banner — warning">
+        <div className="max-w-md">
+          <AlertBanner variant="warning">
+            No flow starting points on this page. Set at least one in the Prototype panel.
+          </AlertBanner>
+        </div>
+      </Block>
       <Block title="Toast — default">
         <div className="max-w-sm">
           <Toast
