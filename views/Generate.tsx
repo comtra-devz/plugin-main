@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
@@ -20,10 +20,12 @@ interface Props {
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
-  fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null; ascii_wireframe?: string }>;
+  fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null }>;
   requestFileContext: () => Promise<{ fileKey: string | null; error?: string | null }>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
   selectedNode: { id: string; name: string; type: string } | null;
+  /** Esegue l'action plan nel main thread Figma (frame + azioni sulla pagina corrente). */
+  applyActionPlanToCanvas: (plan: object) => Promise<{ ok: boolean; error?: string; rootId?: string }>;
 }
 
 const DESIGN_SYSTEMS = [
@@ -37,13 +39,51 @@ const DESIGN_SYSTEMS = [
   "Uber Base Web"
 ];
 
-export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, initialPrompt, fetchGenerate, requestFileContext, fetchGenerateFeedback, selectedNode }) => {
+function normalizeTerminalText(s: string): string {
+  return s.replace(/\r\n/g, '\n').trim();
+}
+
+/** Evita Goal: Goal: … quando Enhance viene premuto più volte: tiene solo il testo obiettivo. */
+function extractBaseForEnhance(raw: string): string {
+  let t = normalizeTerminalText(raw);
+  while (t.toLowerCase().startsWith('goal:')) {
+    t = t.slice(5).trimStart();
+  }
+  const lower = t.toLowerCase();
+  const cut = lower.indexOf('\ncontext:');
+  if (cut !== -1) {
+    t = t.slice(0, cut).trim();
+  }
+  return t.trim() || normalizeTerminalText(raw);
+}
+
+function getPlainTerminalText(el: HTMLDivElement | null): string {
+  if (!el) return '';
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('span[data-url]').forEach((c) => c.remove());
+  return normalizeTerminalText(clone.innerText);
+}
+
+export const Generate: React.FC<Props> = ({
+  plan,
+  userTier,
+  onUnlockRequest,
+  creditsRemaining,
+  useInfiniteCreditsForTest,
+  estimateCredits,
+  consumeCredits,
+  initialPrompt,
+  fetchGenerate,
+  requestFileContext,
+  fetchGenerateFeedback,
+  selectedNode,
+  applyActionPlanToCanvas,
+}) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [lastVariant, setLastVariant] = useState<string | null>(null);
-  const [asciiWireframe, setAsciiWireframe] = useState<string | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showReadFirstModal, setShowReadFirstModal] = useState(false);
@@ -59,18 +99,41 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
 
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
-  
+  /** Dopo Enhance: pulsante off finché l'utente non modifica il testo (evita doppi incastri). */
+  const [enhanceLocked, setEnhanceLocked] = useState(false);
+  /** Obiettivo “pulito” usato per rigenerare il blocco se cambia DS / contesto. */
+  const [enhancedGoalSnapshot, setEnhancedGoalSnapshot] = useState<string | null>(null);
+  const lastEnhancedBodyRef = useRef<string | null>(null);
+  const enhanceLockedRef = useRef(false);
+  useEffect(() => {
+    enhanceLockedRef.current = enhanceLocked;
+  }, [enhanceLocked]);
+
   // New State for Report Flow
   const [showReport, setShowReport] = useState(false);
-  const [conversionSelected, setConversionSelected] = useState(false);
+  const lastActionPlanRef = useRef<object | null>(null);
+  const [canvasApplyResult, setCanvasApplyResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [canvasBusy, setCanvasBusy] = useState(false);
+
+  const runCanvasApply = useCallback(
+    async (actionPlan: object) => {
+      const r = await applyActionPlanToCanvas(actionPlan);
+      setCanvasApplyResult(r.ok ? { ok: true } : { ok: false, error: r.error });
+      return r;
+    },
+    [applyActionPlanToCanvas]
+  );
 
   // Set initial prompt if provided
   useEffect(() => {
-      if (initialPrompt && inputRef.current) {
-          inputRef.current.innerText = initialPrompt;
-          setHasContent(true);
-          setPromptText(initialPrompt);
-      }
+    if (initialPrompt && inputRef.current) {
+      setEnhanceLocked(false);
+      setEnhancedGoalSnapshot(null);
+      lastEnhancedBodyRef.current = null;
+      inputRef.current.innerText = initialPrompt;
+      setHasContent(true);
+      setPromptText(initialPrompt);
+    }
   }, [initialPrompt]);
 
   const isPro = plan === 'PRO';
@@ -132,21 +195,62 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
     promptHints.push('Add success criteria (CTA clarity, hierarchy, accessibility, conversion).');
   }
 
+  const buildEnhancedPrompt = useCallback(
+    (base: string) => {
+      const context = hasSelection
+        ? `Target: ${selectedLayerName} (${selectedNode?.type}).`
+        : uploadedImage
+          ? 'Context: screenshot reference uploaded.'
+          : 'Context: create from scratch.';
+      const dsContext = `Design System: ${selectedSystem}.`;
+      const strictness =
+        userTier === 'PRO'
+          ? 'Push for a polished, production-ready composition.'
+          : 'Stay concise and practical.';
+      return [
+        `Goal: ${base}`,
+        context,
+        dsContext,
+        'Constraints: keep hierarchy clear, spacing consistent, and accessibility in mind.',
+        `Quality bar: one coherent screen that follows the design system above. ${strictness}`,
+      ].join('\n');
+    },
+    [hasSelection, selectedLayerName, selectedNode?.type, uploadedImage, selectedSystem, userTier]
+  );
+
+  /** Dopo Enhance, cambio DS/contesto: riscrivi il terminale senza mischiare due versioni. */
+  useEffect(() => {
+    if (showReport || !enhanceLocked || enhancedGoalSnapshot == null || !inputRef.current) return;
+    const next = buildEnhancedPrompt(enhancedGoalSnapshot);
+    lastEnhancedBodyRef.current = next;
+    inputRef.current.innerText = next;
+    setPromptText(next);
+  }, [buildEnhancedPrompt, enhancedGoalSnapshot, enhanceLocked, showReport]);
+
   // Helper to update content state - Ignores Chips, requires text
   const checkContent = () => {
-      if (inputRef.current) {
-          const clone = inputRef.current.cloneNode(true) as HTMLElement;
-          const chips = clone.querySelectorAll('span[data-url]');
-          chips.forEach(chip => chip.remove());
-          const text = clone.innerText.trim();
-          setHasContent(text.length > 0);
-          setPromptText(text);
+    if (!inputRef.current) return;
+    const clone = inputRef.current.cloneNode(true) as HTMLElement;
+    const chips = clone.querySelectorAll('span[data-url]');
+    chips.forEach((chip) => chip.remove());
+    const text = normalizeTerminalText(clone.innerText);
+    setHasContent(text.length > 0);
+    setPromptText(text);
+    if (enhanceLockedRef.current && lastEnhancedBodyRef.current !== null) {
+      if (text !== normalizeTerminalText(lastEnhancedBodyRef.current)) {
+        setEnhanceLocked(false);
+        setEnhancedGoalSnapshot(null);
+        lastEnhancedBodyRef.current = null;
       }
+    }
   };
 
   /** Prompt starters replace the terminal content (mutually exclusive), they do not stack. */
   const setPromptFromSuggestion = (snippet: string) => {
     if (!inputRef.current) return;
+    setEnhanceLocked(false);
+    setEnhancedGoalSnapshot(null);
+    lastEnhancedBodyRef.current = null;
     inputRef.current.innerText = snippet;
     setPromptText(snippet);
     setHasContent(snippet.trim().length > 0);
@@ -226,27 +330,18 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   };
 
   const handleEnhancePrompt = () => {
-    const base = promptText.trim();
-    if (!base || !inputRef.current) return;
-    const context = hasSelection
-      ? `Target: ${selectedLayerName} (${selectedNode?.type}).`
-      : uploadedImage
-        ? 'Context: screenshot reference uploaded.'
-        : 'Context: create from scratch.';
-    const dsContext = `Design System: ${selectedSystem}.`;
-    const strictness = userTier === 'PRO'
-      ? 'Provide 2 variants and choose the best production-ready option.'
-      : 'Keep output concise and production-ready.';
-    const enhanced = [
-      `Goal: ${base}`,
-      context,
-      dsContext,
-      'Constraints: keep hierarchy clear, spacing consistent, and accessibility in mind.',
-      `Output expected: actionable wireframe plan in JSON. ${strictness}`,
-    ].join('\n');
+    if (!inputRef.current || enhanceLocked) return;
+    const raw = getPlainTerminalText(inputRef.current);
+    if (!raw) return;
+    const base = extractBaseForEnhance(raw);
+    if (!base) return;
+    const enhanced = buildEnhancedPrompt(base);
+    lastEnhancedBodyRef.current = enhanced;
     inputRef.current.innerText = enhanced;
     setPromptText(enhanced);
     setHasContent(true);
+    setEnhancedGoalSnapshot(base);
+    setEnhanceLocked(true);
   };
 
   const handleGen = async () => {
@@ -256,8 +351,9 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
     }
     setLoading(true);
     setShowReport(false);
-    setConversionSelected(false);
     setGenError(null);
+    setCanvasApplyResult(null);
+    lastActionPlanRef.current = null;
 
     const rawText = inputRef.current?.innerText?.trim() || '';
     if (!rawText) {
@@ -284,12 +380,13 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
         ds_source: dsSource,
       });
       const actionPlan = data?.action_plan;
-      if (!actionPlan) {
+      if (!actionPlan || typeof actionPlan !== 'object') {
         setGenError('Invalid response from server.');
         setLoading(false);
         return;
       }
-      const creditsToConsume = (actionPlan.metadata?.estimated_credits ?? 3);
+      const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
+      const creditsToConsume = meta?.estimated_credits ?? 3;
       const consumed = await consumeCredits({
         action_type: mode === 'modify' ? 'wireframe_modified' : 'generate',
         credits_consumed: creditsToConsume,
@@ -300,11 +397,12 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
         setLoading(false);
         return;
       }
+      lastActionPlanRef.current = actionPlan;
       setRes(JSON.stringify(actionPlan, null, 2));
       setLastRequestId(data?.request_id ?? null);
       setLastVariant(data?.variant ?? null);
-      setAsciiWireframe(data?.ascii_wireframe ?? null);
       setFeedbackSent(false);
+      await runCanvasApply(actionPlan);
       setShowReport(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -314,9 +412,16 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
     }
   };
 
-  const handleViewFigma = () => {
-      console.log("Focusing Figma...");
-  }
+  const handleViewFigma = async () => {
+    const plan = lastActionPlanRef.current;
+    if (!plan || canvasBusy) return;
+    setCanvasBusy(true);
+    try {
+      await runCanvasApply(plan);
+    } finally {
+      setCanvasBusy(false);
+    }
+  };
 
   const handleInsertInspiration = (txt: string) => {
     setPromptFromSuggestion(txt);
@@ -510,8 +615,13 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                     <button
                       type="button"
                       onClick={handleEnhancePrompt}
-                      disabled={!hasContent || loading}
-                      className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${(!hasContent || loading) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
+                      disabled={!hasContent || loading || enhanceLocked}
+                      title={
+                        enhanceLocked
+                          ? 'Modifica il testo nel terminale per sbloccare Enhance di nuovo.'
+                          : undefined
+                      }
+                      className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${!hasContent || loading || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
                     >
                       Enhance Prompt
                     </button>
@@ -590,15 +700,6 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                         <span className="text-green-500 font-bold">✓</span>
                         <p className="text-[10px] text-gray-600">Generated using <strong>{selectedSystem}</strong> conventions.</p>
                     </div>
-                    {asciiWireframe && (
-                      <div className="flex items-start gap-2">
-                        <span className="text-blue-500 font-bold">◇</span>
-                        <div className="text-[10px] text-gray-600">
-                          <p className="font-bold uppercase text-[9px] mb-1">ASCII Wireframe (Variant B)</p>
-                          <pre className="p-2 bg-gray-100 text-[9px] overflow-x-auto max-h-[120px] overflow-y-auto border border-black font-mono whitespace-pre">{asciiWireframe}</pre>
-                        </div>
-                      </div>
-                    )}
                     <div className="flex items-start gap-2">
                         <span className="text-green-500 font-bold">✓</span>
                         <p className="text-[10px] text-gray-600">
@@ -611,25 +712,18 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                           )}
                         </p>
                     </div>
-                    
-                    {/* Interactive Selection */}
-                    <div className="bg-gray-50 border border-black p-2 mt-2">
-                        <div className="flex items-center gap-2 mb-2">
-                            <input 
-                                type="checkbox" 
-                                id="convert-check"
-                                className="w-4 h-4 accent-black"
-                                checked={conversionSelected}
-                                onChange={(e) => setConversionSelected(e.target.checked)}
-                            />
-                            <label htmlFor="convert-check" className="text-[10px] font-bold uppercase cursor-pointer select-none">
-                                Convert new "Card_Wrapper" div to Component?
-                            </label>
-                        </div>
-                        <p className="text-[9px] text-gray-500 ml-6 leading-tight">
-                            Found a repeated Frame structure. Checking this will register it as "Card_V3" in your local library.
+                    {canvasApplyResult && (
+                      <div className="flex items-start gap-2">
+                        <span className={canvasApplyResult.ok ? 'text-green-500 font-bold' : 'text-red-600 font-bold'}>
+                          {canvasApplyResult.ok ? '✓' : '✕'}
+                        </span>
+                        <p className="text-[10px] text-gray-600">
+                          {canvasApplyResult.ok
+                            ? 'Frame creato sulla pagina corrente (controlla la canvas Figma).'
+                            : `Canvas: ${canvasApplyResult.error || 'operazione non riuscita'}`}
                         </p>
-                    </div>
+                      </div>
+                    )}
                 </div>
 
                 {/* Feedback: Thumbs up/down */}
@@ -667,12 +761,13 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
                     Back
                 </Button>
                 <Button
-                    variant={conversionSelected ? 'black' : 'primary'}
+                    variant="primary"
                     layout="row"
-                    onClick={handleViewFigma}
+                    onClick={() => void handleViewFigma()}
+                    disabled={canvasBusy || !lastActionPlanRef.current}
                     className="flex-[2] text-xs"
                 >
-                    {conversionSelected ? 'View Component in Figma' : 'Apply Changes'}
+                    {canvasBusy ? 'Applying…' : 'Apply again on canvas'}
                 </Button>
             </div>
         </div>

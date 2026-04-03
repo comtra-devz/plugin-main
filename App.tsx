@@ -583,6 +583,25 @@ export default function AppTest() {
   }, [user?.authToken, user?.id, fetchTrophies]);
 
   const fileContextResolveRef = useRef<((data: { fileKey: string | null; error?: string | null }) => void) | null>(null);
+  const actionPlanExecWaitersRef = useRef<
+    Map<string, (r: { ok: boolean; error?: string; rootId?: string }) => void>
+  >(new Map());
+
+  const requestActionPlanExecution = React.useCallback((plan: object) => {
+    return new Promise<{ ok: boolean; error?: string; rootId?: string }>((resolve) => {
+      const requestId = `apx-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      actionPlanExecWaitersRef.current.set(requestId, resolve);
+      window.parent.postMessage(
+        { pluginMessage: { type: 'execute-action-plan', actionPlan: plan, requestId } },
+        '*'
+      );
+      window.setTimeout(() => {
+        if (!actionPlanExecWaitersRef.current.has(requestId)) return;
+        actionPlanExecWaitersRef.current.delete(requestId);
+        resolve({ ok: false, error: 'Timeout: nessuna risposta da Figma.' });
+      }, 25000);
+    });
+  }, []);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -622,6 +641,22 @@ export default function AppTest() {
           name: String(first.name || 'Selection'),
           type: String(first.type || 'SELECTION'),
         });
+      }
+      if (msg.type === 'action-plan-executed') {
+        const rid = String(msg.requestId || '');
+        const fn = rid ? actionPlanExecWaitersRef.current.get(rid) : undefined;
+        if (fn) {
+          actionPlanExecWaitersRef.current.delete(rid);
+          fn({ ok: true, rootId: msg.rootId ? String(msg.rootId) : undefined });
+        }
+      }
+      if (msg.type === 'action-plan-execute-error') {
+        const rid = String(msg.requestId || '');
+        const fn = rid ? actionPlanExecWaitersRef.current.get(rid) : undefined;
+        if (fn) {
+          actionPlanExecWaitersRef.current.delete(rid);
+          fn({ ok: false, error: String(msg.error || 'Errore creazione su Figma') });
+        }
       }
     };
     window.addEventListener('message', onMessage);
@@ -1185,6 +1220,7 @@ export default function AppTest() {
             requestFileContext={requestFileContext}
             fetchGenerateFeedback={fetchGenerateFeedback}
             selectedNode={selectedNode}
+            applyActionPlanToCanvas={requestActionPlanExecution}
           />
         </div>
 

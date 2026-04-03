@@ -42,7 +42,8 @@ Return exactly one JSON object with this structure:
 - **Frame name**: derive a short semantic name from the user prompt (e.g. "Login / Desktop", "Cart / Mobile"). No "Frame 1" or generic names.
 - **Viewport**: use 1440×900 for desktop, 375×812 for mobile when the prompt implies mobile. Default 1440×900.
 - **Variables only**: all padding, spacing, fills must reference variable names (e.g. `spacing/md`, `color/surface/default`). No raw pixel or hex values.
-- **actions**: for v1 "create" mode, include at least one CREATE_FRAME. You may add INSTANCE_COMPONENT only if the context lists component keys; otherwise keep actions minimal (one frame).
+- **actions**: for v1 "create" mode, include at least one CREATE_FRAME for structure **and** you MUST add **at least three** visible primitives (`CREATE_TEXT`, `CREATE_RECT`, and/or `INSTANCE_COMPONENT`) with `parentId: "root"` (or under a child frame `ref`). Empty shells are invalid: e.g. login → headline text, logo/brand area (frame or rect), primary button (rect or component), social/links row (text or rects). Use `CREATE_TEXT` with `characters` for labels; `CREATE_RECT` for buttons/fields when no matching component exists in context.
+- **Nesting on canvas**: each action may include optional string fields **`ref`** (unique id for later steps) and **`parentId`** (`"root"` or a previous `ref`). Children of the main screen should use `parentId: "root"` or the `ref` of their container frame so the plugin builds hierarchy under the generated frame.
 - **complexity_tier**: one of `micro`, `simple`, `standard`, `complex`, `advanced`. Use `simple` for a single frame or a few elements.
 - **estimated_credits**: use 3 for standard wireframe.
 

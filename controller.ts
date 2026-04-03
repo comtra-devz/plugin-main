@@ -2,6 +2,8 @@
 // It handles API calls to the Figma document
 /// <reference types="@figma/plugin-typings" />
 
+import { executeActionPlanOnCanvas } from './action-plan-executor';
+
 declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
@@ -1588,6 +1590,23 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'get-selection') {
     postSelectionToUi();
+  }
+
+  if (msg.type === 'execute-action-plan') {
+    const requestId = msg.requestId;
+    const actionPlan = msg.actionPlan;
+    (async () => {
+      try {
+        const { rootId } = await executeActionPlanOnCanvas(actionPlan);
+        figma.ui.postMessage({ type: 'action-plan-executed', requestId, rootId });
+        figma.notify('Comtra: interfaccia creata sulla pagina corrente.');
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        figma.ui.postMessage({ type: 'action-plan-execute-error', requestId, error: errMsg });
+        figma.notify(`Comtra: errore creazione — ${errMsg}`);
+      }
+    })();
+    return;
   }
 
   if (msg.type === 'get-pages') {

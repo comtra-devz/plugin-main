@@ -7,5 +7,5 @@
     "module": "CommonJS",
     "outDir": "dist"
   },
-  "include": ["controller.ts"]
+  "include": ["controller.ts", "action-plan-executor.ts"]
 }

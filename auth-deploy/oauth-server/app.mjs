@@ -1953,6 +1953,7 @@ app.post('/api/agents/generate', async (req, res) => {
     }
 
     if (!actionPlan.metadata || typeof actionPlan.metadata !== 'object') actionPlan.metadata = {};
+    if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
     actionPlan.metadata.context_profile = contextProfile;
@@ -1985,7 +1986,6 @@ app.post('/api/agents/generate', async (req, res) => {
         request_id: requestId,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
-        ...(asciiWireframe && { ascii_wireframe: asciiWireframe }),
       });
     } else {
       res.json({
@@ -1994,7 +1994,6 @@ app.post('/api/agents/generate', async (req, res) => {
         request_id: null,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
-        ...(asciiWireframe && { ascii_wireframe: asciiWireframe }),
       });
     }
   } catch (err) {

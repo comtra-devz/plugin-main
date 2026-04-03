@@ -139,10 +139,7 @@ Generazione AI di wireframe e componenti rispettando il design system corrente.
   - Label "Weaving Magic..." durante il loading
   - Se nessun credito rimasto: "Unlock Unlimited AI" → apre Upgrade Modal
 - **Inspiration Chips**: 3 prompt di esempio cliccabili per popolare l'input ("Create a desktop login page", "Create a different version of this component", "Create a mobile cart")
-- **Post-generazione (con layer selezionato)**: AI Implementation Report con:
-  - Check: design system usato, token riutilizzati
-  - Checkbox: "Convert new 'Card_Wrapper' div to Component?" (registra il frame come componente in libreria)
-  - Azioni: "Back" o "Apply Changes" / "View Component in Figma"
+- **Post-generazione**: AI Implementation Report con design system usato, piano azioni (JSON), esito creazione frame su canvas; azioni "Back" e "Apply again on canvas".
 
 ---
 
