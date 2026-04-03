@@ -108,12 +108,13 @@ Return **only** a JSON object of this shape (no text before or after, or a singl
 ```
 
 **Required for every issue:** id, categoryId, msg, severity, layerId, fix.  
-**Optional:** layerIds (array, if issue spans multiple nodes), tokenPath, pageName, rule_id, recommendation, optimizationPayload, autoFixAvailable.
+**Optional:** layerIds (array, if issue spans multiple nodes), tokenPath, pageName, rule_id, recommendation, optimizationPayload, autoFixAvailable, **nodeName** (exact `name` field from the node in the file JSON — required whenever possible so the plugin can select the layer if `layerId` is wrong).
 
 **Constraints:**
 - **categoryId** must be exactly one of: adoption, coverage, naming, structure, consistency, copy, optimization.
 - **severity** must be exactly one of: HIGH, MED, LOW.
-- **layerId** must be the real node `id` from the JSON when available (e.g. "12:3456").
+- **layerId** must be the real node `id` from the JSON when available (e.g. "12:3456")—never invent an id; it must exist in the document tree you were given. Always add **nodeName** with the same node's `name` so the pipeline can verify the id. If you cannot point to a concrete node, omit **layerId** (the product will hide Select Layer for that row).
+- **pageName** (if you include it) must be the **Figma page / canvas** name that *contains* the node (the parent `CANVAS`/`PAGE` in the JSON), never a frame, section, or component name—e.g. not "Footer" if Footer is only a frame on page "Home".
 - **id** must be unique in the response (e.g. ds-1, ds-2, or UUIDs).
 - If no issues are found, return: `{ "issues": [] }`.
 

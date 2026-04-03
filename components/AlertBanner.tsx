@@ -17,7 +17,7 @@ interface AlertBannerProps {
 
 export function AlertBanner({ children, variant = 'warning', className = '' }: AlertBannerProps) {
   const base =
-    'text-[10px] font-bold border-2 px-3 py-2 mx-4 text-center leading-snug';
+    'text-sm font-semibold border-2 p-4 mx-4 text-center leading-snug';
   const variantCls = variantClasses[variant];
   return <p className={`${base} ${variantCls} ${className}`.trim()}>{children}</p>;
 }

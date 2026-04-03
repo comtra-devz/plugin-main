@@ -263,21 +263,21 @@ export const IssueList: React.FC<IssueListProps> = ({
                               </div>
                             )}
                             {!i.hideLayerActions && (
-                            <div className="flex gap-2">
+                            <div className={isDeviationGroup ? 'flex flex-col gap-2' : 'flex gap-2'}>
                             {isDeviationGroup ? (
-                                <div className="flex-1 flex border-2 border-black h-12 bg-gray-50">
+                                <div className="flex w-full min-h-12 border-2 border-black bg-gray-50">
                                     <button 
                                         onClick={(e) => onNavDeviation(e, i.id, i.layerIds!, 'prev')}
-                                        className="px-3 hover:bg-black hover:text-white font-bold border-r border-black"
+                                        className="shrink-0 px-3 hover:bg-black hover:text-white font-bold border-r border-black"
                                     >
                                         ←
                                     </button>
-                                    <div className="flex-1 flex items-center justify-center text-[10px] font-bold uppercase">
+                                    <div className="flex min-w-0 flex-1 items-center justify-center px-2 py-2 text-center text-[10px] font-bold uppercase leading-snug">
                                         Layer {currentIndex + 1} of {i.layerIds!.length} selected
                                     </div>
                                     <button 
                                         onClick={(e) => onNavDeviation(e, i.id, i.layerIds!, 'next')}
-                                        className="px-3 hover:bg-black hover:text-white font-bold border-l border-black"
+                                        className="shrink-0 px-3 hover:bg-black hover:text-white font-bold border-l border-black"
                                     >
                                         →
                                     </button>
@@ -299,7 +299,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                                   variant="primary"
                                   layout="row"
                                   onClick={(e) => onFix(e, i.id)}
-                                  className="flex-1 text-[10px] h-12 relative"
+                                  className={`${isDeviationGroup ? 'w-full' : 'flex-1'} text-[10px] h-12 relative`}
                               >
                                   {isWireframeIssue ? 'Create Wireframe' : isOklchAdvisory ? 'View Suggestion' : 'Auto-Fix Layer'}
                                   {!isOklchAdvisory && (

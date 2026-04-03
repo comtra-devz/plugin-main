@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
+import { SectionCard } from '../components/ui/SectionCard';
 import {
   BrutalDropdown,
   brutalSelectOptionRowClass,
@@ -143,13 +144,21 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
       }
   };
 
-  const appendPromptText = (snippet: string) => {
+  /** Prompt starters replace the terminal content (mutually exclusive), they do not stack. */
+  const setPromptFromSuggestion = (snippet: string) => {
     if (!inputRef.current) return;
-    const current = (inputRef.current.innerText || '').trim();
-    const next = current ? `${current}\n${snippet}` : snippet;
-    inputRef.current.innerText = next;
-    setPromptText(next);
-    setHasContent(next.trim().length > 0);
+    inputRef.current.innerText = snippet;
+    setPromptText(snippet);
+    setHasContent(snippet.trim().length > 0);
+    inputRef.current.focus();
+    const sel = window.getSelection();
+    if (sel && inputRef.current.firstChild) {
+      const range = document.createRange();
+      range.selectNodeContents(inputRef.current);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
   };
 
   // Helper to insert chip and move cursor
@@ -310,7 +319,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
   }
 
   const handleInsertInspiration = (txt: string) => {
-      appendPromptText(txt);
+    setPromptFromSuggestion(txt);
   };
 
   const handleUpload = () => {
@@ -387,13 +396,14 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
         </div>
       )}
 
-      {/* Context Layer */}
-      <div data-component="Generate: Context Card" className={`${BRUTAL.card} bg-white px-3 py-4 flex flex-col gap-3 relative z-[5]`}>
-        <div className="flex justify-between items-center border-b border-black/10 pb-2">
-          <span data-component="Generate: Context Label" className="text-xs font-bold uppercase">Context Layer</span>
-          <span className="text-[10px] font-bold uppercase text-gray-500">{hasSelection ? selectedNode?.type : 'No selection'}</span>
-        </div>
-
+      {/* Context Layer + Design System: stessa tipologia (`SectionCard`), header opzionale a destra */}
+      <SectionCard
+        dataComponent="Generate: Context Card"
+        title="Context Layer"
+        titleDataComponent="Generate: Context Label"
+        headerRight={hasSelection ? selectedNode?.type : 'No selection'}
+        className="z-[5]"
+      >
         {hasSelection ? (
           <>
             <span data-component="Generate: Selection Value" className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate">
@@ -422,14 +432,14 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
             </button>
           </>
         )}
-      </div>
+      </SectionCard>
 
-      {/* Design System */}
-      <div data-component="Generate: DS Card" className={`${BRUTAL.card} bg-white px-3 py-4 flex flex-col gap-3 relative z-[4]`}>
-        <span className="text-xs font-bold uppercase">Design System</span>
-        <p className="text-[10px] text-gray-500">
-          Define the component perimeter. Default uses your current/linked library and cannot be empty.
-        </p>
+      <SectionCard
+        dataComponent="Generate: DS Card"
+        title="Design System"
+        description="Define the component perimeter. Default uses your current/linked library and cannot be empty."
+        className="z-[4]"
+      >
         <BrutalDropdown
           open={isSystemOpen}
           onOpenChange={setIsSystemOpen}
@@ -489,7 +499,7 @@ export const Generate: React.FC<Props> = ({ plan, userTier, onUnlockRequest, cre
             )}
           </div>
         </BrutalDropdown>
-      </div>
+      </SectionCard>
 
       {!showReport ? (
         <>

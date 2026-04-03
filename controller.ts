@@ -1975,15 +1975,23 @@ figma.ui.onmessage = async (raw: any) => {
   }
 
   if (msg.type === 'select-layer') {
-    const layerId = msg.layerId;
-    if (layerId) {
+    const layerId = typeof msg.layerId === 'string' ? msg.layerId : '';
+    if (layerId.trim()) {
       const ok = await selectLayerAndReveal(layerId);
-      figma.ui.postMessage({ type: 'select-layer-result', layerId, ok });
+      figma.ui.postMessage({
+        type: 'select-layer-result',
+        layerId,
+        ok,
+      });
       if (!ok) {
-        figma.notify('Could not open that layer — it may be deleted or in an unloaded page.', {
-          error: true,
-        });
+        figma.notify(
+          'Could not select that layer — the file may have changed since the audit, or the layer was removed.',
+          { error: true },
+        );
       }
+    } else {
+      figma.notify('No layer ID for this issue.', { error: true });
+      figma.ui.postMessage({ type: 'select-layer-result', layerId: '', ok: false });
     }
   }
 

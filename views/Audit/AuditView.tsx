@@ -292,8 +292,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     ? a11yAuditIssues.filter(i => i.pageName === selectedPageName)
     : activeTab === 'A11Y' ? a11yIssuesRaw : [];
 
+  // DS: same snapshot as A11Y — when audit scope is a single page, only list issues for that canvas (name from file JSON).
+  const dsAuditIssuesForList =
+    dsAuditIssues != null && selectedPageName
+      ? dsAuditIssues.filter(i => !i.pageName || i.pageName === selectedPageName)
+      : dsAuditIssues;
+
   // Determine which issue set to use (DS / A11Y use real issues from agent when available)
-  let currentIssues = activeTab === 'DS' && dsAuditIssues != null ? dsAuditIssues : DS_ISSUES;
+  let currentIssues = activeTab === 'DS' && dsAuditIssuesForList != null ? dsAuditIssuesForList : DS_ISSUES;
   if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? (selectedPageName ? a11yIssuesScoped : a11yAuditIssues) : A11Y_ISSUES;
   if (activeTab === 'UX') currentIssues = hasUxAudited && uxAuditIssues != null ? uxAuditIssues : [];
   if (activeTab === 'PROTOTYPE') currentIssues = hasProtoAudited && protoAuditIssues ? protoAuditIssues : [];
@@ -322,8 +328,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
   // DS tab: dynamic categories, score from full issue set (so changing scope doesn't change score until next scan)
   const dsCategories = activeTab === 'DS' ? buildDsCategoriesFromIssues(filteredIssues) : [];
-  const dsFullForScore = activeTab === 'DS' && dsAuditIssues != null
-    ? dsAuditIssues.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
+  const dsFullForScore = activeTab === 'DS' && dsAuditIssuesForList != null
+    ? dsAuditIssuesForList.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
     : filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
   const dsScore = activeTab === 'DS'
     ? (dsFullForScore.length === 0 ? 100 : computeDsScoreFromIssues(dsFullForScore))
@@ -1311,7 +1317,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   };
 
   const postSelectLayer = (layerId: string) => {
-    setPendingLayerSelectionId(layerId);
+    setPendingLayerSelectionId(layerId || null);
     window.parent.postMessage({ pluginMessage: { type: 'select-layer', layerId } }, '*');
   };
 

@@ -9,6 +9,7 @@ import {
 } from '@comtra/components/ui/BrutalSelect';
 import { Toast } from '@comtra/components/Toast';
 import { AlertBanner } from '@comtra/components/AlertBanner';
+import { SectionCard } from '@comtra/components/ui/SectionCard';
 import { BRUTAL, COLORS } from '@comtra/constants';
 
 type SectionId =
@@ -157,6 +158,27 @@ function CardsSection() {
         <div className={`${BRUTAL.card} max-w-sm`}>
           <h3 className="font-black uppercase text-sm mb-2">Current Status</h3>
           <p className="text-xs text-gray-600">Testo secondario nella card.</p>
+        </div>
+      </Block>
+      <Block title="Section card (Generate — stessa tipologia)">
+        <div className="flex flex-col gap-4 max-w-md">
+          <SectionCard title="Context Layer" headerRight="INSTANCE">
+            <span className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate">
+              Target: Base Components
+            </span>
+            <span className="text-[10px] text-gray-500">
+              Selection from canvas is active. Screenshot context is disabled until you deselect in Figma.
+            </span>
+          </SectionCard>
+          <SectionCard
+            title="Design System"
+            description="Define the component perimeter. Default uses your current/linked library and cannot be empty."
+          >
+            <div className="w-full border-2 border-black p-2 flex justify-between items-center text-xs font-bold bg-white">
+              <span>Custom (Current)</span>
+              <span aria-hidden>▼</span>
+            </div>
+          </SectionCard>
         </div>
       </Block>
     </>

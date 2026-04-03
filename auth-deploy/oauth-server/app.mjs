@@ -1036,7 +1036,119 @@ function normalizeDsAuditIssue(raw) {
   if (raw.optimizationPayload && typeof raw.optimizationPayload === 'object') {
     out.optimizationPayload = raw.optimizationPayload;
   }
+  if (raw.nodeName != null && String(raw.nodeName).trim()) {
+    out.nodeName = String(raw.nodeName).trim();
+  }
+  if (raw.hideLayerActions === true) out.hideLayerActions = true;
   return out;
+}
+
+/** Extract quoted name from DS issue msg (same heuristics as plugin IssueList). */
+function extractNameFromMsgDs(msg) {
+  if (typeof msg !== 'string' || !msg) return '';
+  const curly = msg.match(/[\u201c\u201d]([^\u201c\u201d]+)[\u201c\u201d]/);
+  if (curly && curly[1] && String(curly[1]).trim()) return String(curly[1]).trim();
+  const straight = msg.match(/["']([^"']+)["']/);
+  if (straight && straight[1] && String(straight[1]).trim()) return String(straight[1]).trim();
+  const emptyFrame = msg.match(/empty\s+([^\s.]+)\s+frame/i);
+  if (emptyFrame && emptyFrame[1] && String(emptyFrame[1]).trim()) return String(emptyFrame[1]).trim();
+  return '';
+}
+
+function walkFigmaDocForIds(node, pageName, validIds, nameToCandidates) {
+  if (!node || typeof node !== 'object') return;
+  let nextPage = pageName;
+  if (node.type === 'CANVAS' || node.type === 'PAGE') {
+    nextPage = node.name != null ? String(node.name) : pageName;
+  }
+  if (node.id != null) {
+    const id = String(node.id);
+    validIds.add(id);
+    if (node.name != null) {
+      const nm = String(node.name);
+      if (!nameToCandidates.has(nm)) nameToCandidates.set(nm, []);
+      nameToCandidates.get(nm).push({ id, page: nextPage || '' });
+    }
+  }
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) walkFigmaDocForIds(c, nextPage, validIds, nameToCandidates);
+  }
+}
+
+/** Real Figma page/canvas name for each node id (fixes LLM putting frame names like "Footer" in pageName). */
+function walkFigmaDocIdToPageName(node, pageName, idToPageName) {
+  if (!node || typeof node !== 'object') return;
+  let nextPage = pageName;
+  if (node.type === 'CANVAS' || node.type === 'PAGE') {
+    nextPage = node.name != null ? String(node.name) : pageName;
+  }
+  if (node.id != null) {
+    idToPageName.set(String(node.id), nextPage != null && nextPage !== '' ? String(nextPage) : '');
+  }
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) walkFigmaDocIdToPageName(c, nextPage, idToPageName);
+  }
+}
+
+/**
+ * Ogni issue deve avere un layerId presente nello snapshot JSON usato per l'audit.
+ * Se l'LLM sbaglia l'id: prova layerIds, poi nodeName/msg + nome nel documento (match univoco o pageName).
+ * Altrimenti hideLayerActions — niente Select Layer ambiguo o che fallisce.
+ */
+function resolveDsAuditIssuesFromSnapshot(issues, fileJson) {
+  const doc = fileJson && fileJson.document;
+  if (!doc || !Array.isArray(issues)) return issues;
+  const validIds = new Set();
+  const nameToCandidates = new Map();
+  const idToPageName = new Map();
+  walkFigmaDocForIds(doc, null, validIds, nameToCandidates);
+  walkFigmaDocIdToPageName(doc, null, idToPageName);
+
+  const tryId = (id) => {
+    const s = id != null ? String(id).trim() : '';
+    return s && validIds.has(s) ? s : null;
+  };
+
+  return issues.map((issue) => {
+    if (!issue || issue.hideLayerActions === true) return issue;
+
+    let layerId = tryId(issue.layerId);
+    if (!layerId && Array.isArray(issue.layerIds)) {
+      for (const id of issue.layerIds) {
+        layerId = tryId(id);
+        if (layerId) break;
+      }
+    }
+
+    if (!layerId) {
+      const name =
+        (issue.nodeName && String(issue.nodeName).trim()) || extractNameFromMsgDs(issue.msg || '');
+      if (name) {
+        const cands = nameToCandidates.get(name) || [];
+        if (cands.length === 1) layerId = cands[0].id;
+        else if (cands.length > 1 && issue.pageName) {
+          const pn = String(issue.pageName).trim();
+          const onPage = cands.filter((c) => c.page === pn);
+          if (onPage.length === 1) layerId = onPage[0].id;
+        }
+      }
+    }
+
+    const hideLayerActions = !layerId;
+    const out = { ...issue, layerId: layerId || '', hideLayerActions };
+    if (Array.isArray(issue.layerIds)) {
+      const filtered = issue.layerIds.map(String).filter((id) => validIds.has(id));
+      if (filtered.length > 0) out.layerIds = filtered;
+      else delete out.layerIds;
+    }
+    if (layerId) {
+      const canon = idToPageName.get(layerId);
+      if (canon != null && String(canon).trim() !== '') {
+        out.pageName = String(canon);
+      }
+    }
+    return out;
+  });
 }
 
 /** Count nodes in Figma file JSON (document tree) for size_band telemetry. */
@@ -1234,7 +1346,8 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     const content = kimiData?.choices?.[0]?.message?.content;
     const parsed = extractJsonFromContent(content);
     const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
-    const issues = rawIssues.map(normalizeDsAuditIssue).filter(Boolean);
+    let issues = rawIssues.map(normalizeDsAuditIssue).filter(Boolean);
+    issues = resolveDsAuditIssuesFromSnapshot(issues, fileJson);
 
     // Telemetria uso token (anonima): log per dashboard. Vedi docs/TOKEN-USAGE-TELEMETRY.md
     const usage = kimiData?.usage;
