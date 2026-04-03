@@ -68,7 +68,15 @@ export const Toast: React.FC<Props> = ({
           <button
             type="button"
             onClick={onDismiss}
-            className="shrink-0 text-gray-400 hover:text-black font-bold text-sm leading-none p-0.5"
+            className={`shrink-0 flex items-center justify-center w-6 h-6 -mt-1 -mr-1 rounded-sm text-sm font-bold ${
+              variant === 'error'
+                ? 'text-red-700 hover:text-red-900'
+                : variant === 'warning'
+                  ? 'text-amber-700 hover:text-amber-900'
+                  : variant === 'info'
+                    ? 'text-sky-700 hover:text-sky-900'
+                    : 'text-gray-500 hover:text-black'
+            }`}
             aria-label="Dismiss"
           >
             ×

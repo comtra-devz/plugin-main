@@ -1,6 +1,7 @@
 import React from 'react';
 import { BRUTAL, getPrototypeAuditCost } from '../../../constants';
 import { Button } from '../../../components/ui/Button';
+import { AlertBanner } from '../../../components/AlertBanner';
 import { BrutalDropdown, brutalMenuRowClass } from '../../../components/ui/BrutalSelect';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
@@ -116,9 +117,9 @@ export const PrototypeAuditTab: React.FC<Props> = ({
             Run the Prototype audit on selected flows. Dead-ends, back nav, variables and more.
           </p>
           {flowStartingPoints.length === 0 ? (
-            <p className="text-[10px] font-bold text-amber-700 bg-amber-50 border-2 border-amber-300 px-3 py-2 mx-4">
+            <AlertBanner variant="warning">
               No flow starting points on this page. Set at least one in the Prototype panel.
-            </p>
+            </AlertBanner>
           ) : (
             <>
               <div className="relative z-20 text-left mb-2 px-4">
