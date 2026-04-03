@@ -200,7 +200,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [feedbackSentIds, setFeedbackSentIds] = useState<Set<string>>(new Set());
   const [wcagLevelFilter, setWcagLevelFilter] = useState<'AA' | 'AAA'>('AA');
   const [showHiddenLayers, setShowHiddenLayers] = useState(false);
-  
+  /** Resolves when plugin finishes isOnHiddenLayer enrichment for DS audit issues */
+  const dsEnrichHiddenResolveRef = useRef<((issues: AuditIssue[]) => void) | null>(null);
+
   // Feedback Modal State
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackTargetId, setFeedbackTargetId] = useState<string | null>(null);
@@ -322,21 +324,30 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     activeTab === 'PROTOTYPE'
       ? (showHiddenLayers ? filteredIssues : filteredIssues.filter(i => i.isOnHiddenLayer !== true))
       : filteredIssues;
+  const dsVisibleIssues =
+    activeTab === 'DS'
+      ? (showHiddenLayers ? filteredIssues : filteredIssues.filter(i => i.isOnHiddenLayer !== true))
+      : filteredIssues;
   // A11Y: apply WCAG filter only to the list; categories use a11yVisibleIssues
   const listIssues =
     activeTab === 'A11Y'
       ? (wcagLevelFilter === 'AA' ? a11yVisibleIssues.filter(i => i.wcag_level !== 'AAA') : a11yVisibleIssues)
       : activeTab === 'PROTOTYPE'
         ? protoVisibleIssues
-        : filteredIssues;
+        : activeTab === 'DS'
+          ? dsVisibleIssues
+          : filteredIssues;
   const activeIssues = activeCat ? listIssues.filter(i => i.categoryId === activeCat) : listIssues;
   const displayIssues = isPro ? activeIssues : activeIssues.slice(0, 6);
   const totalHiddenCount = isPro ? 0 : Math.max(0, activeIssues.length - 6);
 
-  // DS tab: dynamic categories, score from full issue set (so changing scope doesn't change score until next scan)
-  const dsCategories = activeTab === 'DS' ? buildDsCategoriesFromIssues(filteredIssues) : [];
+  // DS tab: dynamic categories, score respect "Show hidden layers" like A11Y / Prototype
+  const dsCategories = activeTab === 'DS' ? buildDsCategoriesFromIssues(dsVisibleIssues) : [];
   const dsFullForScore = activeTab === 'DS' && dsAuditIssuesForList != null
-    ? dsAuditIssuesForList.filter(i => !i.pageName || !excludedPages.includes(i.pageName)).filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
+    ? dsAuditIssuesForList
+        .filter(i => !i.pageName || !excludedPages.includes(i.pageName))
+        .filter(i => showHiddenLayers || i.isOnHiddenLayer !== true)
+        .filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id))
     : filteredIssues.filter(i => !fixedIds.has(i.id) && !discardedIds.has(i.id));
   const dsScore = activeTab === 'DS'
     ? (dsFullForScore.length === 0 ? 100 : computeDsScoreFromIssues(dsFullForScore))
@@ -492,6 +503,13 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     const handler = (e: MessageEvent) => {
       let msg = e.data?.pluginMessage ?? e.data;
       if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'enrich-issues-hidden-result') {
+        const fn = dsEnrichHiddenResolveRef.current;
+        if (fn) {
+          dsEnrichHiddenResolveRef.current = null;
+          fn(Array.isArray(msg.issues) ? (msg.issues as AuditIssue[]) : []);
+        }
+      }
       if (msg.type === 'pages-result' && msg.pages) {
         setDocumentPages(msg.pages);
         setSelectedPageId((prev) => (prev ? prev : msg.pages[0]?.id ?? null));
@@ -860,7 +878,33 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setDsLibraryContextHint(null);
               setDsAuditLoading(true);
               const data = await fetchDsAudit(auditBody);
-              setDsAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
+              const rawIssues = Array.isArray(data?.issues) ? (data.issues as AuditIssue[]) : [];
+              const enriched = await new Promise<AuditIssue[]>((resolve) => {
+                if (rawIssues.length === 0) {
+                  resolve([]);
+                  return;
+                }
+                const timeout = setTimeout(() => {
+                  if (dsEnrichHiddenResolveRef.current) dsEnrichHiddenResolveRef.current = null;
+                  resolve(rawIssues);
+                }, 12000);
+                dsEnrichHiddenResolveRef.current = (issues: AuditIssue[]) => {
+                  clearTimeout(timeout);
+                  dsEnrichHiddenResolveRef.current = null;
+                  resolve(issues.length > 0 ? issues : rawIssues);
+                };
+                window.parent.postMessage(
+                  {
+                    pluginMessage: {
+                      type: 'enrich-issues-hidden',
+                      issues: rawIssues,
+                      requestId: Date.now(),
+                    },
+                  },
+                  '*',
+                );
+              });
+              setDsAuditIssues(enriched);
               if (data?.advisory && typeof data.advisory === 'object' && data.advisory.message && data.advisory.ctaUrl) {
                 setDsAdvisory({
                   type: data.advisory.type || 'no_design_system',

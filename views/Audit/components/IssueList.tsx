@@ -100,7 +100,9 @@ export const IssueList: React.FC<IssueListProps> = ({
 
   return (
     <div className="space-y-6">
-      {((activeTab === 'A11Y' && (setWcagLevelFilter || setShowHiddenLayers)) || (activeTab === 'PROTOTYPE' && setShowHiddenLayers)) && (
+      {((activeTab === 'A11Y' && (setWcagLevelFilter || setShowHiddenLayers)) ||
+        (activeTab === 'PROTOTYPE' && setShowHiddenLayers) ||
+        (activeTab === 'DS' && setShowHiddenLayers)) && (
         <div className="flex items-center justify-between gap-4 mb-3 pb-2 border-b-2 border-black/10 flex-wrap">
           {activeTab === 'A11Y' && setWcagLevelFilter && (
             <div className="flex items-center gap-2">

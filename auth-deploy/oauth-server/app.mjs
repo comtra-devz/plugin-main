@@ -20,6 +20,8 @@ import {
   deleteLevelDiscount,
   isLevelWithDiscount,
   discountPercentForLevel,
+  resolveLemonStoreId,
+  resolveLemonVariant1y,
 } from './lemon-discounts.mjs';
 import {
   buildDsContextForPrompt,
@@ -823,8 +825,8 @@ app.post('/api/credits/consume', async (req, res) => {
           const code = generateLevelDiscountCode(userId, currentLevel);
           const percent = discountPercentForLevel(currentLevel);
           const created = await createLevelDiscount({
-            storeId: process.env.LEMON_SQUEEZY_STORE_ID,
-            variantId1y: process.env.LEMON_VARIANT_1Y || '1345319',
+            storeId: resolveLemonStoreId(),
+            variantId1y: resolveLemonVariant1y(),
             name: `Level ${currentLevel} - ${percent}%`,
             code,
             amountPercent: percent,
@@ -1427,6 +1429,102 @@ function filterFalsePositiveInstanceVsMainAdoption(issues, fileJson) {
   });
 }
 
+function nodeHasFillStyleOrVariableBinding(n) {
+  if (!n || typeof n !== 'object') return false;
+  if (n.fillStyleId != null && String(n.fillStyleId).trim() !== '') return true;
+  const bv = n.boundVariables;
+  if (bv && typeof bv === 'object' && bv.fills != null) return true;
+  return false;
+}
+
+function nodeHasStrokeStyleOrVariableBinding(n) {
+  if (!n || typeof n !== 'object') return false;
+  if (n.strokeStyleId != null && String(n.strokeStyleId).trim() !== '') return true;
+  const bv = n.boundVariables;
+  if (bv && typeof bv === 'object' && bv.strokes != null) return true;
+  return false;
+}
+
+/**
+ * Coverage 2.1/2.2: LLM or stale plugin JSON may claim hardcoded paint while snapshot has style/variable IDs.
+ */
+function filterFalsePositiveHardcodedPaintCoverage(issues, fileJson) {
+  const doc = fileJson?.document;
+  if (!doc || !Array.isArray(issues)) return issues;
+  const fillHard = /hardcoded\s+fill|colou?r hardcoded|fill colou?r.*hardcode|no style or variable|senza stile|DS-2\.1\b/i;
+  const strokeHard = /hardcoded\s+stroke|stroke.*hardcode|no style or variable.*stroke|DS-2\.2\b/i;
+  return issues.filter((issue) => {
+    if (!issue || issue.categoryId !== 'coverage') return true;
+    const blob = `${issue.msg || ''} ${issue.fix || ''}`;
+    const lid = issue.layerId && String(issue.layerId).trim();
+    if (!lid) return true;
+    const node = findNodeByIdInDocument(doc, lid);
+    if (!node) return true;
+    if (fillHard.test(blob) && nodeHasFillStyleOrVariableBinding(node)) return false;
+    if (strokeHard.test(blob) && nodeHasStrokeStyleOrVariableBinding(node)) return false;
+    return true;
+  });
+}
+
+function jsonNodeDirectChildCount(node) {
+  if (!node || typeof node !== 'object' || !Array.isArray(node.children)) return 0;
+  return node.children.length;
+}
+
+/** DS-4.1: LLM or truncated JSON says "empty frame" but snapshot lists children. */
+function filterFalsePositiveGhostEmptyFrameStructure(issues, fileJson) {
+  const doc = fileJson?.document;
+  if (!doc || !Array.isArray(issues)) return issues;
+  const ghostRe =
+    /ghost|no children|empty frame|frame with no|nessun figlio|senza figli|wrapper vuot|meaningful children|redundant wrapper|DS-4\.1\b/i;
+  const parentTypes = new Set(['FRAME', 'GROUP', 'COMPONENT', 'INSTANCE', 'SECTION']);
+  return issues.filter((issue) => {
+    if (!issue || issue.categoryId !== 'structure') return true;
+    const blob = `${issue.msg || ''} ${issue.fix || ''}`;
+    if (!ghostRe.test(blob)) return true;
+    const lid = issue.layerId && String(issue.layerId).trim();
+    if (!lid) return true;
+    const node = findNodeByIdInDocument(doc, lid);
+    if (!node) return true;
+    if (!parentTypes.has(String(node.type || ''))) return true;
+    if (jsonNodeDirectChildCount(node) > 0) return false;
+    return true;
+  });
+}
+
+/** 5.3 / typography: drop when TEXT has library text style, typo variables, or cited px ≠ snapshot style.fontSize. */
+function filterFalsePositiveTypeScaleTypography(issues, fileJson) {
+  const doc = fileJson?.document;
+  if (!doc || !Array.isArray(issues)) return issues;
+  const topicRe =
+    /type scale|typescale|font size|fontSize|not (found )?in.*scale|5\.3|DS-5\.3|line height.*(scale|type)|typograph/i;
+  const typoFocusRe = /font|typescale|type scale|fontSize|5\.3|DS-5\.3|typograph|line height|heading|body\b/i;
+  return issues.filter((issue) => {
+    if (!issue || issue.categoryId !== 'consistency') return true;
+    const blob = `${issue.msg || ''} ${issue.fix || ''}`;
+    if (!topicRe.test(blob)) return true;
+    const lid = issue.layerId && String(issue.layerId).trim();
+    if (!lid) return true;
+    const node = findNodeByIdInDocument(doc, lid);
+    if (!node || String(node.type) !== 'TEXT') return true;
+    if (node.textStyleId != null && String(node.textStyleId).trim() !== '') return false;
+    if (node.styles && node.styles.text != null && String(node.styles.text).trim() !== '') return false;
+    const bv = node.boundVariables;
+    if (
+      bv &&
+      typeof bv === 'object' &&
+      (bv.fontSize != null || bv.fontFamily != null || bv.fontWeight != null)
+    )
+      return false;
+    const fs = node.style && typeof node.style.fontSize === 'number' ? node.style.fontSize : null;
+    if (fs != null && typoFocusRe.test(blob)) {
+      const pxMatches = [...blob.matchAll(/\b(\d+)\s*px\b/gi)].map((m) => Number(m[1]));
+      if (pxMatches.some((p) => Math.abs(p - fs) >= 0.5)) return false;
+    }
+    return true;
+  });
+}
+
 /** Count nodes in Figma file JSON (document tree) for size_band telemetry. */
 function countFigmaNodes(obj) {
   if (!obj || typeof obj !== 'object') return 0;
@@ -1441,6 +1539,11 @@ function sizeBandFromNodeCount(n) {
   if (n <= 50000) return 'large';
   return '200k+';
 }
+
+/** REST `depth` too shallow → inner frames get empty `children` in JSON → false DS-4.1 "ghost / no children". */
+const FIGMA_AUDIT_REST_DEPTH_NODES = 8;
+const FIGMA_AUDIT_REST_DEPTH_PAGE = 8;
+const FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW = 5;
 
 /** Fetch file JSON from Figma REST API. Never requests the full file in one go: per-page or per-node only, to avoid 400 on large files. Returns { document } for audit engines. */
 async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeIds, pageIds) {
@@ -1462,7 +1565,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   if (scopeType === 'current' && idsArr.length > 0) {
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}/nodes`);
     url.searchParams.set('ids', idsArr.join(','));
-    url.searchParams.set('depth', '5');
+    url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_NODES));
     const res = await fetch(url.toString(), auth);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
@@ -1474,7 +1577,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   if (scopeType === 'page' && pageIdTrim) {
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     url.searchParams.set('ids', pageIdTrim);
-    url.searchParams.set('depth', '4');
+    url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_PAGE));
     const res = await fetch(url.toString(), auth);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
@@ -1489,7 +1592,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
     for (const pid of pageIdsArr) {
       const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
       url.searchParams.set('ids', pid);
-      url.searchParams.set('depth', '4');
+      url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_PAGE));
       const res = await fetch(url.toString(), auth);
       if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
       const data = await res.json();
@@ -1503,7 +1606,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
 
   if (scopeType === 'all') {
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
-    url.searchParams.set('depth', '2');
+    url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW));
     const res = await fetch(url.toString(), auth);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
@@ -1511,7 +1614,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   }
 
   const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
-  url.searchParams.set('depth', '2');
+  url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW));
   const res = await fetch(url.toString(), auth);
   if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
   const data = await res.json();
@@ -1632,6 +1735,9 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     issues = filterOffGridAutoLayoutFalsePositives(issues, fileJson);
     issues = downgradeRedundantComponentMergeSeverity(issues);
     issues = filterFalsePositiveInstanceVsMainAdoption(issues, fileJson);
+    issues = filterFalsePositiveHardcodedPaintCoverage(issues, fileJson);
+    issues = filterFalsePositiveGhostEmptyFrameStructure(issues, fileJson);
+    issues = filterFalsePositiveTypeScaleTypography(issues, fileJson);
 
     // Telemetria uso token (anonima): log per dashboard. Vedi docs/TOKEN-USAGE-TELEMETRY.md
     const { inputTokens, outputTokens } = normalizeMoonshotUsage(kimiData?.usage);
@@ -2511,7 +2617,7 @@ app.post('/api/throttle-discount', async (req, res) => {
       }
       return res.status(400).json({ error: 'Codice sconto throttle già usato (una tantum per utente).' });
     }
-    const created = await createThrottleDiscount({ userId, storeId: process.env.LEMON_SQUEEZY_STORE_ID });
+    const created = await createThrottleDiscount({ userId, storeId: resolveLemonStoreId() });
     if (!created) return res.status(503).json({ error: 'Impossibile creare il codice. Riprova più tardi.' });
     await dbSql`
       INSERT INTO user_throttle_discounts (user_id, code, lemon_discount_id, expires_at)

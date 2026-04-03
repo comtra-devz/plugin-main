@@ -37,6 +37,9 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `LEMON_SQUEEZY_WEBHOOK_SECRET` | Signing secret del webhook Lemon Squeezy (6–40 caratteri) | **da aggiungere** per affiliate |
 | `LEMON_SQUEEZY_API_KEY` | API key Lemon Squeezy (Settings → API) | **da aggiungere** per codici sconto livello (gamification) |
 | `LEMON_SQUEEZY_STORE_ID` | ID dello store Lemon Squeezy (per creare discount via API) | **da aggiungere** con API key |
+| *(alias)* `LEMON_API_KEY` | Stesso valore dell’API key | Se in Vercel usi questo nome al posto di `LEMON_SQUEEZY_API_KEY`, va bene: il backend lo accetta. |
+| *(alias)* `LEMON_STORE_ID` | Stesso valore dello store id | Stesso discorso al posto di `LEMON_SQUEEZY_STORE_ID`. |
+| `LEMON_VARIANT_1Y` | ID della **variant** del piano **Annual (1y)** in Lemon | Obbligatorio per legare gli sconti livello al prodotto giusto. Se hai solo nomi tipo `LEMON_VARIANT_SV` / `AZ` / `TZ` / `SN`, copia l’**ID numerico** della variant Annual da Lemon e incollalo qui (o aggiungi questa variabile accanto alle altre). |
 | `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
 | `KIMI_MODEL` | Nome modello (opzionale) | Default: `kimi-k2-turbo-preview`. Per **testing a basso costo** usa `kimi-k2-0905-preview` (input ~$0.40/M token, contesto 131K). |
 

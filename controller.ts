@@ -1527,6 +1527,44 @@ figma.ui.onmessage = async (raw: any) => {
     figma.ui.resize(msg.width, msg.height);
   }
 
+  /** UI: set isOnHiddenLayer (node or any ancestor visible === false) — same semantics as prototype / A11Y toggle. */
+  if (msg.type === 'enrich-issues-hidden') {
+    const issues = Array.isArray(msg.issues) ? msg.issues : [];
+    const requestId = msg.requestId;
+    const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
+    (async () => {
+      try {
+        await figma.loadAllPagesAsync();
+        const hiddenCache = new Map<string, boolean>();
+        const out: any[] = [];
+        for (let i = 0; i < issues.length; i++) {
+          if (i > 0 && i % 25 === 0) await yieldToMain();
+          const rawIssue = issues[i];
+          const copy = { ...rawIssue };
+          let lid = '';
+          if (rawIssue?.layerId) lid = String(rawIssue.layerId).trim();
+          else if (Array.isArray(rawIssue?.layerIds) && rawIssue.layerIds.length > 0)
+            lid = String(rawIssue.layerIds[0]).trim();
+          let isOnHiddenLayer = false;
+          if (lid) {
+            try {
+              isOnHiddenLayer = await isNodeHidden(lid, hiddenCache);
+            } catch (_) {
+              isOnHiddenLayer = false;
+            }
+          }
+          copy.isOnHiddenLayer = isOnHiddenLayer;
+          out.push(copy);
+        }
+        figma.ui.postMessage({ type: 'enrich-issues-hidden-result', requestId, issues: out });
+      } catch (e) {
+        console.error('[enrich-issues-hidden]', e);
+        figma.ui.postMessage({ type: 'enrich-issues-hidden-result', requestId, issues });
+      }
+    })();
+    return;
+  }
+
   if (msg.type === 'open-oauth-url') {
     if (msg.authUrl) figma.openExternal(msg.authUrl);
   }
@@ -1576,7 +1614,8 @@ figma.ui.onmessage = async (raw: any) => {
   }
 
   // Serialize document tree for audit. Chunked + yield so the main thread never blocks for long.
-  const MAX_SERIALIZE_DEPTH = 6;
+  /** Extra margin for SECTION → frame → card → INSTANCE → … chains in DS audit export. */
+  const MAX_SERIALIZE_DEPTH = 8;
   const SERIALIZE_CHUNK = 20;
   const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
 
@@ -1590,12 +1629,32 @@ figma.ui.onmessage = async (raw: any) => {
     return out;
   }
 
+  /** Paint variable bindings for DS audit (2.1 / 2.2). Keeps payload small — only fills/strokes keys. */
+  function serializeBoundVariablesPaint(node: BaseNode): Record<string, unknown> | undefined {
+    const bv = (node as any).boundVariables as Record<string, unknown> | undefined;
+    if (!bv || typeof bv !== 'object') return undefined;
+    const out: Record<string, unknown> = {};
+    if (bv.fills != null) out.fills = bv.fills;
+    if (bv.strokes != null) out.strokes = bv.strokes;
+    return Object.keys(out).length > 0 ? out : undefined;
+  }
+
   function serializeNodeShallow(node: BaseNode): any {
     const out: any = { id: node.id, name: node.name, type: node.type, children: [] };
     if ('absoluteBoundingBox' in node && node.absoluteBoundingBox) {
       const b = node.absoluteBoundingBox;
       out.absoluteBoundingBox = { x: b.x, y: b.y, width: b.width, height: b.height };
     }
+    if ('fillStyleId' in node) {
+      const fid = (node as any).fillStyleId;
+      if (typeof fid === 'string' && fid.trim() !== '') out.fillStyleId = fid;
+    }
+    if ('strokeStyleId' in node) {
+      const sid = (node as any).strokeStyleId;
+      if (typeof sid === 'string' && sid.trim() !== '') out.strokeStyleId = sid;
+    }
+    const bvPaint = serializeBoundVariablesPaint(node);
+    if (bvPaint) out.boundVariables = bvPaint;
     if ('fills' in node) {
       let fillsToSerialize: readonly Paint[] | null = null;
       if (node.fills !== figma.mixed && Array.isArray(node.fills)) {
@@ -1612,11 +1671,77 @@ figma.ui.onmessage = async (raw: any) => {
         if (serialized.length > 0) out.fills = serialized;
       }
     }
+    if ('strokes' in node && node.strokes !== figma.mixed && Array.isArray(node.strokes) && node.strokes.length > 0) {
+      const serialized = serializeFills(node.strokes as readonly Paint[]);
+      if (serialized.length > 0) out.strokes = serialized;
+    }
+    if ('strokeWeight' in node && typeof (node as any).strokeWeight === 'number' && (node as any).strokeWeight > 0) {
+      out.strokeWeight = (node as any).strokeWeight;
+    }
     if (node.type === 'TEXT') {
-      const tn = node as any;
+      const tn = node as TextNode;
+      const tst = (tn as any).textStyleId;
+      if (typeof tst === 'string' && tst.trim() !== '') out.textStyleId = tst;
+
+      let segBest: {
+        fontSize?: number;
+        fontWeight?: number;
+        lineHeightPx?: number;
+        fontFamily?: string;
+      } = {};
+      try {
+        const segs = tn.getStyledTextSegments?.(['fontSize', 'fontName', 'fontWeight', 'lineHeightPx']);
+        if (Array.isArray(segs) && segs.length > 0) {
+          let bestIdx = 0;
+          let bestLen = -1;
+          for (let i = 0; i < segs.length; i++) {
+            const ch = segs[i].characters;
+            const len = typeof ch === 'string' ? ch.length : 0;
+            if (len > bestLen) {
+              bestLen = len;
+              bestIdx = i;
+            }
+          }
+          const best = segs[bestIdx];
+          if (typeof best.fontSize === 'number') segBest.fontSize = best.fontSize;
+          if (typeof best.fontWeight === 'number') segBest.fontWeight = best.fontWeight;
+          if (typeof (best as { lineHeightPx?: number }).lineHeightPx === 'number')
+            segBest.lineHeightPx = (best as { lineHeightPx?: number }).lineHeightPx!;
+          const fn = best.fontName;
+          if (fn && typeof fn.family === 'string') segBest.fontFamily = fn.family;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+
       out.style = {};
-      if (typeof tn.fontSize === 'number') out.style.fontSize = tn.fontSize;
-      if (typeof tn.fontWeight === 'number') out.style.fontWeight = tn.fontWeight;
+      const tnAny = tn as any;
+      if (typeof tnAny.fontSize === 'number') out.style.fontSize = tnAny.fontSize;
+      else if (segBest.fontSize != null) out.style.fontSize = segBest.fontSize;
+
+      if (typeof tnAny.fontWeight === 'number') out.style.fontWeight = tnAny.fontWeight;
+      else if (segBest.fontWeight != null) out.style.fontWeight = segBest.fontWeight;
+
+      if (segBest.lineHeightPx != null) out.style.lineHeightPx = segBest.lineHeightPx;
+      if (segBest.fontFamily) out.style.fontFamily = segBest.fontFamily;
+
+      try {
+        const t = tn.characters;
+        if (typeof t === 'string' && t.length > 0) out.characters = t.length > 120 ? `${t.slice(0, 120)}…` : t;
+      } catch (_) {
+        /* ignore */
+      }
+
+      const bv = (tn as any).boundVariables as Record<string, unknown> | undefined;
+      if (bv && typeof bv === 'object') {
+        const textBv: Record<string, unknown> = {};
+        for (const k of ['fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'paragraphSpacing']) {
+          if (bv[k] != null) textBv[k] = bv[k];
+        }
+        if (Object.keys(textBv).length > 0) {
+          out.boundVariables = { ...(out.boundVariables || {}), ...textBv };
+        }
+      }
     }
     if ('visible' in node && node.visible === false) out.visible = false;
     return out;
@@ -1632,10 +1757,11 @@ figma.ui.onmessage = async (raw: any) => {
       while (queue.length > 0) {
         const batch = queue.splice(0, SERIALIZE_CHUNK);
         for (const { node, depth, parentArr } of batch) {
-          if (depth <= 0) continue;
+          if (depth < 0) continue;
           const ser = serializeNodeShallow(node);
           parentArr.push(ser);
-          if ('children' in node && Array.isArray((node as ChildrenMixin).children) && depth > 1) {
+          // Must use depth > 0 (not > 1): otherwise nodes at depth 1 never enqueue their children → false empty frames in audit JSON.
+          if ('children' in node && Array.isArray((node as ChildrenMixin).children) && depth > 0) {
             const kids = (node as ChildrenMixin).children as BaseNode[];
             for (const c of kids) queue.push({ node: c, depth: depth - 1, parentArr: ser.children });
           }
@@ -1743,12 +1869,12 @@ figma.ui.onmessage = async (raw: any) => {
       const batch = queue.splice(0, SERIALIZE_CHUNK);
       for (const { node, depth, parentSer } of batch) {
         if (nodeCount >= CODE_GEN_MAX_NODES) break;
-        if (depth <= 0) continue;
+        if (depth < 0) continue;
         const ser = serializeNodeShallow(node);
         augmentCodeGenNode(node, ser);
         parentSer.children.push(ser);
         nodeCount++;
-        if (depth > 1 && 'children' in node && nodeCount < CODE_GEN_MAX_NODES) {
+        if (depth > 0 && 'children' in node && nodeCount < CODE_GEN_MAX_NODES) {
           const kids = (node as ChildrenMixin).children as BaseNode[];
           for (const c of kids) queue.push({ node: c, depth: depth - 1, parentSer: ser });
         }

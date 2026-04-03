@@ -1,12 +1,25 @@
 /**
  * Lemon Squeezy API: create/delete discount for level-up codes (gamification).
- * Env: LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID.
- * Variant 1y (Annual) from LEMON_VARIANT_1Y or default.
+ * Env (see resolve* below): LEMON_SQUEEZY_API_KEY or LEMON_API_KEY, store id, LEMON_VARIANT_1Y.
  */
 import crypto from 'node:crypto';
 
 const LEMON_API = 'https://api.lemonsqueezy.com/v1';
 const LEVELS_WITH_DISCOUNT = [5, 10, 15, 20];
+
+/** API key — LEMON_SQUEEZY_API_KEY (docs) or LEMON_API_KEY (common on Vercel). */
+export function resolveLemonApiKey() {
+  return (process.env.LEMON_SQUEEZY_API_KEY || process.env.LEMON_API_KEY || '').trim();
+}
+/** Store id for Discounts API — LEMON_SQUEEZY_STORE_ID or LEMON_STORE_ID. */
+export function resolveLemonStoreId() {
+  return (process.env.LEMON_SQUEEZY_STORE_ID || process.env.LEMON_STORE_ID || '').trim();
+}
+/** Annual Pro variant id (level discounts limited to this product). Set LEMON_VARIANT_1Y to your 1y variant id from Lemon (same as checkout Annual). */
+export function resolveLemonVariant1y() {
+  const v = (process.env.LEMON_VARIANT_1Y || '').trim();
+  return v || '1450315';
+}
 
 function getSecret() {
   return process.env.LEMON_LEVEL_DISCOUNT_SECRET || process.env.JWT_SECRET || 'comtra-level-discount';
@@ -30,11 +43,11 @@ export function generateLevelDiscountCode(userId, level) {
  * @returns {{ id: string, code: string } | null} discount id and code, or null on failure
  */
 export async function createLevelDiscount(opts) {
-  const apiKey = process.env.LEMON_SQUEEZY_API_KEY;
-  const storeId = opts.storeId || process.env.LEMON_SQUEEZY_STORE_ID;
-  const variantId = opts.variantId1y || process.env.LEMON_VARIANT_1Y || '1345319';
+  const apiKey = resolveLemonApiKey();
+  const storeId = opts.storeId || resolveLemonStoreId();
+  const variantId = opts.variantId1y || resolveLemonVariant1y();
   if (!apiKey || !storeId) {
-    console.warn('lemon-discounts: LEMON_SQUEEZY_API_KEY or LEMON_SQUEEZY_STORE_ID missing');
+    console.warn('lemon-discounts: LEMON_SQUEEZY_API_KEY (or LEMON_API_KEY) or LEMON_SQUEEZY_STORE_ID (or LEMON_STORE_ID) missing');
     return null;
   }
   const body = {
@@ -86,7 +99,7 @@ export async function createLevelDiscount(opts) {
  * @returns {boolean} true if deleted or already gone
  */
 export async function deleteLevelDiscount(discountId) {
-  const apiKey = process.env.LEMON_SQUEEZY_API_KEY;
+  const apiKey = resolveLemonApiKey();
   if (!apiKey || !discountId) return true;
   try {
     const res = await fetch(`${LEMON_API}/discounts/${encodeURIComponent(discountId)}`, {
@@ -117,10 +130,10 @@ export function discountPercentForLevel(level) {
  * @returns {{ id: string, code: string, expires_at: string } | null}
  */
 export async function createThrottleDiscount(opts) {
-  const apiKey = process.env.LEMON_SQUEEZY_API_KEY;
-  const storeId = opts.storeId || process.env.LEMON_SQUEEZY_STORE_ID;
+  const apiKey = resolveLemonApiKey();
+  const storeId = opts.storeId || resolveLemonStoreId();
   if (!apiKey || !storeId) {
-    console.warn('lemon-discounts: LEMON_SQUEEZY_API_KEY or LEMON_SQUEEZY_STORE_ID missing');
+    console.warn('lemon-discounts: LEMON_SQUEEZY_API_KEY (or LEMON_API_KEY) or LEMON_SQUEEZY_STORE_ID (or LEMON_STORE_ID) missing');
     return null;
   }
   const code = `COMTRA-T5-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;

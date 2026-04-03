@@ -63,7 +63,7 @@ Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues tha
 - **3.4 Page/frame non-descriptive:** CANVAS or root frame `name` like "Page 1", "Copy 2", "Final" → LOW–MED.
 
 **Structure**
-- **4.1 Ghost node:** Node with no children or single child (redundant wrapper) → MED.
+- **4.1 Ghost node:** Node with no children or single child (redundant wrapper) → MED. **Do not** claim “frame with no children” / empty ghost if this node’s **`children` array in the JSON has length > 0**. Shallow API/plugin snapshots used to omit nested `children` — prefer not to guess; the pipeline drops inconsistent rows when `children.length > 0`.
 - **4.2 Excessive nesting:** Depth > 6–8 for one visual unit → MED.
 - **4.3 Auto-layout missing:** Frame with layoutMode "NONE" and 2+ children that look aligned in a row/column → MED.
 - **4.4 Inconsistent sizing:** Siblings with mixed FIXED/HUG where HUG would suffice → LOW–MED.
@@ -72,7 +72,7 @@ Use only: **HIGH**, **MED**, **LOW**. When in doubt use MED. HIGH for issues tha
 **Consistency**
 - **5.1 Off grid:** On **absolute** `absoluteBoundingBox` **x, y** only where the designer **directly** controls canvas placement. **Do not** apply 5.1 to a node whose **parent** has `layoutMode` other than `"NONE"` (auto-layout / grid on parent) **unless** the node uses `layoutPositioning: "ABSOLUTE"` — flow children are positioned by layout; absolute coords often look off-grid while the design (relative X/Y) is intentional (see Definitions). For free‑standing frames/groups or absolute children, modulo grid check → MED. In `msg`, prefer phrasing like “absolute position …” if you reference coordinates.
 - **5.2 Spacing between elements:** Gap between siblings not in the file/library spacing scale → MED.
-- **5.3 Font size not in type scale:** style.fontSize not in the file/library type scale (use defined scale when detectable; otherwise common examples: 12, 14, 16, 18, 20, 24, 32) → HIGH.
+- **5.3 Font size not in type scale:** style.fontSize not in the file/library type scale (use defined scale when detectable; otherwise common examples: 12, 14, 16, 18, 20, 24, 32) → HIGH. **Do not** apply if the TEXT node has **`textStyleId`** (plugin) or **`styles.text`** (REST) or **typography `boundVariables`** — that is style-driven. Use **`style.fontSize` from the same node** as the cited `layerId` (and **`characters`** preview if present); mixed runs: trust dominant segment fontSize in JSON. **Never** cite a px size that disagrees with that node’s `style.fontSize`.
 - **5.4 Line height:** lineHeightPx/lineHeightUnit not consistent with the file/library typography scale → MED.
 
 **Copy**
