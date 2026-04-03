@@ -598,6 +598,11 @@ function estimateCreditsByAction(actionType, nodeCount) {
 app.get('/api/credits', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const q = req.query || {};
+  const lite =
+    q.lite === '1' ||
+    q.lite === 'true' ||
+    String(q.lite || '').toLowerCase() === 'yes';
   if (!POSTGRES_URL) {
     return res.json({
       credits_remaining: FREE_TIER_CREDITS,
@@ -632,28 +637,31 @@ app.get('/api/credits', async (req, res) => {
     const remaining = Math.max(0, total - used);
     const totalXp = Math.max(0, Number(row.total_xp) || 0);
     const info = getLevelInfo(totalXp);
+    /** lite=1: solo saldo/plan/XP/regalo/tags — niente aggregazioni su credit_transactions (costose; evita timeout con più tab plugin). */
     let stats = null;
-    try {
-      stats = await getProductionStats(dbSql, userId);
-    } catch (statsErr) {
-      console.error('GET /api/credits: getProductionStats failed (non-fatal)', statsErr);
-    }
     let recent_transactions = [];
-    try {
-      const tx = await dbSql`
-        SELECT action_type, credits_consumed, created_at
-        FROM credit_transactions
-        WHERE user_id = ${userId}
-        ORDER BY created_at DESC
-        LIMIT 30
-      `;
-      recent_transactions = (tx.rows || []).map((r) => ({
-        action_type: r.action_type,
-        credits_consumed: Number(r.credits_consumed) || 0,
-        created_at: r.created_at,
-      }));
-    } catch (txErr) {
-      console.error('GET /api/credits: recent_transactions failed (non-fatal)', txErr);
+    if (!lite) {
+      try {
+        stats = await getProductionStats(dbSql, userId);
+      } catch (statsErr) {
+        console.error('GET /api/credits: getProductionStats failed (non-fatal)', statsErr);
+      }
+      try {
+        const tx = await dbSql`
+          SELECT action_type, credits_consumed, created_at
+          FROM credit_transactions
+          WHERE user_id = ${userId}
+          ORDER BY created_at DESC
+          LIMIT 30
+        `;
+        recent_transactions = (tx.rows || []).map((r) => ({
+          action_type: r.action_type,
+          credits_consumed: Number(r.credits_consumed) || 0,
+          created_at: r.created_at,
+        }));
+      } catch (txErr) {
+        console.error('GET /api/credits: recent_transactions failed (non-fatal)', txErr);
+      }
     }
     const out = {
       credits_remaining: remaining,

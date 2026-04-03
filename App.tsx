@@ -28,16 +28,33 @@ export interface CreditsState {
   used: number;
 }
 
+type CreditsFetchOutcome = { ok: boolean; retryable: boolean };
+
 const CREDITS_CACHE_KEY = 'comtra.credits.v1';
+const CREDITS_CACHE_TTL_MS = 15 * 60 * 1000;
 const CREDITS_GIFT_SEEN_KEY = 'comtra.creditGiftSeen.v1';
+const CREDITS_FETCH_TIMEOUT_LITE_MS = 18_000;
+const CREDITS_FETCH_TIMEOUT_FULL_MS = 28_000;
+
+/** Coalesce parallel GET /api/credits (stesso iframe): più effect/handler non duplicano la richiesta. */
+let creditsInflightLite: Promise<CreditsFetchOutcome> | null = null;
+let creditsInflightFull: Promise<CreditsFetchOutcome> | null = null;
 
 function readCreditsCache(userId: string): CreditsState | null {
   try {
-    const raw = sessionStorage.getItem(CREDITS_CACHE_KEY);
+    const raw = localStorage.getItem(CREDITS_CACHE_KEY);
     if (!raw) return null;
-    const o = JSON.parse(raw) as { userId?: string; remaining?: number; total?: number; used?: number };
+    const o = JSON.parse(raw) as {
+      userId?: string;
+      remaining?: number;
+      total?: number;
+      used?: number;
+      cachedAt?: number;
+    };
     if (o.userId !== userId) return null;
     if (typeof o.remaining !== 'number' || typeof o.total !== 'number' || typeof o.used !== 'number') return null;
+    const cachedAt = typeof o.cachedAt === 'number' ? o.cachedAt : 0;
+    if (!cachedAt || Date.now() - cachedAt > CREDITS_CACHE_TTL_MS) return null;
     return { remaining: o.remaining, total: o.total, used: o.used };
   } catch {
     return null;
@@ -46,7 +63,10 @@ function readCreditsCache(userId: string): CreditsState | null {
 
 function writeCreditsCache(userId: string, c: CreditsState) {
   try {
-    sessionStorage.setItem(CREDITS_CACHE_KEY, JSON.stringify({ userId, ...c }));
+    localStorage.setItem(
+      CREDITS_CACHE_KEY,
+      JSON.stringify({ userId, cachedAt: Date.now(), ...c }),
+    );
   } catch {
     // private mode / quota
   }
@@ -300,128 +320,146 @@ export default function AppTest() {
     });
   }, [showToast, user?.authToken]);
 
-  /** Fetch credits.
-   *  @returns { ok, retryable } where ok=credits were set, retryable=worth retrying.
-   */
-  const fetchCredits = React.useCallback(async (): Promise<{ ok: boolean; retryable: boolean }> => {
-    if (!user?.authToken) return { ok: false, retryable: false };
-    if (!creditsFetchSilentRef.current) setCreditsFetchError(null);
-    try {
-      const controller = new AbortController();
-      // Cold serverless / DB: 25s evita abort prematuri; cache sessionStorage copre l’UX nel frattempo.
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
-      const attemptId = ++creditsFetchAttemptSeqRef.current;
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/credits`, {
-        headers: { Authorization: `Bearer ${user.authToken}` },
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-      if (r.status === 503) {
-        if (shouldLogCreditsDebug()) {
-          console.warn(`[CreditsDebug] #${attemptId} GET /api/credits status=503 retryable=true`);
-        }
-        if (!creditsFetchSilentRef.current) {
-          handle503();
-          setCreditsFetchError('503');
-          console.warn('[Comtra] GET /api/credits: 503 Service Unavailable');
-        }
-        return { ok: false, retryable: true };
-      }
-      if (!r.ok) {
-        const err = `${r.status}`;
-        const retryable = ![400, 401, 403].includes(r.status);
-        let bodySnippet: string | null = null;
+  /** Fetch credits. `lite`: solo saldo/plan/XP/regalo (GET ?lite=1, meno query DB). */
+  const fetchCreditsInternal = React.useCallback(
+    async (lite: boolean): Promise<CreditsFetchOutcome> => {
+      if (!user?.authToken) return { ok: false, retryable: false };
+      if (lite && creditsInflightLite) return creditsInflightLite;
+      if (!lite && creditsInflightFull) return creditsInflightFull;
+
+      const run = async (): Promise<CreditsFetchOutcome> => {
+        if (!creditsFetchSilentRef.current) setCreditsFetchError(null);
         try {
-          const text = await r.text();
-          bodySnippet = text ? text.slice(0, 240) : null;
-        } catch {
-          bodySnippet = null;
-        }
-        if (shouldLogCreditsDebug()) {
-          console.warn(
-            `[CreditsDebug] #${attemptId} GET /api/credits status=${r.status} retryable=${retryable} ${r.statusText ? `statusText=${r.statusText}` : ''}`,
-            bodySnippet ? `body=${bodySnippet}` : 'body=<empty>'
-          );
-        }
-        if (!creditsFetchSilentRef.current) {
-          setCreditsFetchError(err);
-          console.warn('[Comtra] GET /api/credits failed:', r.status, r.statusText);
-        }
-        // 4xx: molto spesso token/permessi/contract errato -> non serve riprovare a vuoto
-        return { ok: false, retryable };
-      }
-      const data = await r.json();
-      const next: CreditsState = {
-        remaining: data.credits_remaining ?? 0,
-        total: data.credits_total ?? 0,
-        used: data.credits_used ?? 0,
-      };
-      setCredits(next);
-      if (user?.id) writeCreditsCache(user.id, next);
-      setCreditsFetchError(null);
-      setUser(prev => {
-        if (!prev) return prev;
-        const updates: Partial<User> = {};
-        if (data.current_level != null || data.total_xp != null) {
-          updates.current_level = data.current_level ?? prev.current_level;
-          updates.total_xp = data.total_xp ?? prev.total_xp;
-          updates.xp_for_next_level = data.xp_for_next_level ?? prev.xp_for_next_level;
-          updates.xp_for_current_level_start = data.xp_for_current_level_start ?? prev.xp_for_current_level_start;
-        }
-        if (data.plan != null) updates.plan = data.plan as User['plan'];
-        if (data.stats != null && typeof data.stats === 'object') {
-          updates.stats = { ...prev.stats, ...data.stats };
-        }
-        if (Array.isArray(data.tags)) updates.tags = data.tags;
-        if (Object.keys(updates).length === 0) return prev;
-        return { ...prev, ...updates };
-      });
-      if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
-      if (
-        data.gift &&
-        typeof data.gift.credits_added === 'number' &&
-        data.gift.credits_added > 0 &&
-        user?.authToken &&
-        user?.id
-      ) {
-        const giftMarker = `${String(data.gift.created_at || 'unknown')}::${data.gift.credits_added}`;
-        const alreadyShownInThisSession = readCreditGiftSeenMarker(user.id) === giftMarker;
-        try {
-          const r = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-          });
-          if (r.ok) {
-            writeCreditGiftSeenMarker(user.id, giftMarker);
-            if (!alreadyShownInThisSession) {
-              setCreditGiftAmount(data.gift.credits_added);
-              setShowCreditGiftModal(true);
+          const controller = new AbortController();
+          const timeoutMs = lite ? CREDITS_FETCH_TIMEOUT_LITE_MS : CREDITS_FETCH_TIMEOUT_FULL_MS;
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          const attemptId = ++creditsFetchAttemptSeqRef.current;
+          const url = `${AUTH_BACKEND_URL}/api/credits${lite ? '?lite=1' : ''}`;
+          const r = await fetch(url, {
+            headers: { Authorization: `Bearer ${user.authToken}` },
+            signal: controller.signal,
+          }).finally(() => clearTimeout(timeoutId));
+          if (r.status === 503) {
+            if (shouldLogCreditsDebug()) {
+              console.warn(`[CreditsDebug] #${attemptId} GET /api/credits status=503 retryable=true`);
             }
-          } else if (shouldLogCreditsDebug()) {
-            console.warn(`[CreditsDebug] POST /api/credit-gift-seen status=${r.status}`);
+            if (!creditsFetchSilentRef.current) {
+              handle503();
+              setCreditsFetchError('503');
+              console.warn('[Comtra] GET /api/credits: 503 Service Unavailable');
+            }
+            return { ok: false, retryable: true };
           }
+          if (!r.ok) {
+            const err = `${r.status}`;
+            const retryable = ![400, 401, 403].includes(r.status);
+            let bodySnippet: string | null = null;
+            try {
+              const text = await r.text();
+              bodySnippet = text ? text.slice(0, 240) : null;
+            } catch {
+              bodySnippet = null;
+            }
+            if (shouldLogCreditsDebug()) {
+              console.warn(
+                `[CreditsDebug] #${attemptId} GET /api/credits status=${r.status} retryable=${retryable} ${r.statusText ? `statusText=${r.statusText}` : ''}`,
+                bodySnippet ? `body=${bodySnippet}` : 'body=<empty>'
+              );
+            }
+            if (!creditsFetchSilentRef.current) {
+              setCreditsFetchError(err);
+              console.warn('[Comtra] GET /api/credits failed:', r.status, r.statusText);
+            }
+            return { ok: false, retryable };
+          }
+          const data = await r.json();
+          const next: CreditsState = {
+            remaining: data.credits_remaining ?? 0,
+            total: data.credits_total ?? 0,
+            used: data.credits_used ?? 0,
+          };
+          setCredits(next);
+          if (user?.id) writeCreditsCache(user.id, next);
+          setCreditsFetchError(null);
+          setUser(prev => {
+            if (!prev) return prev;
+            const updates: Partial<User> = {};
+            if (data.current_level != null || data.total_xp != null) {
+              updates.current_level = data.current_level ?? prev.current_level;
+              updates.total_xp = data.total_xp ?? prev.total_xp;
+              updates.xp_for_next_level = data.xp_for_next_level ?? prev.xp_for_next_level;
+              updates.xp_for_current_level_start = data.xp_for_current_level_start ?? prev.xp_for_current_level_start;
+            }
+            if (data.plan != null) updates.plan = data.plan as User['plan'];
+            if (data.stats != null && typeof data.stats === 'object') {
+              updates.stats = { ...prev.stats, ...data.stats };
+            }
+            if (Array.isArray(data.tags)) updates.tags = data.tags;
+            if (Object.keys(updates).length === 0) return prev;
+            return { ...prev, ...updates };
+          });
+          if (Array.isArray(data.recent_transactions)) setRecentTransactions(data.recent_transactions);
+          if (
+            data.gift &&
+            typeof data.gift.credits_added === 'number' &&
+            data.gift.credits_added > 0 &&
+            user?.authToken &&
+            user?.id
+          ) {
+            const giftMarker = `${String(data.gift.created_at || 'unknown')}::${data.gift.credits_added}`;
+            const alreadyShownInThisSession = readCreditGiftSeenMarker(user.id) === giftMarker;
+            try {
+              const rGift = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+              });
+              if (rGift.ok) {
+                writeCreditGiftSeenMarker(user.id, giftMarker);
+                if (!alreadyShownInThisSession) {
+                  setCreditGiftAmount(data.gift.credits_added);
+                  setShowCreditGiftModal(true);
+                }
+              } else if (shouldLogCreditsDebug()) {
+                console.warn(`[CreditsDebug] POST /api/credit-gift-seen status=${rGift.status}`);
+              }
+            } catch (e) {
+              if (shouldLogCreditsDebug()) {
+                const msg = e instanceof Error ? e.message : String(e);
+                console.warn(`[CreditsDebug] POST /api/credit-gift-seen exception=${msg.slice(0, 200)}`);
+              }
+            }
+          }
+          return { ok: true, retryable: false };
         } catch (e) {
-          if (shouldLogCreditsDebug()) {
-            const msg = e instanceof Error ? e.message : String(e);
-            console.warn(`[CreditsDebug] POST /api/credit-gift-seen exception=${msg.slice(0, 200)}`);
+          if (!creditsFetchSilentRef.current) {
+            setCreditsFetchError('network');
+            console.warn('[Comtra] GET /api/credits: network or parse error', e);
           }
-          // POST fallito: al prossimo accesso riproverà
+          if (shouldLogCreditsDebug()) {
+            const name = e instanceof Error ? e.name : 'unknown';
+            const msg = e instanceof Error ? e.message : String(e);
+            const hint =
+              name === 'AbortError'
+                ? ` (timeout after ${lite ? CREDITS_FETCH_TIMEOUT_LITE_MS : CREDITS_FETCH_TIMEOUT_FULL_MS}ms)`
+                : '';
+            console.warn(`[CreditsDebug] GET /api/credits exception name=${name} message=${msg.slice(0, 200)}${hint}`);
+          }
+          return { ok: false, retryable: true };
         }
-      }
-      return { ok: true, retryable: false };
-    } catch (e) {
-      if (!creditsFetchSilentRef.current) {
-        setCreditsFetchError('network');
-        console.warn('[Comtra] GET /api/credits: network or parse error', e);
-      }
-      if (shouldLogCreditsDebug()) {
-        const name = e instanceof Error ? e.name : 'unknown';
-        const msg = e instanceof Error ? e.message : String(e);
-        const hint = name === 'AbortError' ? ' (timeout after 25s)' : '';
-        console.warn(`[CreditsDebug] GET /api/credits exception name=${name} message=${msg.slice(0, 200)}${hint}`);
-      }
-      return { ok: false, retryable: true };
-    }
-  }, [user?.authToken, user?.id, handle503]);
+      };
+
+      const p = run().finally(() => {
+        if (lite) creditsInflightLite = null;
+        else creditsInflightFull = null;
+      });
+      if (lite) creditsInflightLite = p;
+      else creditsInflightFull = p;
+      return p;
+    },
+    [user?.authToken, user?.id, handle503],
+  );
+
+  const fetchCredits = React.useCallback(() => fetchCreditsInternal(true), [fetchCreditsInternal]);
 
   /** True after we gave up loading credits (all retries failed). Reset on logout. */
   const [creditsLoadGaveUp, setCreditsLoadGaveUp] = useState(false);
@@ -458,8 +496,8 @@ export default function AppTest() {
     return () => { cancelled = true; };
   }, [user?.authToken, user?.id, fetchCredits]);
 
-  // Aggressive (but silent) background recovery: se dopo i retry iniziali i crediti sono ancora null,
-  // continuiamo a riprovare finché arrivano, senza bloccare UI e senza spam UI/toast.
+  // Dopo i retry iniziali: poche riprovate distanziate (niente loop infinito che martella auth).
+  const CREDITS_RECOVERY_DELAYS_MS = [10_000, 30_000, 60_000];
   useEffect(() => {
     if (!user?.authToken) return;
     if (!creditsLoadGaveUp) return;
@@ -468,30 +506,39 @@ export default function AppTest() {
     if (skipRecovery) return;
 
     let cancelled = false;
-    let attempt = 0;
+    const timers: number[] = [];
 
-    (async () => {
-      while (!cancelled && creditsValueRef.current === null && !skipRecovery) {
+    CREDITS_RECOVERY_DELAYS_MS.forEach((delay) => {
+      const tid = window.setTimeout(async () => {
+        if (cancelled || creditsValueRef.current !== null) return;
         creditsFetchSilentRef.current = true;
         try {
-          const res = await fetchCredits();
-          if (res.ok) return;
+          await fetchCreditsInternal(true);
         } finally {
           creditsFetchSilentRef.current = false;
         }
-
-        attempt++;
-        // Aggressivo ma con cap: parte subito, poi cresce fino a 30s.
-        const delay = Math.min(30000, 2000 + attempt * 2000);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    })();
+      }, delay);
+      timers.push(tid);
+    });
 
     return () => {
       cancelled = true;
+      timers.forEach((t) => clearTimeout(t));
       creditsFetchSilentRef.current = false;
     };
-  }, [user?.authToken, user?.id, user?.plan, creditsLoadGaveUp, isTestUser, simulateFreeTier, fetchCredits]);
+  }, [user?.authToken, user?.id, user?.plan, creditsLoadGaveUp, isTestUser, simulateFreeTier, fetchCreditsInternal]);
+
+  // Tab Stats: carica stats + recent_transactions (GET senza lite).
+  useEffect(() => {
+    if (view !== ViewState.ANALYTICS || !user?.authToken) return;
+    const tid = window.setTimeout(() => {
+      creditsFetchSilentRef.current = true;
+      fetchCreditsInternal(false).finally(() => {
+        creditsFetchSilentRef.current = false;
+      });
+    }, 400);
+    return () => clearTimeout(tid);
+  }, [view, user?.authToken, user?.id, fetchCreditsInternal]);
 
   useEffect(() => {
     if (!user) {

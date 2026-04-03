@@ -30,7 +30,7 @@ Il plugin parla con **`AUTH_BACKEND_URL`** (es. `https://auth.comtra.dev`). Dove
 
 **Fallback demo in plugin:** in `views/Audit/data.ts` esistono liste **DS_ISSUES** / **A11Y_ISSUES** (e mock UX/Prototype per spec) usate dalla UI **solo finché** non arrivano issue dall’API o per stati iniziali — non sostituiscono il backend in produzione.
 
-**Crediti in UI:** saldo mostrato subito con **cache sessionStorage** (stesso `userId`) mentre `GET /api/credits` aggiorna in background.
+**Crediti in UI:** saldo mostrato subito con **cache localStorage** (stesso `userId`, TTL ~15 min) così anche aprendo il plugin in **file Figma diversi** (iframe diversi) si riusa l’ultimo saldo; il refresh usa **`GET /api/credits?lite=1`** (solo saldo/plan/XP/regalo, senza aggregazioni pesanti). Stats + transazioni recenti si caricano entrando in **Stats** (`GET /api/credits` completo).
 
 ---
 
