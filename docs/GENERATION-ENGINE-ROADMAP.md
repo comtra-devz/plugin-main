@@ -146,11 +146,11 @@ Allineato allo executor plugin; per Problem 1 le azioni devono referenziare **id
 
 ---
 
-## 7. Stato attuale repo (punto di partenza)
+## 7. Stato attuale repo (post-fasi 1–7)
 
-- `POST /api/agents/generate` + Kimi + `generate-system.md` + `ds_package` per DS esterni.
-- `action-plan-executor.ts` esegue azioni base + fallback visivo + risoluzione componenti migliorata.
-- Manca: **indice DS dal plugin**, **body generate arricchito**, **Swarm / doppia call**, **governance su indice**, **executor su node id** per Problem 1 “puro”.
+- **Plugin:** indice `ds_context_index` + hash, trasporto su `POST /api/agents/generate`, dual Kimi opzionale (`USE_KIMI_SWARM`), esecuzione piano con id componente / `setProperties` / modify (clone).
+- **Backend:** governance su indice file (Fase 4), contesto **Design Intelligence** (`design-intelligence.mjs` + `patterns.default.json` / `COMTRA_PATTERNS_JSON_PATH`).
+- **Aperti / evoluzioni:** persistenza `patterns.json` per-file su DB; API HTTP Kimi “swarm” separata (non esiste in doc Moonshot); modifica su **istanze** senza contenitore = layout sotto la copia, non dentro.
 
 ---
 

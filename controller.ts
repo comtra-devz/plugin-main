@@ -1597,11 +1597,16 @@ figma.ui.onmessage = async (raw: any) => {
   if (msg.type === 'execute-action-plan') {
     const requestId = msg.requestId;
     const actionPlan = msg.actionPlan;
+    const modifyMode = msg.modifyMode === true;
     (async () => {
       try {
-        const { rootId } = await executeActionPlanOnCanvas(actionPlan);
+        const { rootId } = await executeActionPlanOnCanvas(actionPlan, { modifyMode });
         figma.ui.postMessage({ type: 'action-plan-executed', requestId, rootId });
-        figma.notify('Comtra: interfaccia creata sulla pagina corrente.');
+        figma.notify(
+          modifyMode
+            ? 'Comtra: copia modificata sulla pagina (originale invariata).'
+            : 'Comtra: interfaccia creata sulla pagina corrente.',
+        );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         figma.ui.postMessage({ type: 'action-plan-execute-error', requestId, error: errMsg });

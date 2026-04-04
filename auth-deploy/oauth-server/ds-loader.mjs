@@ -40,6 +40,11 @@ export function mapDsSourceToId(dsSource) {
   return DS_ALIASES.get(normalized) || normalized.replace(/[^a-z0-9-]/g, '');
 }
 
+/** True when the request uses file-scoped / custom DS (no bundled ds_package id). */
+export function isCustomDsSource(dsSource) {
+  return mapDsSourceToId(dsSource) == null;
+}
+
 function collectTokenPaths(obj, prefix = '') {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
   const out = [];
@@ -320,6 +325,60 @@ export function validateActionPlanSchema(actionPlan) {
   }
 
   return { valid: errors.length === 0, errors, warnings };
+}
+
+/**
+ * create mode: at least one CREATE_TEXT or CREATE_RECT whose parent is the generated root
+ * (parentId/parent omitted, empty, or "root" — same default as action-plan-executor resolveParent).
+ */
+export function validateActionPlanVisiblePrimitives(actionPlan) {
+  if (!actionPlan || typeof actionPlan !== 'object') {
+    return { valid: true, errors: [] };
+  }
+  const genMode = String(actionPlan.metadata?.mode || '').trim();
+  if (genMode !== 'create' && genMode !== 'screenshot') {
+    return { valid: true, errors: [] };
+  }
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  for (let i = 0; i < actions.length; i++) {
+    const da = actions[i];
+    if (!da || typeof da !== 'object') continue;
+    const t = String(da.type || '').trim();
+    if (t !== 'CREATE_TEXT' && t !== 'CREATE_RECT') continue;
+    const raw = da.parentId ?? da.parent;
+    const p = raw === undefined || raw === null || String(raw).trim() === '' ? 'root' : String(raw).trim();
+    if (p === 'root') {
+      return { valid: true, errors: [] };
+    }
+  }
+  return {
+    valid: false,
+    errors: [
+      'VISIBLE_CONTENT_REQUIRED: create/screenshot mode requires at least one CREATE_TEXT or CREATE_RECT with parentId omitted or "root" (direct child of the generated root frame).',
+    ],
+  };
+}
+
+/** Bundled public DS packages: no INSTANCE_COMPONENT (frames / text / rects + tokens only). */
+export function validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource) {
+  if (isCustomDsSource(dsSource)) {
+    return { valid: true, errors: [] };
+  }
+  if (!actionPlan || typeof actionPlan !== 'object') {
+    return { valid: true, errors: [] };
+  }
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  const errors = [];
+  for (let i = 0; i < actions.length; i++) {
+    const da = actions[i];
+    if (!da || typeof da !== 'object') continue;
+    if (String(da.type || '').trim() === 'INSTANCE_COMPONENT') {
+      errors.push(
+        `PUBLIC_DS_NO_INSTANCE: actions[${i}] INSTANCE_COMPONENT is not allowed for public DS packages; use CREATE_FRAME / CREATE_TEXT / CREATE_RECT with DS tokens only (ds_source is not custom).`,
+      );
+    }
+  }
+  return { valid: errors.length === 0, errors };
 }
 
 const FIGMA_NODE_ID_RE = /^\d+:\d+$/;

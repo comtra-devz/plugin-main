@@ -17,7 +17,7 @@ interface Props {
   onUnlockRequest: () => void;
   creditsRemaining: number | null;
   useInfiniteCreditsForTest?: boolean;
-  estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
+  estimateCredits: (payload: { action_type: string; node_count?: number; has_screenshot?: boolean }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
   fetchGenerate: (body: {
@@ -25,6 +25,7 @@ interface Props {
     prompt: string;
     mode?: string;
     ds_source?: string;
+    screenshot_base64?: string | null;
     ds_context_index?: object | null;
     ds_cache_hash?: string | null;
   }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null }>;
@@ -32,7 +33,10 @@ interface Props {
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
   selectedNode: { id: string; name: string; type: string } | null;
   /** Esegue l'action plan nel main thread Figma (frame + azioni sulla pagina corrente). */
-  applyActionPlanToCanvas: (plan: object) => Promise<{ ok: boolean; error?: string; rootId?: string }>;
+  applyActionPlanToCanvas: (
+    plan: object,
+    opts?: { modifyMode?: boolean },
+  ) => Promise<{ ok: boolean; error?: string; rootId?: string }>;
 }
 
 const DESIGN_SYSTEMS = [
@@ -97,7 +101,10 @@ export const Generate: React.FC<Props> = ({
   const [feedbackComment, setFeedbackComment] = useState('');
   const [hasContent, setHasContent] = useState(!!initialPrompt);
   const [promptText, setPromptText] = useState(initialPrompt || '');
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  /** Screenshot/reference image: full data URL or raw base64 sent to generate API. */
+  const [screenshotAttachment, setScreenshotAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
+  const screenshotFileInputRef = useRef<HTMLInputElement>(null);
+  const [creditEstimate, setCreditEstimate] = useState(3);
   
   // Design System State
   const [selectedSystem, setSelectedSystem] = useState(DESIGN_SYSTEMS[0]);
@@ -119,12 +126,14 @@ export const Generate: React.FC<Props> = ({
   // New State for Report Flow
   const [showReport, setShowReport] = useState(false);
   const lastActionPlanRef = useRef<object | null>(null);
+  /** Per “View in Figma” / ri-applica: stesso comportamento modify vs create dell’ultima generazione. */
+  const lastApplyWasModifyRef = useRef(false);
   const [canvasApplyResult, setCanvasApplyResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [canvasBusy, setCanvasBusy] = useState(false);
 
   const runCanvasApply = useCallback(
-    async (actionPlan: object) => {
-      const r = await applyActionPlanToCanvas(actionPlan);
+    async (actionPlan: object, opts?: { modifyMode?: boolean }) => {
+      const r = await applyActionPlanToCanvas(actionPlan, opts);
       setCanvasApplyResult(r.ok ? { ok: true } : { ok: false, error: r.error });
       return r;
     },
@@ -152,9 +161,24 @@ export const Generate: React.FC<Props> = ({
   const hasSelection = !!selectedNode;
   const selectedLayerName = selectedNode?.name || null;
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const actionType = hasSelection ? 'wireframe_modified' : 'generate';
+      const { estimated_credits } = await estimateCredits({
+        action_type: actionType,
+        has_screenshot: !!screenshotAttachment && !hasSelection,
+      });
+      if (!cancelled) setCreditEstimate(typeof estimated_credits === 'number' ? estimated_credits : 3);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSelection, screenshotAttachment, estimateCredits]);
+
   const promptPlaceholder = hasSelection
     ? `> Modify "${selectedLayerName}": keep layout, improve hierarchy and spacing.`
-    : uploadedImage
+    : screenshotAttachment
       ? '> Using this screenshot as reference, recreate it with my design system.'
       : '> Describe the screen to generate (you can also paste Figma frame links).';
 
@@ -162,7 +186,7 @@ export const Generate: React.FC<Props> = ({
     ? 'Unlock Unlimited AI'
     : hasSelection
       ? 'Modify Selection'
-      : uploadedImage
+      : screenshotAttachment
         ? 'Generate From Screenshot'
         : 'Create Wireframes';
 
@@ -172,7 +196,7 @@ export const Generate: React.FC<Props> = ({
         `Adapt "${selectedLayerName}" for mobile while preserving content priority.`,
         `Create two stronger variants for "${selectedLayerName}" aligned to ${selectedSystem}.`,
       ]
-    : uploadedImage
+    : screenshotAttachment
       ? [
           `Recreate this screenshot using ${selectedSystem} tokens and components.`,
           'Keep layout intent, but simplify visual density and improve contrast.',
@@ -206,7 +230,7 @@ export const Generate: React.FC<Props> = ({
     (base: string) => {
       const context = hasSelection
         ? `Target: ${selectedLayerName} (${selectedNode?.type}).`
-        : uploadedImage
+        : screenshotAttachment
           ? 'Context: screenshot reference uploaded.'
           : 'Context: create from scratch.';
       const dsContext = `Design System: ${selectedSystem}.`;
@@ -222,7 +246,7 @@ export const Generate: React.FC<Props> = ({
         `Quality bar: one coherent screen that follows the design system above. ${strictness}`,
       ].join('\n');
     },
-    [hasSelection, selectedLayerName, selectedNode?.type, uploadedImage, selectedSystem, userTier]
+    [hasSelection, selectedLayerName, selectedNode?.type, screenshotAttachment, selectedSystem, userTier]
   );
 
   /** Dopo Enhance, cambio DS/contesto: riscrivi il terminale senza mischiare due versioni. */
@@ -376,7 +400,7 @@ export const Generate: React.FC<Props> = ({
       return;
     }
 
-    const mode = hasSelection ? 'modify' : 'create';
+    const mode = hasSelection ? 'modify' : screenshotAttachment ? 'screenshot' : 'create';
     const dsSource = selectedSystem === 'Custom (Current)' ? 'custom' : selectedSystem;
 
     try {
@@ -385,6 +409,8 @@ export const Generate: React.FC<Props> = ({
         prompt: rawText,
         mode,
         ds_source: dsSource,
+        screenshot_base64:
+          !hasSelection && screenshotAttachment ? screenshotAttachment.dataUrl : null,
       });
       const actionPlan = data?.action_plan;
       if (!actionPlan || typeof actionPlan !== 'object') {
@@ -405,11 +431,13 @@ export const Generate: React.FC<Props> = ({
         return;
       }
       lastActionPlanRef.current = actionPlan;
+      const isModify = mode === 'modify';
+      lastApplyWasModifyRef.current = isModify;
       setRes(JSON.stringify(actionPlan, null, 2));
       setLastRequestId(data?.request_id ?? null);
       setLastVariant(data?.variant ?? null);
       setFeedbackSent(false);
-      await runCanvasApply(actionPlan);
+      await runCanvasApply(actionPlan, { modifyMode: isModify });
       setShowReport(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -424,7 +452,7 @@ export const Generate: React.FC<Props> = ({
     if (!plan || canvasBusy) return;
     setCanvasBusy(true);
     try {
-      await runCanvasApply(plan);
+      await runCanvasApply(plan, { modifyMode: lastApplyWasModifyRef.current });
     } finally {
       setCanvasBusy(false);
     }
@@ -434,16 +462,32 @@ export const Generate: React.FC<Props> = ({
     setPromptFromSuggestion(txt);
   };
 
-  const handleUpload = () => {
-      // Simulate file picker interaction
-      setTimeout(() => {
-          setUploadedImage("screenshot_v1.png");
-      }, 500);
-  }
+  const handleUploadClick = () => {
+    screenshotFileInputRef.current?.click();
+  };
+
+  const handleScreenshotFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    const maxBytes = 6 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setGenError('Image too large (max 6MB).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) return;
+      setScreenshotAttachment({ name: file.name, dataUrl });
+      setGenError(null);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleDeleteUpload = () => {
-      setUploadedImage(null);
-  }
+    setScreenshotAttachment(null);
+  };
 
   const handleFeedback = async (thumbs: 'up' | 'down') => {
     if (!lastRequestId || feedbackSent) return;
@@ -525,19 +569,28 @@ export const Generate: React.FC<Props> = ({
               Selection from canvas is active. Screenshot context is disabled until you deselect in Figma.
             </span>
           </>
-        ) : uploadedImage ? (
+        ) : screenshotAttachment ? (
           <div data-component="Generate: Uploaded File" className="flex justify-between items-center bg-gray-100 p-2 border border-black">
-            <span className="text-[10px] font-bold truncate">📄 {uploadedImage}</span>
-            <button onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
+            <span className="text-[10px] font-bold truncate">📄 {screenshotAttachment.name}</span>
+            <button type="button" onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
           </div>
         ) : (
           <>
             <span data-component="Generate: Selection Empty" className="text-[10px] text-gray-500 italic">
               No layer selected. Upload a screenshot if you want to start from an existing product reference.
             </span>
+            <input
+              ref={screenshotFileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              aria-hidden
+              onChange={handleScreenshotFileChange}
+            />
             <button
+              type="button"
               data-component="Generate: Upload Button"
-              onClick={handleUpload}
+              onClick={handleUploadClick}
               className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-500"
             >
               Upload Image
@@ -672,7 +725,9 @@ export const Generate: React.FC<Props> = ({
             >
               {loading ? 'Weaving Magic...' : ctaLabel}
               {!loading && canGenerate && (
-                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-3 Credits</span>
+                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
+                  -{creditEstimate} Credits
+                </span>
               )}
             </Button>
 

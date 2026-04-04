@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "comtra://ds_package/patterns/1.0",
+  "title": "Comtra Design Intelligence patterns",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string" },
+    "principles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "verification", "severity"],
+        "properties": {
+          "id": { "type": "string" },
+          "statement": { "type": "string" },
+          "verification": { "type": "string" },
+          "severity": { "type": "string", "enum": ["error", "warning"] }
+        }
+      }
+    },
+    "screen_checklists": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "must_have": { "type": "array", "items": { "type": "string" } },
+          "should_have": { "type": "array", "items": { "type": "string" } },
+          "avoid": { "type": "array", "items": { "type": "string" } },
+          "layout_hint": { "type": "string" }
+        }
+      }
+    },
+    "ds_glossary": { "type": "object" },
+    "recurring_patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "structure", "spacing"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "structure": { "type": "string" },
+          "spacing": { "type": "string" }
+        }
+      }
+    },
+    "correction_vocabulary": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["feedback_phrases", "translation", "corrective_action"],
+        "properties": {
+          "feedback_phrases": { "type": "array", "items": { "type": "string" } },
+          "translation": { "type": "string" },
+          "corrective_action": { "type": "string" }
+        }
+      }
+    }
+  }
+}

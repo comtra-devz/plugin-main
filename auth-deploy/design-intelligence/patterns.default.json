@@ -1,0 +1,326 @@
+{
+  "$schema": "comtra://ds_package/patterns/1.0",
+  "principles": [
+    {
+      "id": "P-001",
+      "statement": "Every section has exactly one visual focus point.",
+      "verification": "Count elements with typography.display or typography.headline per section. Must be exactly 1.",
+      "severity": "error"
+    },
+    {
+      "id": "P-002",
+      "statement": "Primary CTA is always the most visually prominent interactive element.",
+      "verification": "button-filled or button-elevated must have higher visual weight than any other button on screen.",
+      "severity": "error"
+    },
+    {
+      "id": "P-003",
+      "statement": "Spacing between sections uses spacing.lg or spacing.xl. Spacing between sibling elements uses spacing.md or spacing.sm. Never use intermediate or arbitrary values.",
+      "verification": "Check auto-layout spacing values against DS spacing scale. No hardcoded values.",
+      "severity": "error"
+    },
+    {
+      "id": "P-004",
+      "statement": "Title text always precedes action elements. Actions never appear above their context.",
+      "verification": "In vertical auto-layout, heading nodes have lower index than interactive nodes.",
+      "severity": "warning"
+    },
+    {
+      "id": "P-005",
+      "statement": "Contrast and touch targets follow WCAG AA minimum. Text contrast ratio 4.5:1, touch target 48px minimum.",
+      "verification": "Computed contrast ratio >= 4.5. Interactive element min height/width >= 48.",
+      "severity": "error"
+    },
+    {
+      "id": "P-006",
+      "statement": "No more than three typographic weights visible simultaneously in any section.",
+      "verification": "Count distinct font-weight values per section frame. Must be <= 3.",
+      "severity": "warning"
+    },
+    {
+      "id": "P-007",
+      "statement": "Visual hierarchy reads top-to-bottom, left-to-right. Primary content and actions are at natural scan entry points.",
+      "verification": "Highest-weight text is in top-left quadrant or centered-top of its container.",
+      "severity": "warning"
+    }
+  ],
+  "screen_checklists": {
+    "login": {
+      "must_have": [
+        "Brand mark or logo in top section",
+        "Title describing the action (e.g., Sign in, Welcome back)",
+        "Email/username field",
+        "Password field with show/hide toggle",
+        "Primary CTA button (full-width on mobile)",
+        "Secondary action link (e.g., Forgot password)"
+      ],
+      "should_have": [
+        "Social login options below primary CTA",
+        "Create account link at bottom",
+        "Remember me toggle"
+      ],
+      "avoid": [
+        "More than 2 visible input fields before scroll",
+        "CTA above input fields",
+        "Password recovery link above the form",
+        "Multiple competing primary buttons",
+        "Decorative elements that distract from the form"
+      ],
+      "layout_hint": "Centered single-column, max-width 400px on desktop, full-width on mobile. Vertical rhythm: logo -> title -> form -> CTA -> secondary links."
+    },
+    "list": {
+      "must_have": [
+        "Clear page title",
+        "Consistent list item structure (all items same anatomy)",
+        "Visual separator between items (divider or spacing, not both)",
+        "Empty state for zero items"
+      ],
+      "should_have": [
+        "Search or filter mechanism if > 7 items expected",
+        "Sort option",
+        "Batch action capability"
+      ],
+      "avoid": [
+        "Inconsistent item heights",
+        "More than 3 actions visible per item",
+        "Mixing card and list layouts in same view"
+      ],
+      "layout_hint": "Full-width list items. Fixed header with title + actions. Scrollable content area."
+    },
+    "form": {
+      "must_have": [
+        "Clear form title describing purpose",
+        "Labeled input fields (label above, not placeholder-only)",
+        "Primary submit CTA at form end",
+        "Error state indication per field",
+        "Required field indicators"
+      ],
+      "should_have": [
+        "Logical field grouping with section headers",
+        "Cancel/back action (secondary, not primary weight)",
+        "Progress indicator for multi-step forms",
+        "Helper text for complex fields"
+      ],
+      "avoid": [
+        "Placeholder text as the only label",
+        "Submit button above form fields",
+        "More than 7 visible fields without grouping",
+        "Side-by-side fields on mobile",
+        "Disabled submit button without explanation"
+      ],
+      "layout_hint": "Single column on mobile. Two columns on desktop only for short related fields (first+last name). CTA group always at bottom."
+    },
+    "empty_state": {
+      "must_have": [
+        "Illustration or icon (not just text)",
+        "Clear message explaining what is empty and why",
+        "Primary action to resolve the empty state"
+      ],
+      "should_have": [
+        "Secondary contextual help link"
+      ],
+      "avoid": [
+        "Generic text like Just empty or Nothing here",
+        "Multiple competing CTAs",
+        "Blame language (You have not done X yet)"
+      ],
+      "layout_hint": "Vertically centered in available space. Icon/illustration -> text -> CTA. Max-width 320px."
+    },
+    "settings": {
+      "must_have": [
+        "Page title",
+        "Grouped settings with section headers",
+        "Consistent control placement (toggles right-aligned, inputs full-width)",
+        "Save/apply action"
+      ],
+      "should_have": [
+        "Description text per setting",
+        "Unsaved changes indicator",
+        "Destructive actions visually separated (e.g., Delete account at bottom, red)"
+      ],
+      "avoid": [
+        "Flat list without grouping",
+        "Toggle AND save button for same setting (pick one pattern)",
+        "Critical actions mixed with routine settings"
+      ],
+      "layout_hint": "Full-width sections. Each section: header -> list of setting rows. Destructive zone at bottom with extra spacing."
+    },
+    "dashboard": {
+      "must_have": [
+        "Summary metrics in top section (max 4 KPI cards)",
+        "Clear page title or greeting",
+        "Primary content area below metrics",
+        "Consistent card structure for data blocks"
+      ],
+      "should_have": [
+        "Date range or filter controls",
+        "Quick actions section",
+        "Recent activity or notifications"
+      ],
+      "avoid": [
+        "More than 4 metric cards in top row",
+        "Charts without labels or legends",
+        "Mixing too many data visualization types",
+        "Scrolling before seeing any data"
+      ],
+      "layout_hint": "Metric cards in horizontal row (2-4). Content grid below: 2 columns on desktop, single on mobile. Cards with consistent padding and corner radius."
+    },
+    "detail": {
+      "must_have": [
+        "Back navigation",
+        "Clear item title",
+        "Primary content section",
+        "Action buttons contextual to the item"
+      ],
+      "should_have": [
+        "Breadcrumb or parent context indicator",
+        "Metadata section (date, author, status)",
+        "Related items or next steps"
+      ],
+      "avoid": [
+        "Actions before content",
+        "Overloaded toolbar (max 3 visible actions, rest in overflow)",
+        "Tabs with only 1 or 2 items"
+      ],
+      "layout_hint": "Header with back + title + actions. Scrollable content body. Sticky action bar at bottom on mobile."
+    },
+    "error": {
+      "must_have": [
+        "Error icon or illustration",
+        "Clear error message in plain language",
+        "Recovery action (retry, go back, go home)"
+      ],
+      "should_have": [
+        "Error code or reference for support",
+        "Alternative navigation option"
+      ],
+      "avoid": [
+        "Technical jargon (500 Internal Server Error)",
+        "Dead ends with no action",
+        "Blaming the user"
+      ],
+      "layout_hint": "Vertically centered. Icon -> message -> actions. Same pattern as empty state but with error color tokens."
+    }
+  },
+  "ds_glossary": {
+    "roles": {
+      "label": "typography.label-large or typography.label-medium. Used for button text, form labels, navigation items.",
+      "body": "typography.body-large or typography.body-medium. Used for paragraph text, descriptions, helper text.",
+      "title": "typography.title-large or typography.headline-small. Used for section headers, card titles.",
+      "headline": "typography.headline-medium or typography.headline-large. Used for page titles, hero text.",
+      "accent": "color.primary or color.tertiary. Used for interactive elements, emphasis, brand moments.",
+      "surface": "color.surface or color.surface-variant. Used for backgrounds, cards, containers.",
+      "on-surface": "color.on-surface or color.on-surface-variant. Used for text and icons on surface backgrounds."
+    },
+    "spacing_intent": {
+      "tight": "spacing.4 or spacing.8. Between related inline elements (icon and label, badge and text).",
+      "compact": "spacing.8 or spacing.12. Between sibling elements in a group (list items, form fields).",
+      "comfortable": "spacing.16 or spacing.24. Between distinct groups within a section.",
+      "spacious": "spacing.24 or spacing.32. Between sections or major content blocks.",
+      "generous": "spacing.32 or spacing.48. Between top-level page regions (header, body, footer)."
+    },
+    "reading_order": "Top to bottom, left to right. Primary content and actions at natural scan entry points. F-pattern for content-heavy screens, Z-pattern for landing/marketing."
+  },
+  "recurring_patterns": [
+    {
+      "id": "minimal-header",
+      "description": "Clean top bar with back action, centered title, and optional trailing action.",
+      "structure": "FRAME(horizontal) -> [icon-button(back), text(title, centered, flex-grow), icon-button(action, optional)]",
+      "spacing": "spacing.16 horizontal padding, spacing.8 between elements",
+      "height": "56px fixed"
+    },
+    {
+      "id": "bottom-action-block",
+      "description": "Sticky footer with primary CTA and optional secondary link below.",
+      "structure": "FRAME(vertical) -> [button-filled(primary, full-width), text-button(secondary, centered, optional)]",
+      "spacing": "spacing.16 padding all sides, spacing.8 between buttons",
+      "position": "Always at bottom of screen, above safe area"
+    },
+    {
+      "id": "secondary-link-below-cta",
+      "description": "A text link or text-button placed directly below the primary action button for alternative flows.",
+      "structure": "text-button or link, centered, below primary CTA with spacing.8 gap",
+      "use_case": "Forgot password below Sign in, Skip below Continue, Terms link below Submit"
+    },
+    {
+      "id": "metric-card-row",
+      "description": "Horizontal row of 2-4 KPI cards with equal width, used at top of dashboards.",
+      "structure": "FRAME(horizontal, space-between) -> [card(metric) x 2-4]",
+      "spacing": "spacing.16 gap between cards, each card has spacing.16 internal padding",
+      "constraints": "Min 2, max 4 cards. Stack vertically on mobile."
+    },
+    {
+      "id": "form-field-group",
+      "description": "Vertical stack of labeled input fields with consistent spacing.",
+      "structure": "FRAME(vertical) -> [section-header(optional), text-field x N]",
+      "spacing": "spacing.16 between fields, spacing.24 before section header",
+      "constraints": "Max 5 fields per group before adding a new section header."
+    },
+    {
+      "id": "content-card",
+      "description": "Standard card with image/icon top, title, description, and optional actions.",
+      "structure": "FRAME(vertical) -> [image/icon(optional), text(title), text(description), FRAME(horizontal, actions, optional)]",
+      "spacing": "spacing.16 internal padding, spacing.8 between text elements, spacing.16 before actions",
+      "surface": "color.surface-variant background, corner_radius.md"
+    },
+    {
+      "id": "empty-state-centered",
+      "description": "Centered block for empty or error states.",
+      "structure": "FRAME(vertical, center-center) -> [icon/illustration, text(title), text(description), button(action)]",
+      "spacing": "spacing.16 between elements, max-width 320px, vertically centered in parent",
+      "surface": "Transparent, inherits parent background"
+    }
+  ],
+  "correction_vocabulary": {
+    "too_many_equal_weights": {
+      "feedback_phrases": ["too many equal weights", "troppi pesi uguali", "everything looks the same weight"],
+      "translation": "Multiple text elements have the same visual prominence",
+      "corrective_action": "Reduce typographic scale: keep 1 headline, demote others to body or label"
+    },
+    "cta_buried": {
+      "feedback_phrases": ["CTA is buried", "CTA sommersa", "button doesnt stand out", "cant find the action"],
+      "translation": "Primary button does not stand out from surrounding elements",
+      "corrective_action": "Upgrade CTA to filled variant, increase size, add spacing above/below, reduce competing elements"
+    },
+    "hierarchy_inverted": {
+      "feedback_phrases": ["hierarchy is inverted", "gerarchia invertita", "secondary content is too prominent"],
+      "translation": "Secondary content has more visual weight than primary content",
+      "corrective_action": "Swap typography scales: title gets headline token, description gets body token"
+    },
+    "too_cluttered": {
+      "feedback_phrases": ["too cluttered", "troppo pieno", "too much going on", "overwhelming"],
+      "translation": "Too many elements competing for attention in the viewport",
+      "corrective_action": "Increase spacing between groups, remove or collapse non-essential elements, add section breaks"
+    },
+    "feels_generic": {
+      "feedback_phrases": ["feels generic", "sembra generico", "looks like every other app", "boring layout"],
+      "translation": "Layout and component choices are predictable and uninspired",
+      "corrective_action": "Apply Variability Engine with higher creativity seed, try alternative layout pattern from recurring_patterns"
+    },
+    "spacing_inconsistent": {
+      "feedback_phrases": ["spacing is inconsistent", "spaziatura inconsistente", "spacing feels random"],
+      "translation": "Auto-layout gaps do not follow the DS spacing scale",
+      "corrective_action": "Audit all spacing values, replace with nearest DS scale token, apply spacing_intent from glossary"
+    },
+    "wrong_component": {
+      "feedback_phrases": ["wrong component for this", "componente sbagliato", "that button type doesnt fit here"],
+      "translation": "A component variant is used in a context where another variant is more appropriate",
+      "corrective_action": "Consult component description and rules.json for correct variant-context mapping"
+    },
+    "reading_order_wrong": {
+      "feedback_phrases": ["reading order is wrong", "ordine di lettura sbagliato", "eye doesnt know where to go"],
+      "translation": "Visual scan does not follow natural reading flow",
+      "corrective_action": "Rearrange elements per reading_order in glossary: primary content at scan entry point"
+    },
+    "not_enough_breathing_room": {
+      "feedback_phrases": ["not enough breathing room", "troppo compresso", "needs more white space", "feels cramped"],
+      "translation": "Content feels compressed, no white space",
+      "corrective_action": "Upgrade spacing from compact to comfortable or spacious per glossary mapping"
+    },
+    "actions_before_content": {
+      "feedback_phrases": ["actions before content", "azioni prima del contenuto", "buttons are above the text"],
+      "translation": "Buttons or interactive elements appear above the content they act on",
+      "corrective_action": "Move action elements below their related content, apply Principle P-004"
+    }
+  }
+}

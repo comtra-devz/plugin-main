@@ -590,21 +590,31 @@ export default function AppTest() {
     Map<string, (r: { index: object | null; hash: string | null; error?: string }) => void>
   >(new Map());
 
-  const requestActionPlanExecution = React.useCallback((plan: object) => {
-    return new Promise<{ ok: boolean; error?: string; rootId?: string }>((resolve) => {
-      const requestId = `apx-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      actionPlanExecWaitersRef.current.set(requestId, resolve);
-      window.parent.postMessage(
-        { pluginMessage: { type: 'execute-action-plan', actionPlan: plan, requestId } },
-        '*'
-      );
-      window.setTimeout(() => {
-        if (!actionPlanExecWaitersRef.current.has(requestId)) return;
-        actionPlanExecWaitersRef.current.delete(requestId);
-        resolve({ ok: false, error: 'Timeout: nessuna risposta da Figma.' });
-      }, 25000);
-    });
-  }, []);
+  const requestActionPlanExecution = React.useCallback(
+    (plan: object, opts?: { modifyMode?: boolean }) => {
+      return new Promise<{ ok: boolean; error?: string; rootId?: string }>((resolve) => {
+        const requestId = `apx-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        actionPlanExecWaitersRef.current.set(requestId, resolve);
+        window.parent.postMessage(
+          {
+            pluginMessage: {
+              type: 'execute-action-plan',
+              actionPlan: plan,
+              requestId,
+              modifyMode: opts?.modifyMode === true,
+            },
+          },
+          '*'
+        );
+        window.setTimeout(() => {
+          if (!actionPlanExecWaitersRef.current.has(requestId)) return;
+          actionPlanExecWaitersRef.current.delete(requestId);
+          resolve({ ok: false, error: 'Timeout: nessuna risposta da Figma.' });
+        }, 25000);
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -824,7 +834,7 @@ export default function AppTest() {
     setView(ViewState.PRIVACY);
   };
 
-  const estimateCredits = React.useCallback(async (payload: { action_type: string; node_count?: number }) => {
+  const estimateCredits = React.useCallback(async (payload: { action_type: string; node_count?: number; has_screenshot?: boolean }) => {
     const r = await fetch(`${AUTH_BACKEND_URL}/api/credits/estimate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1112,6 +1122,7 @@ export default function AppTest() {
       prompt: string;
       mode?: string;
       ds_source?: string;
+      screenshot_base64?: string | null;
       /** Se omesso, l’indice viene richiesto al plugin prima del POST. Passa `null` per saltare. */
       ds_context_index?: object | null;
       ds_cache_hash?: string | null;
@@ -1142,6 +1153,8 @@ export default function AppTest() {
       };
       if (dsContextIndex != null) payload.ds_context_index = dsContextIndex;
       if (dsCacheHash != null && String(dsCacheHash).trim() !== '') payload.ds_cache_hash = String(dsCacheHash).trim();
+      const sb = body.screenshot_base64;
+      if (sb != null && String(sb).trim() !== '') payload.screenshot_base64 = String(sb).trim();
 
       const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/generate`, {
         method: 'POST',

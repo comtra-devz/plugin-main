@@ -1,6 +1,7 @@
 /**
  * Esegue l'action plan (JSON da /api/agents/generate) sulla pagina Figma corrente.
- * v1: root da `frame`, poi `actions` in ordine — token DS legati se esistono variabili locali con lo stesso path/nome.
+ * Problem 1 (Fase 5): risoluzione componenti con `getNodeByIdAsync` + `loadAllPagesAsync`, `createInstance`,
+ * `setProperties` (variantProperties/properties), fills con variabili, `boundLayout` opzionale sui frame.
  */
 
 type VarMap = Map<string, Variable>;
@@ -254,6 +255,8 @@ async function injectFallbackScaffold(
   root.appendChild(row);
 }
 
+const FIGMA_NODE_ID_RE = /^\d+:\d+$/;
+
 function collectAllLocalComponents(): (ComponentNode | ComponentSetNode)[] {
   const out: (ComponentNode | ComponentSetNode)[] = [];
   for (const page of figma.root.children) {
@@ -273,9 +276,51 @@ function pickFromSet(n: ComponentNode | ComponentSetNode): ComponentNode | null 
 }
 
 /**
+ * Risolve `COMPONENT` / `COMPONENT_SET` per id nodo (Problem 1 — indice plugin).
+ * Con `documentAccess: "dynamic-page"` carica le pagine prima di `getNodeByIdAsync`.
+ */
+async function getComponentNodeByFigmaId(nodeId: string): Promise<ComponentNode | null> {
+  const id = String(nodeId || '').trim();
+  if (!FIGMA_NODE_ID_RE.test(id)) return null;
+
+  async function resolveOnce(): Promise<BaseNode | null> {
+    try {
+      const n = await figma.getNodeByIdAsync(id);
+      return n && 'id' in n ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  let node = await resolveOnce();
+  if (!node) {
+    try {
+      await figma.loadAllPagesAsync();
+    } catch {
+      /* best-effort */
+    }
+    node = await resolveOnce();
+  }
+  if (!node) return null;
+
+  if (node.type === 'COMPONENT') return node;
+  if (node.type === 'COMPONENT_SET') return pickFromSet(node);
+
+  if (node.type === 'INSTANCE') {
+    try {
+      const main = await (node as InstanceNode).getMainComponentAsync();
+      return main;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Cerca in tutto il file (tutte le pagine), prova match su segmenti del path DS, poi import da libreria pubblicata se la chiave è una component key Figma.
  */
-async function resolveComponentForInstance(hint: string): Promise<ComponentNode | null> {
+async function resolveComponentForInstanceBySearch(hint: string): Promise<ComponentNode | null> {
   const rawKey = hint.trim();
   if (!rawKey) return null;
   const h = rawKey.toLowerCase();
@@ -310,6 +355,82 @@ async function resolveComponentForInstance(hint: string): Promise<ComponentNode 
     }
   }
   return null;
+}
+
+async function resolveComponentForInstance(hint: string): Promise<ComponentNode | null> {
+  const rawKey = hint.trim();
+  if (!rawKey) return null;
+  const byId = await getComponentNodeByFigmaId(rawKey);
+  if (byId) return byId;
+  return resolveComponentForInstanceBySearch(rawKey);
+}
+
+/** Applica `variantProperties` / `properties` / `componentProperties` (valori stringa o boolean) come da API `instance.setProperties`. */
+function applyInstanceComponentProperties(inst: InstanceNode, raw: Record<string, unknown>): void {
+  const vp = raw.variantProperties ?? raw.properties ?? raw.componentProperties;
+  if (!vp || typeof vp !== 'object' || Array.isArray(vp)) return;
+  const out: { [prop: string]: string | boolean } = {};
+  for (const [k, v] of Object.entries(vp as Record<string, unknown>)) {
+    if (typeof v === 'string' && v.length > 0) out[k] = v;
+    else if (typeof v === 'boolean') out[k] = v;
+  }
+  if (Object.keys(out).length === 0) return;
+  try {
+    inst.setProperties(out);
+  } catch {
+    /* combinazione non valida per questo componente */
+  }
+}
+
+/** Lega nome variabile locale o id variabile Figma (`123:456`) a un campo layout su frame (Problem 1 / dynamic-page-safe). */
+async function applyBoundVariableToFrameField(
+  f: FrameNode,
+  field: VariableBindableNodeField,
+  variableIdOrName: string,
+  varMap: VarMap,
+): Promise<void> {
+  const raw = String(variableIdOrName || '').trim();
+  if (!raw) return;
+  let v: Variable | null = lookupVariable(varMap, raw);
+  if (!v && FIGMA_NODE_ID_RE.test(raw)) {
+    try {
+      v = await figma.variables.getVariableByIdAsync(raw);
+    } catch {
+      v = null;
+    }
+  }
+  if (!v) return;
+  try {
+    f.setBoundVariable(field, v);
+  } catch {
+    /* tipo o field incompatibile */
+  }
+}
+
+/**
+ * Opzionale: `boundLayout` / `layoutBindings` con id o nomi variabile per padding/spacing (oltre ai token già in applyFrameGeometry).
+ */
+async function applyOptionalLayoutBindingsFromRaw(
+  raw: Record<string, unknown>,
+  node: FrameNode,
+  varMap: VarMap,
+): Promise<void> {
+  if (node.layoutMode === 'NONE') return;
+  const b = raw.boundLayout ?? raw.layoutBindings;
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return;
+  const rec = b as Record<string, unknown>;
+  const pairs: [string, VariableBindableNodeField][] = [
+    ['paddingTop', 'paddingTop'],
+    ['paddingRight', 'paddingRight'],
+    ['paddingBottom', 'paddingBottom'],
+    ['paddingLeft', 'paddingLeft'],
+    ['itemSpacing', 'itemSpacing'],
+  ];
+  for (const [key, field] of pairs) {
+    const vid = rec[key];
+    if (typeof vid === 'string' && vid.trim())
+      await applyBoundVariableToFrameField(node, field, vid.trim(), varMap);
+  }
 }
 
 function humanizeComponentKey(key: string): string {
@@ -363,10 +484,72 @@ async function appendMissingComponentWireframe(parent: ChildrenMixin, key: strin
   ph.appendChild(cap);
 }
 
+export type ExecuteActionPlanOptions = {
+  /** Fase 6: duplica la selezione e costruisce il nuovo layout nella copia (frame/gruppo/sezione) o sotto di essa. */
+  modifyMode?: boolean;
+};
+
+function prepareModifyModeCloneHost(page: PageNode): {
+  appendParent: ChildrenMixin;
+  rootPos: { x: number; y: number };
+  clonedFromId: string | null;
+} {
+  const rawSel = page.selection[0];
+  if (!rawSel || !('clone' in rawSel)) {
+    figma.notify('Nessuna selezione adatta: layout creato come nuovo blocco sulla pagina.');
+    return { appendParent: page, rootPos: nextPlacementOnPage(page), clonedFromId: null };
+  }
+  if (rawSel.type === 'COMPONENT' || rawSel.type === 'COMPONENT_SET') {
+    figma.notify('Per “modifica” seleziona un frame, gruppo o istanza — non un componente master.');
+    return { appendParent: page, rootPos: nextPlacementOnPage(page), clonedFromId: null };
+  }
+
+  const sel = rawSel as SceneNode;
+  const dup = sel.clone();
+  const par = sel.parent;
+  if (par && 'insertChild' in par) {
+    const idx = par.children.indexOf(sel);
+    if (idx >= 0) par.insertChild(idx + 1, dup);
+    else page.appendChild(dup);
+  } else {
+    page.appendChild(dup);
+  }
+
+  if ('x' in dup && 'x' in sel && 'width' in sel) {
+    const w = (sel as LayoutMixin).width;
+    dup.x = sel.x + (typeof w === 'number' && Number.isFinite(w) ? w : 0) + 48;
+    dup.y = sel.y;
+  }
+
+  if (dup.type === 'FRAME' || dup.type === 'GROUP' || dup.type === 'SECTION') {
+    const host = dup as ChildrenMixin;
+    while (host.children.length > 0) {
+      host.children[0].remove();
+    }
+    return { appendParent: host, rootPos: { x: 0, y: 0 }, clonedFromId: sel.id };
+  }
+
+  figma.notify('Copia creata; il nuovo layout è sotto la copia (selezione non contenitrice).');
+  if ('x' in dup && 'y' in dup && 'height' in dup) {
+    const h = (dup as LayoutMixin).height;
+    const yOff = typeof h === 'number' && Number.isFinite(h) ? h : 0;
+    return {
+      appendParent: page,
+      rootPos: { x: dup.x, y: dup.y + yOff + 32 },
+      clonedFromId: sel.id,
+    };
+  }
+  return { appendParent: page, rootPos: nextPlacementOnPage(page), clonedFromId: sel.id };
+}
+
 /**
  * Crea frame + figli sulla pagina corrente. Supporta: CREATE_FRAME, CREATE_TEXT, CREATE_RECT, INSTANCE_COMPONENT (best-effort).
+ * Con `modifyMode`, duplica la selezione e inserisce il wireframe nella copia (o sotto di essa) lasciando l’originale intatto.
  */
-export async function executeActionPlanOnCanvas(actionPlan: unknown): Promise<{ rootId: string }> {
+export async function executeActionPlanOnCanvas(
+  actionPlan: unknown,
+  options?: ExecuteActionPlanOptions,
+): Promise<{ rootId: string; clonedFromId?: string | null }> {
   if (!isRecord(actionPlan)) throw new Error('Action plan non valido');
   const frameSpec = actionPlan.frame;
   const actions = actionPlan.actions;
@@ -374,16 +557,31 @@ export async function executeActionPlanOnCanvas(actionPlan: unknown): Promise<{ 
   if (!Array.isArray(actions)) throw new Error('Action plan: manca actions');
 
   const varMap = await buildLocalVariableMap();
+  try {
+    await figma.loadAllPagesAsync();
+  } catch {
+    /* best-effort: ricerca componenti su pagine non caricate */
+  }
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }).catch(() => undefined);
 
   const page = figma.currentPage;
-  const pos = nextPlacementOnPage(page);
+  let appendParent: ChildrenMixin = page;
+  let rootPos = nextPlacementOnPage(page);
+  let clonedFromId: string | null = null;
+
+  if (options?.modifyMode) {
+    const prep = prepareModifyModeCloneHost(page);
+    appendParent = prep.appendParent;
+    rootPos = prep.rootPos;
+    clonedFromId = prep.clonedFromId;
+  }
 
   const root = figma.createFrame();
-  root.x = pos.x;
-  root.y = pos.y;
+  root.x = rootPos.x;
+  root.y = rootPos.y;
   applyFrameGeometry(root, frameSpec, varMap);
-  page.appendChild(root);
+  await applyOptionalLayoutBindingsFromRaw(frameSpec, root, varMap);
+  appendParent.appendChild(root);
 
   const idMap = new Map<string, SceneNode>();
   idMap.set('root', root);
@@ -398,6 +596,7 @@ export async function executeActionPlanOnCanvas(actionPlan: unknown): Promise<{ 
       const f = figma.createFrame();
       parent.appendChild(f);
       applyFrameGeometry(f, raw, varMap);
+      await applyOptionalLayoutBindingsFromRaw(raw, f, varMap);
       if (parent !== root && 'layoutMode' in parent && (parent as FrameNode).layoutMode !== 'NONE') {
         f.layoutSizingHorizontal = 'FILL';
       }
@@ -458,6 +657,21 @@ export async function executeActionPlanOnCanvas(actionPlan: unknown): Promise<{ 
       if (comp) {
         const inst = comp.createInstance();
         parent.appendChild(inst);
+        if ('layoutMode' in parent && (parent as FrameNode).layoutMode !== 'NONE') {
+          inst.layoutSizingHorizontal = 'FILL';
+        }
+        const iw = Number(raw.width);
+        const ih = Number(raw.height);
+        if (Number.isFinite(iw) && iw > 0 && Number.isFinite(ih) && ih > 0) {
+          try {
+            inst.resize(iw, ih);
+          } catch {
+            /* ignore */
+          }
+        }
+        applyInstanceComponentProperties(inst, raw);
+        if (raw.fills !== undefined) applyFillsToNode(inst, raw.fills, varMap);
+        if (typeof raw.name === 'string' && raw.name.trim()) inst.name = raw.name.trim();
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);
       } else {
         await appendMissingComponentWireframe(parent, key || 'unknown');
@@ -475,5 +689,5 @@ export async function executeActionPlanOnCanvas(actionPlan: unknown): Promise<{ 
   figma.currentPage.selection = [root];
   figma.viewport.scrollAndZoomIntoView([root]);
 
-  return { rootId: root.id };
+  return { rootId: root.id, clonedFromId: clonedFromId ?? undefined };
 }

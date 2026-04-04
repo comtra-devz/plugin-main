@@ -7,7 +7,7 @@
  * oppure pattern applicativi come questo (più round di chat).
  *
  * Questo modulo usa **due chiamate sequenziali** a `chat/completions` — stesso endpoint già usato da `callKimi`
- * in app.mjs. Per attivarlo: env **`USE_KIMI_SWARM=1`** sul server. **Non serve `KIMI_SWARM_URL`.**
+ * in app.mjs. **Default attivo**; disattiva con **`USE_KIMI_SWARM=0`** o **`false`**. **Non serve `KIMI_SWARM_URL`.**
  */
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,14 +24,25 @@ const COMPONENT_MAPPER_PATH = path.join(__dirname, '..', 'prompts', 'generate-co
  * @param {string} opts.userPrompt
  * @param {string} opts.contextBlob
  * @param {string} opts.actionPlanSystemPrompt - generate-system.md (full v1 contract)
+ * @param {string | null} [opts.screenshotDataUrl] - optional data URL for Kimi vision (first + second call)
  * @returns {Promise<{ actionPlan: object | null, layout_skeleton: object | null, usage: { input: number, output: number }, stage: string }>}
  */
+function withOptionalVision(text, screenshotDataUrl) {
+  const t = String(text || '');
+  if (!screenshotDataUrl || typeof screenshotDataUrl !== 'string') return t;
+  return [
+    { type: 'image_url', image_url: { url: screenshotDataUrl } },
+    { type: 'text', text: t },
+  ];
+}
+
 export async function runGenerateDualCallPipeline({
   callKimi,
   extractJsonFromContent,
   userPrompt,
   contextBlob,
   actionPlanSystemPrompt,
+  screenshotDataUrl = null,
 }) {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -60,8 +71,9 @@ export async function runGenerateDualCallPipeline({
     'Return only one JSON object: the layout skeleton as specified in your system instructions.',
   ].join('\n');
 
+  const layoutUserContent = withOptionalVision(layoutUser, screenshotDataUrl);
   const { content: layoutContent, usage: u1 } = await callKimi(
-    [{ role: 'system', content: layoutSystem }, { role: 'user', content: layoutUser }],
+    [{ role: 'system', content: layoutSystem }, { role: 'user', content: layoutUserContent }],
     4096,
   );
   totalInputTokens += Math.max(0, Number(u1?.input_tokens ?? u1?.prompt_tokens ?? 0));
@@ -97,8 +109,9 @@ export async function runGenerateDualCallPipeline({
     'Return only one JSON object: the full Comtra action plan (version "1.0").',
   ].join('\n');
 
+  const mapperUserContent = withOptionalVision(mapperUser, screenshotDataUrl);
   const { content: mapContent, usage: u2 } = await callKimi(
-    [{ role: 'system', content: combinedMapperSystem }, { role: 'user', content: mapperUser }],
+    [{ role: 'system', content: combinedMapperSystem }, { role: 'user', content: mapperUserContent }],
     8192,
   );
   totalInputTokens += Math.max(0, Number(u2?.input_tokens ?? u2?.prompt_tokens ?? 0));

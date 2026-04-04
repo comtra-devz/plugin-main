@@ -32,8 +32,11 @@ import {
   validateActionPlanAgainstDs,
   validateActionPlanAgainstFileDsIndex,
   validateActionPlanSchema,
+  validateActionPlanVisiblePrimitives,
+  validateActionPlanNoInstanceForPublicDs,
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
+import { formatDesignIntelligenceForPrompt } from './design-intelligence.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -562,7 +565,8 @@ const XP_BY_ACTION = {
   bug_report: 5,
 };
 
-function estimateCreditsByAction(actionType, nodeCount) {
+function estimateCreditsByAction(actionType, nodeCount, options = {}) {
+  const hasScreenshot = Boolean(options?.has_screenshot);
   const n = nodeCount ?? 0;
   if (actionType === 'audit' || actionType === 'scan') {
     if (n <= 500) return 2;
@@ -577,8 +581,10 @@ function estimateCreditsByAction(actionType, nodeCount) {
     if (n <= 50000) return 4;
     return 6;
   }
-  if (actionType === 'wireframe_gen' || actionType === 'generate') return 3;
-  if (actionType === 'wireframe_modified') return 3;
+  if (actionType === 'wireframe_gen' || actionType === 'generate') {
+    return 3 + (hasScreenshot ? 2 : 0);
+  }
+  if (actionType === 'wireframe_modified') return 3 + (hasScreenshot ? 2 : 0);
   if (actionType === 'proto_scan') return 2;
   // Prototype Audit: node_count = number of selected flows; low credits (1–4). See audit-specs/prototype-audit/COST-PROSPECT.md
   if (actionType === 'proto_audit') {
@@ -707,7 +713,12 @@ app.post('/api/credits/estimate', async (req, res) => {
   const body = req.body || {};
   const actionType = body.action_type || 'audit';
   const nodeCount = body.node_count != null ? Number(body.node_count) : undefined;
-  const estimated = estimateCreditsByAction(actionType, nodeCount);
+  const hasScreenshot =
+    body.has_screenshot === true ||
+    body.has_screenshot === 'true' ||
+    body.has_screenshot === 1 ||
+    body.has_screenshot === '1';
+  const estimated = estimateCreditsByAction(actionType, nodeCount, { has_screenshot: hasScreenshot });
   res.json({ estimated_credits: estimated });
 });
 
@@ -1009,6 +1020,8 @@ app.post('/api/figma/token-status', async (req, res) => {
 // --- DS Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
 const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
+/** Model with vision when messages include image parts (defaults to KIMI_MODEL). */
+const KIMI_VISION_MODEL = process.env.KIMI_VISION_MODEL || KIMI_MODEL;
 const DS_AUDIT_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'ds-audit-system.md');
 
 /** Risposta Moonshot/OpenAI: campi usage variabili; a volte solo total_tokens (dashboard costi). */
@@ -1772,11 +1785,43 @@ app.post('/api/agents/ds-audit', async (req, res) => {
 const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
 const GENERATE_ASCII_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-ascii-system.md');
 
+function normalizeScreenshotFromBody(body) {
+  const raw =
+    body?.screenshot_base64 ||
+    body?.screenshotBase64 ||
+    body?.screenshot_data_url ||
+    body?.screenshotDataUrl;
+  if (raw == null || raw === '') return { dataUrl: null, error: null };
+  if (typeof raw !== 'string') {
+    return { dataUrl: null, error: 'screenshot must be a string (base64 or data URL).' };
+  }
+  const s = raw.trim();
+  if (!s) return { dataUrl: null, error: null };
+  let dataUrl = s;
+  if (!/^data:image\//i.test(s)) {
+    dataUrl = `data:image/png;base64,${s.replace(/\s/g, '')}`;
+  }
+  const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,([\s\S]+)$/i);
+  if (!m) {
+    return { dataUrl: null, error: 'Invalid screenshot: expected PNG/JPEG/WebP data URL or raw base64.' };
+  }
+  const b64 = m[2].replace(/\s/g, '');
+  const approxBytes = Math.ceil((b64.length * 3) / 4);
+  const MAX_BYTES = 6 * 1024 * 1024;
+  if (approxBytes > MAX_BYTES) {
+    return { dataUrl: null, error: 'Screenshot too large (max 6MB decoded).' };
+  }
+  return { dataUrl: `data:image/${m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase()};base64,${b64}`, error: null };
+}
+
 async function callKimi(messages, maxTokens = 8192) {
+  const usesVision =
+    Array.isArray(messages) && messages.some((m) => m && typeof m === 'object' && Array.isArray(m.content));
+  const model = usesVision ? KIMI_VISION_MODEL : KIMI_MODEL;
   const r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
-    body: JSON.stringify({ model: KIMI_MODEL, messages, temperature: 0.3, max_tokens: maxTokens }),
+    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxTokens }),
   });
   if (!r.ok) {
     const t = await r.text();
@@ -1819,15 +1864,21 @@ app.post('/api/agents/generate', async (req, res) => {
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
 
-  /** Phase 3: 2× Kimi (layout skeleton → full action plan). Legacy A/B when unset or 0. */
+  const shot = normalizeScreenshotFromBody(body);
+  if (shot.error) return res.status(400).json({ error: shot.error });
+  const screenshotDataUrl = shot.dataUrl;
+
+  /** Phase 3: 2× Kimi default. Opt out: USE_KIMI_SWARM=0 / false. */
   const useKimiDualSwarmPipeline =
-    process.env.USE_KIMI_SWARM === '1' || process.env.USE_KIMI_SWARM === 'true';
+    process.env.USE_KIMI_SWARM !== '0' && process.env.USE_KIMI_SWARM !== 'false';
 
   let variant = Math.random() < 0.5 ? 'B' : 'A';
   const startMs = Date.now();
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let asciiWireframe = null;
+  let generationPipeline = 'legacy_ab';
+  let dualPipelineSucceeded = false;
 
   let systemPrompt;
   try {
@@ -1889,6 +1940,7 @@ app.post('/api/agents/generate', async (req, res) => {
           `ds_cache_hash: ${dsIndexHashLine}`,
         ].join('\n')
       : '';
+    const designIntelBlock = formatDesignIntelligenceForPrompt(fileKey);
     const contextBlob = [
       `Mode: ${mode}.`,
       `DS source: ${dsSource}.`,
@@ -1898,31 +1950,39 @@ app.post('/api/agents/generate', async (req, res) => {
       'Use only variable references (no raw hex/px).',
       dsContextBlock,
       dsIndexBlock,
+      designIntelBlock,
     ].join('\n');
 
-    let actionPlan;
+    let actionPlan = null;
+    const forceDirectForVision = Boolean(screenshotDataUrl);
 
     if (useKimiDualSwarmPipeline) {
-      const dual = await runGenerateDualCallPipeline({
-        callKimi,
-        extractJsonFromContent,
-        userPrompt: prompt,
-        contextBlob,
-        actionPlanSystemPrompt: systemPrompt,
-      });
-      totalInputTokens = dual.usage.input;
-      totalOutputTokens = dual.usage.output;
-      actionPlan = dual.actionPlan;
-      variant = 'S';
-      asciiWireframe = null;
-      if (!actionPlan) {
-        console.error('Generate dual pipeline failed:', dual.stage);
-        return res.status(502).json({
-          error: 'Invalid response from AI (layout/mapper pipeline)',
-          code: dual.stage || 'DUAL_PIPELINE_FAILED',
+      try {
+        const dual = await runGenerateDualCallPipeline({
+          callKimi,
+          extractJsonFromContent,
+          userPrompt: prompt,
+          contextBlob,
+          actionPlanSystemPrompt: systemPrompt,
+          screenshotDataUrl,
         });
+        totalInputTokens = dual.usage.input;
+        totalOutputTokens = dual.usage.output;
+        if (dual.actionPlan && typeof dual.actionPlan === 'object') {
+          actionPlan = dual.actionPlan;
+          variant = 'S';
+          asciiWireframe = null;
+          dualPipelineSucceeded = true;
+          generationPipeline = 'kimi_dual_layout_mapper';
+        } else {
+          console.error('Generate dual pipeline failed:', dual.stage);
+        }
+      } catch (dualErr) {
+        console.error('Generate dual pipeline error:', dualErr?.message || dualErr);
       }
-    } else if (variant === 'B') {
+    }
+
+    if (!actionPlan && !forceDirectForVision && variant === 'B') {
       let asciiPrompt;
       try {
         asciiPrompt = readFileSync(GENERATE_ASCII_PROMPT_PATH, 'utf8');
@@ -1934,7 +1994,7 @@ app.post('/api/agents/generate', async (req, res) => {
       const asciiUserMsg = `User request: ${prompt}\n\nCreate the ASCII wireframe.`;
       const { content: asciiContent, usage: asciiUsage } = await callKimi(
         [{ role: 'system', content: asciiPrompt }, { role: 'user', content: asciiUserMsg }],
-        2048
+        2048,
       );
       totalInputTokens += Math.max(0, Number(asciiUsage?.input_tokens ?? asciiUsage?.prompt_tokens ?? 0));
       totalOutputTokens += Math.max(0, Number(asciiUsage?.output_tokens ?? asciiUsage?.completion_tokens ?? 0));
@@ -1943,20 +2003,28 @@ app.post('/api/agents/generate', async (req, res) => {
       const convertUserMsg = `ASCII wireframe:\n${asciiWireframe}\n\nOriginal prompt: ${prompt}\n\nContext: ${contextBlob}\n\nConvert this ASCII wireframe into the action plan JSON. Return only the JSON object, no other text.`;
       const { content: jsonContent, usage: jsonUsage } = await callKimi(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: convertUserMsg }],
-        8192
+        8192,
       );
       totalInputTokens += Math.max(0, Number(jsonUsage?.input_tokens ?? jsonUsage?.prompt_tokens ?? 0));
       totalOutputTokens += Math.max(0, Number(jsonUsage?.output_tokens ?? jsonUsage?.completion_tokens ?? 0));
       actionPlan = extractJsonFromContent(jsonContent);
-    } else {
-      const userMessage = `User prompt:\n${prompt}\n\nContext: ${contextBlob}\n\nReturn only the action plan JSON object, no other text.`;
-      const { content, usage } = await callKimi([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ]);
-      totalInputTokens = Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
-      totalOutputTokens = Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
+      generationPipeline = 'legacy_ab';
+    } else if (!actionPlan) {
+      const userText = `User prompt:\n${prompt}\n\nContext: ${contextBlob}\n\nReturn only the action plan JSON object, no other text.`;
+      const userMessage = screenshotDataUrl
+        ? [
+            { type: 'image_url', image_url: { url: screenshotDataUrl } },
+            { type: 'text', text: userText },
+          ]
+        : userText;
+      const { content, usage } = await callKimi(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
+        8192,
+      );
+      totalInputTokens += Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
+      totalOutputTokens += Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
       actionPlan = extractJsonFromContent(content);
+      if (!dualPipelineSucceeded) generationPipeline = 'legacy_ab';
     }
 
     if (!actionPlan || typeof actionPlan !== 'object') {
@@ -1966,11 +2034,19 @@ app.post('/api/agents/generate', async (req, res) => {
 
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
-    const mustRepair = !schemaValidation.valid || !dsValidation.valid;
+    let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
+    let publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
+    const mustRepair =
+      !schemaValidation.valid ||
+      !dsValidation.valid ||
+      !visibleValidation.valid ||
+      !publicDsInstanceValidation.valid;
     if (mustRepair) {
       const firstPassErrors = [
         ...schemaValidation.errors.map((e) => `schema: ${e}`),
         ...dsValidation.errors.map((e) => `ds: ${e}`),
+        ...visibleValidation.errors.map((e) => `visible: ${e}`),
+        ...publicDsInstanceValidation.errors.map((e) => `public_ds: ${e}`),
       ];
       const repair = await repairActionPlanWithKimi(systemPrompt, actionPlan, firstPassErrors, `User prompt: ${prompt}\n\n${contextBlob}`);
       totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
@@ -1980,6 +2056,8 @@ app.post('/api/agents/generate', async (req, res) => {
         actionPlan = repaired;
         schemaValidation = validateActionPlanSchema(actionPlan);
         dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
+        visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
+        publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
       }
     }
 
@@ -1998,6 +2076,20 @@ app.post('/api/agents/generate', async (req, res) => {
         details: dsValidation.errors,
       });
     }
+    if (!visibleValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan missing visible primitives on root',
+        code: 'VISIBLE_CONTENT_REQUIRED',
+        details: visibleValidation.errors,
+      });
+    }
+    if (!publicDsInstanceValidation.valid) {
+      return res.status(422).json({
+        error: 'INSTANCE_COMPONENT not allowed for public design system packages',
+        code: 'PUBLIC_DS_NO_INSTANCE',
+        details: publicDsInstanceValidation.errors,
+      });
+    }
 
     const fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForPrompt);
     if (!fileIndexValidation.skipped && !fileIndexValidation.valid) {
@@ -2010,7 +2102,7 @@ app.post('/api/agents/generate', async (req, res) => {
 
     if (!actionPlan.metadata || typeof actionPlan.metadata !== 'object') actionPlan.metadata = {};
     if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
-    if (useKimiDualSwarmPipeline) actionPlan.metadata.generation_pipeline = 'kimi_dual_layout_mapper';
+    actionPlan.metadata.generation_pipeline = generationPipeline;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
     actionPlan.metadata.context_profile = contextProfile;
@@ -2031,6 +2123,18 @@ app.post('/api/agents/generate', async (req, res) => {
       component_node_ids_seen: fileIndexValidation.used?.componentNodeIds?.length ?? 0,
       variable_refs_seen: fileIndexValidation.used?.variableRefs?.length ?? 0,
     };
+
+    if (screenshotDataUrl) {
+      const metaEc = Number(actionPlan.metadata.estimated_credits);
+      const base =
+        Number.isFinite(metaEc) && metaEc > 0
+          ? metaEc
+          : estimateCreditsByAction(mode === 'modify' ? 'wireframe_modified' : 'generate', undefined, {
+              has_screenshot: false,
+            });
+      actionPlan.metadata.estimated_credits = base + 2;
+      actionPlan.metadata.screenshot_attached = true;
+    }
 
     const creditsConsumed = actionPlan.metadata?.estimated_credits ?? 3;
     const latencyMs = Date.now() - startMs;
