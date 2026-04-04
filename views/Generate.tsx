@@ -20,7 +20,14 @@ interface Props {
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   initialPrompt?: string;
-  fetchGenerate: (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null }>;
+  fetchGenerate: (body: {
+    file_key: string;
+    prompt: string;
+    mode?: string;
+    ds_source?: string;
+    ds_context_index?: object | null;
+    ds_cache_hash?: string | null;
+  }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null }>;
   requestFileContext: () => Promise<{ fileKey: string | null; error?: string | null }>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
   selectedNode: { id: string; name: string; type: string } | null;

@@ -586,6 +586,9 @@ export default function AppTest() {
   const actionPlanExecWaitersRef = useRef<
     Map<string, (r: { ok: boolean; error?: string; rootId?: string }) => void>
   >(new Map());
+  const dsContextIndexWaitersRef = useRef<
+    Map<string, (r: { index: object | null; hash: string | null; error?: string }) => void>
+  >(new Map());
 
   const requestActionPlanExecution = React.useCallback((plan: object) => {
     return new Promise<{ ok: boolean; error?: string; rootId?: string }>((resolve) => {
@@ -656,6 +659,19 @@ export default function AppTest() {
         if (fn) {
           actionPlanExecWaitersRef.current.delete(rid);
           fn({ ok: false, error: String(msg.error || 'Errore creazione su Figma') });
+        }
+      }
+      if (msg.type === 'ds-context-index-result') {
+        const rid = String(msg.requestId || '');
+        const fn = rid ? dsContextIndexWaitersRef.current.get(rid) : undefined;
+        if (fn) {
+          dsContextIndexWaitersRef.current.delete(rid);
+          const idx = msg.index;
+          fn({
+            index: idx && typeof idx === 'object' ? (idx as object) : null,
+            hash: msg.hash != null ? String(msg.hash) : null,
+            error: msg.error ? String(msg.error) : undefined,
+          });
         }
       }
     };
@@ -1076,32 +1092,81 @@ export default function AppTest() {
     }
   }, [user?.authToken]);
 
-  const fetchGenerate = useCallback(async (body: { file_key: string; prompt: string; mode?: string; ds_source?: string }) => {
-    if (!user?.authToken) throw new Error('Unauthorized');
-    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-      body: JSON.stringify({
+  const requestDsContextIndex = useCallback(() => {
+    return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
+      const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      dsContextIndexWaitersRef.current.set(requestId, resolve);
+      window.parent.postMessage({ pluginMessage: { type: 'get-ds-context-index', requestId } }, '*');
+      window.setTimeout(() => {
+        const fn = dsContextIndexWaitersRef.current.get(requestId);
+        if (!fn) return;
+        dsContextIndexWaitersRef.current.delete(requestId);
+        fn({ index: null, hash: null, error: 'Timeout waiting for DS context index from Figma.' });
+      }, 30000);
+    });
+  }, []);
+
+  const fetchGenerate = useCallback(
+    async (body: {
+      file_key: string;
+      prompt: string;
+      mode?: string;
+      ds_source?: string;
+      /** Se omesso, l’indice viene richiesto al plugin prima del POST. Passa `null` per saltare. */
+      ds_context_index?: object | null;
+      ds_cache_hash?: string | null;
+    }) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+
+      let dsContextIndex: object | undefined | null = body.ds_context_index;
+      let dsCacheHash: string | null | undefined = body.ds_cache_hash;
+      if (dsContextIndex === undefined) {
+        const fromPlugin = await requestDsContextIndex();
+        if (fromPlugin.index && typeof fromPlugin.index === 'object') {
+          dsContextIndex = fromPlugin.index;
+          const h =
+            fromPlugin.hash ||
+            (fromPlugin.index as { hash?: string }).hash ||
+            null;
+          dsCacheHash = dsCacheHash ?? h;
+        } else {
+          dsContextIndex = null;
+        }
+      }
+
+      const payload: Record<string, unknown> = {
         file_key: body.file_key,
         prompt: body.prompt,
         mode: body.mode || 'create',
         ds_source: body.ds_source || 'custom',
-      }),
-    });
-    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
-    if (!r.ok) {
-      const text = await r.text();
-      let msg = text;
-      try {
-        const j = JSON.parse(text);
-        msg = j.error || text;
-      } catch {
-        // keep as-is
+      };
+      if (dsContextIndex != null) payload.ds_context_index = dsContextIndex;
+      if (dsCacheHash != null && String(dsCacheHash).trim() !== '') payload.ds_cache_hash = String(dsCacheHash).trim();
+
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
       }
-      throw new Error(msg);
-    }
-    return r.json();
-  }, [user?.authToken, handle503]);
+      if (!r.ok) {
+        const text = await r.text();
+        let msg = text;
+        try {
+          const j = JSON.parse(text);
+          msg = j.error || text;
+        } catch {
+          // keep as-is
+        }
+        throw new Error(msg);
+      }
+      return r.json();
+    },
+    [user?.authToken, handle503, requestDsContextIndex],
+  );
 
   const requestFileContext = useCallback(() => {
     return new Promise<{ fileKey: string | null; error?: string | null }>((resolve) => {

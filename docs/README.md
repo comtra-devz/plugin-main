@@ -28,6 +28,7 @@ Per questo motivo questa ottimizzazione è **non distruttiva**: introduciamo ind
 
 - OAuth: `docs/OAUTH-FIGMA.md`
 - Generate: `docs/GENERATE-TAB-SPEC.md`
+- **Generation Engine roadmap (Problem 1 + Swarm):** `docs/GENERATION-ENGINE-ROADMAP.md`
 - Sync: `docs/SYNC-INVESTIGATION.md`
 - Gamification: `docs/GAMIFICATION.md`
 - Trophies: `docs/TROPHIES.md`

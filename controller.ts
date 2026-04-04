@@ -3,10 +3,12 @@
 /// <reference types="@figma/plugin-typings" />
 
 import { executeActionPlanOnCanvas } from './action-plan-executor';
+import { buildAndCacheDsContextIndex, initDsContextIndexLifecycle } from './ds-context-index';
 
 declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
+initDsContextIndexLifecycle();
 
 const SESSION_DAYS = 30; // Durata sessione in giorni; 0 = nessuna scadenza (solo logout manuale)
 
@@ -1613,6 +1615,27 @@ figma.ui.onmessage = async (raw: any) => {
     await figma.loadAllPagesAsync();
     const pages = figma.root.children.map((p: PageNode) => ({ id: p.id, name: p.name }));
     figma.ui.postMessage({ type: 'pages-result', pages });
+  }
+
+  if (msg.type === 'get-ds-context-index') {
+    const requestId = msg.requestId;
+    (async () => {
+      try {
+        const index = await buildAndCacheDsContextIndex();
+        figma.ui.postMessage({ type: 'ds-context-index-result', requestId, index, hash: index.hash });
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error('[get-ds-context-index]', e);
+        figma.ui.postMessage({
+          type: 'ds-context-index-result',
+          requestId,
+          index: null,
+          hash: null,
+          error: errMsg,
+        });
+      }
+    })();
+    return;
   }
 
   if (msg.type === 'get-flow-starting-points') {

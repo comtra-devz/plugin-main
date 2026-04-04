@@ -30,8 +30,10 @@ import {
   resolveContextProfile,
   resolveDsPackageForContext,
   validateActionPlanAgainstDs,
+  validateActionPlanAgainstFileDsIndex,
   validateActionPlanSchema,
 } from './ds-loader.mjs';
+import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1806,6 +1808,8 @@ app.post('/api/agents/generate', async (req, res) => {
   const prompt = (body.prompt || body.promptText || '').trim();
   const mode = body.mode || 'create';
   const dsSource = body.ds_source || body.dsSource || 'custom';
+  const dsContextIndex = body.ds_context_index;
+  const dsCacheHashFromBody = String(body.ds_cache_hash || body.dsCacheHash || '').trim();
   const contextProfile = resolveContextProfile(body.context_profile || body.contextProfile || { input_mode: mode });
   const resolvedDsId = mapDsSourceToId(dsSource);
   const dsPackageRaw = loadDsPackage(dsSource);
@@ -1815,7 +1819,11 @@ app.post('/api/agents/generate', async (req, res) => {
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
 
-  const variant = Math.random() < 0.5 ? 'B' : 'A';
+  /** Phase 3: 2× Kimi (layout skeleton → full action plan). Legacy A/B when unset or 0. */
+  const useKimiDualSwarmPipeline =
+    process.env.USE_KIMI_SWARM === '1' || process.env.USE_KIMI_SWARM === 'true';
+
+  let variant = Math.random() < 0.5 ? 'B' : 'A';
   const startMs = Date.now();
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -1863,6 +1871,24 @@ app.post('/api/agents/generate', async (req, res) => {
 
     const pageCount = fileJson?.document?.children?.length ?? 0;
     const dsContextBlock = dsPackage ? buildDsContextForPrompt(dsPackage, contextProfile) : 'Resolved DS package: unavailable (fallback to semantic DS hint only).';
+    const dsIndexForPrompt =
+      dsContextIndex && typeof dsContextIndex === 'object' && !Array.isArray(dsContextIndex)
+        ? dsContextIndex
+        : null;
+    const dsIndexHashLine =
+      dsCacheHashFromBody ||
+      (dsIndexForPrompt && typeof dsIndexForPrompt.hash === 'string' ? dsIndexForPrompt.hash : '') ||
+      'n/a';
+    const dsIndexBlock = dsIndexForPrompt
+      ? [
+          '',
+          '[DS CONTEXT INDEX]',
+          'Compact index of local components, variables, and styles from the Figma plugin. For file-scoped DS, use only component ids and token paths that appear in this JSON.',
+          JSON.stringify(dsIndexForPrompt),
+          '[END DS CONTEXT INDEX]',
+          `ds_cache_hash: ${dsIndexHashLine}`,
+        ].join('\n')
+      : '';
     const contextBlob = [
       `Mode: ${mode}.`,
       `DS source: ${dsSource}.`,
@@ -1871,11 +1897,32 @@ app.post('/api/agents/generate', async (req, res) => {
       `File has ${pageCount} page(s).`,
       'Use only variable references (no raw hex/px).',
       dsContextBlock,
+      dsIndexBlock,
     ].join('\n');
 
     let actionPlan;
 
-    if (variant === 'B') {
+    if (useKimiDualSwarmPipeline) {
+      const dual = await runGenerateDualCallPipeline({
+        callKimi,
+        extractJsonFromContent,
+        userPrompt: prompt,
+        contextBlob,
+        actionPlanSystemPrompt: systemPrompt,
+      });
+      totalInputTokens = dual.usage.input;
+      totalOutputTokens = dual.usage.output;
+      actionPlan = dual.actionPlan;
+      variant = 'S';
+      asciiWireframe = null;
+      if (!actionPlan) {
+        console.error('Generate dual pipeline failed:', dual.stage);
+        return res.status(502).json({
+          error: 'Invalid response from AI (layout/mapper pipeline)',
+          code: dual.stage || 'DUAL_PIPELINE_FAILED',
+        });
+      }
+    } else if (variant === 'B') {
       let asciiPrompt;
       try {
         asciiPrompt = readFileSync(GENERATE_ASCII_PROMPT_PATH, 'utf8');
@@ -1952,16 +1999,37 @@ app.post('/api/agents/generate', async (req, res) => {
       });
     }
 
+    const fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForPrompt);
+    if (!fileIndexValidation.skipped && !fileIndexValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan violates file DS context index',
+        code: 'FILE_DS_INDEX_VIOLATION',
+        details: fileIndexValidation.errors,
+      });
+    }
+
     if (!actionPlan.metadata || typeof actionPlan.metadata !== 'object') actionPlan.metadata = {};
     if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
+    if (useKimiDualSwarmPipeline) actionPlan.metadata.generation_pipeline = 'kimi_dual_layout_mapper';
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
     actionPlan.metadata.context_profile = contextProfile;
     actionPlan.metadata.ds_validation = {
       valid: dsValidation.valid,
-      warnings: [...(schemaValidation.warnings || []), ...(dsValidation.warnings || [])],
+      warnings: [
+        ...(schemaValidation.warnings || []),
+        ...(dsValidation.warnings || []),
+        ...(fileIndexValidation.skipped ? [] : fileIndexValidation.warnings || []),
+      ],
       token_refs_used: dsValidation.used.tokenRefs.length,
       component_refs_used: dsValidation.used.componentRefs.length,
+    };
+    actionPlan.metadata.file_ds_index_validation = {
+      skipped: fileIndexValidation.skipped,
+      valid: fileIndexValidation.skipped ? null : fileIndexValidation.valid,
+      warnings: fileIndexValidation.skipped ? [] : fileIndexValidation.warnings || [],
+      component_node_ids_seen: fileIndexValidation.used?.componentNodeIds?.length ?? 0,
+      variable_refs_seen: fileIndexValidation.used?.variableRefs?.length ?? 0,
     };
 
     const creditsConsumed = actionPlan.metadata?.estimated_credits ?? 3;

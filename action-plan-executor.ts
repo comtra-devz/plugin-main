@@ -254,21 +254,113 @@ async function injectFallbackScaffold(
   root.appendChild(row);
 }
 
-function findComponentByHint(hint: string): ComponentNode | null {
-  const h = hint.toLowerCase().trim();
-  if (!h) return null;
-  const nodes = figma.currentPage.findAll(
-    (n): n is ComponentNode | ComponentSetNode => n.type === 'COMPONENT' || n.type === 'COMPONENT_SET'
-  );
+function collectAllLocalComponents(): (ComponentNode | ComponentSetNode)[] {
+  const out: (ComponentNode | ComponentSetNode)[] = [];
+  for (const page of figma.root.children) {
+    if (page.type !== 'PAGE') continue;
+    const found = page.findAll(
+      (n): n is ComponentNode | ComponentSetNode => n.type === 'COMPONENT' || n.type === 'COMPONENT_SET'
+    );
+    out.push(...found);
+  }
+  return out;
+}
+
+function pickFromSet(n: ComponentNode | ComponentSetNode): ComponentNode | null {
+  if (n.type === 'COMPONENT') return n;
+  const set = n as ComponentSetNode;
+  return set.defaultVariant ?? (set.children[0] as ComponentNode | undefined) ?? null;
+}
+
+/**
+ * Cerca in tutto il file (tutte le pagine), prova match su segmenti del path DS, poi import da libreria pubblicata se la chiave è una component key Figma.
+ */
+async function resolveComponentForInstance(hint: string): Promise<ComponentNode | null> {
+  const rawKey = hint.trim();
+  if (!rawKey) return null;
+  const h = rawKey.toLowerCase();
+  const nodes = collectAllLocalComponents();
+  const segments = h.split(/[/_.\s-]+/).filter((s) => s.length > 1);
+
   for (const n of nodes) {
     const nm = n.name.toLowerCase();
-    if (nm.includes(h) || n.id.toLowerCase() === h) {
-      if (n.type === 'COMPONENT') return n;
-      const set = n as ComponentSetNode;
-      return set.defaultVariant ?? set.children?.[0] ?? null;
+    if (nm.includes(h) || n.id.toLowerCase() === h) return pickFromSet(n);
+  }
+  if (segments.length >= 2) {
+    for (const n of nodes) {
+      const nm = n.name.toLowerCase();
+      if (segments.every((seg) => nm.includes(seg))) return pickFromSet(n);
+    }
+  }
+  const last = segments[segments.length - 1];
+  if (last && last.length > 2) {
+    for (const n of nodes) {
+      const nm = n.name.toLowerCase();
+      if (nm.includes(last)) return pickFromSet(n);
+    }
+  }
+
+  const looksLikeFigmaKey =
+    /^[a-f0-9]{32,}$/i.test(rawKey) || (/^[a-zA-Z0-9_-]{22,}$/.test(rawKey) && !rawKey.includes('/') && !rawKey.includes('.'));
+  if (looksLikeFigmaKey) {
+    try {
+      return await figma.importComponentByKeyAsync(rawKey);
+    } catch {
+      /* libreria non collegata o chiave errata */
     }
   }
   return null;
+}
+
+function humanizeComponentKey(key: string): string {
+  return key
+    .replace(/[/._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 56);
+}
+
+/** Sostituisce “Component not found” con un blocco leggibile (stile wireframe), non solo testo tagliato. */
+async function appendMissingComponentWireframe(parent: ChildrenMixin, key: string): Promise<void> {
+  const label = humanizeComponentKey(key) || 'Control';
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }).catch(() => undefined);
+
+  const ph = figma.createFrame();
+  ph.name = `Placeholder · ${label}`;
+  ph.layoutMode = 'VERTICAL';
+  ph.itemSpacing = 6;
+  ph.paddingTop = 8;
+  ph.paddingBottom = 8;
+  ph.paddingLeft = 10;
+  ph.paddingRight = 10;
+  ph.primaryAxisSizingMode = 'AUTO';
+  ph.counterAxisSizingMode = 'FIXED';
+  ph.layoutSizingHorizontal = 'FILL';
+  ph.fills = [{ type: 'SOLID', color: { r: 0.96, g: 0.96, b: 0.98 } }];
+  ph.strokes = [{ type: 'SOLID', color: { r: 0.65, g: 0.68, b: 0.75 } }];
+  ph.strokeWeight = 1;
+  ph.cornerRadius = 6;
+  parent.appendChild(ph);
+
+  const bar = figma.createRectangle();
+  bar.resize(280, 40);
+  bar.name = label;
+  bar.cornerRadius = 4;
+  bar.fills = [{ type: 'SOLID', color: { r: 0.2, g: 0.45, b: 0.95 } }];
+  ph.appendChild(bar);
+
+  const cap = figma.createText();
+  try {
+    cap.fontName = { family: 'Inter', style: 'Regular' };
+  } catch {
+    /* default */
+  }
+  cap.characters =
+    `Nessun componente nel file per “${label}”. Collega la libreria del DS o usa rettangoli/testo nel prompt.`;
+  cap.fontSize = 10;
+  cap.opacity = 0.75;
+  cap.layoutSizingHorizontal = 'FILL';
+  ph.appendChild(cap);
 }
 
 /**
@@ -354,30 +446,21 @@ export async function executeActionPlanOnCanvas(actionPlan: unknown): Promise<{ 
 
     if (type === 'INSTANCE_COMPONENT') {
       const parent = resolveParent(raw, idMap, root);
-      const key = String(raw.component_key || raw.componentKey || raw.component_id || '').trim();
-      const comp = findComponentByHint(key);
+      const key = String(
+        raw.component_node_id ||
+          raw.componentNodeId ||
+          raw.component_key ||
+          raw.componentKey ||
+          raw.component_id ||
+          '',
+      ).trim();
+      const comp = await resolveComponentForInstance(key);
       if (comp) {
         const inst = comp.createInstance();
         parent.appendChild(inst);
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);
       } else {
-        const ph = figma.createFrame();
-        ph.name = key ? `Component: ${key}` : 'Component (not found)';
-        ph.resize(200, 48);
-        ph.layoutMode = 'VERTICAL';
-        parent.appendChild(ph);
-        try {
-          const hint = figma.createText();
-          try {
-            hint.fontName = { family: 'Inter', style: 'Regular' };
-          } catch {
-            /* default font */
-          }
-          hint.characters = key ? `Missing: ${key}` : 'Component not found in file';
-          ph.appendChild(hint);
-        } catch {
-          /* frame vuoto se testo non creabile */
-        }
+        await appendMissingComponentWireframe(parent, key || 'unknown');
       }
       continue;
     }

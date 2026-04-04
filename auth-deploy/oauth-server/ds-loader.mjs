@@ -322,6 +322,163 @@ export function validateActionPlanSchema(actionPlan) {
   return { valid: errors.length === 0, errors, warnings };
 }
 
+const FIGMA_NODE_ID_RE = /^\d+:\d+$/;
+
+function normalizeFileVarRef(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/** Alias set for variable names: slash/dot variants. */
+function buildFileVariableAliasSet(variableNames) {
+  const set = new Set();
+  for (const raw of variableNames || []) {
+    const n = normalizeFileVarRef(raw);
+    if (!n) continue;
+    set.add(n);
+    set.add(n.replace(/\//g, '.'));
+    set.add(n.replace(/\./g, '/'));
+  }
+  return set;
+}
+
+function extractExplicitVariableRefsFromActionPlan(actionPlan) {
+  const refs = new Set();
+  walk(actionPlan, (obj) => {
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v !== 'string') continue;
+      if (String(k).toLowerCase() === 'variable' && v.trim()) refs.add(v.trim());
+    }
+  });
+  return [...refs];
+}
+
+function semanticComponentKeyMatchesIndex(key, components) {
+  const k = String(key || '').trim().toLowerCase();
+  if (!k) return false;
+  for (const c of components) {
+    const name = String(c?.name || '').trim();
+    if (!name) continue;
+    const nl = name.toLowerCase();
+    if (nl === k) return true;
+    const last = nl.split('/').pop().trim();
+    if (last === k) return true;
+  }
+  return false;
+}
+
+/**
+ * Fase 4 — governance su indice file dal plugin (`ds_context_index`).
+ * Se l’indice non c’è o non ha dati utili → skipped (valid: true).
+ * Con `components_truncated` non si validano id componente (falsi negativi); restano variabili se elencate.
+ */
+export function validateActionPlanAgainstFileDsIndex(actionPlan, dsContextIndex) {
+  const emptyUsed = { componentNodeIds: [], variableRefs: [] };
+  if (!actionPlan || typeof actionPlan !== 'object') {
+    return { valid: true, skipped: true, errors: [], warnings: [], used: emptyUsed };
+  }
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') {
+    return { valid: true, skipped: true, errors: [], warnings: [], used: emptyUsed };
+  }
+
+  const components = Array.isArray(dsContextIndex.components) ? dsContextIndex.components : [];
+  const variableNames = Array.isArray(dsContextIndex.variable_names) ? dsContextIndex.variable_names : [];
+  const truncatedComponents = Boolean(dsContextIndex.components_truncated);
+
+  if (components.length === 0 && variableNames.length === 0) {
+    return {
+      valid: true,
+      skipped: true,
+      errors: [],
+      warnings: ['ds_context_index has no components or variable_names — file index checks skipped.'],
+      used: emptyUsed,
+    };
+  }
+
+  const errors = [];
+  const warnings = [];
+  const usedComponentNodeIds = [];
+  const usedVariableRefs = [];
+
+  const allowedIds = new Set(components.map((c) => (c && c.id ? String(c.id) : '')).filter(Boolean));
+
+  if (truncatedComponents && components.length > 0) {
+    warnings.push(
+      'DS CONTEXT INDEX has components_truncated=true; INSTANCE_COMPONENT is not validated against the partial component list.',
+    );
+  }
+
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+
+    const nodeId = String(a.component_node_id || a.componentNodeId || '').trim();
+    const key = String(a.component_key || a.componentKey || a.component_id || '').trim();
+
+    let figmaId = '';
+    if (FIGMA_NODE_ID_RE.test(nodeId)) figmaId = nodeId;
+    else if (FIGMA_NODE_ID_RE.test(key)) figmaId = key;
+
+    if (!truncatedComponents) {
+      if (figmaId) {
+        usedComponentNodeIds.push(figmaId);
+        if (!allowedIds.has(figmaId)) {
+          errors.push(
+            `actions[${i}] INSTANCE_COMPONENT: unknown Figma component id "${figmaId}" (not in DS CONTEXT INDEX).`,
+          );
+        }
+      } else if (key) {
+        if (!semanticComponentKeyMatchesIndex(key, components)) {
+          errors.push(
+            `actions[${i}] INSTANCE_COMPONENT: unknown component reference "${key}" (no matching id or name in index).`,
+          );
+        }
+      } else {
+        warnings.push(`actions[${i}] INSTANCE_COMPONENT: empty reference — plugin may insert a placeholder.`);
+      }
+    } else if (figmaId && allowedIds.has(figmaId)) {
+      usedComponentNodeIds.push(figmaId);
+    }
+  }
+
+  const varAliasSet = buildFileVariableAliasSet(variableNames);
+  const varRefs = extractExplicitVariableRefsFromActionPlan(actionPlan);
+  const truncatedVars = Boolean(dsContextIndex.variable_names_truncated);
+
+  let warnedVarTruncate = false;
+  for (const r of varRefs) {
+    usedVariableRefs.push(r);
+    if (varAliasSet.size === 0) continue;
+    const nr = normalizeFileVarRef(r);
+    const candidates = [nr, nr.replace(/\//g, '.'), nr.replace(/\./g, '/')];
+    const ok = candidates.some((c) => varAliasSet.has(c));
+    if (!ok) {
+      if (truncatedVars) {
+        if (!warnedVarTruncate) {
+          warnings.push(
+            'Some variable references could not be verified against a truncated variable_names list in DS CONTEXT INDEX.',
+          );
+          warnedVarTruncate = true;
+        }
+      } else {
+        errors.push(`Unknown variable reference "${r}" (not in file variable_names / DS CONTEXT INDEX).`);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    skipped: false,
+    errors,
+    warnings,
+    used: { componentNodeIds: usedComponentNodeIds, variableRefs: usedVariableRefs },
+  };
+}
+
 export function validateActionPlanAgainstDs(actionPlan, dsPackage) {
   if (!dsPackage || !actionPlan || typeof actionPlan !== 'object') {
     return { valid: true, errors: [], warnings: [], used: { tokenRefs: [], componentRefs: [] } };
