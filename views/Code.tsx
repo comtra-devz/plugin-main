@@ -663,7 +663,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   return (
-    <div className="p-0 pb-16 flex flex-col gap-4 relative">
+    <div className="p-4 flex flex-col gap-4 pb-16 relative">
       {showConfetti && <Confetti />}
       {showLevelUp && (
         <LevelUpModal
@@ -689,19 +689,19 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       <div className="grid grid-cols-3 border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
         <button 
           onClick={() => setActiveTab('TOKENS')}
-          className={`py-2 text-[10px] font-black uppercase transition-colors ${activeTab === 'TOKENS' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+          className={`py-3 px-2 text-[10px] font-black uppercase transition-colors ${activeTab === 'TOKENS' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           Tokens
         </button>
         <button 
           onClick={() => setActiveTab('TARGET')}
-          className={`py-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'TARGET' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+          className={`py-3 px-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'TARGET' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           Target
         </button>
         <button 
           onClick={() => setActiveTab('SYNC')}
-          className={`py-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'SYNC' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+          className={`py-3 px-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'SYNC' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
         >
           Sync
         </button>

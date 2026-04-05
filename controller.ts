@@ -3,12 +3,21 @@
 /// <reference types="@figma/plugin-typings" />
 
 import { executeActionPlanOnCanvas } from './action-plan-executor';
-import { buildAndCacheDsContextIndex, initDsContextIndexLifecycle } from './ds-context-index';
+import {
+  initDsContextIndexLifecycle,
+  resolveDsContextIndexForRequest,
+  setDsContextIndexRefreshSuspended,
+} from './ds-context-index';
 
 declare const __html__: string;
 
 figma.showUI(__html__, { width: 400, height: 700, themeColors: true });
-initDsContextIndexLifecycle();
+/* Ritarda loadAllPagesAsync + registrazione handler: la finestra UI compare prima del lavoro pesante. */
+setTimeout(() => {
+  void initDsContextIndexLifecycle().catch((err) =>
+    console.error('[ds-context-index] lifecycle init failed', err),
+  );
+}, 0);
 
 const SESSION_DAYS = 30; // Durata sessione in giorni; 0 = nessuna scadenza (solo logout manuale)
 
@@ -1599,6 +1608,7 @@ figma.ui.onmessage = async (raw: any) => {
     const actionPlan = msg.actionPlan;
     const modifyMode = msg.modifyMode === true;
     (async () => {
+      setDsContextIndexRefreshSuspended(true);
       try {
         const { rootId } = await executeActionPlanOnCanvas(actionPlan, { modifyMode });
         figma.ui.postMessage({ type: 'action-plan-executed', requestId, rootId });
@@ -1611,6 +1621,8 @@ figma.ui.onmessage = async (raw: any) => {
         const errMsg = e instanceof Error ? e.message : String(e);
         figma.ui.postMessage({ type: 'action-plan-execute-error', requestId, error: errMsg });
         figma.notify(`Comtra: errore creazione — ${errMsg}`);
+      } finally {
+        setDsContextIndexRefreshSuspended(false);
       }
     })();
     return;
@@ -1624,9 +1636,10 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'get-ds-context-index') {
     const requestId = msg.requestId;
+    const reuseCached = msg.reuseCached !== false;
     (async () => {
       try {
-        const index = await buildAndCacheDsContextIndex();
+        const index = await resolveDsContextIndexForRequest({ reuseCached });
         figma.ui.postMessage({ type: 'ds-context-index-result', requestId, index, hash: index.hash });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);

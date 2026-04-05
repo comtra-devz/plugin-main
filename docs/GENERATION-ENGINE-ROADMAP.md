@@ -103,6 +103,10 @@ Allineato allo executor plugin; per Problem 1 le azioni devono referenziare **id
 
 **Deliverable:** moduli nel bundle `controller` / `code.js` che costruiscono cache + indice + hash; evento refresh su `documentchange` (debounced).
 
+**Performance (DS molto grandi, primo build):** ricerca e leve evidence-based in [`docs/DS-CONTEXT-INDEX-PERFORMANCE.md`](./DS-CONTEXT-INDEX-PERFORMANCE.md) (`findAllWithCriteria`, `skipInvisibleInstanceChildren`, warm-up, contratto payload).
+
+**Catalogo unico del file (proposta):** [`docs/PLUGIN-DOCUMENT-INDEX-PLAN.md`](./PLUGIN-DOCUMENT-INDEX-PLAN.md) — documento di proposta per presentazione; per dettagli tecnici vedi anche `DS-CONTEXT-INDEX-PERFORMANCE.md`.
+
 **Test:** file con 20+ componenti e 50+ variabili → indice sotto soglia byte/righe; hash cambia se rinomino un componente.
 
 ### Fase 2 — Trasporto indice → backend

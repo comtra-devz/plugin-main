@@ -7,7 +7,8 @@
 
 export const DS_CONTEXT_INDEX_VERSION = 1;
 
-const DEBOUNCE_MS = 600;
+/** Dopo modifiche al file, aspetta prima di scansione completa (file grandi + meno rivalidazioni ravvicinate). */
+const DEBOUNCE_MS = 1500;
 const MAX_COMPONENTS_IN_INDEX = 500;
 const MAX_VARIABLE_NAMES_IN_INDEX = 1500;
 const MAX_PROPERTY_KEYS = 24;
@@ -44,6 +45,56 @@ type BuildResult = { index: DsContextIndexPayload; canonicalJson: string };
 
 let cache: BuildResult | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Increments on every `documentchange` so we know if a cached index predates edits. */
+let docEpoch = 0;
+/** `docEpoch` value for which `cache` was built; if !== `docEpoch`, cached payload is stale. */
+let cacheBuiltAtEpoch: number | null = null;
+
+const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
+
+function isIndexCacheFresh(): boolean {
+  return cache !== null && cacheBuiltAtEpoch !== null && cacheBuiltAtEpoch === docEpoch;
+}
+
+/**
+ * Durante `executeActionPlanOnCanvas` il documento riceve molti `documentchange`; un rebuild
+ * completo dell’indice in parallelo impallerebbe Figma su file grandi. Si sospende il refresh
+ * e si fa al massimo un debounce dopo la fine.
+ */
+let refreshSuspended = false;
+let dirtyWhileSuspended = false;
+
+/**
+ * true = non schedulare rebuild su documentchange (es. mentre si applica un action plan).
+ * Alla ripresa, un solo refresh debounced se nel frattempo il file è cambiato.
+ */
+export function setDsContextIndexRefreshSuspended(suspended: boolean): void {
+  if (suspended) {
+    refreshSuspended = true;
+    if (debounceTimer != null) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+  } else {
+    refreshSuspended = false;
+    if (dirtyWhileSuspended) {
+      dirtyWhileSuspended = false;
+      runDebouncedRefresh();
+    }
+  }
+}
+
+/** Evita più `loadAllPagesAsync` sovrapposti (init + primo build spesso in sequenza ravvicinata). */
+let loadAllPagesInFlight: Promise<void> | null = null;
+async function ensureAllPagesLoaded(): Promise<void> {
+  if (!loadAllPagesInFlight) {
+    loadAllPagesInFlight = figma.loadAllPagesAsync().finally(() => {
+      loadAllPagesInFlight = null;
+    });
+  }
+  return loadAllPagesInFlight;
+}
 
 function stableStringifyForHash(obj: unknown): string {
   const sortObjectDeep = (v: unknown): unknown => {
@@ -104,8 +155,9 @@ function summarizeComponent(node: ComponentNode | ComponentSetNode): DsComponent
 }
 
 async function collectAllLocalComponents(): Promise<(ComponentNode | ComponentSetNode)[]> {
-  await figma.loadAllPagesAsync();
+  await ensureAllPagesLoaded();
   const out: (ComponentNode | ComponentSetNode)[] = [];
+  let pageIdx = 0;
   for (const child of figma.root.children) {
     if (child.type !== 'PAGE') continue;
     try {
@@ -118,6 +170,9 @@ async function collectAllLocalComponents(): Promise<(ComponentNode | ComponentSe
         n.type === 'COMPONENT' || n.type === 'COMPONENT_SET'
     );
     for (const n of found) out.push(n);
+    pageIdx++;
+    // `findAll` è sincrono e su file grandi blocca il main thread: cedi tra una pagina e l’altra.
+    if (pageIdx % 2 === 0) await yieldToMain();
   }
   return out;
 }
@@ -217,24 +272,55 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
 }
 
 function runDebouncedRefresh(): void {
+  if (refreshSuspended) {
+    dirtyWhileSuspended = true;
+    return;
+  }
   if (debounceTimer != null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
+    const e0 = docEpoch;
     buildDsContextIndex()
       .then((r) => {
+        if (docEpoch !== e0) {
+          runDebouncedRefresh();
+          return;
+        }
         cache = r;
+        cacheBuiltAtEpoch = e0;
       })
       .catch((e) => console.error('[ds-context-index]', e));
   }, DEBOUNCE_MS);
 }
 
+function onDocumentOrStructureChange(): void {
+  docEpoch++;
+  runDebouncedRefresh();
+}
+
 /**
  * Call once at plugin startup: refresh index after edits (debounced).
+ * With `documentAccess: "dynamic-page"`, Figma requires `loadAllPagesAsync` before
+ * registering `documentchange` (incremental document mode); otherwise the plugin crashes on startup.
  */
-export function initDsContextIndexLifecycle(): void {
-  figma.on('documentchange', runDebouncedRefresh);
+export async function initDsContextIndexLifecycle(): Promise<void> {
+  await ensureAllPagesLoaded();
+  figma.on('documentchange', onDocumentOrStructureChange);
   figma.on('currentpagechange', runDebouncedRefresh);
-  runDebouncedRefresh();
+  /** Nessun build immediato: alleggerisce l'apertura del plugin; l'indice si costruisce su prima Generate / get-ds-context-index / documentchange. */
+}
+
+/**
+ * Usato dalla UI prima di `/api/agents/generate`: se il file non è cambiato dall’ultimo build,
+ * evita una seconda scansione completa (spesso ~secondi su migliaia di nodi).
+ */
+export async function resolveDsContextIndexForRequest(options?: {
+  reuseCached?: boolean;
+}): Promise<DsContextIndexPayload> {
+  if (options?.reuseCached !== false && isIndexCacheFresh()) {
+    return cache!.index;
+  }
+  return buildAndCacheDsContextIndex();
 }
 
 /**
@@ -245,9 +331,16 @@ export async function buildAndCacheDsContextIndex(): Promise<DsContextIndexPaylo
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  const r = await buildDsContextIndex();
-  cache = r;
-  return r.index;
+  for (;;) {
+    const e0 = docEpoch;
+    const r = await buildDsContextIndex();
+    if (docEpoch === e0) {
+      cache = r;
+      cacheBuiltAtEpoch = e0;
+      return r.index;
+    }
+    await yieldToMain();
+  }
 }
 
 export function getCachedDsContextIndex(): DsContextIndexPayload | null {

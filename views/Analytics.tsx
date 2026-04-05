@@ -258,8 +258,10 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
   );
   const nextLevelXp = user?.xp_for_next_level ?? 100;
   const xpCurrentStart = user?.xp_for_current_level_start ?? 0;
+  const xpSegmentSize = nextLevelXp > xpCurrentStart ? nextLevelXp - xpCurrentStart : 1;
+  const xpIntoLevel = Math.max(0, xp - xpCurrentStart);
   const progress = nextLevelXp > xpCurrentStart
-    ? Math.min(100, ((xp - xpCurrentStart) / (nextLevelXp - xpCurrentStart)) * 100)
+    ? Math.min(100, (xpIntoLevel / xpSegmentSize) * 100)
     : 100;
 
   // Discount Logic: 5% every 5 levels, max 20%
@@ -360,7 +362,11 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
           </div>
           
           <div className="text-right relative z-[1] mb-1">
-              <span className="text-[10px] font-mono text-gray-400">{xp} XP / {nextLevelXp} XP</span>
+              <span className="text-[10px] font-mono text-gray-400">
+                {nextLevelXp > xpCurrentStart
+                  ? `${xpIntoLevel} / ${xpSegmentSize} XP → L${level + 1}`
+                  : `${xp} XP`}
+              </span>
           </div>
 
           {/* Progress Bar */}

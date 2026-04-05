@@ -6,6 +6,8 @@
 
 type VarMap = Map<string, Variable>;
 
+const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
@@ -587,6 +589,7 @@ export async function executeActionPlanOnCanvas(
   idMap.set('root', root);
 
   for (let i = 0; i < actions.length; i++) {
+    if (i > 0 && i % 15 === 0) await yieldToMain();
     const raw = actions[i];
     if (!isRecord(raw)) continue;
     const type = String(raw.type || '').trim();

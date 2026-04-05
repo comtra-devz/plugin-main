@@ -36,7 +36,7 @@ import {
   validateActionPlanNoInstanceForPublicDs,
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
-import { formatDesignIntelligenceForPrompt } from './design-intelligence.mjs';
+import { formatDesignIntelligenceForPrompt, inferFocusedScreenType } from './design-intelligence.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -798,6 +798,8 @@ app.post('/api/credits/consume', async (req, res) => {
     }
 
     let levelUp = false;
+    /** Livello persistito prima di questo consume (per modal client quando lo stato React era già allineato a GET). */
+    let levelUpPreviousLevel = null;
     let currentLevel = 1;
     let totalXp = 0;
     let xpForNextLevel = 100;
@@ -805,19 +807,27 @@ app.post('/api/credits/consume', async (req, res) => {
     const u = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${userId} LIMIT 1`;
     if (u.rows.length > 0) {
       totalXp = Math.max(0, Number(u.rows[0].total_xp) || 0);
-      const oldLevel = Math.max(1, Number(u.rows[0].current_level) || 1);
+      const oldLevelDb = Math.max(1, Number(u.rows[0].current_level) || 1);
       if (xpEarned > 0) {
         totalXp += xpEarned;
         const info = getLevelInfo(totalXp);
         currentLevel = info.level;
         xpForNextLevel = info.xpForNextLevel;
-        levelUp = currentLevel > oldLevel;
+        levelUp = currentLevel > oldLevelDb;
+        if (levelUp) levelUpPreviousLevel = oldLevelDb;
         await dbSql`UPDATE users SET total_xp = ${totalXp}, current_level = ${currentLevel}, updated_at = NOW() WHERE id = ${userId}`;
         await dbSql`INSERT INTO xp_transactions (user_id, action_type, xp_earned) VALUES (${userId}, ${actionType}, ${xpEarned})`;
       } else {
         const info = getLevelInfo(totalXp);
         currentLevel = info.level;
         xpForNextLevel = info.xpForNextLevel;
+        // XP già sufficiente per un livello più alto ma DB non allineato (es. azione senza voce in XP_BY_ACTION):
+        // al prossimo consume mostriamo comunque level_up e sincronizziamo current_level.
+        if (currentLevel > oldLevelDb) {
+          levelUp = true;
+          levelUpPreviousLevel = oldLevelDb;
+          await dbSql`UPDATE users SET current_level = ${currentLevel}, updated_at = NOW() WHERE id = ${userId}`;
+        }
       }
     }
 
@@ -873,6 +883,7 @@ app.post('/api/credits/consume', async (req, res) => {
       credits_total: total,
       credits_used: newUsed,
       level_up: levelUp,
+      ...(levelUp && levelUpPreviousLevel != null ? { level_up_previous_level: levelUpPreviousLevel } : {}),
       current_level: currentLevel,
       total_xp: totalXp,
       xp_for_next_level: xpForNextLevel,
@@ -1020,8 +1031,13 @@ app.post('/api/figma/token-status', async (req, res) => {
 // --- DS Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
 const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
-/** Model with vision when messages include image parts (defaults to KIMI_MODEL). */
-const KIMI_VISION_MODEL = process.env.KIMI_VISION_MODEL || KIMI_MODEL;
+/**
+ * Modello per messaggi multimodali (image_url in content).
+ * Moonshot elenca esplicitamente modelli vision: moonshot-v1-*-vision-preview, kimi-k2.5, ecc.
+ * Il default testuale (es. kimi-k2-0905-preview) non è nella lista ufficiale “vision”.
+ * @see https://platform.moonshot.ai/docs/guide/use-kimi-vision-model
+ */
+const KIMI_VISION_MODEL = process.env.KIMI_VISION_MODEL || 'kimi-k2.5';
 const DS_AUDIT_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'ds-audit-system.md');
 
 /** Risposta Moonshot/OpenAI: campi usage variabili; a volte solo total_tokens (dashboard costi). */
@@ -1818,10 +1834,16 @@ async function callKimi(messages, maxTokens = 8192) {
   const usesVision =
     Array.isArray(messages) && messages.some((m) => m && typeof m === 'object' && Array.isArray(m.content));
   const model = usesVision ? KIMI_VISION_MODEL : KIMI_MODEL;
+  /** kimi-k2.5: la doc Moonshot impone temperature/top_p fissi; altri valori possono dare errore. */
+  const isK25Family = /k2\.5/i.test(String(model));
+  const payload = { model, messages, max_tokens: maxTokens };
+  if (!isK25Family) {
+    payload.temperature = 0.3;
+  }
   const r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
-    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxTokens }),
+    body: JSON.stringify(payload),
   });
   if (!r.ok) {
     const t = await r.text();
@@ -1940,9 +1962,15 @@ app.post('/api/agents/generate', async (req, res) => {
           `ds_cache_hash: ${dsIndexHashLine}`,
         ].join('\n')
       : '';
-    const designIntelBlock = formatDesignIntelligenceForPrompt(fileKey);
+    const inferredScreenArchetype = inferFocusedScreenType(prompt);
+    const designIntelBlock = formatDesignIntelligenceForPrompt(fileKey, {
+      focusScreenType: inferredScreenArchetype,
+    });
     const contextBlob = [
       `Mode: ${mode}.`,
+      inferredScreenArchetype
+        ? `Inferred screen archetype: ${inferredScreenArchetype} (layout and checklist prioritize this type).`
+        : 'Inferred screen archetype: none — full pattern library in DESIGN INTELLIGENCE block.',
       `DS source: ${dsSource}.`,
       `Resolved DS id: ${resolvedDsId || 'none'}.`,
       `Context profile: platform=${contextProfile.platform}, density=${contextProfile.density}, input_mode=${contextProfile.input_mode}, selection_type=${contextProfile.selection_type}.`,
@@ -2102,6 +2130,7 @@ app.post('/api/agents/generate', async (req, res) => {
 
     if (!actionPlan.metadata || typeof actionPlan.metadata !== 'object') actionPlan.metadata = {};
     if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
+    actionPlan.metadata.inferred_screen_archetype = inferredScreenArchetype ?? null;
     actionPlan.metadata.generation_pipeline = generationPipeline;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;

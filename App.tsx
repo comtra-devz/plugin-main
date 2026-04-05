@@ -885,7 +885,12 @@ export default function AppTest() {
       ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
       : prev);
     if (data.level_up && data.current_level != null) {
-      const oldLevel = Math.max(1, (user?.current_level ?? 1));
+      const oldLevel = Math.max(
+        1,
+        typeof data.level_up_previous_level === 'number' && Number.isFinite(data.level_up_previous_level)
+          ? data.level_up_previous_level
+          : (user?.current_level ?? 1)
+      );
       const discount = Math.min(20, Math.floor((data.current_level ?? 1) / 5) * 5);
       setLevelUpData({
         oldLevel,
@@ -1106,7 +1111,10 @@ export default function AppTest() {
     return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
       const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       dsContextIndexWaitersRef.current.set(requestId, resolve);
-      window.parent.postMessage({ pluginMessage: { type: 'get-ds-context-index', requestId } }, '*');
+      window.parent.postMessage(
+        { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached: true } },
+        '*',
+      );
       window.setTimeout(() => {
         const fn = dsContextIndexWaitersRef.current.get(requestId);
         if (!fn) return;

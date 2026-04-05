@@ -169,7 +169,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   };
 
   return (
-    <div className={`${BRUTAL.card} relative overflow-hidden bg-white p-0 animate-in slide-in-from-right-2`}>
+    <div className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] relative overflow-hidden animate-in slide-in-from-right-2">
       <div className="p-3 border-b-2 border-black bg-black text-white flex justify-between items-center">
         <h3 className="font-bold uppercase text-xs">Deep Sync</h3>
       </div>
@@ -179,26 +179,26 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           <div className="grid grid-cols-3 border-b-2 border-black">
             <button 
               onClick={() => setActiveSyncTab('SB')}
-              className={`py-2 text-[10px] font-bold uppercase transition-colors ${activeSyncTab === 'SB' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
+              className={`py-3 px-2 text-[10px] font-bold uppercase transition-colors ${activeSyncTab === 'SB' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
             >
               Storybook
             </button>
             <button 
               onClick={() => setActiveSyncTab('GH')}
-              className={`py-2 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${activeSyncTab === 'GH' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
+              className={`py-3 px-2 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${activeSyncTab === 'GH' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
             >
               GitHub
             </button>
             <button 
               onClick={() => setActiveSyncTab('BB')}
-              className={`py-2 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${activeSyncTab === 'BB' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
+              className={`py-3 px-2 text-[10px] font-bold uppercase transition-colors border-l-2 border-black ${activeSyncTab === 'BB' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
             >
               Bitbucket
             </button>
           </div>
 
           {activeSyncTab === 'SB' && (
-            <div className="p-4 animate-in slide-in-from-left-2">
+            <div className="px-2 py-2 animate-in slide-in-from-left-2">
               {!isSbConnected ? (
                 <div className="space-y-3">
                   <p className="text-xs font-medium">Pick a public Storybook or enter your own URL. We’ll check that it exposes the stories API.</p>
