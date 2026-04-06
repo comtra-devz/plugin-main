@@ -962,7 +962,8 @@ export default function AppTest() {
       let msg = text;
       try {
         const j = JSON.parse(text);
-        msg = j.error || text;
+        const details = typeof j.details === 'string' && j.details.trim() ? ` (${j.details.trim()})` : '';
+        msg = (j.error || text) + details;
       } catch {
         // keep as-is
       }

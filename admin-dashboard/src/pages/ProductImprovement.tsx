@@ -21,7 +21,6 @@ export default function ProductImprovement() {
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [gitStep, setGitStep] = useState<0 | 1 | 2>(0);
   const [gitConfirmText, setGitConfirmText] = useState('');
-  const [enrichLinkedIn, setEnrichLinkedIn] = useState(false);
   const [fetchWeb, setFetchWeb] = useState(false);
   const [includeDocSnapshot, setIncludeDocSnapshot] = useState(false);
   const [includeLlmSynthesis, setIncludeLlmSynthesis] = useState(false);
@@ -92,8 +91,8 @@ export default function ProductImprovement() {
     setResult(null);
     scanNotionProductSources(
       p
-        ? { pageId: p, enrichLinkedIn, fetchWeb, includeDocSnapshot, includeLlmSynthesis }
-        : { databaseId: d, enrichLinkedIn, fetchWeb, includeDocSnapshot, includeLlmSynthesis },
+        ? { pageId: p, fetchWeb, includeDocSnapshot, includeLlmSynthesis }
+        : { databaseId: d, fetchWeb, includeDocSnapshot, includeLlmSynthesis },
     )
       .then(setResult)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -278,31 +277,9 @@ export default function ProductImprovement() {
             />
           </label>
         </div>
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.5rem',
-            marginTop: '0.75rem',
-            fontSize: '0.8rem',
-            cursor: 'pointer',
-            maxWidth: '36rem',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={enrichLinkedIn}
-            onChange={(e) => setEnrichLinkedIn(e.target.checked)}
-            disabled={loading}
-            style={{ marginTop: '0.15rem' }}
-          />
-          <span>
-            <strong>Arricchisci post LinkedIn (Apify)</strong> — estrae <strong>testo del post</strong> e{' '}
-            <strong>link nel post</strong> (no commenti). Richiede <code>APIFY_TOKEN</code> e{' '}
-            <code>APIFY_LINKEDIN_ACTOR_ID</code> su Vercel; la richiesta può durare <strong>molti secondi</strong> e
-            rispetta <code>PRODUCT_SOURCES_MAX_LINKEDIN_PER_RUN</code> su Vercel (default 20 — tetto tecnico configurabile, non un tetto di business).
-          </span>
-        </label>
+        <p style={{ fontSize: '0.8rem', marginTop: '0.75rem', color: 'var(--muted-fg, #555)' }}>
+          Arricchimento LinkedIn (Apify): <strong>disattivato</strong> in dashboard per evitare consumo crediti.
+        </p>
         <label
           style={{
             display: 'flex',
@@ -413,11 +390,6 @@ export default function ProductImprovement() {
               <li>
                 Blocchi ignorati (filtro): <strong>{result.stats.ignoredBlocks}</strong>
               </li>
-              {result.enrichLinkedInRequested && (
-                <li>
-                  LinkedIn processati da Apify (tentativi): <strong>{result.linkedinEnriched ?? 0}</strong>
-                </li>
-              )}
               {result.fetchWebRequested && (
                 <li>
                   Web — URL in batch (strategia Fase 2): <strong>{result.webEnriched ?? 0}</strong>

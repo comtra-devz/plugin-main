@@ -420,10 +420,9 @@ async function handleCronProductSources(req, res) {
 
     const linkedinUrlsForApify = refetchAllLinkedIn ? linkedinUrlsAll : linkedinUrlsNew;
 
-    const linkedinApifyMode = refetchAllLinkedIn ? 'refetch_all' : 'new_only';
-    const skipLinkedin =
-      process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === '1' ||
-      process.env.PRODUCT_SOURCES_SKIP_LINKEDIN === 'true';
+    const linkedinApifyMode = 'disabled';
+    // Hard-stop dashboard LinkedIn scraping to avoid Apify credit consumption.
+    const skipLinkedin = true;
 
     const fetchWebEnabled =
       process.env.PRODUCT_SOURCES_FETCH_WEB === '1' ||

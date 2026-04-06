@@ -71,8 +71,8 @@ export default async function handler(req, res) {
   }
 
   const ignoreTokens = Array.isArray(body.ignoreTokens) ? body.ignoreTokens : [];
-  const enrichLinkedIn =
-    body.enrichLinkedIn === true || String(body.enrichLinkedIn || '').toLowerCase() === 'true';
+  // Hard-stop dashboard LinkedIn scraping to avoid Apify credit consumption.
+  const enrichLinkedIn = false;
   const fetchWeb =
     body.fetchWeb === true ||
     String(body.fetchWeb || '').toLowerCase() === 'true' ||

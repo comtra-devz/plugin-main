@@ -238,19 +238,19 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         </div>
                       ))}
                     </BrutalDropdown>
+                    <label className="text-[10px] font-bold uppercase text-gray-600">Or paste URL</label>
+                    <input
+                      type="text"
+                      inputMode="url"
+                      autoComplete="url"
+                      placeholder="https://jetbrains.github.io/ring-ui/master"
+                      value={connectInput}
+                      onChange={(e) => {
+                        setConnectInput(e.target.value);
+                      }}
+                      className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none min-w-0"
+                    />
                   </div>
-                  <label className="text-[10px] font-bold uppercase text-gray-600 block mt-1">Or paste URL</label>
-                  <input
-                    type="text"
-                    inputMode="url"
-                    autoComplete="url"
-                    placeholder="https://jetbrains.github.io/ring-ui/master"
-                    value={connectInput}
-                    onChange={(e) => {
-                      setConnectInput(e.target.value);
-                    }}
-                    className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none min-w-0"
-                  />
                   <div className="flex items-center justify-between gap-2 border border-dashed border-gray-400 bg-gray-50 p-2">
                     <span className="text-[10px] font-bold uppercase text-gray-700">Private Storybook (use access token)</span>
                     <button

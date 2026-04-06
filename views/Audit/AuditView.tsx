@@ -271,14 +271,23 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         });
         return;
       }
-      const opts = /timeout|504|timed out/i.test(message)
+      const isTimeout = /timeout|504|timed out/i.test(message);
+      const isKimiValidation = /kimi api error|context|token|too large|max(_| )?completion|invalid_request|model/i.test(message.toLowerCase());
+      const opts = isTimeout
         ? getSystemToastOptions('audit_timed_out')
-        : getSystemToastOptions('audit_couldnt_start');
+        : isKimiValidation
+          ? getSystemToastOptions('audit_couldnt_start', {
+              description: 'UX audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.',
+            })
+          : getSystemToastOptions('audit_couldnt_start');
       showToast({
         ...opts,
         dismissible: true,
         actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
       });
+      if (isUx && isKimiValidation) {
+        setUxAuditError(message);
+      }
     },
     [showToast, onRetryConnection]
   );
