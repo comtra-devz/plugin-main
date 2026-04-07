@@ -625,7 +625,26 @@ app.get('/api/credits', async (req, res) => {
     });
   }
   try {
-    const r = await dbSql`SELECT credits_total, credits_used, plan, plan_expires_at, total_xp, current_level FROM users WHERE id = ${userId}`;
+    const [r, tr, giftRows] = await Promise.all([
+      dbSql`SELECT credits_total, credits_used, plan, plan_expires_at, total_xp, current_level FROM users WHERE id = ${userId}`,
+      (async () => {
+        try {
+          return await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${userId} LIMIT 1`;
+        } catch {
+          return { rows: [] };
+        }
+      })(),
+      (async () => {
+        try {
+          return await dbSql`
+            SELECT credits_added, created_at FROM user_credit_gifts
+            WHERE user_id = ${userId} AND shown_at IS NULL ORDER BY created_at DESC
+          `;
+        } catch {
+          return { rows: [] };
+        }
+      })(),
+    ]);
     if (r.rows.length === 0) {
       return res.json({
         credits_remaining: FREE_TIER_CREDITS,
@@ -649,27 +668,28 @@ app.get('/api/credits', async (req, res) => {
     let stats = null;
     let recent_transactions = [];
     if (!lite) {
-      try {
-        stats = await getProductionStats(dbSql, userId);
-      } catch (statsErr) {
-        console.error('GET /api/credits: getProductionStats failed (non-fatal)', statsErr);
-      }
-      try {
-        const tx = await dbSql`
+      const [statsResult, txResult] = await Promise.all([
+        getProductionStats(dbSql, userId).catch((statsErr) => {
+          console.error('GET /api/credits: getProductionStats failed (non-fatal)', statsErr);
+          return null;
+        }),
+        dbSql`
           SELECT action_type, credits_consumed, created_at
           FROM credit_transactions
           WHERE user_id = ${userId}
           ORDER BY created_at DESC
           LIMIT 30
-        `;
-        recent_transactions = (tx.rows || []).map((r) => ({
-          action_type: r.action_type,
-          credits_consumed: Number(r.credits_consumed) || 0,
-          created_at: r.created_at,
-        }));
-      } catch (txErr) {
-        console.error('GET /api/credits: recent_transactions failed (non-fatal)', txErr);
-      }
+        `.catch((txErr) => {
+          console.error('GET /api/credits: recent_transactions failed (non-fatal)', txErr);
+          return { rows: [] };
+        }),
+      ]);
+      stats = statsResult;
+      recent_transactions = (txResult.rows || []).map((txRow) => ({
+        action_type: txRow.action_type,
+        credits_consumed: Number(txRow.credits_consumed) || 0,
+        created_at: txRow.created_at,
+      }));
     }
     const out = {
       credits_remaining: remaining,
@@ -684,24 +704,15 @@ app.get('/api/credits', async (req, res) => {
       ...(stats && { stats }),
       recent_transactions,
     };
-    try {
-      const tr = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${userId} LIMIT 1`;
-      if (tr.rows.length > 0) {
-        const raw = tr.rows[0].tags;
-        out.tags = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) ? [] : []);
-      }
-    } catch (_) { /* tags column may not exist before migration 006 */ }
-    try {
-      const giftRows = await dbSql`
-        SELECT credits_added, created_at FROM user_credit_gifts
-        WHERE user_id = ${userId} AND shown_at IS NULL ORDER BY created_at DESC
-      `;
-      if (giftRows.rows && giftRows.rows.length > 0) {
-        const totalAdded = giftRows.rows.reduce((s, r) => s + (Number(r.credits_added) || 0), 0);
-        const latest = giftRows.rows[0];
-        out.gift = { credits_added: totalAdded, created_at: latest.created_at };
-      }
-    } catch (_) { /* user_credit_gifts may not exist before migration 007 */ }
+    if (tr.rows.length > 0) {
+      const raw = tr.rows[0].tags;
+      out.tags = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) ? [] : []);
+    }
+    if (giftRows.rows && giftRows.rows.length > 0) {
+      const totalAdded = giftRows.rows.reduce((s, gr) => s + (Number(gr.credits_added) || 0), 0);
+      const latest = giftRows.rows[0];
+      out.gift = { credits_added: totalAdded, created_at: latest.created_at };
+    }
     res.json(out);
   } catch (err) {
     console.error('GET /api/credits', err);
@@ -1579,10 +1590,29 @@ function sizeBandFromNodeCount(n) {
   return '200k+';
 }
 
+/** Parallel Figma REST calls with bounded concurrency (sequential was N×latency for “all pages” audits). */
+async function mapWithConcurrency(items, concurrency, mapper) {
+  if (!items.length) return [];
+  const cap = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await mapper(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: cap }, () => worker()));
+  return results;
+}
+
 /** REST `depth` too shallow → inner frames get empty `children` in JSON → false DS-4.1 "ghost / no children". */
 const FIGMA_AUDIT_REST_DEPTH_NODES = 8;
 const FIGMA_AUDIT_REST_DEPTH_PAGE = 8;
 const FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW = 5;
+/** Max parallel GET /v1/files/... per multi-page audit (Figma rate limits ~ tier-dependent; 6 is a safe default). */
+const FIGMA_AUDIT_PAGE_FETCH_CONCURRENCY = 6;
 
 /** Fetch file JSON from Figma REST API. Never requests the full file in one go: per-page or per-node only, to avoid 400 on large files. Returns { document } for audit engines. */
 async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeIds, pageIds) {
@@ -1628,13 +1658,18 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   if (scopeType === 'all' && pageIdsArr.length > 0) {
     const allChildren = [];
     let components = undefined;
-    for (const pid of pageIdsArr) {
+    const pageResults = await mapWithConcurrency(pageIdsArr, FIGMA_AUDIT_PAGE_FETCH_CONCURRENCY, async (pid) => {
       const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
       url.searchParams.set('ids', pid);
       url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_PAGE));
       const res = await fetch(url.toString(), auth);
-      if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
-      const data = await res.json();
+      if (!res.ok) {
+        const t = await res.text();
+        handleFigmaError(res, t);
+      }
+      return res.json();
+    });
+    for (const data of pageResults) {
       const doc = data.document || {};
       const kids = Array.isArray(doc.children) ? doc.children : [];
       allChildren.push(...kids);

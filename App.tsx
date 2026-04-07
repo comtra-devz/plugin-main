@@ -39,6 +39,7 @@ const CREDITS_FETCH_TIMEOUT_FULL_MS = 28_000;
 /** Coalesce parallel GET /api/credits (stesso iframe): più effect/handler non duplicano la richiesta. */
 let creditsInflightLite: Promise<CreditsFetchOutcome> | null = null;
 let creditsInflightFull: Promise<CreditsFetchOutcome> | null = null;
+let trophiesInflight: Promise<void> | null = null;
 
 function readCreditsCache(userId: string): CreditsState | null {
   try {
@@ -566,21 +567,41 @@ export default function AppTest() {
 
   const fetchTrophies = React.useCallback(async () => {
     if (!user?.authToken) return;
-    try {
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies`, {
-        headers: { Authorization: `Bearer ${user.authToken}` },
-      });
-      if (r.status === 503) { handle503(); return; }
-      if (!r.ok) return;
-      const data = await r.json();
-      setTrophies(data.trophies ?? []);
-    } catch (_) {}
+    if (trophiesInflight) return trophiesInflight;
+    const run = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+        const r = await fetch(`${AUTH_BACKEND_URL}/api/trophies`, {
+          headers: { Authorization: `Bearer ${user.authToken}` },
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
+        if (r.status === 503) {
+          handle503();
+          return;
+        }
+        if (!r.ok) return;
+        const data = await r.json();
+        setTrophies(data.trophies ?? []);
+      } catch {
+        // best-effort: non bloccare UX se trophies è lento/non raggiungibile
+      }
+    };
+    trophiesInflight = run().finally(() => {
+      trophiesInflight = null;
+    });
+    return trophiesInflight;
   }, [user?.authToken, handle503]);
 
   useEffect(() => {
-    if (user?.authToken) fetchTrophies();
-    else setTrophies(null);
-  }, [user?.authToken, user?.id, fetchTrophies]);
+    if (!user?.authToken) setTrophies(null);
+  }, [user?.authToken, user?.id]);
+
+  useEffect(() => {
+    if (!user?.authToken) return;
+    if (view !== ViewState.ANALYTICS && !showProfile) return;
+    fetchTrophies();
+  }, [view, showProfile, user?.authToken, user?.id, fetchTrophies]);
 
   const fileContextResolveRef = useRef<((data: { fileKey: string | null; error?: string | null }) => void) | null>(null);
   const actionPlanExecWaitersRef = useRef<
@@ -967,6 +988,7 @@ export default function AppTest() {
       } catch {
         // keep as-is
       }
+      console.warn('[Comtra] POST /api/agents/ds-audit failed', r.status, msg.slice(0, 400));
       throw new Error(msg);
     }
     return r.json();
