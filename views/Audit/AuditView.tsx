@@ -272,9 +272,20 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         return;
       }
       const isTimeout = /timeout|504|timed out/i.test(message);
-      const isKimiValidation = /kimi api error|context|token|too large|max(_| )?completion|invalid_request|model/i.test(message.toLowerCase());
+      const lowerMsg = message.toLowerCase();
+      const isRateLimited = lowerMsg.includes('kimi_rate_limit') || lowerMsg.includes('rate limit') || lowerMsg.includes('rate-limited');
+      const isInputTooLarge = lowerMsg.includes('ux_audit_input_too_large') || lowerMsg.includes('selection too large for ux audit');
+      const isKimiValidation = /kimi api error|context|token|too large|max(_| )?completion|invalid_request|model/i.test(lowerMsg);
       const opts = isTimeout
         ? getSystemToastOptions('audit_timed_out')
+        : isRateLimited
+          ? getSystemToastOptions('service_unavailable', {
+              description: 'The UX audit is temporarily busy. Please retry in about a minute.',
+            })
+        : isInputTooLarge
+          ? getSystemToastOptions('audit_timed_out', {
+              description: 'This selection is too large for UX Audit. Try a smaller frame group or a tighter page section.',
+            })
         : isKimiValidation
           ? getSystemToastOptions('audit_couldnt_start', {
               description: 'UX audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.',
@@ -285,8 +296,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         dismissible: true,
         actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
       });
-      if (isUx && isKimiValidation) {
-        setUxAuditError(message);
+      if (isUx && (isKimiValidation || isRateLimited || isInputTooLarge)) {
+        setUxAuditError(opts.description ?? opts.title);
       }
     },
     [showToast, onRetryConnection]
@@ -840,7 +851,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
         (async () => {
           try {
-            if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
+            // UX: charge only after successful provider response to avoid charging on 429/temporary failures.
+            const shouldChargeBeforeAudit = !isUxScan;
+            if (shouldChargeBeforeAudit && !useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
               const result = await consumeCredits({
                 action_type: isUxScan ? 'ux_audit' : isA11yScan ? 'a11y_audit' : 'audit',
                 credits_consumed: payload.cost,
@@ -865,6 +878,22 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setUxAuditError(null);
               setUxAuditLoading(true);
               const data = await fetchUxAudit(auditBody);
+              if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
+                const chargeResult = await consumeCredits({
+                  action_type: 'ux_audit',
+                  credits_consumed: payload.cost,
+                  max_health_score: payload.score,
+                });
+                if (chargeResult.error === 'Insufficient credits') {
+                  onUnlockRequest();
+                  setWaitingForFileContext(false);
+                  return;
+                }
+                if (chargeResult.error) {
+                  setAuditError(chargeResult.error);
+                  return;
+                }
+              }
               setUxAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
               setHasUxAudited(true);
               setLastUxAuditDate(new Date());

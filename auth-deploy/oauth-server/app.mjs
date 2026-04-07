@@ -2407,7 +2407,18 @@ app.post('/api/agents/ux-audit', async (req, res) => {
       return res.status(400).json({ error: 'file_json must include document' });
     }
 
-    const userMessage = `Ecco il JSON del file di design. Esegui l'audit UX secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.\n\n${JSON.stringify(fileJson)}`;
+    // Keep UX payload under model context budget. System prompt for UX is large,
+    // so we cap file JSON aggressively and signal truncation to the model.
+    const UX_JSON_MAX = 140000;
+    let uxBlob = JSON.stringify(fileJson);
+    if (uxBlob.length > UX_JSON_MAX) {
+      uxBlob = `${uxBlob.slice(0, UX_JSON_MAX)}\n…[truncated for model input: file JSON exceeded size budget]`;
+    }
+    const userMessage = [
+      `Ecco il JSON del file di design. Esegui l'audit UX secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.`,
+      'Se trovi il marker "[truncated for model input]" tratta l\'analisi come partial scan e limita i risultati ai segnali più affidabili.',
+      uxBlob,
+    ].join('\n\n');
 
     const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
       method: 'POST',
@@ -2434,7 +2445,12 @@ app.post('/api/agents/ux-audit', async (req, res) => {
         return res.status(429).json({
           error: 'UX audit temporarily rate-limited by AI provider. Please retry in about 1 minute.',
           code: 'KIMI_RATE_LIMIT',
-          details: t.slice(0, 260),
+        });
+      }
+      if (kimiRes.status === 400 && /token limit|exceeded model token limit|invalid_request_error/i.test(t)) {
+        return res.status(413).json({
+          error: 'Selection too large for UX audit. Try Current Selection with fewer layers, or scan a smaller page section.',
+          code: 'UX_AUDIT_INPUT_TOO_LARGE',
         });
       }
       return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 260) });
