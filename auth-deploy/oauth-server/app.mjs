@@ -2428,7 +2428,16 @@ app.post('/api/agents/ux-audit', async (req, res) => {
     if (!kimiRes.ok) {
       const t = await kimiRes.text();
       console.error('UX Audit: Kimi API', kimiRes.status, t.slice(0, 300));
-      return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
+      // Preserve upstream semantics: 429 from Kimi should stay 429 (not generic 400),
+      // so frontend can show a proper "retry later" message.
+      if (kimiRes.status === 429) {
+        return res.status(429).json({
+          error: 'UX audit temporarily rate-limited by AI provider. Please retry in about 1 minute.',
+          code: 'KIMI_RATE_LIMIT',
+          details: t.slice(0, 260),
+        });
+      }
+      return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 260) });
     }
     const kimiData = await kimiRes.json();
     const content = kimiData?.choices?.[0]?.message?.content;
