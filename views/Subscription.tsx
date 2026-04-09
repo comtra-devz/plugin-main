@@ -119,7 +119,7 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
 
           {!isPro && (
              <div data-component="Subscription: Free Info Box" className="bg-gray-100 p-2 text-[10px] font-medium text-gray-600 border border-gray-300">
-                Free tier: 25 credits one-time (bonus benvenuto). Upgrade to PRO per più credits e tutte le funzionalità.
+                Free tier: 25 one-time credits (welcome bonus). Upgrade to PRO for more credits and full features.
              </div>
           )}
 

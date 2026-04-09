@@ -41,7 +41,7 @@ interface Props {
     error?: string | null;
   }>;
   requestDsContextIndex: RequestDsContextIndexFn;
-  /** Se il plugin non ha sessione, verifica se c’è uno snapshot DS salvato sul backend per questo file. */
+  /** When the plugin has no session cache, check the backend for a stored DS snapshot for this file. */
   checkServerHasDsContext: (fileKey: string) => Promise<boolean>;
   persistDsImportToServer: (body: {
     figma_file_key: string;
@@ -52,7 +52,7 @@ interface Props {
   }) => Promise<void>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
   selectedNode: { id: string; name: string; type: string } | null;
-  /** Esegue l'action plan nel main thread Figma (frame + azioni sulla pagina corrente). */
+  /** Runs the action plan on the Figma main thread (frame + actions on the current page). */
   applyActionPlanToCanvas: (
     plan: object,
     opts?: { modifyMode?: boolean },
@@ -74,7 +74,7 @@ function normalizeTerminalText(s: string): string {
   return s.replace(/\r\n/g, '\n').trim();
 }
 
-/** Evita Goal: Goal: … quando Enhance viene premuto più volte: tiene solo il testo obiettivo. */
+/** Strips duplicate "Goal:" prefixes when Enhance is used more than once. */
 function extractBaseForEnhance(raw: string): string {
   let t = normalizeTerminalText(raw);
   while (t.toLowerCase().startsWith('goal:')) {
@@ -121,6 +121,7 @@ export const Generate: React.FC<Props> = ({
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showReadFirstModal, setShowReadFirstModal] = useState(false);
+  const [showLegalModal, setShowLegalModal] = useState(false);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [hasContent, setHasContent] = useState(!!initialPrompt);
   const [promptText, setPromptText] = useState(initialPrompt || '');
@@ -136,9 +137,9 @@ export const Generate: React.FC<Props> = ({
 
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
-  /** Dopo Enhance: pulsante off finché l'utente non modifica il testo (evita doppi incastri). */
+  /** After Enhance: button stays off until the user edits the terminal (avoids nested enhance). */
   const [enhanceLocked, setEnhanceLocked] = useState(false);
-  /** Obiettivo “pulito” usato per rigenerare il blocco se cambia DS / contesto. */
+  /** Clean goal text used to rebuild the block when DS or context changes. */
   const [enhancedGoalSnapshot, setEnhancedGoalSnapshot] = useState<string | null>(null);
   const lastEnhancedBodyRef = useRef<string | null>(null);
   const enhanceLockedRef = useRef(false);
@@ -149,12 +150,12 @@ export const Generate: React.FC<Props> = ({
   // New State for Report Flow
   const [showReport, setShowReport] = useState(false);
   const lastActionPlanRef = useRef<object | null>(null);
-  /** Per “View in Figma” / ri-applica: stesso comportamento modify vs create dell’ultima generazione. */
+  /** For “View in Figma” / re-apply: same modify vs create as the last run. */
   const lastApplyWasModifyRef = useRef(false);
   const [canvasApplyResult, setCanvasApplyResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [canvasBusy, setCanvasBusy] = useState(false);
 
-  /** Solo per “Custom (Current)”: catalogo letto da Figma obbligatorio prima di generare. */
+  /** For “Custom (Current)” only: Figma catalog required before generate. */
   const [genFileKey, setGenFileKey] = useState<string | null>(null);
   const [genFileName, setGenFileName] = useState<string | null>(null);
   const [fileCtxLoading, setFileCtxLoading] = useState(false);
@@ -189,6 +190,8 @@ export const Generate: React.FC<Props> = ({
   const canGenerate = isPro || remaining > 0;
   const usesFileDs = selectedSystem === DESIGN_SYSTEMS[0];
   const dsGateBlocked = usesFileDs && (!catalogReady || dsImportBusy);
+  /** Custom (Current): hide the full composer until the step-by-step DS import is done. */
+  const showGenerateComposer = !usesFileDs || catalogReady;
 
   useEffect(() => {
     if (!usesFileDs) {
@@ -211,10 +214,10 @@ export const Generate: React.FC<Props> = ({
       const err =
         r.error != null && String(r.error).trim() !== ''
           ? String(r.error) === 'FILE_LINK_UNAVAILABLE'
-            ? 'Salva il file in Figma e riprova (file non collegato).'
+            ? 'Save this file in Figma and try again (file not linked).'
             : String(r.error)
           : !r.fileKey
-            ? 'Apri un file salvato in Figma.'
+            ? 'Open a saved file in Figma.'
             : null;
       setGenFileCtxError(err);
       if (err || !r.fileKey) return;
@@ -337,7 +340,7 @@ export const Generate: React.FC<Props> = ({
     [hasSelection, selectedLayerName, selectedNode?.type, screenshotAttachment, selectedSystem, userTier]
   );
 
-  /** Dopo Enhance, cambio DS/contesto: riscrivi il terminale senza mischiare due versioni. */
+  /** After Enhance, if DS/context changes, rewrite the terminal without mixing versions. */
   useEffect(() => {
     if (showReport || !enhanceLocked || enhancedGoalSnapshot == null || !inputRef.current) return;
     const next = buildEnhancedPrompt(enhancedGoalSnapshot);
@@ -469,7 +472,7 @@ export const Generate: React.FC<Props> = ({
       return;
     }
     if (usesFileDs && !catalogReady) {
-      setGenError('Prepara il catalogo del design system (sezione sopra) prima di generare.');
+      setGenError('Finish the design system import above before generating.');
       return;
     }
     setLoading(true);
@@ -615,7 +618,7 @@ export const Generate: React.FC<Props> = ({
   const filteredSystems = DESIGN_SYSTEMS.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
 
   return (
-    <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-16 min-h-full relative">
+    <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-28 min-h-full relative">
       
       {/* Credit Banner */}
       <div className="flex justify-center mb-2">
@@ -650,133 +653,135 @@ export const Generate: React.FC<Props> = ({
         />
       )}
 
-      {!showReport && (
-        <div className="flex justify-end -mt-1">
-          <button
-            type="button"
-            onClick={() => setShowReadFirstModal(true)}
-            className="text-[10px] font-black uppercase underline hover:text-[#ff90e8]"
+      {showGenerateComposer && !showReport && (
+        <>
+          <div className="flex justify-end -mt-1">
+            <button
+              type="button"
+              onClick={() => setShowReadFirstModal(true)}
+              className="text-[10px] font-black uppercase underline hover:text-[#ff90e8]"
+            >
+              Read First
+            </button>
+          </div>
+
+          {/* Context Layer + Design System: stessa tipologia (`SectionCard`), header opzionale a destra */}
+          <SectionCard
+            dataComponent="Generate: Context Card"
+            title="Context Layer"
+            titleDataComponent="Generate: Context Label"
+            headerRight={hasSelection ? selectedNode?.type : 'No selection'}
+            className="z-[5]"
           >
-            Read First
-          </button>
-        </div>
+            {hasSelection ? (
+              <>
+                <span data-component="Generate: Selection Value" className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate">
+                  Target: {selectedLayerName}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  Selection from canvas is active. Screenshot context is disabled until you deselect in Figma.
+                </span>
+              </>
+            ) : screenshotAttachment ? (
+              <div data-component="Generate: Uploaded File" className="flex justify-between items-center bg-gray-100 p-2 border border-black">
+                <span className="text-[10px] font-bold truncate">📄 {screenshotAttachment.name}</span>
+                <button type="button" onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
+              </div>
+            ) : (
+              <>
+                <span data-component="Generate: Selection Empty" className="text-[10px] text-gray-500 italic">
+                  No layer selected. Upload a screenshot if you want to start from an existing product reference.
+                </span>
+                <input
+                  ref={screenshotFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  aria-hidden
+                  onChange={handleScreenshotFileChange}
+                />
+                <button
+                  type="button"
+                  data-component="Generate: Upload Button"
+                  onClick={handleUploadClick}
+                  className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-500"
+                >
+                  Upload Image
+                </button>
+              </>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            dataComponent="Generate: DS Card"
+            title="Design System"
+            description="Define the component perimeter. Default uses your current/linked library and cannot be empty."
+            className="z-[4]"
+          >
+            <BrutalDropdown
+              open={isSystemOpen}
+              onOpenChange={setIsSystemOpen}
+              maxHeightClassName="max-h-[240px]"
+              panelClassName="!overflow-hidden flex flex-col p-0"
+              trigger={
+                <button
+                  type="button"
+                  data-component="Generate: DS Selector"
+                  onClick={() => setIsSystemOpen(!isSystemOpen)}
+                  className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
+                >
+                  <span className="truncate min-w-0">{selectedSystem}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedSystem !== DESIGN_SYSTEMS[0] && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); } }}
+                        className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
+                      >
+                        ✕
+                      </span>
+                    )}
+                    <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+              }
+            >
+              <input
+                type="text"
+                placeholder="Search System..."
+                autoFocus
+                value={systemSearch}
+                onChange={(e) => setSystemSearch(e.target.value)}
+                className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+                {filteredSystems.map((sys) => (
+                  <div
+                    key={sys}
+                    role="option"
+                    onClick={() => {
+                      setSelectedSystem(sys);
+                      setIsSystemOpen(false);
+                      setSystemSearch('');
+                    }}
+                    className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                  >
+                    {sys}
+                  </div>
+                ))}
+                {filteredSystems.length === 0 && (
+                  <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+                )}
+              </div>
+            </BrutalDropdown>
+          </SectionCard>
+        </>
       )}
 
-      {/* Context Layer + Design System: stessa tipologia (`SectionCard`), header opzionale a destra */}
-      <SectionCard
-        dataComponent="Generate: Context Card"
-        title="Context Layer"
-        titleDataComponent="Generate: Context Label"
-        headerRight={hasSelection ? selectedNode?.type : 'No selection'}
-        className="z-[5]"
-      >
-        {hasSelection ? (
-          <>
-            <span data-component="Generate: Selection Value" className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate">
-              Target: {selectedLayerName}
-            </span>
-            <span className="text-[10px] text-gray-500">
-              Selection from canvas is active. Screenshot context is disabled until you deselect in Figma.
-            </span>
-          </>
-        ) : screenshotAttachment ? (
-          <div data-component="Generate: Uploaded File" className="flex justify-between items-center bg-gray-100 p-2 border border-black">
-            <span className="text-[10px] font-bold truncate">📄 {screenshotAttachment.name}</span>
-            <button type="button" onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
-          </div>
-        ) : (
-          <>
-            <span data-component="Generate: Selection Empty" className="text-[10px] text-gray-500 italic">
-              No layer selected. Upload a screenshot if you want to start from an existing product reference.
-            </span>
-            <input
-              ref={screenshotFileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              aria-hidden
-              onChange={handleScreenshotFileChange}
-            />
-            <button
-              type="button"
-              data-component="Generate: Upload Button"
-              onClick={handleUploadClick}
-              className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-500"
-            >
-              Upload Image
-            </button>
-          </>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        dataComponent="Generate: DS Card"
-        title="Design System"
-        description="Define the component perimeter. Default uses your current/linked library and cannot be empty."
-        className="z-[4]"
-      >
-        <BrutalDropdown
-          open={isSystemOpen}
-          onOpenChange={setIsSystemOpen}
-          maxHeightClassName="max-h-[240px]"
-          panelClassName="!overflow-hidden flex flex-col p-0"
-          trigger={
-            <button
-              type="button"
-              data-component="Generate: DS Selector"
-              onClick={() => setIsSystemOpen(!isSystemOpen)}
-              className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
-            >
-              <span className="truncate min-w-0">{selectedSystem}</span>
-              <div className="flex items-center gap-2 shrink-0">
-                {selectedSystem !== DESIGN_SYSTEMS[0] && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); } }}
-                    className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
-                  >
-                    ✕
-                  </span>
-                )}
-                <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
-              </div>
-            </button>
-          }
-        >
-          <input
-            type="text"
-            placeholder="Search System..."
-            autoFocus
-            value={systemSearch}
-            onChange={(e) => setSystemSearch(e.target.value)}
-            className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
-            {filteredSystems.map((sys) => (
-              <div
-                key={sys}
-                role="option"
-                onClick={() => {
-                  setSelectedSystem(sys);
-                  setIsSystemOpen(false);
-                  setSystemSearch('');
-                }}
-                className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
-              >
-                {sys}
-              </div>
-            ))}
-            {filteredSystems.length === 0 && (
-              <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
-            )}
-          </div>
-        </BrutalDropdown>
-      </SectionCard>
-
-      {!showReport ? (
+      {showGenerateComposer && !showReport ? (
         <>
             <div className="flex flex-col gap-0 relative z-[1]">
                 <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">
@@ -788,7 +793,7 @@ export const Generate: React.FC<Props> = ({
                   disabled={!hasContent || loading || enhanceLocked || dsGateBlocked}
                       title={
                         enhanceLocked
-                          ? 'Modifica il testo nel terminale per sbloccare Enhance di nuovo.'
+                          ? 'Edit the terminal text to unlock Enhance again.'
                           : undefined
                       }
                       className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${!hasContent || loading || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
@@ -816,7 +821,7 @@ export const Generate: React.FC<Props> = ({
             <p className="text-[10px] text-gray-500 -mt-1">
               {dsGateBlocked ? (
                 <span className="text-amber-800 font-bold">
-                  Completa l’import del design system sopra per sbloccare prompt e generazione.
+                  Complete the design system import above to unlock the prompt and generation.
                 </span>
               ) : (
                 <>Tip: include goal, constraints, and expected output. Press Cmd/Ctrl + Enter to run.</>
@@ -864,7 +869,7 @@ export const Generate: React.FC<Props> = ({
                 </div>
             </div>
         </>
-      ) : (
+      ) : showReport ? (
         <div data-component="Generate: Report Container" className="animate-in slide-in-from-bottom-2 fade-in duration-300">
             {/* AI Report Card */}
             <div className={`${BRUTAL.card} bg-white mb-4`}>
@@ -897,8 +902,8 @@ export const Generate: React.FC<Props> = ({
                         </span>
                         <p className="text-[10px] text-gray-600">
                           {canvasApplyResult.ok
-                            ? 'Frame creato sulla pagina corrente (controlla la canvas Figma).'
-                            : `Canvas: ${canvasApplyResult.error || 'operazione non riuscita'}`}
+                            ? 'Frame created on the current page (check the Figma canvas).'
+                            : `Canvas: ${canvasApplyResult.error || 'operation failed'}`}
                         </p>
                       </div>
                     )}
@@ -949,7 +954,7 @@ export const Generate: React.FC<Props> = ({
                 </Button>
             </div>
         </div>
-      )}
+      ) : null}
 
       {/* Feedback Modal (thumbs down) */}
       {showFeedbackModal && (
@@ -996,12 +1001,41 @@ export const Generate: React.FC<Props> = ({
         </div>
       )}
 
-      <footer className="mt-auto pt-4 border-t-2 border-gray-200 text-[9px] text-gray-500 leading-snug px-1">
-        <strong className="text-gray-700">Informativa (placeholder):</strong> Comtra utilizza i dati del tuo design
-        system per erogare Generate e le funzioni che hai richiesto. I contenuti del DS non sono utilizzati per
-        addestrare modelli di IA generica; testo definitivo, link alla privacy e dettagli di conservazione saranno
-        disponibili qui dopo approvazione legale.
-      </footer>
+      {/* Sticky above main tab bar: opens full legal copy in a dialog */}
+      <div
+        data-component="Generate: Legal strip"
+        className="fixed left-0 right-0 z-[55] max-w-md mx-auto w-full border-t-2 border-black bg-[#fdfdfd] px-3 py-2"
+        style={{ bottom: '4.25rem' }}
+      >
+        <button
+          type="button"
+          onClick={() => setShowLegalModal(true)}
+          className="w-full text-left text-[10px] font-black uppercase tracking-wide text-gray-600 underline decoration-black/25 underline-offset-2 hover:text-black"
+        >
+          Design system data — tap for full notice
+        </button>
+      </div>
+
+      {showLegalModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowLegalModal(false)}
+        >
+          <div className={`${BRUTAL.card} bg-white max-w-lg w-full p-4`} onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-black uppercase text-sm mb-2">Design system data (placeholder)</h3>
+            <p className="text-xs text-gray-700 leading-[1.4]">
+              Comtra uses your design system data to run Generate and the features you requested. DS content is not
+              used to train generic AI models. Final copy, privacy links, and retention details will appear here after
+              legal sign-off.
+            </p>
+            <div className="flex justify-end mt-4">
+              <Button variant="secondary" onClick={() => setShowLegalModal(false)} className="text-xs">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -10,6 +10,7 @@ import {
   canFreeTierUseFileForDsImport,
   type StoredDsImport,
 } from '../lib/dsImportsStorage';
+import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../lib/safeWebStorage';
 
 const INTRO_SEEN_KEY = 'comtra-generate-ds-intro-seen';
 
@@ -27,34 +28,29 @@ type DsIndexSummary = {
 };
 
 function readIntroSeen(): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  return localStorage.getItem(INTRO_SEEN_KEY) === '1';
+  return safeLocalStorageGetItem(INTRO_SEEN_KEY) === '1';
 }
 
 function writeIntroSeen(): void {
-  try {
-    localStorage.setItem(INTRO_SEEN_KEY, '1');
-  } catch {
-    /* ignore */
-  }
+  safeLocalStorageSetItem(INTRO_SEEN_KEY, '1');
 }
 
 const WIZARD_TEXT = [
   {
-    title: 'Regole',
-    body: 'Comtra userà le regole e i vincoli del design system di questo file quando genera schermate: colori, spaziature, tipografia e convenzioni dei componenti devono restare allineati a ciò che è definito in Figma.',
+    title: 'Rules',
+    body: 'Comtra will use this file’s design-system rules and constraints when generating screens: color, spacing, typography, and component conventions stay aligned with what is defined in Figma.',
   },
   {
-    title: 'Indicazioni',
-    body: 'Le indicazioni operative (gerarchia visiva, priorità di contenuto, pattern ricorrenti) verranno ricavate dal file e dal catalogo che stiamo per importare, così le proposte Generate rispettano il tuo modo di progettare.',
+    title: 'Guidance',
+    body: 'Operational guidance (visual hierarchy, content priority, recurring patterns) is derived from the file and the catalog we are about to import so Generate matches how you design.',
   },
   {
-    title: 'Variabili',
-    body: 'Stiamo importando le variabili e i token collegati al file (colori, numeri, stringhe dove applicabile). Questo passaggio può richiedere qualche secondo su file molto grandi.',
+    title: 'Variables',
+    body: 'We import variables and tokens tied to the file (colors, numbers, strings where applicable). Large files may take a few seconds.',
   },
   {
-    title: 'Componenti',
-    body: 'Stiamo importando l’elenco dei componenti e dei set di varianti necessari a mappare il layout generato sugli elementi reali del tuo sistema.',
+    title: 'Components',
+    body: 'We import the component and variant sets needed to map generated layouts to the real building blocks in your system.',
   },
 ] as const;
 
@@ -66,11 +62,11 @@ export type GenerateDsImportProps = {
   requestDsContextIndex: RequestDsContextIndexFn;
   catalogReady: boolean;
   onCatalogReady: () => void;
-  /** Azzera “catalogo pronto” e la sessione (es. pulsante Aggiorna catalogo). */
+  /** Clears “catalog ready” and session (e.g. Refresh catalog). */
   onInvalidateCatalog: () => void;
   dsImportBusy: boolean;
   onBusyChange: (busy: boolean) => void;
-  /** Se false, massimo un DS importato; altro file Figma → upsell Pro. */
+  /** If false, only one DS file on Free; another Figma file triggers Pro upsell. */
   isPro: boolean;
   onUnlockRequest: () => void;
   persistDsImportToServer: (body: {
@@ -104,7 +100,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
   const [indexResult, setIndexResult] = useState<DsIndexSummary | null>(null);
-  /** Snapshot completo + hash per PUT backend (stesso payload del plugin). */
+  /** Full snapshot + hash for backend PUT (same payload as from the plugin). */
   const [wizardCapture, setWizardCapture] = useState<{ fullIndex: object; hash: string } | null>(null);
   const [wizardError, setWizardError] = useState<string | null>(null);
 
@@ -113,7 +109,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     !isPro &&
     fileKey &&
     canFreeTierUseFileForDsImport(fileKey, isPro).ok === false;
-  /** Free: al più un record; Pro: select solo se c’è più di un import salvato. */
+  /** Free: at most one record; Pro: show select only when more than one import exists. */
   const showImportSelect = isPro && imports.length > 1;
 
   useEffect(() => {
@@ -137,7 +133,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
 
   const mismatchLabel =
     selectedImport && fileKey && selectedImport.fileKey !== fileKey
-      ? 'Il catalogo viene sempre letto dal file Figma attualmente aperto. La voce selezionata si riferisce a un altro file salvato in precedenza.'
+      ? 'The catalog is always read from the Figma file you have open. The selected entry refers to a different file saved earlier.'
       : null;
 
   const openWizard = useCallback(() => {
@@ -169,7 +165,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       const label =
         selectedImport?.fileKey === fileKey
           ? selectedImport.displayName
-          : fileName || 'Questo file';
+          : fileName || 'This file';
       upsertDsImport({
         fileKey,
         displayName: label,
@@ -189,7 +185,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           ds_cache_hash: h,
           ds_context_index: wizardCapture.fullIndex,
         }).catch(() => {
-          /* offline / 403: locale resta valido */
+          /* offline / 403: local state still valid */
         });
       }
     }
@@ -209,7 +205,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     onUnlockRequest,
   ]);
 
-  // Step 2 (variabili): avvia lettura Figma una sola volta per apertura wizard
+  // Step 2: start Figma read once per wizard open
   useEffect(() => {
     if (!wizardOpen || wizardStep !== 2 || indexResult || wizardError) return;
     let cancelled = false;
@@ -218,7 +214,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       const res = await requestDsContextIndex({ reuseCached: false, timeoutMs: 120000 });
       if (cancelled) return;
       if (res.error || !res.index || typeof res.index !== 'object') {
-        setWizardError(res.error || 'Impossibile leggere il design system da Figma.');
+        setWizardError(res.error || 'Could not read the design system from Figma.');
         onBusyChange(false);
         return;
       }
@@ -254,7 +250,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   if (fileContextLoading) {
     return (
       <div className={`${BRUTAL.card} bg-white border-2 border-black p-3`}>
-        <p className="text-[10px] font-bold uppercase text-gray-600">Connessione al file…</p>
+        <p className="text-[10px] font-bold uppercase text-gray-600">Connecting to file…</p>
       </div>
     );
   }
@@ -264,7 +260,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       <div className={`${BRUTAL.card} bg-amber-50 border-2 border-amber-700 p-3`}>
         <p className="text-[10px] font-bold text-amber-900">
           {fileContextError ||
-            'Non riusciamo a leggere il file. Apri un file salvato in Figma e riprova.'}
+            'We could not read the file. Open a saved file in Figma and try again.'}
         </p>
       </div>
     );
@@ -275,15 +271,15 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       <div className={`${BRUTAL.card} bg-violet-50 border-2 border-black p-3 space-y-3`}>
         <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] font-bold leading-snug text-black">
-              Hai già collegato un design system su <strong>Free</strong>. Per importare e usare Generate con{' '}
-              <strong>un altro file</strong> Figma serve <strong>Pro</strong> (più file e più DS).
+              On <strong>Free</strong> you already linked a design system. To import and use Generate with{' '}
+              <strong>another</strong> Figma file you need <strong>Pro</strong> (multiple files and DS).
             </p>
             <span className="shrink-0 text-[9px] font-black uppercase bg-black text-white px-2 py-1 border-2 border-black shadow-[2px_2px_0_0_#ff90e8]">
               Pro
             </span>
           </div>
         <Button variant="primary" fullWidth className="relative text-xs" onClick={onUnlockRequest}>
-          Sblocca Pro
+          Unlock Pro
           <span className="absolute bottom-0.5 right-1 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm border border-black">
             PRO
           </span>
@@ -296,14 +292,14 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     return (
       <div className={`${BRUTAL.card} bg-green-50 border-2 border-green-800 p-3`}>
         <p className="text-[10px] font-bold text-green-900">
-          Catalogo design system pronto per questo file. Puoi usare Generate.
+          Design system catalog is ready for this file. You can use Generate.
         </p>
         <button
           type="button"
           className="mt-2 text-[9px] font-black uppercase underline text-green-900"
           onClick={onInvalidateCatalog}
         >
-          Aggiorna catalogo
+          Refresh catalog
         </button>
       </div>
     );
@@ -312,32 +308,32 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   return (
     <>
       {!introSeen && (
-        <div className={`${BRUTAL.card} bg-[#fff8e7] border-2 border-black p-3 space-y-2`}>
-          <p className="text-[11px] font-bold leading-snug">
-            Prima di generare con il <strong>file corrente</strong>, Comtra deve importare nel plugin le
-            informazioni sul tuo design system (regole, variabili, componenti). Succede in pochi passaggi e
-            non addestriamo modelli con questi dati — vedi l’informativa in basso.
-          </p>
-          <div className="flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              className="text-[10px] font-black uppercase underline"
-              onClick={() => setShowWhyModal(true)}
-            >
-              Perché serve?
-            </button>
-            <Button variant="secondary" className="text-[10px] px-2 py-1" onClick={dismissIntro}>
-              Ok, ho capito
-            </Button>
+        <div className={`${BRUTAL.card} bg-[#fff8e7] border-2 border-black p-3`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-bold leading-snug text-black">
+              Import your design system for this file before generating.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                className="text-[10px] font-black uppercase underline hover:text-[#ff90e8]"
+                onClick={() => setShowWhyModal(true)}
+              >
+                Read first
+              </button>
+              <Button variant="secondary" className="text-[10px] px-2 py-1" onClick={dismissIntro}>
+                OK, I understand
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
       <div className={`${BRUTAL.card} bg-white border-2 border-black p-3 space-y-3`}>
         <div className="flex justify-between items-start gap-2">
-          <h3 className="text-[11px] font-black uppercase">Design system nel file</h3>
-          <span className="text-[9px] font-mono text-gray-500 truncate max-w-[120px]" title={fileKey}>
-            {fileName || 'File senza nome'}
+          <h3 className="text-sm font-black uppercase leading-tight sm:text-base">Design system in file</h3>
+          <span className="text-xs font-normal text-gray-500 truncate max-w-[160px] text-right" title={fileKey}>
+            {fileName || 'Untitled file'}
           </span>
         </div>
 
@@ -345,9 +341,9 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           <>
             {showImportSelect ? (
               <>
-                <label className="block text-[10px] font-bold text-gray-700">I tuoi DS importati</label>
+                <label className="block text-sm font-bold text-gray-700">Your imported design systems</label>
                 <select
-                  className="w-full border-2 border-black p-2 text-[11px] font-bold bg-white"
+                  className="w-full border-2 border-black p-2 text-sm font-bold bg-white"
                   value={selectedImportId ?? ''}
                   onChange={(e) => setSelectedImportId(e.target.value || null)}
                   disabled={dsImportBusy}
@@ -363,26 +359,37 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                 </select>
               </>
             ) : (
-              <p className="text-[10px] text-gray-700">
-                <span className="font-bold">DS collegato:</span>{' '}
-                {selectedImport?.displayName || fileName || 'Questo file'}
+              <p className="text-sm font-normal text-gray-900 leading-normal">
+                <span className="font-bold">Linked DS:</span>{' '}
+                {selectedImport?.displayName || fileName || 'This file'}
               </p>
             )}
             {mismatchLabel && (
-              <p className="text-[9px] text-amber-900 bg-amber-50 border border-amber-300 p-2">{mismatchLabel}</p>
+              <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 p-2 leading-snug">{mismatchLabel}</p>
             )}
-            <Button variant="primary" fullWidth onClick={openWizard} disabled={dsImportBusy}>
-              {dsImportBusy ? 'Importazione…' : 'Prepara il design system per questo file'}
+            <Button
+              variant="primary"
+              fullWidth
+              className="text-lg font-black leading-[1.15] py-3.5 px-4 text-center"
+              onClick={openWizard}
+              disabled={dsImportBusy}
+            >
+              {dsImportBusy ? 'Importing…' : 'Prepare design system for this file'}
             </Button>
           </>
         ) : (
           <>
-            <p className="text-[10px] text-gray-700">
-              Questo file non è ancora tra i design system che hai importato. Avvia un import da questo file
-              Figma.
+            <p className="text-sm font-normal text-gray-900 leading-normal">
+              This file is not yet among the design systems you imported. Start an import from this Figma file.
             </p>
-            <Button variant="primary" fullWidth onClick={openWizard} disabled={dsImportBusy}>
-              {dsImportBusy ? 'Importazione…' : 'Importa il design system da questo file'}
+            <Button
+              variant="primary"
+              fullWidth
+              className="text-lg font-black leading-[1.15] py-3.5 px-4 text-center"
+              onClick={openWizard}
+              disabled={dsImportBusy}
+            >
+              {dsImportBusy ? 'Importing…' : 'Import design system from this file'}
             </Button>
           </>
         )}
@@ -397,14 +404,14 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             className={`${BRUTAL.card} bg-white max-w-md w-full p-4`}
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 className="font-black uppercase text-sm mb-2">Perché serve l’import</h4>
+            <h4 className="font-black uppercase text-sm mb-2">Why import?</h4>
             <p className="text-[11px] text-gray-700 leading-snug mb-3">
-              Generate deve sapere quali componenti, variabili e convenzioni esistono nel <strong>tuo</strong>{' '}
-              file, così le schermate create sono coerenti con il design system reale e non inventano pattern
-              assenti dal progetto.
+              Generate needs to know which components, variables, and conventions exist in <strong>your</strong>{' '}
+              file so outputs match your real design system and do not invent patterns that are not in the project.
+              We do not use this data to train generic AI — see the notice above the tab bar for more.
             </p>
             <Button variant="secondary" className="text-xs w-full" onClick={() => setShowWhyModal(false)}>
-              Chiudi
+              Close
             </Button>
           </div>
         </div>
@@ -421,7 +428,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           >
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black uppercase text-gray-500">
-                Passo {wizardStep + 1} di {WIZARD_TEXT.length}
+                Step {wizardStep + 1} of {WIZARD_TEXT.length}
               </span>
               <button
                 type="button"
@@ -440,13 +447,13 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             )}
 
             {wizardStep === 2 && dsImportBusy && !indexResult && !wizardError && (
-              <p className="text-[10px] font-bold animate-pulse">Lettura variabili e stili dal file…</p>
+              <p className="text-[10px] font-bold animate-pulse">Reading variables and styles from file…</p>
             )}
 
             {wizardStep === 2 && indexResult && (
               <ul className="text-[10px] space-y-1 border border-black/20 p-2 bg-gray-50">
                 <li>
-                  <strong>Variabili (token):</strong> {indexResult.total_tokens}
+                  <strong>Variables (tokens):</strong> {indexResult.total_tokens}
                 </li>
                 {Object.keys(indexResult.token_categories).length > 0 && (
                   <li className="text-gray-600">
@@ -461,9 +468,9 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             {wizardStep === 3 && indexResult && (
               <ul className="text-[10px] space-y-1 border border-black/20 p-2 bg-gray-50">
                 <li>
-                  <strong>Componenti nell’indice:</strong> {indexResult.components.length}
+                  <strong>Components in index:</strong> {indexResult.components.length}
                   {indexResult.components_truncated && indexResult.total_components_in_file != null
-                    ? ` (file ne contiene ${indexResult.total_components_in_file}; indice limitato per prestazioni)`
+                    ? ` (file has ${indexResult.total_components_in_file}; index capped for performance)`
                     : ''}
                 </li>
               </ul>
@@ -480,7 +487,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     setWizardStep((s) => Math.max(0, s - 1));
                   }}
                 >
-                  Indietro
+                  Back
                 </Button>
               )}
               {wizardStep < 2 && (
@@ -492,12 +499,12 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     setWizardStep((s) => s + 1);
                   }}
                 >
-                  Continua
+                  Continue
                 </Button>
               )}
               {wizardStep === 2 && indexResult && !wizardError && (
                 <Button variant="primary" className="flex-1 text-xs" onClick={() => setWizardStep(3)}>
-                  Continua
+                  Continue
                 </Button>
               )}
               {wizardStep === 2 && wizardError && (
@@ -510,12 +517,12 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     setWizardCapture(null);
                   }}
                 >
-                  Riprova
+                  Retry
                 </Button>
               )}
               {wizardStep === 3 && indexResult && (
                 <Button variant="primary" className="flex-1 text-xs" onClick={finishWizard}>
-                  Fine — usa questo catalogo
+                  Done — use this catalog
                 </Button>
               )}
             </div>

@@ -1,3 +1,5 @@
+import { safeLocalStorageGetItem, safeLocalStorageSetItem } from './lib/safeWebStorage';
+
 /** Versione UI del plugin; aggiornare qui quando si va live (es. 1.0.1, 1.1.0). */
 export const APP_VERSION = '1.0.0';
 
@@ -24,7 +26,7 @@ const STORAGE_KEY_SIMULATED_CREDITS_PREFIX = 'comtra_test_simulated_credits_';
 export function getSimulatedCreditsFromStorage(email: string): { remaining: number; total: number; used: number } | null {
   try {
     const key = STORAGE_KEY_SIMULATED_CREDITS_PREFIX + email.toLowerCase().trim();
-    const raw = localStorage.getItem(key);
+    const raw = safeLocalStorageGetItem(key);
     if (!raw) return null;
     const o = JSON.parse(raw);
     if (o && typeof o.remaining === 'number' && typeof o.total === 'number' && typeof o.used === 'number') {
@@ -37,22 +39,14 @@ export function getSimulatedCreditsFromStorage(email: string): { remaining: numb
 }
 
 export function setSimulatedCreditsInStorage(email: string, value: { remaining: number; total: number; used: number }): void {
-  try {
-    const key = STORAGE_KEY_SIMULATED_CREDITS_PREFIX + email.toLowerCase().trim();
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+  const key = STORAGE_KEY_SIMULATED_CREDITS_PREFIX + email.toLowerCase().trim();
+  safeLocalStorageSetItem(key, JSON.stringify(value));
 }
 export function getSimulateFreeTierFromStorage(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY_SIMULATE_FREE) === 'true';
-  } catch {
-    return false;
-  }
+  return safeLocalStorageGetItem(STORAGE_KEY_SIMULATE_FREE) === 'true';
 }
 export function setSimulateFreeTierInStorage(value: boolean): void {
-  try {
-    localStorage.setItem(STORAGE_KEY_SIMULATE_FREE, value ? 'true' : 'false');
-  } catch {}
+  safeLocalStorageSetItem(STORAGE_KEY_SIMULATE_FREE, value ? 'true' : 'false');
 }
 
 export const COLORS = {

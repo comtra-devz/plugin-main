@@ -3,6 +3,14 @@
  * Un eventuale backend potrà sostituire o integrare questa fonte in seguito.
  */
 
+import {
+  safeLocalStorageGetItem,
+  safeLocalStorageSetItem,
+  safeSessionStorageGetItem,
+  safeSessionStorageRemoveItem,
+  safeSessionStorageSetItem,
+} from './safeWebStorage';
+
 export type StoredDsImport = {
   id: string;
   fileKey: string;
@@ -39,17 +47,11 @@ function safeParse(raw: string | null): StoredDsImport[] {
 }
 
 export function loadDsImports(): StoredDsImport[] {
-  if (typeof localStorage === 'undefined') return [];
-  return safeParse(localStorage.getItem(STORAGE_KEY));
+  return safeParse(safeLocalStorageGetItem(STORAGE_KEY));
 }
 
 export function saveDsImports(list: StoredDsImport[]): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    /* quota / privacy mode */
-  }
+  safeLocalStorageSetItem(STORAGE_KEY, JSON.stringify(list));
 }
 
 /** Risposta lista da GET /api/user/ds-imports (senza ds_context_index). */
@@ -116,9 +118,9 @@ const SESSION_PREPARED_KEY = 'comtra-ds-prepared-session';
 
 /** True se in questa sessione del plugin l’utente ha già completato la preparazione per questo `fileKey`. */
 export function isSessionCatalogPreparedForFile(fileKey: string | null | undefined): boolean {
-  if (typeof sessionStorage === 'undefined' || !fileKey) return false;
+  if (!fileKey) return false;
   try {
-    const raw = sessionStorage.getItem(SESSION_PREPARED_KEY);
+    const raw = safeSessionStorageGetItem(SESSION_PREPARED_KEY);
     if (!raw) return false;
     const o = JSON.parse(raw) as { fileKey?: string };
     return o?.fileKey === fileKey;
@@ -128,23 +130,14 @@ export function isSessionCatalogPreparedForFile(fileKey: string | null | undefin
 }
 
 export function clearSessionCatalogPrepared(): void {
-  try {
-    sessionStorage.removeItem(SESSION_PREPARED_KEY);
-  } catch {
-    /* ignore */
-  }
+  safeSessionStorageRemoveItem(SESSION_PREPARED_KEY);
 }
 
 export function setSessionCatalogPrepared(fileKey: string): void {
-  if (typeof sessionStorage === 'undefined') return;
-  try {
-    sessionStorage.setItem(
-      SESSION_PREPARED_KEY,
-      JSON.stringify({ fileKey, ts: Date.now() }),
-    );
-  } catch {
-    /* ignore */
-  }
+  safeSessionStorageSetItem(
+    SESSION_PREPARED_KEY,
+    JSON.stringify({ fileKey, ts: Date.now() }),
+  );
 }
 
 /**

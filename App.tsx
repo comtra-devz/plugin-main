@@ -21,6 +21,12 @@ import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
 import { replaceDsImportsFromServer } from './lib/dsImportsStorage';
+import {
+  safeLocalStorageGetItem,
+  safeLocalStorageSetItem,
+  safeSessionStorageGetItem,
+  safeSessionStorageSetItem,
+} from './lib/safeWebStorage';
 import type { FetchFigmaFileBody } from './views/Audit/AuditView';
 
 export interface CreditsState {
@@ -44,7 +50,7 @@ let trophiesInflight: Promise<void> | null = null;
 
 function readCreditsCache(userId: string): CreditsState | null {
   try {
-    const raw = localStorage.getItem(CREDITS_CACHE_KEY);
+    const raw = safeLocalStorageGetItem(CREDITS_CACHE_KEY);
     if (!raw) return null;
     const o = JSON.parse(raw) as {
       userId?: string;
@@ -64,19 +70,15 @@ function readCreditsCache(userId: string): CreditsState | null {
 }
 
 function writeCreditsCache(userId: string, c: CreditsState) {
-  try {
-    localStorage.setItem(
-      CREDITS_CACHE_KEY,
-      JSON.stringify({ userId, cachedAt: Date.now(), ...c }),
-    );
-  } catch {
-    // private mode / quota
-  }
+  safeLocalStorageSetItem(
+    CREDITS_CACHE_KEY,
+    JSON.stringify({ userId, cachedAt: Date.now(), ...c }),
+  );
 }
 
 function readCreditGiftSeenMarker(userId: string): string | null {
   try {
-    const raw = sessionStorage.getItem(CREDITS_GIFT_SEEN_KEY);
+    const raw = safeSessionStorageGetItem(CREDITS_GIFT_SEEN_KEY);
     if (!raw) return null;
     const o = JSON.parse(raw) as { userId?: string; marker?: string };
     if (o.userId !== userId) return null;
@@ -87,11 +89,7 @@ function readCreditGiftSeenMarker(userId: string): string | null {
 }
 
 function writeCreditGiftSeenMarker(userId: string, marker: string) {
-  try {
-    sessionStorage.setItem(CREDITS_GIFT_SEEN_KEY, JSON.stringify({ userId, marker }));
-  } catch {
-    // private mode / quota
-  }
+  safeSessionStorageSetItem(CREDITS_GIFT_SEEN_KEY, JSON.stringify({ userId, marker }));
 }
 
 interface SelectedNodeInfo {
