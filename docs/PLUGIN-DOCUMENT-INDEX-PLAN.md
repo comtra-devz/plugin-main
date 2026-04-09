@@ -102,6 +102,8 @@ Per **contenere costi e rischi**, proponiamo di **entrare subito** solo dove il 
 
 Per dettagli sulle API Figma, ottimizzazioni possibili e riferimenti ai file sorgente, vedere anche **`docs/DS-CONTEXT-INDEX-PERFORMANCE.md`**.
 
+Per **Generate**, import DS da file Figma dell’utente, regole su file key / select / caricamento / privacy: **`docs/GENERATE-DS-IMPORT-SPEC.md`**.
+
 ---
 
 *Proposta di indirizzo prodotto e architettura. Implementazione soggetta a priorità di roadmap e risorse.*

@@ -3,6 +3,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
+import { GenerateDsImport, type RequestDsContextIndexFn } from './GenerateDsImport';
+import {
+  clearSessionCatalogPrepared,
+  isSessionCatalogPreparedForFile,
+  setSessionCatalogPrepared,
+} from '../lib/dsImportsStorage';
 import {
   BrutalDropdown,
   brutalSelectOptionRowClass,
@@ -29,7 +35,21 @@ interface Props {
     ds_context_index?: object | null;
     ds_cache_hash?: string | null;
   }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null }>;
-  requestFileContext: () => Promise<{ fileKey: string | null; error?: string | null }>;
+  requestFileContext: () => Promise<{
+    fileKey: string | null;
+    fileName?: string | null;
+    error?: string | null;
+  }>;
+  requestDsContextIndex: RequestDsContextIndexFn;
+  /** Se il plugin non ha sessione, verifica se c’è uno snapshot DS salvato sul backend per questo file. */
+  checkServerHasDsContext: (fileKey: string) => Promise<boolean>;
+  persistDsImportToServer: (body: {
+    figma_file_key: string;
+    display_name: string;
+    figma_file_name: string;
+    ds_cache_hash: string;
+    ds_context_index: object;
+  }) => Promise<void>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
   selectedNode: { id: string; name: string; type: string } | null;
   /** Esegue l'action plan nel main thread Figma (frame + azioni sulla pagina corrente). */
@@ -86,6 +106,9 @@ export const Generate: React.FC<Props> = ({
   initialPrompt,
   fetchGenerate,
   requestFileContext,
+  requestDsContextIndex,
+  checkServerHasDsContext,
+  persistDsImportToServer,
   fetchGenerateFeedback,
   selectedNode,
   applyActionPlanToCanvas,
@@ -131,6 +154,14 @@ export const Generate: React.FC<Props> = ({
   const [canvasApplyResult, setCanvasApplyResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [canvasBusy, setCanvasBusy] = useState(false);
 
+  /** Solo per “Custom (Current)”: catalogo letto da Figma obbligatorio prima di generare. */
+  const [genFileKey, setGenFileKey] = useState<string | null>(null);
+  const [genFileName, setGenFileName] = useState<string | null>(null);
+  const [fileCtxLoading, setFileCtxLoading] = useState(false);
+  const [genFileCtxError, setGenFileCtxError] = useState<string | null>(null);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [dsImportBusy, setDsImportBusy] = useState(false);
+
   const runCanvasApply = useCallback(
     async (actionPlan: object, opts?: { modifyMode?: boolean }) => {
       const r = await applyActionPlanToCanvas(actionPlan, opts);
@@ -156,6 +187,63 @@ export const Generate: React.FC<Props> = ({
   const infiniteForTest = !!useInfiniteCreditsForTest;
   const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
   const canGenerate = isPro || remaining > 0;
+  const usesFileDs = selectedSystem === DESIGN_SYSTEMS[0];
+  const dsGateBlocked = usesFileDs && (!catalogReady || dsImportBusy);
+
+  useEffect(() => {
+    if (!usesFileDs) {
+      setCatalogReady(true);
+      setGenFileKey(null);
+      setGenFileName(null);
+      setGenFileCtxError(null);
+      setFileCtxLoading(false);
+      return;
+    }
+    setCatalogReady(false);
+    let cancelled = false;
+    setFileCtxLoading(true);
+    setGenFileCtxError(null);
+    void requestFileContext().then(async (r) => {
+      if (cancelled) return;
+      setFileCtxLoading(false);
+      setGenFileKey(r.fileKey ?? null);
+      setGenFileName(r.fileName ?? null);
+      const err =
+        r.error != null && String(r.error).trim() !== ''
+          ? String(r.error) === 'FILE_LINK_UNAVAILABLE'
+            ? 'Salva il file in Figma e riprova (file non collegato).'
+            : String(r.error)
+          : !r.fileKey
+            ? 'Apri un file salvato in Figma.'
+            : null;
+      setGenFileCtxError(err);
+      if (err || !r.fileKey) return;
+      if (isSessionCatalogPreparedForFile(r.fileKey)) {
+        setCatalogReady(true);
+        return;
+      }
+      const serverOk = await checkServerHasDsContext(r.fileKey);
+      if (cancelled) return;
+      if (serverOk) {
+        setSessionCatalogPrepared(r.fileKey);
+        setCatalogReady(true);
+      } else {
+        setCatalogReady(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [usesFileDs, requestFileContext, checkServerHasDsContext]);
+
+  const handleInvalidateCatalog = useCallback(() => {
+    clearSessionCatalogPrepared();
+    setCatalogReady(false);
+  }, []);
+
+  const handleCatalogReady = useCallback(() => {
+    setCatalogReady(true);
+  }, []);
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
   const hasSelection = !!selectedNode;
@@ -356,7 +444,7 @@ export const Generate: React.FC<Props> = ({
   const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (!loading && hasContent) handleGen();
+      if (!loading && hasContent && !dsGateBlocked) handleGen();
     }
   };
 
@@ -378,6 +466,10 @@ export const Generate: React.FC<Props> = ({
   const handleGen = async () => {
     if (!canGenerate) {
       onUnlockRequest();
+      return;
+    }
+    if (usesFileDs && !catalogReady) {
+      setGenError('Prepara il catalogo del design system (sezione sopra) prima di generare.');
       return;
     }
     setLoading(true);
@@ -540,6 +632,24 @@ export const Generate: React.FC<Props> = ({
         </div>
       )}
 
+      {usesFileDs && !showReport && (
+        <GenerateDsImport
+          fileKey={genFileKey}
+          fileName={genFileName}
+          fileContextLoading={fileCtxLoading}
+          fileContextError={genFileCtxError}
+          requestDsContextIndex={requestDsContextIndex}
+          persistDsImportToServer={persistDsImportToServer}
+          catalogReady={catalogReady}
+          onCatalogReady={handleCatalogReady}
+          onInvalidateCatalog={handleInvalidateCatalog}
+          dsImportBusy={dsImportBusy}
+          onBusyChange={setDsImportBusy}
+          isPro={isPro || !!useInfiniteCreditsForTest}
+          onUnlockRequest={onUnlockRequest}
+        />
+      )}
+
       {!showReport && (
         <div className="flex justify-end -mt-1">
           <button
@@ -674,8 +784,8 @@ export const Generate: React.FC<Props> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={handleEnhancePrompt}
-                      disabled={!hasContent || loading || enhanceLocked}
+                  onClick={handleEnhancePrompt}
+                  disabled={!hasContent || loading || enhanceLocked || dsGateBlocked}
                       title={
                         enhanceLocked
                           ? 'Modifica il testo nel terminale per sbloccare Enhance di nuovo.'
@@ -698,13 +808,19 @@ export const Generate: React.FC<Props> = ({
                   onKeyDown={handlePromptKeyDown}
                   onClick={handleContentClick}
                   data-component="Generate: Rich Input"
-                  className={`${BRUTAL.input} min-h-[120px] text-sm bg-white focus:bg-white overflow-y-auto cursor-text`}
+                  className={`${BRUTAL.input} min-h-[120px] text-sm bg-white focus:bg-white overflow-y-auto cursor-text ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''}`}
                   style={{ whiteSpace: 'pre-wrap' }}
                   data-placeholder={promptPlaceholder}
                 />
             </div>
             <p className="text-[10px] text-gray-500 -mt-1">
-              Tip: include goal, constraints, and expected output. Press Cmd/Ctrl + Enter to run.
+              {dsGateBlocked ? (
+                <span className="text-amber-800 font-bold">
+                  Completa l’import del design system sopra per sbloccare prompt e generazione.
+                </span>
+              ) : (
+                <>Tip: include goal, constraints, and expected output. Press Cmd/Ctrl + Enter to run.</>
+              )}
             </p>
             {promptHints.length > 0 && (
               <div className="bg-yellow-50 border border-yellow-300 p-2 text-[10px] text-yellow-900">
@@ -720,7 +836,7 @@ export const Generate: React.FC<Props> = ({
               fullWidth
               layout="row"
               onClick={handleGen}
-              disabled={!hasContent || loading || (!canGenerate && !isPro)}
+              disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
               className="relative"
             >
               {loading ? 'Weaving Magic...' : ctaLabel}
@@ -739,8 +855,8 @@ export const Generate: React.FC<Props> = ({
                     key={txt} 
                     data-component={`Generate: Inspiration Chip ${i+1}`}
                     onClick={() => handleInsertInspiration(txt)} 
-                    disabled={!canGenerate}
-                    className={`text-[10px] border border-black px-2 py-1 bg-white transition-colors text-left ${canGenerate ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
+                    disabled={!canGenerate || dsGateBlocked}
+                    className={`text-[10px] border border-black px-2 py-1 bg-white transition-colors text-left ${canGenerate && !dsGateBlocked ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
                     >
                     {txt}
                     </button>
@@ -879,6 +995,13 @@ export const Generate: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      <footer className="mt-auto pt-4 border-t-2 border-gray-200 text-[9px] text-gray-500 leading-snug px-1">
+        <strong className="text-gray-700">Informativa (placeholder):</strong> Comtra utilizza i dati del tuo design
+        system per erogare Generate e le funzioni che hai richiesto. I contenuti del DS non sono utilizzati per
+        addestrare modelli di IA generica; testo definitivo, link alla privacy e dettagli di conservazione saranno
+        disponibili qui dopo approvazione legale.
+      </footer>
     </div>
   );
 };

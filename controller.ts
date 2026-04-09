@@ -1869,8 +1869,10 @@ figma.ui.onmessage = async (raw: any) => {
       nodeIds = sel.map((n: BaseNode) => n.id);
     }
     const fileKey = (figma as any).fileKey ?? null;
+    const fileName = typeof figma.root?.name === 'string' ? figma.root.name : null;
     return {
       fileKey,
+      fileName,
       scope: scope ?? 'all',
       pageId: pageIdOut ?? null,
       nodeIds: nodeIds ?? null,

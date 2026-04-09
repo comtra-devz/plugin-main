@@ -20,6 +20,7 @@ import { useToast } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
+import { replaceDsImportsFromServer } from './lib/dsImportsStorage';
 import type { FetchFigmaFileBody } from './views/Audit/AuditView';
 
 export interface CreditsState {
@@ -603,7 +604,9 @@ export default function AppTest() {
     fetchTrophies();
   }, [view, showProfile, user?.authToken, user?.id, fetchTrophies]);
 
-  const fileContextResolveRef = useRef<((data: { fileKey: string | null; error?: string | null }) => void) | null>(null);
+  const fileContextResolveRef = useRef<
+    ((data: { fileKey: string | null; fileName?: string | null; error?: string | null }) => void) | null
+  >(null);
   const actionPlanExecWaitersRef = useRef<
     Map<string, (r: { ok: boolean; error?: string; rootId?: string }) => void>
   >(new Map());
@@ -657,7 +660,11 @@ export default function AppTest() {
       if (msg.type === 'file-context-result' && fileContextResolveRef.current) {
         const resolve = fileContextResolveRef.current;
         fileContextResolveRef.current = null;
-        resolve({ fileKey: msg.fileKey ?? null, error: msg.error ?? null });
+        resolve({
+          fileKey: msg.fileKey ?? null,
+          fileName: typeof msg.fileName === 'string' ? msg.fileName : null,
+          error: msg.error ?? null,
+        });
       }
       if (msg.type === 'selection-changed') {
         const nodes = Array.isArray(msg.nodes) ? msg.nodes : [];
@@ -1130,12 +1137,15 @@ export default function AppTest() {
     }
   }, [user?.authToken]);
 
-  const requestDsContextIndex = useCallback(() => {
+  const requestDsContextIndex = useCallback((opts?: { reuseCached?: boolean; timeoutMs?: number }) => {
+    const reuseCached = opts?.reuseCached !== false;
+    const timeoutMs =
+      typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
     return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
       const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       dsContextIndexWaitersRef.current.set(requestId, resolve);
       window.parent.postMessage(
-        { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached: true } },
+        { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached } },
         '*',
       );
       window.setTimeout(() => {
@@ -1143,9 +1153,99 @@ export default function AppTest() {
         if (!fn) return;
         dsContextIndexWaitersRef.current.delete(requestId);
         fn({ index: null, hash: null, error: 'Timeout waiting for DS context index from Figma.' });
-      }, 30000);
+      }, timeoutMs);
     });
   }, []);
+
+  const fetchDsImportContextSnapshot = useCallback(
+    async (
+      fileKey: string,
+    ): Promise<{ ds_context_index: object; ds_cache_hash: string | null } | null> => {
+      if (!user?.authToken || !fileKey) return null;
+      const r = await fetch(
+        `${AUTH_BACKEND_URL}/api/user/ds-imports/context?file_key=${encodeURIComponent(fileKey)}`,
+        { headers: { Authorization: `Bearer ${user.authToken}` } },
+      );
+      if (r.status === 404) return null;
+      if (r.status === 503) {
+        handle503();
+        return null;
+      }
+      if (!r.ok) return null;
+      const j = (await r.json().catch(() => ({}))) as {
+        ds_context_index?: unknown;
+        ds_cache_hash?: string | null;
+      };
+      if (!j.ds_context_index || typeof j.ds_context_index !== 'object') return null;
+      return {
+        ds_context_index: j.ds_context_index as object,
+        ds_cache_hash: j.ds_cache_hash != null && String(j.ds_cache_hash).trim() !== '' ? String(j.ds_cache_hash) : null,
+      };
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
+  const checkServerHasDsContext = useCallback(
+    async (fileKey: string) => {
+      const snap = await fetchDsImportContextSnapshot(fileKey);
+      return !!snap?.ds_context_index;
+    },
+    [fetchDsImportContextSnapshot],
+  );
+
+  const syncDsImportsFromServer = useCallback(async () => {
+    if (!user?.authToken) return;
+    const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
+      headers: { Authorization: `Bearer ${user.authToken}` },
+    });
+    if (r.status === 503) {
+      handle503();
+      return;
+    }
+    if (!r.ok) return;
+    const data = (await r.json().catch(() => ({}))) as { imports?: unknown };
+    if (!Array.isArray(data.imports)) return;
+    replaceDsImportsFromServer(
+      data.imports as Parameters<typeof replaceDsImportsFromServer>[0],
+    );
+  }, [user?.authToken, AUTH_BACKEND_URL, handle503]);
+
+  const persistDsImportToServer = useCallback(
+    async (body: {
+      figma_file_key: string;
+      display_name: string;
+      figma_file_name: string;
+      ds_cache_hash: string;
+      ds_context_index: object;
+    }) => {
+      if (!user?.authToken) return;
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) {
+        const d = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error || `ds-imports save failed (${r.status})`);
+      }
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
+  useEffect(() => {
+    if (view !== ViewState.GENERATE || !user?.authToken) return;
+    let cancelled = false;
+    void syncDsImportsFromServer().then(() => {
+      if (cancelled) return;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, user?.authToken, syncDsImportsFromServer]);
 
   const fetchGenerate = useCallback(
     async (body: {
@@ -1163,16 +1263,35 @@ export default function AppTest() {
       let dsContextIndex: object | undefined | null = body.ds_context_index;
       let dsCacheHash: string | null | undefined = body.ds_cache_hash;
       if (dsContextIndex === undefined) {
-        const fromPlugin = await requestDsContextIndex();
-        if (fromPlugin.index && typeof fromPlugin.index === 'object') {
-          dsContextIndex = fromPlugin.index;
+        const fromPluginCached = await requestDsContextIndex({ reuseCached: true });
+        if (fromPluginCached.index && typeof fromPluginCached.index === 'object') {
+          dsContextIndex = fromPluginCached.index;
           const h =
-            fromPlugin.hash ||
-            (fromPlugin.index as { hash?: string }).hash ||
+            fromPluginCached.hash ||
+            (fromPluginCached.index as { hash?: string }).hash ||
             null;
           dsCacheHash = dsCacheHash ?? h;
         } else {
-          dsContextIndex = null;
+          const fromServer = await fetchDsImportContextSnapshot(body.file_key);
+          if (fromServer?.ds_context_index) {
+            dsContextIndex = fromServer.ds_context_index;
+            dsCacheHash = dsCacheHash ?? fromServer.ds_cache_hash;
+          } else {
+            const fromPluginFull = await requestDsContextIndex({
+              reuseCached: false,
+              timeoutMs: 120000,
+            });
+            if (fromPluginFull.index && typeof fromPluginFull.index === 'object') {
+              dsContextIndex = fromPluginFull.index;
+              const h =
+                fromPluginFull.hash ||
+                (fromPluginFull.index as { hash?: string }).hash ||
+                null;
+              dsCacheHash = dsCacheHash ?? h;
+            } else {
+              dsContextIndex = null;
+            }
+          }
         }
       }
 
@@ -1209,18 +1328,18 @@ export default function AppTest() {
       }
       return r.json();
     },
-    [user?.authToken, handle503, requestDsContextIndex],
+    [user?.authToken, handle503, requestDsContextIndex, fetchDsImportContextSnapshot, AUTH_BACKEND_URL],
   );
 
   const requestFileContext = useCallback(() => {
-    return new Promise<{ fileKey: string | null; error?: string | null }>((resolve) => {
+    return new Promise<{ fileKey: string | null; fileName?: string | null; error?: string | null }>((resolve) => {
       fileContextResolveRef.current = resolve;
       window.parent.postMessage({ pluginMessage: { type: 'get-file-context', scope: 'all' } }, '*');
       setTimeout(() => {
         if (fileContextResolveRef.current) {
           const r = fileContextResolveRef.current;
           fileContextResolveRef.current = null;
-          r({ fileKey: null, error: 'Timeout' });
+          r({ fileKey: null, fileName: null, error: 'Timeout' });
         }
       }, 15000);
     });
@@ -1327,6 +1446,9 @@ export default function AppTest() {
             initialPrompt={genPrompt}
             fetchGenerate={fetchGenerate}
             requestFileContext={requestFileContext}
+            requestDsContextIndex={requestDsContextIndex}
+            checkServerHasDsContext={checkServerHasDsContext}
+            persistDsImportToServer={persistDsImportToServer}
             fetchGenerateFeedback={fetchGenerateFeedback}
             selectedNode={selectedNode}
             applyActionPlanToCanvas={requestActionPlanExecution}

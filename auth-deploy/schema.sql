@@ -247,6 +247,20 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id);
 CREATE INDEX IF NOT EXISTS idx_support_tickets_created_at ON support_tickets(created_at);
 
+-- Generate: snapshot indice design system (plugin) per utente e file Figma
+CREATE TABLE IF NOT EXISTS user_ds_imports (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  figma_file_key TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  figma_file_name TEXT NOT NULL DEFAULT '',
+  ds_cache_hash TEXT NOT NULL DEFAULT '',
+  ds_context_index JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, figma_file_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_ds_imports_user_updated ON user_ds_imports(user_id, updated_at DESC);
+
 -- Migrazione: se la tabella users esiste già senza colonne XP, esegui (PostgreSQL 9.5+):
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;

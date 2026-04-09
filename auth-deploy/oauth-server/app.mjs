@@ -98,8 +98,8 @@ app.use(cors({
     }
   },
 }));
-// Code-gen / audit inviano file_json o node_json che superano il default 100kb di express.json()
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
+// Code-gen / audit / DS context index: corpi grandi; default 5mb (override con JSON_BODY_LIMIT).
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '5mb' }));
 
 app.get('/auth/figma/init', async (req, res) => {
   const store = await getFlowStore();
@@ -2264,6 +2264,110 @@ app.post('/api/feedback/generate', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/feedback/generate', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- User DS imports (Generate: custom file DS — persist context index for performance)
+app.get('/api/user/ds-imports', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  try {
+    const sel = await dbSql`
+      SELECT figma_file_key, display_name, figma_file_name, ds_cache_hash,
+             EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_at_ms
+      FROM user_ds_imports
+      WHERE user_id = ${userId}
+      ORDER BY updated_at DESC
+    `;
+    res.json({ imports: sel.rows || [] });
+  } catch (err) {
+    console.error('GET /api/user/ds-imports', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/user/ds-imports/context', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const fileKey = String(req.query.file_key || req.query.fileKey || '').trim();
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  try {
+    const sel = await dbSql`
+      SELECT ds_context_index, ds_cache_hash
+      FROM user_ds_imports
+      WHERE user_id = ${userId} AND figma_file_key = ${fileKey}
+      LIMIT 1
+    `;
+    const row = sel?.rows?.[0];
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json({
+      ds_context_index: row.ds_context_index,
+      ds_cache_hash: row.ds_cache_hash || null,
+    });
+  } catch (err) {
+    console.error('GET /api/user/ds-imports/context', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/user/ds-imports', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const figmaFileKey = String(body.figma_file_key || body.file_key || body.fileKey || '').trim();
+  const displayName = String(body.display_name || body.displayName || '').trim().slice(0, 500);
+  const figmaFileName = String(body.figma_file_name || body.figmaFileName || '').trim().slice(0, 500);
+  const dsCacheHash = String(body.ds_cache_hash || body.dsCacheHash || '').trim().slice(0, 128);
+  const dsContextIndex = body.ds_context_index ?? body.dsContextIndex;
+  if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
+  if (!displayName) return res.status(400).json({ error: 'display_name required' });
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') return res.status(400).json({ error: 'ds_context_index object required' });
+
+  try {
+    const planRow = await dbSql`SELECT plan FROM users WHERE id = ${userId} LIMIT 1`;
+    const plan = String(planRow?.rows?.[0]?.plan || 'FREE').toUpperCase();
+    if (plan !== 'PRO') {
+      const cntSel = await dbSql`
+        SELECT COUNT(*)::int AS c FROM user_ds_imports WHERE user_id = ${userId}
+      `;
+      const total = cntSel?.rows?.[0]?.c ?? 0;
+      const sameSel = await dbSql`
+        SELECT 1 FROM user_ds_imports
+        WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey}
+        LIMIT 1
+      `;
+      const hasSame = (sameSel?.rows?.length || 0) > 0;
+      if (total >= 1 && !hasSame) {
+        return res.status(403).json({
+          error: 'Free tier allows one design system file. Upgrade to Pro to import more.',
+          code: 'DS_IMPORT_PRO_REQUIRED',
+        });
+      }
+    }
+
+    const jsonStr = JSON.stringify(dsContextIndex);
+    await dbSql`
+      INSERT INTO user_ds_imports (
+        user_id, figma_file_key, display_name, figma_file_name, ds_cache_hash, ds_context_index, updated_at
+      )
+      VALUES (
+        ${userId}, ${figmaFileKey}, ${displayName}, ${figmaFileName},
+        ${dsCacheHash}, ${jsonStr}::jsonb, NOW()
+      )
+      ON CONFLICT (user_id, figma_file_key) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        figma_file_name = EXCLUDED.figma_file_name,
+        ds_cache_hash = EXCLUDED.ds_cache_hash,
+        ds_context_index = EXCLUDED.ds_context_index,
+        updated_at = NOW()
+    `;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PUT /api/user/ds-imports', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
