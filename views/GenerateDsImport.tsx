@@ -991,21 +991,21 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                   variant="primary"
                   fullWidth
                   disabled={introStepLoading !== null}
-                  className="text-sm font-black py-3"
+                  className="relative overflow-hidden text-sm font-black py-3"
                   onClick={() => void continueFromIntroStep(0, 1)}
                 >
                   {introStepLoading === 0 ? (
-                    <span className="relative flex w-full items-center justify-center overflow-hidden">
+                    <span className="absolute inset-0">
                       <span
-                        className="absolute left-0 top-0 h-full bg-yellow-300"
+                        className="absolute inset-y-0 left-0 bg-yellow-300"
                         style={{ animation: `fill-cta-bar ${INTRO_STEP_MIN_MS}ms linear forwards` }}
                         aria-hidden
                       />
-                      <span className="relative z-10">Loading…</span>
                     </span>
-                  ) : (
-                    'Continue'
-                  )}
+                  ) : null}
+                  <span className="relative z-10 w-full text-center">
+                    {introStepLoading === 0 ? 'Loading…' : 'Continue'}
+                  </span>
                 </Button>
               ) : (
                 <>
@@ -1027,22 +1027,23 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                   {wizardStep === 1 && (
                     <Button
                       variant="primary"
-                      className="flex-1 text-xs font-black py-3"
+                      className="relative flex-1 overflow-hidden text-xs font-black py-3"
                       disabled={introStepLoading !== null}
                       onClick={() => void continueFromIntroStep(1, 2)}
                     >
                       {introStepLoading === 1 ? (
-                        <span className="relative flex w-full items-center justify-center overflow-hidden">
+                        <span className="absolute inset-0">
                           <span
-                            className="absolute left-0 top-0 h-full bg-yellow-300"
+                            className="absolute inset-y-0 left-0 bg-yellow-300"
                             style={{ animation: `fill-cta-bar ${INTRO_STEP_MIN_MS}ms linear forwards` }}
                             aria-hidden
                           />
-                          <span className="relative z-10">Loading…</span>
                         </span>
-                      ) : (
-                        'Continue'
-                      )}
+                      ) : null}
+                      <span className="relative z-10 w-full text-center">
+                        {introStepLoading === 1 ? 'Loading…' : 'Continue'}
+                      </span>
+                    </span>
                     </Button>
                   )}
                   {wizardStep === 2 && importFlowPhase !== 'none' && indexResult && !wizardError && (

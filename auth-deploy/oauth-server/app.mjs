@@ -456,14 +456,33 @@ app.get('/auth/figma/plugin', (req, res) => {
 });
 
 function getUserIdFromToken(req) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) return null;
-  try {
-    const decoded = jwt.verify(auth.slice(7), JWT_SECRET);
-    return decoded.sub || null;
-  } catch {
-    return null;
+  return getUserAuthContext(req).userId;
+}
+
+function getUserAuthContext(req) {
+  const authRaw = String(req.headers.authorization || '').trim();
+  if (!authRaw) return { userId: null, reason: 'missing_authorization' };
+  const m = authRaw.match(/^Bearer\s+(.+)$/i);
+  if (!m || !m[1]) return { userId: null, reason: 'invalid_authorization_format' };
+  const token = String(m[1]).trim();
+  if (!token) return { userId: null, reason: 'empty_bearer_token' };
+
+  // Allow one previous secret for seamless rotations between deploys.
+  const verifySecrets = [
+    String(JWT_SECRET || '').trim(),
+    String(process.env.JWT_SECRET_PREVIOUS || '').trim(),
+  ].filter(Boolean);
+
+  for (const secret of verifySecrets) {
+    try {
+      const decoded = jwt.verify(token, secret);
+      const userId = decoded?.sub ? String(decoded.sub) : '';
+      if (userId) return { userId, reason: null };
+    } catch {
+      // keep trying next secret
+    }
   }
+  return { userId: null, reason: 'jwt_verify_failed' };
 }
 
 const ADMIN_API_KEY = String(process.env.ADMIN_API_KEY || '').trim();
@@ -2415,8 +2434,9 @@ app.put('/api/admin/design-systems/external', async (req, res) => {
 
 // --- User DS imports (Generate: custom file DS — persist context index for performance)
 app.get('/api/user/ds-imports', async (req, res) => {
-  const userId = getUserIdFromToken(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
   if (!dbSql) return res.status(503).json({ error: 'Database required' });
   try {
     const sel = await dbSql`
@@ -2434,8 +2454,9 @@ app.get('/api/user/ds-imports', async (req, res) => {
 });
 
 app.get('/api/user/ds-imports/context', async (req, res) => {
-  const userId = getUserIdFromToken(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
   const fileKey = String(req.query.file_key || req.query.fileKey || '').trim();
   if (!fileKey) return res.status(400).json({ error: 'file_key required' });
   if (!dbSql) return res.status(503).json({ error: 'Database required' });
@@ -2459,8 +2480,9 @@ app.get('/api/user/ds-imports/context', async (req, res) => {
 });
 
 app.put('/api/user/ds-imports', async (req, res) => {
-  const userId = getUserIdFromToken(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
   if (!dbSql) return res.status(503).json({ error: 'Database required' });
   const body = req.body || {};
   const figmaFileKey = String(body.figma_file_key || body.file_key || body.fileKey || '').trim();

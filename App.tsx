@@ -244,6 +244,8 @@ export default function AppTest() {
   /** Prevent repeated failing fetches in Generate view (CORS / network). */
   const dsImportsSyncAttemptedRef = useRef<string | null>(null);
   const designSystemsFetchAttemptedRef = useRef(false);
+  /** If DS-import APIs return 401 once, avoid repeated slow calls in this session. */
+  const dsImportsUnauthorizedRef = useRef(false);
 
   const isTestUser = user ? TEST_USER_EMAILS.includes(user.email.toLowerCase().trim()) : false;
   const useInfiniteCreditsForTest = isTestUser && !simulateFreeTier;
@@ -1203,11 +1205,15 @@ export default function AppTest() {
     async (
       fileKey: string,
     ): Promise<{ ds_context_index: object; ds_cache_hash: string | null } | null> => {
-      if (!user?.authToken || !fileKey) return null;
+      if (!user?.authToken || !fileKey || dsImportsUnauthorizedRef.current) return null;
       const r = await fetch(
         `${AUTH_BACKEND_URL}/api/user/ds-imports/context?file_key=${encodeURIComponent(fileKey)}`,
         { headers: { Authorization: `Bearer ${user.authToken}` } },
       );
+      if (r.status === 401) {
+        dsImportsUnauthorizedRef.current = true;
+        return null;
+      }
       if (r.status === 404) return null;
       if (r.status === 503) {
         handle503();
@@ -1236,10 +1242,14 @@ export default function AppTest() {
   );
 
   const syncDsImportsFromServer = useCallback(async () => {
-    if (!user?.authToken) return;
+    if (!user?.authToken || dsImportsUnauthorizedRef.current) return;
     const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
       headers: { Authorization: `Bearer ${user.authToken}` },
     });
+    if (r.status === 401) {
+      dsImportsUnauthorizedRef.current = true;
+      return;
+    }
     if (r.status === 503) {
       handle503();
       return;
@@ -1260,12 +1270,16 @@ export default function AppTest() {
       ds_cache_hash: string;
       ds_context_index: object;
     }) => {
-      if (!user?.authToken) return;
+      if (!user?.authToken || dsImportsUnauthorizedRef.current) return;
       const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
         body: JSON.stringify(body),
       });
+      if (r.status === 401) {
+        dsImportsUnauthorizedRef.current = true;
+        throw new Error('Unauthorized');
+      }
       if (r.status === 503) {
         handle503();
         throw new Error('Service temporarily unavailable');
@@ -1277,6 +1291,10 @@ export default function AppTest() {
     },
     [user?.authToken, AUTH_BACKEND_URL, handle503],
   );
+
+  useEffect(() => {
+    dsImportsUnauthorizedRef.current = false;
+  }, [user?.authToken]);
 
   useEffect(() => {
     if (view !== ViewState.GENERATE || !user?.authToken) return;
