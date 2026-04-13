@@ -27,6 +27,12 @@ type DsIndexSummary = {
   token_categories: Record<string, number>;
   styles_summary?: { paintStyles: number; textStyles: number; effectStyles: number };
   components: unknown[];
+  /** After heavy component scan: UI counts only (drops full `components[]` from React state to save memory). */
+  catalogPreview?: {
+    inIndex: number;
+    sets: number;
+    singles: number;
+  };
   components_truncated?: boolean;
   total_components_in_file?: number;
   rules_summary?: {
@@ -127,7 +133,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
   const railTop = `${STEPPER_NODE_HALF}px`;
 
   return (
-    <div className="w-full px-3 pb-1" role="navigation" aria-label="Import steps">
+    <div className="w-full px-3" role="navigation" aria-label="Import steps">
       <p className="sr-only">
         Step {currentStep + 1} of {STEP_TOTAL}
       </p>
@@ -155,7 +161,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
               return (
                 <div
                   key={`ellipsis-${si}`}
-                  className="flex min-h-[5.5rem] min-w-0 flex-col items-center justify-start gap-2 pt-0"
+                  className="flex min-h-[4.75rem] min-w-0 flex-col items-center justify-start gap-2 pt-0"
                   aria-label="Variables and components steps omitted from strip"
                 >
                   {/* Same 40×40 box + shadow as other steps; dashed border = collapsed steps; dots only inside (no duplicate under label). */}
@@ -167,7 +173,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
                     <span>·</span>
                     <span>·</span>
                   </div>
-                  <span className="flex min-h-[2.75rem] w-full items-start justify-center px-1 text-center text-[12px] font-black uppercase leading-snug tracking-wide text-gray-600">
+                  <span className="flex min-h-[2rem] w-full items-start justify-center px-1 text-center text-[12px] font-black uppercase leading-snug tracking-wide text-gray-600">
                     Var · comp
                   </span>
                 </div>
@@ -180,7 +186,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
             return (
               <div
                 key={`step-${stepIndex}`}
-                className="flex min-h-[5.5rem] min-w-0 flex-col items-center justify-start gap-2 pt-0"
+                className="flex min-h-[4.75rem] min-w-0 flex-col items-center justify-start gap-2 pt-0"
               >
                 <div
                   className={`flex size-10 shrink-0 items-center justify-center border-2 border-black text-xs font-black tabular-nums leading-none shadow-[3px_3px_0_0_#000] transition-transform duration-200 ${
@@ -194,7 +200,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
                   {completed ? <span className="text-base leading-none">✓</span> : displayNumber}
                 </div>
                 <span
-                  className={`flex min-h-[2.75rem] w-full items-start justify-center px-1 text-center text-[12px] font-black uppercase leading-snug tracking-wide text-balance ${
+                  className={`flex min-h-[2rem] w-full items-start justify-center px-1 text-center text-[12px] font-black uppercase leading-snug tracking-wide text-balance ${
                     active ? 'text-black' : completed ? 'text-gray-800' : 'text-gray-400'
                   }`}
                 >
@@ -235,7 +241,8 @@ function buildTokenAndStyleGapHints(s: DsIndexSummary): ImportGapHint[] {
 
 /** Step Components: after full merge only. */
 function buildComponentsGapHints(s: DsIndexSummary): ImportGapHint[] {
-  if (s.components.length === 0) {
+  const indexed = s.catalogPreview?.inIndex ?? s.components.length;
+  if (indexed === 0) {
     return [
       {
         id: 'components',
@@ -287,15 +294,19 @@ function WizardImportGapSnackbars({
 
 function ImportComponentsCatalogCard({
   components,
+  catalogPreview,
   components_truncated,
   total_components_in_file,
 }: {
   components: unknown[];
+  catalogPreview?: DsIndexSummary['catalogPreview'];
   components_truncated?: boolean;
   total_components_in_file?: number;
 }) {
-  const { sets, singles } = countIndexedCatalogParts(components);
-  const n = components.length;
+  const { sets, singles } = catalogPreview
+    ? { sets: catalogPreview.sets, singles: catalogPreview.singles }
+    : countIndexedCatalogParts(components);
+  const n = catalogPreview?.inIndex ?? components.length;
   const truncated = Boolean(components_truncated);
   const fileTotal = total_components_in_file;
 
@@ -644,7 +655,15 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         onBusyChange(false);
         return;
       }
-      setIndexResult(parseIndexToSummary(res.index as object));
+      const parsed = parseIndexToSummary(res.index as object);
+      const parts = countIndexedCatalogParts(parsed.components);
+      const inIndex = parsed.components.length;
+      // Drop full component rows from React state after scan — keeps step 4/5 responsive and lowers memory pressure.
+      setIndexResult({
+        ...parsed,
+        components: [],
+        catalogPreview: { inIndex, sets: parts.sets, singles: parts.singles },
+      });
       const hash =
         (res.hash && String(res.hash).trim()) ||
         String((res.index as { hash?: string }).hash || '').trim() ||
@@ -778,7 +797,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             <Button
               variant="primary"
               fullWidth
-              className="text-lg font-black leading-[1.15] py-3.5 px-4 text-center"
               onClick={openWizard}
               disabled={dsImportBusy}
             >
@@ -793,7 +811,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             <Button
               variant="primary"
               fullWidth
-              className="text-lg font-black leading-[1.15] py-3.5 px-4 text-center"
               onClick={openWizard}
               disabled={dsImportBusy}
             >
@@ -947,6 +964,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               {wizardStep === 3 && indexResult && importFlowPhase === 'full' && (
                 <ImportComponentsCatalogCard
                   components={indexResult.components}
+                  catalogPreview={indexResult.catalogPreview}
                   components_truncated={indexResult.components_truncated}
                   total_components_in_file={indexResult.total_components_in_file}
                 />
@@ -967,7 +985,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     </li>
                   )}
                   <li>
-                    <strong>Components in index:</strong> {indexResult.components.length}
+                    <strong>Components in index:</strong>{' '}
+                    {indexResult.catalogPreview?.inIndex ?? indexResult.components.length}
                     {indexResult.components_truncated ? ' (truncated)' : ''}
                   </li>
                 </ul>
@@ -1020,7 +1039,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                 <>
                   <Button
                     variant="secondary"
-                    className="flex-1 text-xs font-black py-3"
+                    className="flex-1 min-h-[44px] text-xs font-black py-3"
                     disabled={
                       introStepLoading !== null ||
                       (wizardStep === 2 && dsImportBusy && importFlowPhase === 'none') ||
@@ -1036,7 +1055,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                   {wizardStep === 1 && (
                     <Button
                       variant="primary"
-                      className="relative flex-1 overflow-hidden text-xs font-black py-3"
+                      className="relative flex-1 min-h-[44px] overflow-hidden text-xs font-black py-3"
                       disabled={introStepLoading !== null}
                       onClick={() => void continueFromIntroStep(1, 2)}
                     >
@@ -1055,14 +1074,14 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     </Button>
                   )}
                   {wizardStep === 2 && importFlowPhase !== 'none' && indexResult && !wizardError && (
-                    <Button variant="primary" className="flex-1 text-xs font-black py-3" onClick={() => setWizardStep(3)}>
+                    <Button variant="primary" className="flex-1 min-h-[44px] text-xs font-black py-3" onClick={() => setWizardStep(3)}>
                       Continue
                     </Button>
                   )}
                   {wizardStep === 2 && wizardError && (
                     <Button
                       variant="primary"
-                      className="flex-1 text-xs font-black py-3"
+                      className="flex-1 min-h-[44px] text-xs font-black py-3"
                       onClick={() => {
                         setWizardError(null);
                         setIndexResult(null);
@@ -1073,14 +1092,14 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     </Button>
                   )}
                   {wizardStep === 3 && importFlowPhase === 'full' && indexResult && !wizardError && (
-                    <Button variant="primary" className="flex-1 text-xs font-black py-3" onClick={() => setWizardStep(4)}>
+                    <Button variant="primary" className="flex-1 min-h-[44px] text-xs font-black py-3" onClick={() => setWizardStep(4)}>
                       Continue
                     </Button>
                   )}
                   {wizardStep === 3 && wizardError && (
                     <Button
                       variant="primary"
-                      className="flex-1 text-xs font-black py-3"
+                      className="flex-1 min-h-[44px] text-xs font-black py-3"
                       onClick={() => {
                         setWizardError(null);
                         setWizardCapture(null);
@@ -1090,7 +1109,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     </Button>
                   )}
                   {wizardStep === 4 && importFlowPhase === 'full' && wizardCapture && (
-                    <Button variant="primary" className="flex-1 text-xs font-black uppercase py-3" onClick={finishWizard}>
+                    <Button variant="primary" className="flex-1 min-h-[44px] text-xs font-black uppercase py-3" onClick={finishWizard}>
                       Confirm and import
                     </Button>
                   )}

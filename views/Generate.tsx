@@ -17,6 +17,7 @@ import {
 } from '../components/ui/BrutalSelect';
 import { UserPlan } from '../types';
 import { getSystemToastOptions } from '../lib/errorCopy';
+import { Confetti } from '../components/Confetti.tsx';
 
 interface Props { 
   plan: UserPlan; 
@@ -126,7 +127,8 @@ export const Generate: React.FC<Props> = ({
   const [showReadFirstModal, setShowReadFirstModal] = useState(false);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [showCatalogReadyModal, setShowCatalogReadyModal] = useState(false);
-  const [catalogConfettiBurst, setCatalogConfettiBurst] = useState(0);
+  /** Increment to remount canvas confetti (same pattern as LevelUpModal). */
+  const [catalogConfettiKey, setCatalogConfettiKey] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [hasContent, setHasContent] = useState(!!initialPrompt);
   const [promptText, setPromptText] = useState(initialPrompt || '');
@@ -270,7 +272,7 @@ export const Generate: React.FC<Props> = ({
 
   const handleCatalogReady = useCallback(() => {
     setCatalogReady(true);
-    setCatalogConfettiBurst((n) => n + 1);
+    setCatalogConfettiKey((k) => k + 1);
     setShowCatalogReadyModal(true);
   }, []);
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
@@ -1045,44 +1047,14 @@ export const Generate: React.FC<Props> = ({
         </div>
       )}
 
-      {catalogConfettiBurst > 0 && (
-        <div
-          key={`catalog-confetti-${catalogConfettiBurst}`}
-          className="pointer-events-none fixed inset-0 z-[62] overflow-hidden"
-          aria-hidden
-        >
-          {Array.from({ length: 36 }).map((_, i) => {
-            const left = (i * 7919) % 100;
-            const delay = (i % 12) * 55;
-            const dur = 900 + (i % 5) * 140;
-            const colors = ['#ff90e8', '#ffc900', '#4ade80', '#60a5fa', '#f97316', '#111827'];
-            const color = colors[i % colors.length];
-            return (
-              <span
-                key={`piece-${i}`}
-                className="absolute top-[-10%] block h-2 w-1.5 rounded-[1px] animate-[confetti-drop_var(--dur)_ease-out_forwards]"
-                style={
-                  {
-                    left: `${left}%`,
-                    backgroundColor: color,
-                    transform: `rotate(${(i * 37) % 360}deg)`,
-                    animationDelay: `${delay}ms`,
-                    '--dur': `${dur}ms`,
-                  } as React.CSSProperties
-                }
-              />
-            );
-          })}
-        </div>
-      )}
-
       {showCatalogReadyModal && (
         <div
-          className="fixed inset-0 z-[63] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 animate-in fade-in"
           onClick={() => setShowCatalogReadyModal(false)}
         >
+          <Confetti key={catalogConfettiKey} />
           <div
-            className={`${BRUTAL.card} bg-white max-w-sm w-full p-4`}
+            className={`${BRUTAL.card} bg-white max-w-sm w-full p-4 relative`}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-black uppercase text-sm mb-2">Design system imported</h3>

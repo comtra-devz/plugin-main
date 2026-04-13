@@ -64,6 +64,10 @@ export type ServerDsImportListRow = {
 };
 
 export function replaceDsImportsFromServer(rows: ServerDsImportListRow[]): void {
+  // Empty list from API must NOT wipe local imports (e.g. token/CORS timing, or server lag after PUT).
+  // Local `upsertDsImport` remains source of truth until server returns at least one row.
+  if (!Array.isArray(rows) || rows.length === 0) return;
+
   const list: StoredDsImport[] = rows.map((row, i) => {
     const msRaw = row.updated_at_ms;
     const updatedAt =

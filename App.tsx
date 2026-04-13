@@ -17,6 +17,7 @@ import { TrophiesModal } from './components/TrophiesModal';
 import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { useToast } from './contexts/ToastContext';
+import type { ToastOptions } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
@@ -188,6 +189,76 @@ function CreditsLoader() {
 }
 
 const THROTTLE_DISCOUNT_WINDOW_MS = 15 * 60 * 1000; // 15 min
+
+/**
+ * TEMP: barra JWT (anche build prod). RIMUOVERE SUBITO dopo aver finito (sicurezza).
+ */
+function DevJwtDebugBar({
+  authToken,
+  showToast,
+}: {
+  authToken: string | undefined;
+  showToast: (options: ToastOptions) => string;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const copy = () => {
+    if (!authToken) return;
+    void navigator.clipboard.writeText(authToken).then(
+      () =>
+        showToast({
+          title: 'JWT copiato',
+          description: 'COMTRA_JWT="…" npm run verify-ds-import',
+          dismissible: true,
+        }),
+      () =>
+        showToast({
+          title: 'Copia non riuscita',
+          description: 'Seleziona il testo nel box e copia a mano.',
+          variant: 'warning',
+          dismissible: true,
+        }),
+    );
+  };
+  return (
+    <div
+      className="fixed bottom-16 left-1 right-1 z-[75] max-h-[40vh] flex flex-col border-2 border-black bg-amber-100 shadow-[4px_4px_0_0_#000] text-black"
+      data-dev-jwt-bar
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b-2 border-black px-2 py-1.5 bg-amber-200">
+        <p className="text-[9px] font-black uppercase leading-tight">
+          TEMP — JWT (rimuovi da App.tsx subito dopo)
+        </p>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            className="border-2 border-black bg-white px-2 py-0.5 text-[9px] font-black uppercase shadow-[2px_2px_0_0_#000] active:translate-x-px active:translate-y-px active:shadow-none"
+            onClick={copy}
+            disabled={!authToken}
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            className="border-2 border-black bg-white px-2 py-0.5 text-[9px] font-black uppercase shadow-[2px_2px_0_0_#000] active:translate-x-px active:translate-y-px active:shadow-none"
+            onClick={() => setCollapsed((c) => !c)}
+          >
+            {collapsed ? 'Mostra' : 'Nascondi'}
+          </button>
+        </div>
+      </div>
+      {!collapsed && (
+        <textarea
+          readOnly
+          className="min-h-[5rem] flex-1 resize-y border-0 bg-white p-2 font-mono text-[9px] leading-snug text-black outline-none"
+          spellCheck={false}
+          value={authToken || '(non loggato — fai login nel plugin)'}
+          aria-label="JWT sessione Comtra (solo ambiente sviluppo)"
+          onFocus={(e) => e.target.select()}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function AppTest() {
   const { showToast } = useToast();
@@ -1656,6 +1727,7 @@ export default function AppTest() {
           />
         )}
       </Layout>
+      <DevJwtDebugBar authToken={user?.authToken} showToast={showToast} />
     </>
   );
 }
