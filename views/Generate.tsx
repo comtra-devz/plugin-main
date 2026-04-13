@@ -1052,7 +1052,7 @@ export const Generate: React.FC<Props> = ({
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 animate-in fade-in"
           onClick={() => setShowCatalogReadyModal(false)}
         >
-          <Confetti key={catalogConfettiKey} />
+          <Confetti key={catalogConfettiKey} density="lite" />
           <div
             className={`${BRUTAL.card} bg-white max-w-sm w-full p-4 relative`}
             onClick={(e) => e.stopPropagation()}
