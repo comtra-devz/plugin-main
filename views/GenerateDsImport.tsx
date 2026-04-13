@@ -11,6 +11,7 @@ import {
   type StoredDsImport,
 } from '../lib/dsImportsStorage';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../lib/safeWebStorage';
+import { useToast } from '../contexts/ToastContext';
 
 const INTRO_SEEN_KEY = 'comtra-generate-ds-intro-seen';
 
@@ -389,6 +390,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   onUnlockRequest,
   persistDsImportToServer,
 }) => {
+  const { showToast } = useToast();
   const [introSeen, setIntroSeen] = useState(readIntroSeen);
   const [imports, setImports] = useState<StoredDsImport[]>(() => loadDsImports());
   const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
@@ -546,14 +548,38 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           wizardCapture.hash.trim() ||
           String((wizardCapture.fullIndex as { hash?: string }).hash || '').trim() ||
           '';
-        void persistDsImportToServer({
-          figma_file_key: fileKey,
-          display_name: label,
-          figma_file_name: fileName || '',
-          ds_cache_hash: h,
-          ds_context_index: wizardCapture.fullIndex,
-        }).catch(() => {
-          /* offline / 403: local state still valid */
+        const topKeys = Object.keys(wizardCapture.fullIndex as object).length;
+        void (async () => {
+          try {
+            await persistDsImportToServer({
+              figma_file_key: fileKey,
+              display_name: label,
+              figma_file_name: fileName || '',
+              ds_cache_hash: h,
+              ds_context_index: wizardCapture.fullIndex,
+            });
+            showToast({
+              title: 'Server: salvataggio OK',
+              description: `PUT /api/user/ds-imports · 200 · indice con ${topKeys} chiavi in cima al JSON. Così anche altre sessioni / verify-ds-import vedono lo snapshot.`,
+              dismissible: true,
+            });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            showToast({
+              title: 'Server: salvataggio non riuscito',
+              description: `${msg} In questa sessione il catalogo resta usabile; controlla rete o login e riprova l’import.`,
+              variant: 'warning',
+              dismissible: true,
+            });
+          }
+        })();
+      } else if (fileKey) {
+        showToast({
+          title: 'Server: nessuno snapshot inviato',
+          description:
+            'Manca l’indice completo (wizard). Rifai lo step componenti e conferma di nuovo: altrimenti su /ds-imports/context il payload resta vuoto.',
+          variant: 'warning',
+          dismissible: true,
         });
       }
     }
@@ -571,6 +597,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     onBusyChange,
     isPro,
     onUnlockRequest,
+    showToast,
   ]);
 
   const parseIndexToSummary = useCallback((raw: object): DsIndexSummary => {
