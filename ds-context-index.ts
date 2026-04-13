@@ -39,6 +39,12 @@ export type DsContextIndexPayload = {
   /** Nomi variabili locali (per governance Fase 4 lato server). */
   variable_names?: string[];
   variable_names_truncated?: boolean;
+  /** Optional summary of explicit DS rules and guidance found in the file. */
+  rules_summary?: {
+    source: 'plugin_data' | 'documentation_pages' | 'none';
+    rules: string[];
+    guidance: string[];
+  };
 };
 
 type BuildResult = { index: DsContextIndexPayload; canonicalJson: string };
@@ -168,18 +174,118 @@ type TokensSlice = {
   styles_summary: { paintStyles: number; textStyles: number; effectStyles: number };
   total_tokens: number;
   fileName: string;
+  rules_summary?: DsContextIndexPayload['rules_summary'];
 };
 
 /** Set by `buildDsContextIndexTokensOnly`; consumed by `buildDsContextIndexComponentsMerge` to avoid re-fetching tokens. */
 let lastWizardTokensSlice: TokensSlice | null = null;
 
+const RULE_PAGE_NAME_RE = /\b(rules?|guidelines?|documentation|foundations?|principles?)\b/i;
+const BULLET_RE = /^\s*(?:[-*•]|\d+[.)])\s+/;
+const MAX_RULES = 8;
+const MAX_GUIDANCE = 8;
+const MAX_LINE_LEN = 180;
+
+function normalizeLine(line: string): string {
+  const compact = line.replace(/\s+/g, ' ').trim();
+  return compact.length > MAX_LINE_LEN ? `${compact.slice(0, MAX_LINE_LEN - 1)}…` : compact;
+}
+
+function classifyGuidanceLine(line: string): 'rule' | 'guidance' | null {
+  const l = line.toLowerCase();
+  if (!l) return null;
+  if (/\b(must|never|always|required|forbidden|do not|don't|cannot|only)\b/.test(l)) return 'rule';
+  if (/\b(should|prefer|recommend|try|consider|avoid)\b/.test(l)) return 'guidance';
+  if (BULLET_RE.test(line)) return 'guidance';
+  return null;
+}
+
+async function collectRulesAndGuidanceSummary(): Promise<DsContextIndexPayload['rules_summary']> {
+  const pluginRuleKeys = ['comtra_ds_rules', 'comtra_rules', 'ds_rules', 'rules'];
+  const pluginGuidanceKeys = ['comtra_ds_guidance', 'comtra_guidance', 'ds_guidance', 'guidance'];
+  const rulesFromPlugin = new Set<string>();
+  const guidanceFromPlugin = new Set<string>();
+
+  for (const key of pluginRuleKeys) {
+    const raw = String(figma.root.getPluginData(key) || '').trim();
+    if (!raw) continue;
+    for (const piece of raw.split(/\n+/g)) {
+      const n = normalizeLine(piece);
+      if (n) rulesFromPlugin.add(n);
+      if (rulesFromPlugin.size >= MAX_RULES) break;
+    }
+  }
+  for (const key of pluginGuidanceKeys) {
+    const raw = String(figma.root.getPluginData(key) || '').trim();
+    if (!raw) continue;
+    for (const piece of raw.split(/\n+/g)) {
+      const n = normalizeLine(piece);
+      if (n) guidanceFromPlugin.add(n);
+      if (guidanceFromPlugin.size >= MAX_GUIDANCE) break;
+    }
+  }
+
+  if (rulesFromPlugin.size > 0 || guidanceFromPlugin.size > 0) {
+    return {
+      source: 'plugin_data',
+      rules: Array.from(rulesFromPlugin).slice(0, MAX_RULES),
+      guidance: Array.from(guidanceFromPlugin).slice(0, MAX_GUIDANCE),
+    };
+  }
+
+  await ensureAllPagesLoaded();
+  const rules = new Set<string>();
+  const guidance = new Set<string>();
+
+  for (const child of figma.root.children) {
+    if (child.type !== 'PAGE') continue;
+    if (!RULE_PAGE_NAME_RE.test(child.name || '')) continue;
+    try {
+      await child.loadAsync();
+    } catch {
+      continue;
+    }
+    const textNodes = child.findAll((n) => n.type === 'TEXT') as TextNode[];
+    for (const t of textNodes) {
+      let chars = '';
+      try {
+        chars = String(t.characters || '');
+      } catch {
+        chars = '';
+      }
+      if (!chars) continue;
+      for (const rawLine of chars.split('\n')) {
+        const line = normalizeLine(rawLine);
+        if (!line) continue;
+        const kind = classifyGuidanceLine(line);
+        if (kind === 'rule' && rules.size < MAX_RULES) rules.add(line);
+        else if (kind === 'guidance' && guidance.size < MAX_GUIDANCE) guidance.add(line);
+        if (rules.size >= MAX_RULES && guidance.size >= MAX_GUIDANCE) break;
+      }
+      if (rules.size >= MAX_RULES && guidance.size >= MAX_GUIDANCE) break;
+    }
+    if (rules.size >= MAX_RULES && guidance.size >= MAX_GUIDANCE) break;
+  }
+
+  if (rules.size === 0 && guidance.size === 0) {
+    return { source: 'none', rules: [], guidance: [] };
+  }
+
+  return {
+    source: 'documentation_pages',
+    rules: Array.from(rules).slice(0, MAX_RULES),
+    guidance: Array.from(guidance).slice(0, MAX_GUIDANCE),
+  };
+}
+
 async function collectTokensAndStylesSlice(): Promise<TokensSlice> {
-  const [variables, collections, paintStyles, textStyles, effectStyles] = await Promise.all([
+  const [variables, collections, paintStyles, textStyles, effectStyles, rules_summary] = await Promise.all([
     figma.variables.getLocalVariablesAsync(),
     figma.variables.getLocalVariableCollectionsAsync(),
     figma.getLocalPaintStylesAsync(),
     figma.getLocalTextStylesAsync(),
     figma.getLocalEffectStylesAsync(),
+    collectRulesAndGuidanceSummary(),
   ]);
 
   const token_categories: Record<string, number> = {};
@@ -217,6 +323,7 @@ async function collectTokensAndStylesSlice(): Promise<TokensSlice> {
     },
     total_tokens: variables.length,
     fileName: figma.root.name || '',
+    rules_summary,
   };
 }
 
@@ -251,6 +358,7 @@ async function assembleFromParts(
     total_components_in_file: totalInFile,
     variable_names,
     variable_names_truncated: variableNamesTruncated || undefined,
+    rules_summary: tokens.rules_summary,
   };
 
   const canonicalJson = stableStringifyForHash(bodyForHash);
@@ -267,6 +375,7 @@ async function assembleFromParts(
     modes: tokens.modes,
     styles_summary: tokens.styles_summary,
     variable_names,
+    rules_summary: tokens.rules_summary,
   };
   if (variableNamesTruncated) index.variable_names_truncated = true;
   if (truncated) {
@@ -328,6 +437,22 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
 export async function buildDsContextIndexTokensOnly(): Promise<BuildResult> {
   const tokens = await collectTokensAndStylesSlice();
   lastWizardTokensSlice = tokens;
+  return assembleFromParts(tokens, [], 0, false);
+}
+
+/** Wizard intro step: read only global rules/guidance hints from file metadata/docs. */
+export async function buildDsContextIndexRulesOnly(): Promise<BuildResult> {
+  const rules_summary = await collectRulesAndGuidanceSummary();
+  const tokens: TokensSlice = {
+    token_categories: {},
+    modes: [],
+    variable_names: [],
+    variable_names_truncated: false,
+    styles_summary: { paintStyles: 0, textStyles: 0, effectStyles: 0 },
+    total_tokens: 0,
+    fileName: figma.root.name || '',
+    rules_summary,
+  };
   return assembleFromParts(tokens, [], 0, false);
 }
 

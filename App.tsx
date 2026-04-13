@@ -1169,7 +1169,7 @@ export default function AppTest() {
   }, []);
 
   const requestDsContextIndex = useCallback(
-    (opts?: { reuseCached?: boolean; timeoutMs?: number; phase?: 'tokens' | 'components' }) => {
+    (opts?: { reuseCached?: boolean; timeoutMs?: number; phase?: 'rules' | 'tokens' | 'components' }) => {
       const reuseCached = opts?.reuseCached !== false;
       const timeoutMs =
         typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
@@ -1177,7 +1177,7 @@ export default function AppTest() {
       return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
         const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
         dsContextIndexWaitersRef.current.set(requestId, resolve);
-        if (phase === 'tokens' || phase === 'components') {
+        if (phase === 'rules' || phase === 'tokens' || phase === 'components') {
           window.parent.postMessage(
             { pluginMessage: { type: 'get-ds-context-index-phase', requestId, phase } },
             '*',

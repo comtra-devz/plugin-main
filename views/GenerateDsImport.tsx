@@ -18,7 +18,7 @@ export type RequestDsContextIndexFn = (opts: {
   reuseCached: boolean;
   timeoutMs?: number;
   /** Wizard: read tokens/styles only, or merge component scan (after tokens). */
-  phase?: 'tokens' | 'components';
+  phase?: 'rules' | 'tokens' | 'components';
 }) => Promise<{ index: object | null; hash: string | null; error?: string }>;
 
 type DsIndexSummary = {
@@ -29,9 +29,15 @@ type DsIndexSummary = {
   components: unknown[];
   components_truncated?: boolean;
   total_components_in_file?: number;
+  rules_summary?: {
+    source: 'plugin_data' | 'documentation_pages' | 'none';
+    rules: string[];
+    guidance: string[];
+  };
 };
 
 type ImportFlowPhase = 'none' | 'tokens' | 'full';
+type IntroStepLoading = 0 | 1 | null;
 
 const STEP_TOTAL = 5;
 const VISIBLE_STEPPER_COLS = 4;
@@ -116,7 +122,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
   const railTop = `${STEPPER_NODE_HALF}px`;
 
   return (
-    <div className="w-full px-3" role="navigation" aria-label="Import steps">
+    <div className="w-full px-3 pb-1" role="navigation" aria-label="Import steps">
       <p className="sr-only">
         Step {currentStep + 1} of {STEP_TOTAL}
       </p>
@@ -291,7 +297,7 @@ function ImportComponentsCatalogCard({
   return (
     <div className="border-2 border-black bg-white shadow-[5px_5px_0_0_#000] overflow-hidden">
       <div className="flex items-stretch border-b-2 border-black">
-        <div className="min-w-0 flex-1 bg-[#ff90e8] px-3 py-2.5">
+        <div className="min-w-0 flex-1 bg-yellow-300 px-3 py-2.5">
           <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/75">Indexed catalog</p>
           <p className="mt-0.5 text-xs font-black uppercase leading-tight text-black">Ready for Generate</p>
         </div>
@@ -378,10 +384,11 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   /** Full snapshot + hash for backend PUT (same payload as from the plugin). */
   const [wizardCapture, setWizardCapture] = useState<{ fullIndex: object; hash: string } | null>(null);
   const [wizardError, setWizardError] = useState<string | null>(null);
+  const [rulesSummary, setRulesSummary] = useState<DsIndexSummary['rules_summary'] | null>(null);
   /** Tokens loaded vs full index with components (for split Figma reads). */
   const [importFlowPhase, setImportFlowPhase] = useState<ImportFlowPhase>('none');
-  /** Minimum dwell on Rules step + fake progress before advancing (ms). */
-  const [rulesContinueLoading, setRulesContinueLoading] = useState(false);
+  /** Minimum dwell on intro steps (Rules + Guidance) with CTA progress bar. */
+  const [introStepLoading, setIntroStepLoading] = useState<IntroStepLoading>(null);
   const importFlowCancelledRef = useRef(false);
   const [dismissedStep2GapIds, setDismissedStep2GapIds] = useState<string[]>([]);
   const [dismissedStep3GapIds, setDismissedStep3GapIds] = useState<string[]>([]);
@@ -456,9 +463,10 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setIndexResult(null);
     setWizardCapture(null);
     setImportFlowPhase('none');
+    setRulesSummary(null);
     setWizardStep(0);
     setShowCancelConfirm(false);
-    setRulesContinueLoading(false);
+    setIntroStepLoading(null);
     importFlowCancelledRef.current = false;
     setWizardOpen(true);
   }, [fileKey, isPro, onUnlockRequest]);
@@ -473,25 +481,26 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setIndexResult(null);
     setWizardCapture(null);
     setImportFlowPhase('none');
-    setRulesContinueLoading(false);
+    setRulesSummary(null);
+    setIntroStepLoading(null);
     onBusyChange(false);
   }, [onBusyChange]);
 
-  const RULES_STEP_MIN_MS = 2000;
+  const INTRO_STEP_MIN_MS = 2000;
 
-  const continueFromRulesStep = useCallback(async () => {
+  const continueFromIntroStep = useCallback(async (fromStep: 0 | 1, nextStep: number) => {
     importFlowCancelledRef.current = false;
-    setRulesContinueLoading(true);
+    setIntroStepLoading(fromStep);
     try {
       await Promise.all([
-        new Promise<void>((resolve) => setTimeout(resolve, RULES_STEP_MIN_MS)),
+        new Promise<void>((resolve) => setTimeout(resolve, INTRO_STEP_MIN_MS)),
         // Future: add real async prep here; advance only when delay and work both complete.
       ]);
       if (importFlowCancelledRef.current) return;
       setWizardError(null);
-      setWizardStep(1);
+      setWizardStep(nextStep);
     } finally {
-      setRulesContinueLoading(false);
+      setIntroStepLoading(null);
     }
   }, []);
 
@@ -567,8 +576,31 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       components_truncated: idx.components_truncated === true,
       total_components_in_file:
         typeof idx.total_components_in_file === 'number' ? idx.total_components_in_file : undefined,
+      rules_summary:
+        idx.rules_summary &&
+        typeof idx.rules_summary === 'object' &&
+        idx.rules_summary !== null &&
+        !Array.isArray(idx.rules_summary)
+          ? (idx.rules_summary as DsIndexSummary['rules_summary'])
+          : undefined,
     };
   }, []);
+
+  // Step 0: read explicit DS rules/guidance from file metadata or documentation pages.
+  useEffect(() => {
+    if (!wizardOpen || wizardStep !== 0 || rulesSummary || wizardError) return;
+    let cancelled = false;
+    (async () => {
+      const res = await requestDsContextIndex({ reuseCached: false, timeoutMs: 60000, phase: 'rules' });
+      if (cancelled) return;
+      if (res.error || !res.index || typeof res.index !== 'object') return;
+      const parsed = parseIndexToSummary(res.index as object);
+      if (parsed.rules_summary) setRulesSummary(parsed.rules_summary);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardOpen, wizardStep, rulesSummary, wizardError, requestDsContextIndex, parseIndexToSummary]);
 
   // Step 2: variables + styles only (no component scan)
   useEffect(() => {
@@ -792,6 +824,12 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           aria-modal="true"
           aria-labelledby="import-flow-title"
         >
+          <style>{`
+            @keyframes fill-cta-bar {
+              0% { width: 0%; }
+              100% { width: 100%; }
+            }
+          `}</style>
           <header className="shrink-0 border-b-2 border-black bg-white shadow-[0_2px_0_0_#000] flex items-center justify-between gap-2 px-3 py-3">
             <h2 id="import-flow-title" className="text-xs font-black uppercase tracking-wide truncate pr-2">
               Import design system
@@ -806,7 +844,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             </button>
           </header>
 
-          <div className="shrink-0 border-b-2 border-black bg-neutral-100 py-4">
+          <div className="shrink-0 border-b-2 border-black bg-neutral-100 pt-4 pb-4">
             <ImportFlowStepper currentStep={wizardStep} />
           </div>
 
@@ -822,6 +860,47 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               {wizardError && (
                 <div className="bg-red-50 border-2 border-red-500 p-3 text-xs font-medium text-red-900">
                   {wizardError}
+                </div>
+              )}
+
+              {(wizardStep === 0 || wizardStep === 1) && (
+                <div className="border-2 border-black bg-neutral-50 p-3 shadow-[3px_3px_0_0_#000]">
+                  {rulesSummary && (rulesSummary.rules.length > 0 || rulesSummary.guidance.length > 0) ? (
+                    <div className="space-y-3 text-xs">
+                      <p className="font-black uppercase text-[11px]">
+                        Source: {rulesSummary.source === 'plugin_data' ? 'Global DS metadata' : 'Documentation pages'}
+                      </p>
+                      {wizardStep === 0 && rulesSummary.rules.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-gray-600">Global rules found</p>
+                          <ul className="mt-1 space-y-1">
+                            {rulesSummary.rules.slice(0, 4).map((r, i) => (
+                              <li key={`rule-${i}`} className="leading-snug">
+                                - {r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {wizardStep === 1 && rulesSummary.guidance.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-gray-600">Guidance found</p>
+                          <ul className="mt-1 space-y-1">
+                            {rulesSummary.guidance.slice(0, 4).map((g, i) => (
+                              <li key={`guidance-${i}`} className="leading-snug">
+                                - {g}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-snug text-gray-700">
+                      No explicit global rules found in this file. Comtra will fallback to inferred guidance from
+                      tokens, styles, component structure, and naming conventions in the next steps.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -911,17 +990,18 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                 <Button
                   variant="primary"
                   fullWidth
-                  disabled={rulesContinueLoading}
+                  disabled={introStepLoading !== null}
                   className="text-sm font-black py-3"
-                  onClick={() => void continueFromRulesStep()}
+                  onClick={() => void continueFromIntroStep(0, 1)}
                 >
-                  {rulesContinueLoading ? (
-                    <span className="flex items-center justify-center gap-2">
+                  {introStepLoading === 0 ? (
+                    <span className="relative flex w-full items-center justify-center overflow-hidden">
                       <span
-                        className="size-4 shrink-0 rounded-full border-2 border-black border-t-transparent animate-spin"
+                        className="absolute left-0 top-0 h-full bg-yellow-300"
+                        style={{ animation: `fill-cta-bar ${INTRO_STEP_MIN_MS}ms linear forwards` }}
                         aria-hidden
                       />
-                      <span>Loading…</span>
+                      <span className="relative z-10">Loading…</span>
                     </span>
                   ) : (
                     'Continue'
@@ -933,6 +1013,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     variant="secondary"
                     className="flex-1 text-xs font-black py-3"
                     disabled={
+                      introStepLoading !== null ||
                       (wizardStep === 2 && dsImportBusy && importFlowPhase === 'none') ||
                       (wizardStep === 3 && dsImportBusy && importFlowPhase === 'tokens')
                     }
@@ -947,12 +1028,21 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     <Button
                       variant="primary"
                       className="flex-1 text-xs font-black py-3"
-                      onClick={() => {
-                        setWizardError(null);
-                        setWizardStep(2);
-                      }}
+                      disabled={introStepLoading !== null}
+                      onClick={() => void continueFromIntroStep(1, 2)}
                     >
-                      Continue
+                      {introStepLoading === 1 ? (
+                        <span className="relative flex w-full items-center justify-center overflow-hidden">
+                          <span
+                            className="absolute left-0 top-0 h-full bg-yellow-300"
+                            style={{ animation: `fill-cta-bar ${INTRO_STEP_MIN_MS}ms linear forwards` }}
+                            aria-hidden
+                          />
+                          <span className="relative z-10">Loading…</span>
+                        </span>
+                      ) : (
+                        'Continue'
+                      )}
                     </Button>
                   )}
                   {wizardStep === 2 && importFlowPhase !== 'none' && indexResult && !wizardError && (

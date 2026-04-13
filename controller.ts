@@ -7,6 +7,7 @@ import {
   initDsContextIndexLifecycle,
   resolveDsContextIndexForRequest,
   setDsContextIndexRefreshSuspended,
+  buildDsContextIndexRulesOnly,
   buildDsContextIndexTokensOnly,
   buildDsContextIndexComponentsMerge,
 } from './ds-context-index';
@@ -1660,11 +1661,16 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'get-ds-context-index-phase') {
     const requestId = msg.requestId;
-    const phase = msg.phase === 'components' ? 'components' : 'tokens';
+    const phase =
+      msg.phase === 'components' ? 'components' : msg.phase === 'rules' ? 'rules' : 'tokens';
     (async () => {
       try {
         const r =
-          phase === 'tokens' ? await buildDsContextIndexTokensOnly() : await buildDsContextIndexComponentsMerge();
+          phase === 'components'
+            ? await buildDsContextIndexComponentsMerge()
+            : phase === 'rules'
+              ? await buildDsContextIndexRulesOnly()
+              : await buildDsContextIndexTokensOnly();
         figma.ui.postMessage({
           type: 'ds-context-index-result',
           requestId,
