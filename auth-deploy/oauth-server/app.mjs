@@ -104,6 +104,15 @@ app.options('*', cors());
 // Code-gen / audit / DS context index: corpi grandi; default 5mb (override con JSON_BODY_LIMIT).
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '5mb' }));
 
+// DS import/catalog endpoints are user-specific and must never be served as stale 304.
+app.use(['/api/user/ds-imports', '/api/user/ds-imports/context', '/api/design-systems'], (_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Vary', 'Authorization');
+  next();
+});
+
 app.get('/auth/figma/init', async (req, res) => {
   const store = await getFlowStore();
   const flowId = randomBytes(16).toString('hex');

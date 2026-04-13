@@ -1152,7 +1152,7 @@ export default function AppTest() {
 
   const fetchDesignSystems = useCallback(async () => {
     try {
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/design-systems`);
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/design-systems`, { cache: 'no-store' });
       if (!r.ok) return;
       const data = (await r.json().catch(() => ({}))) as { systems?: unknown };
       if (!Array.isArray(data.systems)) return;
@@ -1207,8 +1207,15 @@ export default function AppTest() {
     ): Promise<{ ds_context_index: object; ds_cache_hash: string | null } | null> => {
       if (!user?.authToken || !fileKey || dsImportsUnauthorizedRef.current) return null;
       const r = await fetch(
-        `${AUTH_BACKEND_URL}/api/user/ds-imports/context?file_key=${encodeURIComponent(fileKey)}`,
-        { headers: { Authorization: `Bearer ${user.authToken}` } },
+        `${AUTH_BACKEND_URL}/api/user/ds-imports/context?file_key=${encodeURIComponent(fileKey)}&_ts=${Date.now()}`,
+        {
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${user.authToken}`,
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        },
       );
       if (r.status === 401) {
         dsImportsUnauthorizedRef.current = true;
@@ -1244,8 +1251,14 @@ export default function AppTest() {
   const syncDsImportsFromServer = useCallback(async () => {
     if (!user?.authToken || dsImportsUnauthorizedRef.current) return;
     const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
-      headers: { Authorization: `Bearer ${user.authToken}` },
+      cache: 'no-store',
+      headers: {
+        Authorization: `Bearer ${user.authToken}`,
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
     });
+    if (r.status === 304) return;
     if (r.status === 401) {
       dsImportsUnauthorizedRef.current = true;
       return;
@@ -1273,7 +1286,13 @@ export default function AppTest() {
       if (!user?.authToken || dsImportsUnauthorizedRef.current) return;
       const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.authToken}`,
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
         body: JSON.stringify(body),
       });
       if (r.status === 401) {

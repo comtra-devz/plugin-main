@@ -86,6 +86,11 @@ function writeIntroSeen(): void {
   safeLocalStorageSetItem(INTRO_SEEN_KEY, '1');
 }
 
+function blurActiveElement(): void {
+  const active = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+  if (active && typeof active.blur === 'function') active.blur();
+}
+
 const WIZARD_TEXT = [
   {
     title: 'Rules',
@@ -467,6 +472,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setWizardStep(0);
     setShowCancelConfirm(false);
     setIntroStepLoading(null);
+    blurActiveElement();
     importFlowCancelledRef.current = false;
     setWizardOpen(true);
   }, [fileKey, isPro, onUnlockRequest]);
@@ -713,7 +719,10 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               <button
                 type="button"
                 className="text-[10px] font-black uppercase underline hover:text-[#ff90e8]"
-                onClick={() => setShowWhyModal(true)}
+                onClick={() => {
+                  blurActiveElement();
+                  setShowWhyModal(true);
+                }}
               >
                 Read first
               </button>
@@ -1043,7 +1052,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                       <span className="relative z-10 w-full text-center">
                         {introStepLoading === 1 ? 'Loading…' : 'Continue'}
                       </span>
-                    </span>
                     </Button>
                   )}
                   {wizardStep === 2 && importFlowPhase !== 'none' && indexResult && !wizardError && (
