@@ -92,13 +92,15 @@ const app = express();
 app.use(cookieParser());
 app.use(cors({
   origin: (origin, cb) => {
-    if (origin == null || origin === '' || origin === 'null') {
-      cb(null, 'null');
-    } else {
-      cb(null, true);
-    }
+    // Figma plugin UI runs in `data:` / opaque origin -> browser reports `origin = null`.
+    // Accept all origins here (auth is JWT-based), including null-origin preflights.
+    if (origin == null || origin === '' || origin === 'null') return cb(null, true);
+    return cb(null, true);
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key'],
 }));
+app.options('*', cors());
 // Code-gen / audit / DS context index: corpi grandi; default 5mb (override con JSON_BODY_LIMIT).
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '5mb' }));
 

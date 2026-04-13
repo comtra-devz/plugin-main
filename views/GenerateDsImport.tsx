@@ -120,7 +120,7 @@ function ImportFlowStepper({ currentStep }: { currentStep: number }) {
       <p className="sr-only">
         Step {currentStep + 1} of {STEP_TOTAL}
       </p>
-      <div className="relative pt-0.5">
+      <div className="relative py-0.5">
         <div
           className="pointer-events-none absolute z-0 h-1 rounded-full bg-gray-300"
           style={{ left: `${STEPPER_RAIL_LEFT_PCT}%`, width: `${STEPPER_RAIL_WIDTH_PCT}%`, top: railTop }}
@@ -667,22 +667,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     );
   }
 
-  if (catalogReady) {
-    return (
-      <div className={`${BRUTAL.card} bg-green-50 border-2 border-green-800 p-3`}>
-        <p className="text-[10px] font-bold text-green-900">
-          Design system catalog is ready for this file. You can use Generate.
-        </p>
-        <button
-          type="button"
-          className="mt-2 text-[9px] font-black uppercase underline text-green-900"
-          onClick={onInvalidateCatalog}
-        >
-          Refresh catalog
-        </button>
-      </div>
-    );
-  }
+  if (catalogReady) return null;
 
   return (
     <>
@@ -899,26 +884,26 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                   </li>
                 </ul>
               )}
+
+              {step2GapHints.length > 0 && (
+                <WizardImportGapSnackbars
+                  hints={step2GapHints}
+                  dismissedIds={dismissedStep2GapSet}
+                  onDismiss={dismissStep2Gap}
+                  ariaLabel="Variables and styles notes"
+                />
+              )}
+
+              {step3GapHints.length > 0 && (
+                <WizardImportGapSnackbars
+                  hints={step3GapHints}
+                  dismissedIds={dismissedStep3GapSet}
+                  onDismiss={dismissStep3Gap}
+                  ariaLabel="Components catalog notes"
+                />
+              )}
             </div>
           </div>
-
-          {step2GapHints.length > 0 && (
-            <WizardImportGapSnackbars
-              hints={step2GapHints}
-              dismissedIds={dismissedStep2GapSet}
-              onDismiss={dismissStep2Gap}
-              ariaLabel="Variables and styles notes"
-            />
-          )}
-
-          {step3GapHints.length > 0 && (
-            <WizardImportGapSnackbars
-              hints={step3GapHints}
-              dismissedIds={dismissedStep3GapSet}
-              onDismiss={dismissStep3Gap}
-              ariaLabel="Components catalog notes"
-            />
-          )}
 
           <footer className="shrink-0 border-t-2 border-black bg-white px-3 py-4 shadow-[0_-4px_0_0_rgba(0,0,0,0.06)]">
             <div className="flex w-full gap-2 items-stretch">
