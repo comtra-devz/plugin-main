@@ -7,8 +7,8 @@ import app from '../oauth-server/app.mjs';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Key');
 }
 
 export default function handler(req, res) {
@@ -79,5 +79,28 @@ export default function handler(req, res) {
     return app(req, res);
   }
 
-  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|report-throttle|throttle-discount|feedback|support' });
+  if (service === 'ds-catalog') {
+    if (req.method !== 'GET') return res.status(405).end();
+    req.url = '/api/design-systems';
+    return app(req, res);
+  }
+
+  if (service === 'user-ds-imports') {
+    if (sub === 'context') {
+      if (req.method !== 'GET') return res.status(405).end();
+      req.url = '/api/user/ds-imports/context' + qs;
+      return app(req, res);
+    }
+    if (req.method === 'GET') {
+      req.url = '/api/user/ds-imports' + qs;
+      return app(req, res);
+    }
+    if (req.method === 'PUT') {
+      req.url = '/api/user/ds-imports';
+      return app(req, res);
+    }
+    return res.status(405).end();
+  }
+
+  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|report-throttle|throttle-discount|feedback|support|ds-catalog|user-ds-imports' });
 }

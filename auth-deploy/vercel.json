@@ -6,6 +6,9 @@
     }
   },
   "rewrites": [
+    { "source": "/api/design-systems", "destination": "/api/credits-trophies?service=ds-catalog" },
+    { "source": "/api/user/ds-imports", "destination": "/api/credits-trophies?service=user-ds-imports" },
+    { "source": "/api/user/ds-imports/context", "destination": "/api/credits-trophies?service=user-ds-imports&sub=context" },
     { "source": "/api/feedback/generate", "destination": "/api/credits-trophies?service=feedback&sub=generate" },
     { "source": "/api/support/ticket", "destination": "/api/credits-trophies?service=support&sub=ticket" },
     { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
