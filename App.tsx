@@ -1208,14 +1208,7 @@ export default function AppTest() {
       if (!user?.authToken || !fileKey || dsImportsUnauthorizedRef.current) return null;
       const r = await fetch(
         `${AUTH_BACKEND_URL}/api/user/ds-imports/context?file_key=${encodeURIComponent(fileKey)}&_ts=${Date.now()}`,
-        {
-          cache: 'no-store',
-          headers: {
-            Authorization: `Bearer ${user.authToken}`,
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
-        },
+        { cache: 'no-store', headers: { Authorization: `Bearer ${user.authToken}` } },
       );
       if (r.status === 401) {
         dsImportsUnauthorizedRef.current = true;
@@ -1252,11 +1245,7 @@ export default function AppTest() {
     if (!user?.authToken || dsImportsUnauthorizedRef.current) return;
     const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
       cache: 'no-store',
-      headers: {
-        Authorization: `Bearer ${user.authToken}`,
-        'Cache-Control': 'no-cache',
-        Pragma: 'no-cache',
-      },
+      headers: { Authorization: `Bearer ${user.authToken}` },
     });
     if (r.status === 304) return;
     if (r.status === 401) {
@@ -1287,12 +1276,7 @@ export default function AppTest() {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
         method: 'PUT',
         cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.authToken}`,
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
         body: JSON.stringify(body),
       });
       if (r.status === 401) {

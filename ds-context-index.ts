@@ -63,6 +63,11 @@ function isIndexCacheFresh(): boolean {
   return cache !== null && cacheBuiltAtEpoch !== null && cacheBuiltAtEpoch === docEpoch;
 }
 
+/** Keep cache lightweight: canonicalJson is only needed during hashing, not for runtime reuse. */
+function toCachedBuildResult(r: BuildResult): BuildResult {
+  return { index: r.index, canonicalJson: '' };
+}
+
 /**
  * Durante `executeActionPlanOnCanvas` il documento riceve molti `documentchange`; un rebuild
  * completo dell’indice in parallelo impallerebbe Figma su file grandi. Si sospende il refresh
@@ -465,7 +470,7 @@ export async function buildDsContextIndexComponentsMerge(): Promise<BuildResult>
   lastWizardTokensSlice = tokens;
   const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
   const r = await assembleFromParts(tokens, components, totalInFile, truncated);
-  cache = r;
+  cache = toCachedBuildResult(r);
   cacheBuiltAtEpoch = docEpoch;
   return r;
 }
@@ -485,7 +490,7 @@ function runDebouncedRefresh(): void {
           runDebouncedRefresh();
           return;
         }
-        cache = r;
+        cache = toCachedBuildResult(r);
         cacheBuiltAtEpoch = e0;
       })
       .catch((e) => console.error('[ds-context-index]', e));
@@ -534,7 +539,7 @@ export async function buildAndCacheDsContextIndex(): Promise<DsContextIndexPaylo
     const e0 = docEpoch;
     const r = await buildDsContextIndex();
     if (docEpoch === e0) {
-      cache = r;
+      cache = toCachedBuildResult(r);
       cacheBuiltAtEpoch = e0;
       return r.index;
     }
