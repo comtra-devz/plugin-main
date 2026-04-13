@@ -6,6 +6,7 @@ import { SectionCard } from '../components/ui/SectionCard';
 import { GenerateDsImport, type RequestDsContextIndexFn } from './GenerateDsImport';
 import {
   clearSessionCatalogPrepared,
+  hasImportForFileKey,
   isSessionCatalogPreparedForFile,
   setSessionCatalogPrepared,
 } from '../lib/dsImportsStorage';
@@ -232,6 +233,11 @@ export const Generate: React.FC<Props> = ({
             : null;
       setGenFileCtxError(err);
       if (err || !r.fileKey) return;
+      if (hasImportForFileKey(r.fileKey)) {
+        setSessionCatalogPrepared(r.fileKey);
+        setCatalogReady(true);
+        return;
+      }
       if (isSessionCatalogPreparedForFile(r.fileKey)) {
         setCatalogReady(true);
         return;
@@ -1033,8 +1039,8 @@ export const Generate: React.FC<Props> = ({
       {/* Sticky above main tab bar: opens full legal copy in a dialog */}
       <div
         data-component="Generate: Legal strip"
-        className="fixed left-0 right-0 z-[55] max-w-md mx-auto w-full border-t-2 border-black bg-[#fdfdfd] px-3 py-2"
-        style={{ bottom: '4.25rem' }}
+        className="fixed left-0 right-0 z-[55] max-w-md mx-auto w-full border-t-2 border-black bg-[#fdfdfd] px-3 pt-2.5 pb-2.5"
+        style={{ bottom: '3.5rem' }}
       >
         <button
           type="button"

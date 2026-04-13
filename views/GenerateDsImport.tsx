@@ -415,6 +415,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   }, []);
 
   const keyMatch = Boolean(fileKey && hasImportForFileKey(fileKey));
+  const hasCatalogForCurrentFile = keyMatch || catalogReady;
   const freeTierFileBlocked =
     !isPro &&
     fileKey &&
@@ -715,7 +716,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           </span>
         </div>
 
-        {keyMatch ? (
+        {hasCatalogForCurrentFile ? (
           <>
             {showImportSelect ? (
               <>
@@ -742,6 +743,9 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                 {selectedImport?.displayName || fileName || 'This file'}
               </p>
             )}
+            <p className="text-sm font-normal text-gray-900 leading-normal">
+              This file is already in your imported design systems. You can update the snapshot anytime.
+            </p>
             {mismatchLabel && (
               <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 p-2 leading-snug">{mismatchLabel}</p>
             )}
@@ -752,7 +756,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               onClick={openWizard}
               disabled={dsImportBusy}
             >
-              {dsImportBusy ? 'Importing…' : 'Prepare design system for this file'}
+              {dsImportBusy ? 'Importing…' : 'Update Design System'}
             </Button>
           </>
         ) : (

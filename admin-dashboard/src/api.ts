@@ -901,3 +901,41 @@ export async function fetchProductSourcesStatus(): Promise<ProductSourcesStatusR
   }
   return data as ProductSourcesStatusResponse;
 }
+
+// --- External design systems (admin managed)
+export type ExternalDesignSystemStatus = 'draft' | 'published' | 'archived';
+
+export interface ExternalDesignSystemItem {
+  slug: string;
+  display_name: string;
+  ds_source: string;
+  status: ExternalDesignSystemStatus;
+  ds_package: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchExternalDesignSystems(): Promise<{ items: ExternalDesignSystemItem[] }> {
+  const r = await fetchWithRetry(`${BASE}/api/external-design-systems`, { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function upsertExternalDesignSystem(body: {
+  slug: string;
+  display_name: string;
+  ds_source: string;
+  status: ExternalDesignSystemStatus;
+  ds_package: Record<string, unknown>;
+}): Promise<{ ok: boolean; slug: string; status: ExternalDesignSystemStatus }> {
+  const r = await fetch(`${BASE}/api/external-design-systems`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  }
+  return data as { ok: boolean; slug: string; status: ExternalDesignSystemStatus };
+}
