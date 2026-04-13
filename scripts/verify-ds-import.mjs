@@ -74,12 +74,40 @@ if (fileKey.trim()) {
     console.log('body:', JSON.stringify(ctx.data, null, 2));
     process.exit(ctx.status === 401 ? 2 : 4);
   }
-  const idx = ctx.data?.ds_context_index ?? ctx.data;
-  const hasIndex = idx && typeof idx === 'object' && Object.keys(idx).length > 0;
-  console.log('has ds_context_index payload:', hasIndex);
+  const rawIdx = ctx.data?.ds_context_index;
+  const hash = ctx.data?.ds_cache_hash ?? null;
+  console.log('ds_cache_hash:', hash === null || hash === undefined || hash === '' ? '(empty)' : String(hash).slice(0, 24) + (String(hash).length > 24 ? '…' : ''));
+  console.log('ds_context_index typeof:', rawIdx === null ? 'null' : rawIdx === undefined ? 'undefined' : typeof rawIdx);
+  let idx = rawIdx;
+  if (typeof rawIdx === 'string') {
+    try {
+      idx = JSON.parse(rawIdx);
+      console.log('ds_context_index: parsed JSON string →', typeof idx);
+    } catch {
+      console.log('ds_context_index: string but not valid JSON (len', rawIdx.length, ')');
+    }
+  }
+  const hasIndex =
+    idx &&
+    typeof idx === 'object' &&
+    !Array.isArray(idx) &&
+    Object.keys(idx).length > 0;
+  const hasIndexArray = Array.isArray(idx) && idx.length > 0;
+  console.log('has usable ds_context_index (non-empty object):', hasIndex);
+  if (Array.isArray(idx)) {
+    console.log('note: ds_context_index is an array (unexpected); length:', idx.length);
+  }
   if (hasIndex) {
     const keys = Object.keys(idx).slice(0, 20);
     console.log('index top-level keys (sample):', keys.join(', '));
+  } else if (rawIdx == null) {
+    console.log(
+      '⚠ ds_context_index is null/undefined: la riga c’è ma lo snapshot non è mai stato salvato (o è stato azzerato). Rifai “Confirm and import” nel wizard.'
+    );
+  } else if (typeof idx === 'object' && !Array.isArray(idx) && Object.keys(idx).length === 0) {
+    console.log('⚠ ds_context_index è {} (oggetto vuoto). Rifai import completo dal plugin.');
+  } else if (Array.isArray(idx) && idx.length === 0) {
+    console.log('⚠ ds_context_index è array vuoto (inaspettato).');
   }
 } else {
   console.log('\n(Tip: imposta COMTRA_FILE_KEY per provare anche /context.)');
