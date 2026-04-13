@@ -37,6 +37,7 @@ import {
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
 import { formatDesignIntelligenceForPrompt, inferFocusedScreenType } from './design-intelligence.mjs';
+import { buildDsSlimIndex, buildPromptScopedDsIndex } from './ds-context-retrieval.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -461,6 +462,31 @@ function getUserIdFromToken(req) {
   } catch {
     return null;
   }
+}
+
+const ADMIN_API_KEY = String(process.env.ADMIN_API_KEY || '').trim();
+const EXTERNAL_DS_STATUSES = new Set(['draft', 'published', 'archived']);
+const BUILTIN_DESIGN_SYSTEMS = [
+  'Custom (Current)',
+  'Material Design 3',
+  'iOS Human Interface',
+  'Ant Design',
+  'Carbon Design',
+  'Bootstrap 5',
+  'Salesforce Lightning',
+  'Uber Base Web',
+];
+
+function isAdminApiRequest(req) {
+  if (!ADMIN_API_KEY) return false;
+  const k = String(req.headers['x-admin-key'] || '').trim();
+  if (k && k === ADMIN_API_KEY) return true;
+  const auth = String(req.headers.authorization || '');
+  if (auth.startsWith('Bearer ')) {
+    const t = auth.slice(7).trim();
+    if (t && t === ADMIN_API_KEY) return true;
+  }
+  return false;
 }
 
 /** Get valid Figma access token for user; refresh if expired (within 5 min buffer). Returns null if no tokens or refresh fails. */
@@ -1914,7 +1940,31 @@ app.post('/api/agents/generate', async (req, res) => {
   const dsCacheHashFromBody = String(body.ds_cache_hash || body.dsCacheHash || '').trim();
   const contextProfile = resolveContextProfile(body.context_profile || body.contextProfile || { input_mode: mode });
   const resolvedDsId = mapDsSourceToId(dsSource);
-  const dsPackageRaw = loadDsPackage(dsSource);
+  let dsPackageRaw = loadDsPackage(dsSource);
+  if (!dsPackageRaw && dbSql && dsSource && String(dsSource).toLowerCase() !== 'custom') {
+    try {
+      const sourceNorm = String(dsSource).trim().toLowerCase();
+      const sourceSlug = sourceNorm.replace(/[^a-z0-9-]/g, '-');
+      const ext = await dbSql`
+        SELECT ds_package
+        FROM external_design_systems
+        WHERE status = 'published'
+          AND (
+            lower(ds_source) = ${sourceNorm}
+            OR lower(display_name) = ${sourceNorm}
+            OR slug = ${sourceSlug}
+          )
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `;
+      const row = ext?.rows?.[0];
+      if (row?.ds_package && typeof row.ds_package === 'object') {
+        dsPackageRaw = row.ds_package;
+      }
+    } catch (e) {
+      console.error('external DS lookup failed', e);
+    }
+  }
   const dsPackage = resolveDsPackageForContext(dsPackageRaw, contextProfile);
 
   if (!fileKey) return res.status(400).json({ error: 'file_key required' });
@@ -1979,19 +2029,31 @@ app.post('/api/agents/generate', async (req, res) => {
 
     const pageCount = fileJson?.document?.children?.length ?? 0;
     const dsContextBlock = dsPackage ? buildDsContextForPrompt(dsPackage, contextProfile) : 'Resolved DS package: unavailable (fallback to semantic DS hint only).';
-    const dsIndexForPrompt =
+    const dsIndexForValidation =
       dsContextIndex && typeof dsContextIndex === 'object' && !Array.isArray(dsContextIndex)
         ? dsContextIndex
         : null;
+    const dsIndexSlim = dsIndexForValidation
+      ? buildDsSlimIndex(dsIndexForValidation, {
+          maxComponents: Number(process.env.GENERATE_DS_SLIM_COMPONENTS || 120),
+          maxVariables: Number(process.env.GENERATE_DS_SLIM_VARIABLES || 180),
+        })
+      : null;
+    const dsIndexForPrompt = dsIndexSlim
+      ? buildPromptScopedDsIndex(dsIndexSlim, prompt, {
+          topKComponents: Number(process.env.GENERATE_DS_PROMPT_COMPONENTS || 32),
+          topKVariables: Number(process.env.GENERATE_DS_PROMPT_VARIABLES || 48),
+        })
+      : null;
     const dsIndexHashLine =
       dsCacheHashFromBody ||
-      (dsIndexForPrompt && typeof dsIndexForPrompt.hash === 'string' ? dsIndexForPrompt.hash : '') ||
+      (dsIndexForValidation && typeof dsIndexForValidation.hash === 'string' ? dsIndexForValidation.hash : '') ||
       'n/a';
     const dsIndexBlock = dsIndexForPrompt
       ? [
           '',
           '[DS CONTEXT INDEX]',
-          'Compact index of local components, variables, and styles from the Figma plugin. For file-scoped DS, use only component ids and token paths that appear in this JSON.',
+          'Prompt-scoped DS index retrieved from a slim local snapshot. For file-scoped DS, use only component ids and token paths that appear in this JSON.',
           JSON.stringify(dsIndexForPrompt),
           '[END DS CONTEXT INDEX]',
           `ds_cache_hash: ${dsIndexHashLine}`,
@@ -2154,7 +2216,7 @@ app.post('/api/agents/generate', async (req, res) => {
       });
     }
 
-    const fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForPrompt);
+    const fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
     if (!fileIndexValidation.skipped && !fileIndexValidation.valid) {
       return res.status(422).json({
         error: 'Action plan violates file DS context index',
@@ -2169,6 +2231,9 @@ app.post('/api/agents/generate', async (req, res) => {
     actionPlan.metadata.generation_pipeline = generationPipeline;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
+    actionPlan.metadata.ds_context_strategy = dsIndexForPrompt ? 'slim_plus_prompt_retrieval' : 'none';
+    if (dsIndexForPrompt?.components_retrieval) actionPlan.metadata.ds_components_retrieval = dsIndexForPrompt.components_retrieval;
+    if (dsIndexForPrompt?.variable_names_retrieval) actionPlan.metadata.ds_variables_retrieval = dsIndexForPrompt.variable_names_retrieval;
     actionPlan.metadata.context_profile = contextProfile;
     actionPlan.metadata.ds_validation = {
       valid: dsValidation.valid,
@@ -2264,6 +2329,84 @@ app.post('/api/feedback/generate', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/feedback/generate', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Design systems catalog (dynamic list for plugin dropdown)
+app.get('/api/design-systems', async (_req, res) => {
+  if (!dbSql) return res.json({ systems: BUILTIN_DESIGN_SYSTEMS });
+  try {
+    const sel = await dbSql`
+      SELECT display_name
+      FROM external_design_systems
+      WHERE status = 'published'
+      ORDER BY updated_at DESC
+      LIMIT 300
+    `;
+    const external = (sel.rows || [])
+      .map((r) => String(r.display_name || '').trim())
+      .filter(Boolean);
+    const out = Array.from(new Set([...BUILTIN_DESIGN_SYSTEMS, ...external]));
+    return res.json({ systems: out });
+  } catch (err) {
+    console.error('GET /api/design-systems', err);
+    return res.json({ systems: BUILTIN_DESIGN_SYSTEMS });
+  }
+});
+
+// --- Admin external DS CRUD (for portal ingestion / publish)
+app.get('/api/admin/design-systems/external', async (req, res) => {
+  if (!isAdminApiRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  try {
+    const sel = await dbSql`
+      SELECT slug, display_name, ds_source, status, ds_package, created_at, updated_at
+      FROM external_design_systems
+      ORDER BY updated_at DESC
+      LIMIT 500
+    `;
+    res.json({ items: sel.rows || [] });
+  } catch (err) {
+    console.error('GET /api/admin/design-systems/external', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/admin/design-systems/external', async (req, res) => {
+  if (!isAdminApiRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const slug = String(body.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 120);
+  const displayName = String(body.display_name || body.displayName || '').trim().slice(0, 200);
+  const dsSource = String(body.ds_source || body.dsSource || slug).trim().slice(0, 160);
+  const statusRaw = String(body.status || 'draft').trim().toLowerCase();
+  const status = EXTERNAL_DS_STATUSES.has(statusRaw) ? statusRaw : 'draft';
+  const dsPackage = body.ds_package ?? body.dsPackage;
+  if (!slug) return res.status(400).json({ error: 'slug required' });
+  if (!displayName) return res.status(400).json({ error: 'display_name required' });
+  if (!dsPackage || typeof dsPackage !== 'object' || Array.isArray(dsPackage)) {
+    return res.status(400).json({ error: 'ds_package object required' });
+  }
+  try {
+    const dsPackageStr = JSON.stringify(dsPackage);
+    await dbSql`
+      INSERT INTO external_design_systems (
+        slug, display_name, ds_source, status, ds_package, created_at, updated_at
+      )
+      VALUES (
+        ${slug}, ${displayName}, ${dsSource}, ${status}, ${dsPackageStr}::jsonb, NOW(), NOW()
+      )
+      ON CONFLICT (slug) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        ds_source = EXCLUDED.ds_source,
+        status = EXCLUDED.status,
+        ds_package = EXCLUDED.ds_package,
+        updated_at = NOW()
+    `;
+    res.json({ ok: true, slug, status });
+  } catch (err) {
+    console.error('PUT /api/admin/design-systems/external', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

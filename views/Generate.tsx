@@ -57,9 +57,10 @@ interface Props {
     plan: object,
     opts?: { modifyMode?: boolean },
   ) => Promise<{ ok: boolean; error?: string; rootId?: string }>;
+  designSystems?: string[];
 }
 
-const DESIGN_SYSTEMS = [
+const DEFAULT_DESIGN_SYSTEMS = [
   "Custom (Current)",
   "Material Design 3",
   "iOS Human Interface",
@@ -112,6 +113,7 @@ export const Generate: React.FC<Props> = ({
   fetchGenerateFeedback,
   selectedNode,
   applyActionPlanToCanvas,
+  designSystems,
 }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -129,9 +131,11 @@ export const Generate: React.FC<Props> = ({
   const [screenshotAttachment, setScreenshotAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
   const screenshotFileInputRef = useRef<HTMLInputElement>(null);
   const [creditEstimate, setCreditEstimate] = useState(3);
+  const availableSystems =
+    Array.isArray(designSystems) && designSystems.length > 0 ? designSystems : DEFAULT_DESIGN_SYSTEMS;
   
   // Design System State
-  const [selectedSystem, setSelectedSystem] = useState(DESIGN_SYSTEMS[0]);
+  const [selectedSystem, setSelectedSystem] = useState(availableSystems[0] || 'Custom (Current)');
   const [isSystemOpen, setIsSystemOpen] = useState(false);
   const [systemSearch, setSystemSearch] = useState('');
 
@@ -188,10 +192,17 @@ export const Generate: React.FC<Props> = ({
   const infiniteForTest = !!useInfiniteCreditsForTest;
   const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
   const canGenerate = isPro || remaining > 0;
-  const usesFileDs = selectedSystem === DESIGN_SYSTEMS[0];
+  const usesFileDs = selectedSystem === availableSystems[0];
   const dsGateBlocked = usesFileDs && (!catalogReady || dsImportBusy);
   /** Custom (Current): hide the full composer until the step-by-step DS import is done. */
   const showGenerateComposer = !usesFileDs || catalogReady;
+
+  useEffect(() => {
+    if (!availableSystems.length) return;
+    if (!availableSystems.includes(selectedSystem)) {
+      setSelectedSystem(availableSystems[0]);
+    }
+  }, [availableSystems, selectedSystem]);
 
   useEffect(() => {
     if (!usesFileDs) {
@@ -496,7 +507,7 @@ export const Generate: React.FC<Props> = ({
     }
 
     const mode = hasSelection ? 'modify' : screenshotAttachment ? 'screenshot' : 'create';
-    const dsSource = selectedSystem === 'Custom (Current)' ? 'custom' : selectedSystem;
+    const dsSource = usesFileDs ? 'custom' : selectedSystem;
 
     try {
       const data = await fetchGenerate({
@@ -615,7 +626,21 @@ export const Generate: React.FC<Props> = ({
   };
 
   // Filter Design Systems
-  const filteredSystems = DESIGN_SYSTEMS.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
+  const filteredSystems = availableSystems.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
+  const dsConnectionText = usesFileDs
+    ? catalogReady
+      ? `Connected to this file${genFileName ? ` (${genFileName})` : ''}. Generate will use imported rules, tokens, and components.`
+      : dsImportBusy
+        ? 'Importing design system data for this file…'
+        : 'Import the design system for this file to unlock Generate with Custom (Current).'
+    : `Using ${selectedSystem} as the active reference system.`;
+  const dsConnectionTone = usesFileDs
+    ? catalogReady
+      ? 'bg-emerald-50 text-emerald-900 border-emerald-700'
+      : dsImportBusy
+        ? 'bg-amber-50 text-amber-900 border-amber-700'
+        : 'bg-yellow-50 text-yellow-900 border-yellow-700'
+    : 'bg-sky-50 text-sky-900 border-sky-700';
 
   return (
     <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-28 min-h-full relative">
@@ -715,68 +740,72 @@ export const Generate: React.FC<Props> = ({
           <SectionCard
             dataComponent="Generate: DS Card"
             title="Design System"
-            description="Define the component perimeter. Default uses your current/linked library and cannot be empty."
             className="z-[4]"
           >
-            <BrutalDropdown
-              open={isSystemOpen}
-              onOpenChange={setIsSystemOpen}
-              maxHeightClassName="max-h-[240px]"
-              panelClassName="!overflow-hidden flex flex-col p-0"
-              trigger={
-                <button
-                  type="button"
-                  data-component="Generate: DS Selector"
-                  onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="w-full border-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
-                >
-                  <span className="truncate min-w-0">{selectedSystem}</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {selectedSystem !== DESIGN_SYSTEMS[0] && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => { e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(DESIGN_SYSTEMS[0]); } }}
-                        className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
-                      >
-                        ✕
-                      </span>
-                    )}
-                    <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
-                  </div>
-                </button>
-              }
-            >
-              <input
-                type="text"
-                placeholder="Search System..."
-                autoFocus
-                value={systemSearch}
-                onChange={(e) => setSystemSearch(e.target.value)}
-                className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
-                {filteredSystems.map((sys) => (
-                  <div
-                    key={sys}
-                    role="option"
-                    onClick={() => {
-                      setSelectedSystem(sys);
-                      setIsSystemOpen(false);
-                      setSystemSearch('');
-                    }}
-                    className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+            <div className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] overflow-hidden">
+              <BrutalDropdown
+                open={isSystemOpen}
+                onOpenChange={setIsSystemOpen}
+                maxHeightClassName="max-h-[240px]"
+                panelClassName="!overflow-hidden flex flex-col p-0"
+                trigger={
+                  <button
+                    type="button"
+                    data-component="Generate: DS Selector"
+                    onClick={() => setIsSystemOpen(!isSystemOpen)}
+                    className="w-full border-b-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
                   >
-                    {sys}
-                  </div>
-                ))}
-                {filteredSystems.length === 0 && (
-                  <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
-                )}
+                    <span className="truncate min-w-0">{selectedSystem}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {selectedSystem !== availableSystems[0] && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); setSelectedSystem(availableSystems[0]); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(availableSystems[0]); } }}
+                          className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
+                        >
+                          ✕
+                        </span>
+                      )}
+                      <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
+                    </div>
+                  </button>
+                }
+              >
+                <input
+                  type="text"
+                  placeholder="Search System..."
+                  autoFocus
+                  value={systemSearch}
+                  onChange={(e) => setSystemSearch(e.target.value)}
+                  className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+                  {filteredSystems.map((sys) => (
+                    <div
+                      key={sys}
+                      role="option"
+                      onClick={() => {
+                        setSelectedSystem(sys);
+                        setIsSystemOpen(false);
+                        setSystemSearch('');
+                      }}
+                      className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                    >
+                      {sys}
+                    </div>
+                  ))}
+                  {filteredSystems.length === 0 && (
+                    <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+                  )}
+                </div>
+              </BrutalDropdown>
+              <div className={`border-t-2 px-2.5 py-2 text-[10px] leading-snug font-bold ${dsConnectionTone}`}>
+                {dsConnectionText}
               </div>
-            </BrutalDropdown>
+            </div>
           </SectionCard>
         </>
       )}

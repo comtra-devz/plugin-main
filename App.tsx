@@ -213,6 +213,16 @@ export default function AppTest() {
 
   const [genPrompt, setGenPrompt] = useState('');
   const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null);
+  const [designSystems, setDesignSystems] = useState<string[]>([
+    'Custom (Current)',
+    'Material Design 3',
+    'iOS Human Interface',
+    'Ant Design',
+    'Carbon Design',
+    'Bootstrap 5',
+    'Salesforce Lightning',
+    'Uber Base Web',
+  ]);
   const [credits, setCredits] = useState<CreditsState | null>(null);
   /** Diagnostic: why credits fetch failed (e.g. "401", "503", "network"). Cleared on success. */
   const [creditsFetchError, setCreditsFetchError] = useState<string | null>(null);
@@ -1135,25 +1145,56 @@ export default function AppTest() {
     }
   }, [user?.authToken]);
 
-  const requestDsContextIndex = useCallback((opts?: { reuseCached?: boolean; timeoutMs?: number }) => {
-    const reuseCached = opts?.reuseCached !== false;
-    const timeoutMs =
-      typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
-    return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
-      const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      dsContextIndexWaitersRef.current.set(requestId, resolve);
-      window.parent.postMessage(
-        { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached } },
-        '*',
+  const fetchDesignSystems = useCallback(async () => {
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/design-systems`);
+      if (!r.ok) return;
+      const data = (await r.json().catch(() => ({}))) as { systems?: unknown };
+      if (!Array.isArray(data.systems)) return;
+      const deduped = Array.from(
+        new Set(data.systems.map((s) => String(s || '').trim()).filter(Boolean)),
       );
-      window.setTimeout(() => {
-        const fn = dsContextIndexWaitersRef.current.get(requestId);
-        if (!fn) return;
-        dsContextIndexWaitersRef.current.delete(requestId);
-        fn({ index: null, hash: null, error: 'Timeout waiting for DS context index from Figma.' });
-      }, timeoutMs);
-    });
+      if (!deduped.length) return;
+      const custom = deduped.find((s) => s.toLowerCase() === 'custom (current)');
+      const ordered = custom
+        ? ['Custom (Current)', ...deduped.filter((s) => s.toLowerCase() !== 'custom (current)')]
+        : ['Custom (Current)', ...deduped];
+      setDesignSystems(ordered);
+    } catch {
+      // keep local fallback list
+    }
   }, []);
+
+  const requestDsContextIndex = useCallback(
+    (opts?: { reuseCached?: boolean; timeoutMs?: number; phase?: 'tokens' | 'components' }) => {
+      const reuseCached = opts?.reuseCached !== false;
+      const timeoutMs =
+        typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
+      const phase = opts?.phase;
+      return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
+        const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        dsContextIndexWaitersRef.current.set(requestId, resolve);
+        if (phase === 'tokens' || phase === 'components') {
+          window.parent.postMessage(
+            { pluginMessage: { type: 'get-ds-context-index-phase', requestId, phase } },
+            '*',
+          );
+        } else {
+          window.parent.postMessage(
+            { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached } },
+            '*',
+          );
+        }
+        window.setTimeout(() => {
+          const fn = dsContextIndexWaitersRef.current.get(requestId);
+          if (!fn) return;
+          dsContextIndexWaitersRef.current.delete(requestId);
+          fn({ index: null, hash: null, error: 'Timeout waiting for DS context index from Figma.' });
+        }, timeoutMs);
+      });
+    },
+    [],
+  );
 
   const fetchDsImportContextSnapshot = useCallback(
     async (
@@ -1244,6 +1285,11 @@ export default function AppTest() {
       cancelled = true;
     };
   }, [view, user?.authToken, syncDsImportsFromServer]);
+
+  useEffect(() => {
+    if (view !== ViewState.GENERATE) return;
+    void fetchDesignSystems();
+  }, [view, fetchDesignSystems]);
 
   const fetchGenerate = useCallback(
     async (body: {
@@ -1450,6 +1496,7 @@ export default function AppTest() {
             fetchGenerateFeedback={fetchGenerateFeedback}
             selectedNode={selectedNode}
             applyActionPlanToCanvas={requestActionPlanExecution}
+            designSystems={designSystems}
           />
         </div>
 

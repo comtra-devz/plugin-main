@@ -128,16 +128,22 @@ async function digestHex(s: string): Promise<string> {
 }
 
 function summarizeComponent(node: ComponentNode | ComponentSetNode): DsComponentSummary {
-  const defs = node.componentPropertyDefinitions;
-  const propertyKeys = defs ? Object.keys(defs).slice(0, MAX_PROPERTY_KEYS) : [];
+  /** Only defined on component sets and non-variant components (never on variant `COMPONENT` children). */
+  let propertyKeys: string[] = [];
   const slotHints: string[] = [];
-  if (defs) {
-    for (const [k, def] of Object.entries(defs)) {
-      if (def && def.type === 'INSTANCE_SWAP') {
-        slotHints.push(k.length > 48 ? k.slice(0, 48) : k);
-        if (slotHints.length >= MAX_SLOT_HINTS) break;
+  try {
+    const defs = node.componentPropertyDefinitions;
+    if (defs) {
+      propertyKeys = Object.keys(defs).slice(0, MAX_PROPERTY_KEYS);
+      for (const [k, def] of Object.entries(defs)) {
+        if (def && def.type === 'INSTANCE_SWAP') {
+          slotHints.push(k.length > 48 ? k.slice(0, 48) : k);
+          if (slotHints.length >= MAX_SLOT_HINTS) break;
+        }
       }
     }
+  } catch {
+    /* Figma throws if a variant slipped through; index still useful without defs */
   }
   let variantAxes: string[] | undefined;
   if (node.type === 'COMPONENT_SET') {
@@ -154,45 +160,27 @@ function summarizeComponent(node: ComponentNode | ComponentSetNode): DsComponent
   return out;
 }
 
-async function collectAllLocalComponents(): Promise<(ComponentNode | ComponentSetNode)[]> {
-  await ensureAllPagesLoaded();
-  const out: (ComponentNode | ComponentSetNode)[] = [];
-  let pageIdx = 0;
-  for (const child of figma.root.children) {
-    if (child.type !== 'PAGE') continue;
-    try {
-      await child.loadAsync();
-    } catch (_) {
-      continue;
-    }
-    const found = child.findAll(
-      (n): n is ComponentNode | ComponentSetNode =>
-        n.type === 'COMPONENT' || n.type === 'COMPONENT_SET'
-    );
-    for (const n of found) out.push(n);
-    pageIdx++;
-    // `findAll` è sincrono e su file grandi blocca il main thread: cedi tra una pagina e l’altra.
-    if (pageIdx % 2 === 0) await yieldToMain();
-  }
-  return out;
-}
+type TokensSlice = {
+  token_categories: Record<string, number>;
+  modes: string[];
+  variable_names: string[];
+  variable_names_truncated: boolean;
+  styles_summary: { paintStyles: number; textStyles: number; effectStyles: number };
+  total_tokens: number;
+  fileName: string;
+};
 
-export async function buildDsContextIndex(): Promise<BuildResult> {
-  const [componentsRaw, variables, collections, paintStyles, textStyles, effectStyles] =
-    await Promise.all([
-      collectAllLocalComponents(),
-      figma.variables.getLocalVariablesAsync(),
-      figma.variables.getLocalVariableCollectionsAsync(),
-      figma.getLocalPaintStylesAsync(),
-      figma.getLocalTextStylesAsync(),
-      figma.getLocalEffectStylesAsync(),
-    ]);
+/** Set by `buildDsContextIndexTokensOnly`; consumed by `buildDsContextIndexComponentsMerge` to avoid re-fetching tokens. */
+let lastWizardTokensSlice: TokensSlice | null = null;
 
-  const totalInFile = componentsRaw.length;
-  const sorted = componentsRaw.slice().sort((a, b) => a.id.localeCompare(b.id));
-  const truncated = sorted.length > MAX_COMPONENTS_IN_INDEX;
-  const componentsSlice = truncated ? sorted.slice(0, MAX_COMPONENTS_IN_INDEX) : sorted;
-  const components = componentsSlice.map(summarizeComponent);
+async function collectTokensAndStylesSlice(): Promise<TokensSlice> {
+  const [variables, collections, paintStyles, textStyles, effectStyles] = await Promise.all([
+    figma.variables.getLocalVariablesAsync(),
+    figma.variables.getLocalVariableCollectionsAsync(),
+    figma.getLocalPaintStylesAsync(),
+    figma.getLocalTextStylesAsync(),
+    figma.getLocalEffectStylesAsync(),
+  ]);
 
   const token_categories: Record<string, number> = {};
   for (const v of variables) {
@@ -217,14 +205,32 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
     ? variableNamesSorted.slice(0, MAX_VARIABLE_NAMES_IN_INDEX)
     : variableNamesSorted;
 
-  const styles_summary = {
-    paintStyles: paintStyles.length,
-    textStyles: textStyles.length,
-    effectStyles: effectStyles.length,
+  return {
+    token_categories,
+    modes,
+    variable_names,
+    variable_names_truncated: variableNamesTruncated,
+    styles_summary: {
+      paintStyles: paintStyles.length,
+      textStyles: textStyles.length,
+      effectStyles: effectStyles.length,
+    },
+    total_tokens: variables.length,
+    fileName: figma.root.name || '',
   };
+}
+
+async function assembleFromParts(
+  tokens: TokensSlice,
+  components: DsComponentSummary[],
+  totalInFile: number,
+  truncated: boolean,
+): Promise<BuildResult> {
+  const variable_names = tokens.variable_names;
+  const variableNamesTruncated = tokens.variable_names_truncated;
 
   const bodyForHash = {
-    fileName: figma.root.name || '',
+    fileName: tokens.fileName,
     components: components.map((c) => ({
       id: c.id,
       name: c.name,
@@ -233,14 +239,14 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
       propertyKeys: c.propertyKeys,
       slotHints: c.slotHints,
     })),
-    token_categories: Object.keys(token_categories)
+    token_categories: Object.keys(tokens.token_categories)
       .sort()
       .reduce<Record<string, number>>((acc, k) => {
-        acc[k] = token_categories[k];
+        acc[k] = tokens.token_categories[k];
         return acc;
       }, {}),
-    modes,
-    styles_summary,
+    modes: tokens.modes,
+    styles_summary: tokens.styles_summary,
     components_truncated: truncated || undefined,
     total_components_in_file: totalInFile,
     variable_names,
@@ -253,13 +259,13 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
   const index: DsContextIndexPayload = {
     version: DS_CONTEXT_INDEX_VERSION,
     ds_source: 'file',
-    fileName: figma.root.name || '',
+    fileName: tokens.fileName,
     hash,
     components,
-    total_tokens: variables.length,
-    token_categories,
-    modes,
-    styles_summary,
+    total_tokens: tokens.total_tokens,
+    token_categories: tokens.token_categories,
+    modes: tokens.modes,
+    styles_summary: tokens.styles_summary,
     variable_names,
   };
   if (variableNamesTruncated) index.variable_names_truncated = true;
@@ -269,6 +275,74 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
   }
 
   return { index, canonicalJson };
+}
+
+async function collectAllLocalComponents(): Promise<(ComponentNode | ComponentSetNode)[]> {
+  await ensureAllPagesLoaded();
+  const out: (ComponentNode | ComponentSetNode)[] = [];
+  let pageIdx = 0;
+  for (const child of figma.root.children) {
+    if (child.type !== 'PAGE') continue;
+    try {
+      await child.loadAsync();
+    } catch (_) {
+      continue;
+    }
+    const found = child.findAll((n) => n.type === 'COMPONENT' || n.type === 'COMPONENT_SET');
+    for (const n of found) {
+      if (n.type === 'COMPONENT_SET') {
+        out.push(n);
+      } else if (n.type === 'COMPONENT' && n.parent?.type !== 'COMPONENT_SET') {
+        // Variant `COMPONENT` nodes cannot use `componentPropertyDefinitions`; keep the parent set only.
+        out.push(n);
+      }
+    }
+    pageIdx++;
+    // `findAll` è sincrono e su file grandi blocca il main thread: cedi tra una pagina e l’altra.
+    if (pageIdx % 2 === 0) await yieldToMain();
+  }
+  return out;
+}
+
+function processComponentNodes(
+  componentsRaw: (ComponentNode | ComponentSetNode)[],
+): { components: DsComponentSummary[]; totalInFile: number; truncated: boolean } {
+  const totalInFile = componentsRaw.length;
+  const sorted = componentsRaw.slice().sort((a, b) => a.id.localeCompare(b.id));
+  const truncated = sorted.length > MAX_COMPONENTS_IN_INDEX;
+  const componentsSlice = truncated ? sorted.slice(0, MAX_COMPONENTS_IN_INDEX) : sorted;
+  const components = componentsSlice.map(summarizeComponent);
+  return { components, totalInFile, truncated };
+}
+
+export async function buildDsContextIndex(): Promise<BuildResult> {
+  const [componentsRaw, tokens] = await Promise.all([
+    collectAllLocalComponents(),
+    collectTokensAndStylesSlice(),
+  ]);
+  const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
+  return assembleFromParts(tokens, components, totalInFile, truncated);
+}
+
+/** Wizard step: variables + local styles only (no `findAll` on components). Hash is final only after `buildDsContextIndexComponentsMerge`. */
+export async function buildDsContextIndexTokensOnly(): Promise<BuildResult> {
+  const tokens = await collectTokensAndStylesSlice();
+  lastWizardTokensSlice = tokens;
+  return assembleFromParts(tokens, [], 0, false);
+}
+
+/** Wizard step: fresh tokens/styles + component scan in parallel (same data as full index; split only for wizard UX). Updates plugin cache. */
+export async function buildDsContextIndexComponentsMerge(): Promise<BuildResult> {
+  const [tokens, componentsRaw] = await Promise.all([
+    collectTokensAndStylesSlice(),
+    collectAllLocalComponents(),
+  ]);
+  lastWizardTokensSlice = tokens;
+  const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
+  const r = await assembleFromParts(tokens, components, totalInFile, truncated);
+  cache = r;
+  cacheBuiltAtEpoch = docEpoch;
+  return r;
 }
 
 function runDebouncedRefresh(): void {

@@ -7,6 +7,8 @@ import {
   initDsContextIndexLifecycle,
   resolveDsContextIndexForRequest,
   setDsContextIndexRefreshSuspended,
+  buildDsContextIndexTokensOnly,
+  buildDsContextIndexComponentsMerge,
 } from './ds-context-index';
 
 declare const __html__: string;
@@ -1644,6 +1646,34 @@ figma.ui.onmessage = async (raw: any) => {
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         console.error('[get-ds-context-index]', e);
+        figma.ui.postMessage({
+          type: 'ds-context-index-result',
+          requestId,
+          index: null,
+          hash: null,
+          error: errMsg,
+        });
+      }
+    })();
+    return;
+  }
+
+  if (msg.type === 'get-ds-context-index-phase') {
+    const requestId = msg.requestId;
+    const phase = msg.phase === 'components' ? 'components' : 'tokens';
+    (async () => {
+      try {
+        const r =
+          phase === 'tokens' ? await buildDsContextIndexTokensOnly() : await buildDsContextIndexComponentsMerge();
+        figma.ui.postMessage({
+          type: 'ds-context-index-result',
+          requestId,
+          index: r.index,
+          hash: r.index.hash,
+        });
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error('[get-ds-context-index-phase]', phase, e);
         figma.ui.postMessage({
           type: 'ds-context-index-result',
           requestId,
