@@ -169,6 +169,8 @@ export const Generate: React.FC<Props> = ({
   const [genFileCtxError, setGenFileCtxError] = useState<string | null>(null);
   const [catalogReady, setCatalogReady] = useState(false);
   const [dsImportBusy, setDsImportBusy] = useState(false);
+  /** Avoid repeated server probe loops for the same file when network/CORS fails. */
+  const fileCatalogProbeRef = useRef<string | null>(null);
 
   const runCanvasApply = useCallback(
     async (actionPlan: object, opts?: { modifyMode?: boolean }) => {
@@ -214,6 +216,7 @@ export const Generate: React.FC<Props> = ({
       setGenFileName(null);
       setGenFileCtxError(null);
       setFileCtxLoading(false);
+      fileCatalogProbeRef.current = null;
       return;
     }
     setCatalogReady(false);
@@ -244,6 +247,8 @@ export const Generate: React.FC<Props> = ({
         setCatalogReady(true);
         return;
       }
+      if (fileCatalogProbeRef.current === r.fileKey) return;
+      fileCatalogProbeRef.current = r.fileKey;
       const serverOk = await checkServerHasDsContext(r.fileKey);
       if (cancelled) return;
       if (serverOk) {

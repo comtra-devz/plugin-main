@@ -241,6 +241,9 @@ export default function AppTest() {
   const [simulateFreeTier, setSimulateFreeTier] = useState(getSimulateFreeTierFromStorage);
   /** Per utenti di test con "Simula Free Tier" ON quando l'API non restituisce crediti: simulazione locale (25 crediti, consumo in localStorage). */
   const [simulatedCredits, setSimulatedCredits] = useState<CreditsState | null>(null);
+  /** Prevent repeated failing fetches in Generate view (CORS / network). */
+  const dsImportsSyncAttemptedRef = useRef<string | null>(null);
+  const designSystemsFetchAttemptedRef = useRef(false);
 
   const isTestUser = user ? TEST_USER_EMAILS.includes(user.email.toLowerCase().trim()) : false;
   const useInfiniteCreditsForTest = isTestUser && !simulateFreeTier;
@@ -1277,6 +1280,9 @@ export default function AppTest() {
 
   useEffect(() => {
     if (view !== ViewState.GENERATE || !user?.authToken) return;
+    const marker = `${user.id || ''}:${user.authToken.slice(0, 12)}`;
+    if (dsImportsSyncAttemptedRef.current === marker) return;
+    dsImportsSyncAttemptedRef.current = marker;
     let cancelled = false;
     void syncDsImportsFromServer().then(() => {
       if (cancelled) return;
@@ -1288,6 +1294,8 @@ export default function AppTest() {
 
   useEffect(() => {
     if (view !== ViewState.GENERATE) return;
+    if (designSystemsFetchAttemptedRef.current) return;
+    designSystemsFetchAttemptedRef.current = true;
     void fetchDesignSystems();
   }, [view, fetchDesignSystems]);
 
