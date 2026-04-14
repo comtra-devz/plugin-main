@@ -26,6 +26,36 @@ body {
   opacity: 0.8;
 }
 
+.app-nav {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.app-nav a {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.app-nav a:hover {
+  text-decoration: underline;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #52525b;
+}
+
+#panel-dashboard {
+  display: grid;
+  gap: 16px;
+}
+
 .grid {
   display: grid;
   gap: 16px;

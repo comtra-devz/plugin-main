@@ -11,9 +11,13 @@
       <header class="header">
         <h1>Comtra Webapp MVP</h1>
         <p>Read-only account dashboard (credits, trophies, history)</p>
+        <nav class="app-nav" aria-label="Sections">
+          <a href="#panel-account">Account</a>
+          <a href="#panel-dashboard">Dashboard</a>
+        </nav>
       </header>
 
-      <section class="card">
+      <section id="panel-account" class="card">
         <label for="backendUrl">Auth backend URL</label>
         <input
           id="backendUrl"
@@ -30,9 +34,15 @@
 
         <div class="row row-wrap">
           <button id="loginFigmaBtn" type="button" class="primary">Log in with Figma</button>
+          <button id="cancelOauthBtn" type="button" class="secondary hidden">Cancel login</button>
           <button id="loadBtn" type="button">Load data</button>
           <button id="clearBtn" type="button" class="secondary">Clear session</button>
         </div>
+
+        <p class="hint">
+          After Figma redirects, you will see the pink “Login completato” screen in the popup. You can
+          close that window; this page will pick up the session automatically.
+        </p>
 
         <details class="advanced">
           <summary>Manual JWT (debug)</summary>
@@ -47,21 +57,23 @@
         <p id="status" class="status"></p>
       </section>
 
-      <section class="grid">
-        <article class="card">
-          <h2>Credits</h2>
-          <pre id="creditsOut">-</pre>
-        </article>
-        <article class="card">
-          <h2>Trophies</h2>
-          <pre id="trophiesOut">-</pre>
-        </article>
-      </section>
+      <div id="panel-dashboard">
+        <section class="grid">
+          <article class="card">
+            <h2>Credits</h2>
+            <pre id="creditsOut">-</pre>
+          </article>
+          <article class="card">
+            <h2>Trophies</h2>
+            <pre id="trophiesOut">-</pre>
+          </article>
+        </section>
 
-      <section class="card">
-        <h2>History</h2>
-        <pre id="historyOut">-</pre>
-      </section>
+        <section class="card">
+          <h2>History</h2>
+          <pre id="historyOut">-</pre>
+        </section>
+      </div>
     </main>
 
     <script src="./config.js"></script>

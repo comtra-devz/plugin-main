@@ -4,6 +4,9 @@ const LS_BACKEND = "comtra_web_backend_url";
 const LS_TOKEN = "comtra_web_jwt";
 const LS_USER_LABEL = "comtra_web_user_label";
 
+/** Server flow store TTL is 600s; stop slightly before to avoid racing 404. */
+const OAUTH_FLOW_MAX_MS = 580_000;
+
 const backendInput = $("backendUrl");
 const tokenInput = $("token");
 const statusEl = $("status");
@@ -13,11 +16,13 @@ const historyOut = $("historyOut");
 const loadBtn = $("loadBtn");
 const clearBtn = $("clearBtn");
 const loginFigmaBtn = $("loginFigmaBtn");
+const cancelOauthBtn = $("cancelOauthBtn");
 const logoutBtn = $("logoutBtn");
 const sessionRow = $("sessionRow");
 const sessionLabel = $("sessionLabel");
 
-let oauthPollTimer = null;
+let oauthPollInterval = null;
+let oauthDeadlineTimeout = null;
 let oauthWindow = null;
 
 function setStatus(text, isError = false) {
@@ -37,6 +42,11 @@ function effectiveToken() {
   const fromField = String(tokenInput.value || "").trim();
   if (fromField) return fromField;
   return String(localStorage.getItem(LS_TOKEN) || "").trim();
+}
+
+function setOauthWaiting(on) {
+  cancelOauthBtn.classList.toggle("hidden", !on);
+  loginFigmaBtn.disabled = on;
 }
 
 function updateSessionUi() {
@@ -68,10 +78,14 @@ function persistSession(token, userLabel) {
   updateSessionUi();
 }
 
-function stopOauthPoll() {
-  if (oauthPollTimer) {
-    clearInterval(oauthPollTimer);
-    oauthPollTimer = null;
+function stopOauthFlow() {
+  if (oauthPollInterval) {
+    clearInterval(oauthPollInterval);
+    oauthPollInterval = null;
+  }
+  if (oauthDeadlineTimeout) {
+    clearTimeout(oauthDeadlineTimeout);
+    oauthDeadlineTimeout = null;
   }
 }
 
@@ -139,7 +153,8 @@ async function loadAll() {
 }
 
 function clearAll() {
-  stopOauthPoll();
+  stopOauthFlow();
+  setOauthWaiting(false);
   clearOauthWindow();
   tokenInput.value = "";
   localStorage.removeItem(LS_TOKEN);
@@ -151,6 +166,13 @@ function clearAll() {
   updateSessionUi();
 }
 
+function cancelOauth() {
+  stopOauthFlow();
+  setOauthWaiting(false);
+  clearOauthWindow();
+  setStatus("Login cancelled.");
+}
+
 async function loginWithFigma() {
   const base = baseUrl();
   if (!base) {
@@ -158,7 +180,7 @@ async function loginWithFigma() {
     return;
   }
 
-  loginFigmaBtn.disabled = true;
+  setOauthWaiting(true);
   setStatus("Opening Figma login…");
 
   oauthWindow = window.open(
@@ -167,7 +189,7 @@ async function loginWithFigma() {
     "width=560,height=720,scrollbars=yes,resizable=yes"
   );
   if (!oauthWindow) {
-    loginFigmaBtn.disabled = false;
+    setOauthWaiting(false);
     setStatus("Popup blocked. Allow popups for this site and try again.", true);
     return;
   }
@@ -188,31 +210,46 @@ async function loginWithFigma() {
       throw new Error("Could not open OAuth URL in popup.");
     }
 
+    setStatus(
+      "Complete login in the popup. When you see “Login completato”, you can close it — this page will update automatically."
+    );
+
     const pollUrl = `${base}/api/figma-oauth/poll?read_key=${encodeURIComponent(readKey)}`;
-    stopOauthPoll();
-    oauthPollTimer = setInterval(async () => {
+    stopOauthFlow();
+
+    oauthDeadlineTimeout = setTimeout(() => {
+      stopOauthFlow();
+      setOauthWaiting(false);
+      clearOauthWindow();
+      setStatus(
+        "Login timed out (the server flow expired). Close the popup if it is still open and try again.",
+        true
+      );
+    }, OAUTH_FLOW_MAX_MS);
+
+    oauthPollInterval = setInterval(async () => {
       try {
         const r = await fetch(pollUrl);
         if (r.status === 202) return;
         if (r.status === 404) {
-          stopOauthPoll();
-          loginFigmaBtn.disabled = false;
-          setStatus("Login flow expired. Try again.", true);
+          stopOauthFlow();
+          setOauthWaiting(false);
+          setStatus("Login flow expired on the server. Try again.", true);
           clearOauthWindow();
           return;
         }
         if (!r.ok) return;
         const payload = await r.json();
         if (payload?.error) {
-          stopOauthPoll();
-          loginFigmaBtn.disabled = false;
+          stopOauthFlow();
+          setOauthWaiting(false);
           setStatus("Login did not complete. Try again.", true);
           clearOauthWindow();
           return;
         }
         if (payload?.user) {
-          stopOauthPoll();
-          loginFigmaBtn.disabled = false;
+          stopOauthFlow();
+          setOauthWaiting(false);
           if (payload.tokenSaved === false) {
             setStatus("Login did not complete (token not saved). Try again.", true);
             clearOauthWindow();
@@ -228,15 +265,17 @@ async function loginWithFigma() {
           }
           tokenInput.value = "";
           persistSession(jwt, label);
-          setStatus("Signed in. You can load data or close the Figma login window.");
           clearOauthWindow();
+          setStatus("Signed in. Loading dashboard…");
+          await loadAll();
+          document.getElementById("panel-dashboard")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       } catch (_) {}
     }, 2000);
   } catch (e) {
-    stopOauthPoll();
+    stopOauthFlow();
+    setOauthWaiting(false);
     clearOauthWindow();
-    loginFigmaBtn.disabled = false;
     const msg = e instanceof Error ? e.message : "Connection error";
     const isNetwork = msg === "Failed to fetch" || /fetch|network|CORS/i.test(msg);
     setStatus(
@@ -249,7 +288,8 @@ async function loginWithFigma() {
 }
 
 function logout() {
-  stopOauthPoll();
+  stopOauthFlow();
+  setOauthWaiting(false);
   clearOauthWindow();
   tokenInput.value = "";
   localStorage.removeItem(LS_TOKEN);
@@ -281,6 +321,7 @@ function restoreFromStorage() {
 loadBtn.addEventListener("click", loadAll);
 clearBtn.addEventListener("click", clearAll);
 loginFigmaBtn.addEventListener("click", loginWithFigma);
+cancelOauthBtn.addEventListener("click", cancelOauth);
 logoutBtn.addEventListener("click", logout);
 
 restoreFromStorage();
