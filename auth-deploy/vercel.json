@@ -23,6 +23,7 @@
     { "source": "/api/credits", "destination": "/api/credits-trophies?service=credits" },
     { "source": "/api/trophies/linkedin-shared", "destination": "/api/credits-trophies?service=trophies&sub=linkedin-shared" },
     { "source": "/api/trophies", "destination": "/api/credits-trophies?service=trophies" },
+    { "source": "/api/history", "destination": "/api/credits-trophies?service=history" },
     { "source": "/api/report-throttle", "destination": "/api/credits-trophies?service=report-throttle" },
     { "source": "/api/throttle-discount", "destination": "/api/credits-trophies?service=throttle-discount" }
   ]

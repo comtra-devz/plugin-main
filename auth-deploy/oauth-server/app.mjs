@@ -1751,13 +1751,158 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] }, components: data.components };
 }
 
+function asStringArray(v) {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.map((x) => String(x || '').trim()).filter(Boolean);
+  return out.length > 0 ? out : undefined;
+}
+
+function buildProviderFetchParams(body, fallbackScope = 'all') {
+  const sourceRef =
+    body?.source_ref && typeof body.source_ref === 'object' && !Array.isArray(body.source_ref)
+      ? body.source_ref
+      : body?.sourceRef && typeof body.sourceRef === 'object' && !Array.isArray(body.sourceRef)
+        ? body.sourceRef
+        : null;
+  const selectionContext =
+    body?.selection_context && typeof body.selection_context === 'object' && !Array.isArray(body.selection_context)
+      ? body.selection_context
+      : body?.selectionContext && typeof body.selectionContext === 'object' && !Array.isArray(body.selectionContext)
+        ? body.selectionContext
+        : null;
+  const scope =
+    body?.scope ||
+    sourceRef?.scope ||
+    selectionContext?.scope ||
+    fallbackScope;
+  return {
+    scope,
+    pageId:
+      body?.page_id ||
+      body?.pageId ||
+      sourceRef?.page_id ||
+      sourceRef?.pageId ||
+      selectionContext?.page_id ||
+      selectionContext?.pageId ||
+      null,
+    nodeIds:
+      asStringArray(body?.node_ids) ||
+      asStringArray(body?.nodeIds) ||
+      asStringArray(sourceRef?.node_ids) ||
+      asStringArray(sourceRef?.nodeIds) ||
+      asStringArray(selectionContext?.node_ids) ||
+      asStringArray(selectionContext?.nodeIds),
+    pageIds:
+      asStringArray(body?.page_ids) ||
+      asStringArray(body?.pageIds) ||
+      asStringArray(sourceRef?.page_ids) ||
+      asStringArray(sourceRef?.pageIds) ||
+      asStringArray(selectionContext?.page_ids) ||
+      asStringArray(selectionContext?.pageIds),
+  };
+}
+
+async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'all' }) {
+  const sourceTool = String(body?.source_tool || body?.sourceTool || '').trim().toLowerCase();
+  const fileJsonFromBody =
+    body?.design_document ||
+    body?.designDocument ||
+    body?.file_json ||
+    body?.fileJson;
+  const sourceRef =
+    body?.source_ref && typeof body.source_ref === 'object' && !Array.isArray(body.source_ref)
+      ? body.source_ref
+      : body?.sourceRef && typeof body.sourceRef === 'object' && !Array.isArray(body.sourceRef)
+        ? body.sourceRef
+        : null;
+  const refDocId = String(
+    sourceRef?.doc_id ||
+    sourceRef?.docId ||
+    sourceRef?.file_key ||
+    sourceRef?.fileKey ||
+    ''
+  ).trim();
+  const fileKey = refDocId || String(body?.file_key || body?.fileKey || '').trim();
+  const providerParams = buildProviderFetchParams(body, fallbackScope);
+
+  if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
+    return { fileJson: fileJsonFromBody, sourceTool: sourceTool || 'inline' };
+  }
+
+  if (sourceTool && sourceTool !== 'figma') {
+    const err = new Error(`Unsupported source_tool "${sourceTool}". Provide design_document until adapter is implemented.`);
+    err.status = 400;
+    throw err;
+  }
+
+  if (!fileKey) {
+    const err = new Error('file_key/source_ref.doc_id or design_document required');
+    err.status = 400;
+    throw err;
+  }
+
+  let accessToken = await getFigmaAccessToken(dbSql, userId);
+  if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
+  if (!accessToken) {
+    const err = new Error('Figma non connesso. Clicca "Riconnetti Figma" nel plugin.');
+    err.status = 403;
+    err.code = 'FIGMA_RECONNECT';
+    throw err;
+  }
+
+  let fetchErr = null;
+  let fileJson = null;
+  try {
+    fileJson = await fetchFigmaFileForAudit(
+      accessToken,
+      fileKey,
+      providerParams.scope,
+      providerParams.pageId,
+      providerParams.nodeIds,
+      providerParams.pageIds,
+    );
+  } catch (err) {
+    fetchErr = err;
+  }
+  if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
+    const newToken = await forceRefreshFigmaToken(userId);
+    if (newToken) {
+      try {
+        fileJson = await fetchFigmaFileForAudit(
+          newToken,
+          fileKey,
+          providerParams.scope,
+          providerParams.pageId,
+          providerParams.nodeIds,
+          providerParams.pageIds,
+        );
+        fetchErr = null;
+      } catch (e) {
+        fetchErr = e;
+      }
+    }
+  }
+  if (fetchErr || !fileJson) {
+    const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+    const err = new Error(msg);
+    if (msg.includes('re-login')) {
+      err.status = 403;
+      err.code = 'FIGMA_RECONNECT';
+    } else if (msg.includes('not found')) {
+      err.status = 404;
+    } else {
+      err.status = 400;
+    }
+    throw err;
+  }
+
+  return { fileJson, sourceTool: sourceTool || 'figma', fileKey };
+}
+
 app.post('/api/agents/ds-audit', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
-  const fileKey = (body.file_key || body.fileKey || '').trim();
-  const fileJsonFromBody = body.file_json || body.fileJson;
-  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
 
   if (!POSTGRES_URL) return res.status(503).json({ error: 'DS Audit requires database' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
@@ -1777,40 +1922,15 @@ app.post('/api/agents/ds-audit', async (req, res) => {
 
   try {
     let fileJson;
-    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
-      fileJson = fileJsonFromBody;
-    } else if (fileKey) {
-      let accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-      if (!accessToken) {
-        console.warn('POST /api/agents/ds-audit: no token for user_id=', userId);
-        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-      }
-      let fetchErr = null;
-      try {
-        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-      } catch (err) {
-        fetchErr = err;
-      }
-      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
-        const newToken = await forceRefreshFigmaToken(userId);
-        if (newToken) {
-          try {
-            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-            fetchErr = null;
-          } catch (e) {
-            fetchErr = e;
-          }
-        }
-      }
-      if (fetchErr) {
-        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
-        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-        if (msg.includes('not found')) return res.status(404).json({ error: msg });
-        return res.status(400).json({ error: msg });
-      }
-    } else {
-      return res.status(400).json({ error: 'file_json must include document' });
+    try {
+      const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
+      fileJson = resolved.fileJson;
+    } catch (resolveErr) {
+      const status = Number(resolveErr?.status) || 400;
+      const code = resolveErr?.code;
+      const msg = resolveErr?.message || 'Invalid design source';
+      if (code) return res.status(status).json({ error: msg, code });
+      return res.status(status).json({ error: msg });
     }
 
     // Advisory: file senza design system (0 componenti) → suggerire Preline, skip Kimi
@@ -1962,7 +2082,7 @@ app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
-  const fileKey = (body.file_key || body.fileKey || '').trim();
+  const legacyFileKey = (body.file_key || body.fileKey || '').trim();
   const prompt = (body.prompt || body.promptText || '').trim();
   const mode = body.mode || 'create';
   const dsSource = body.ds_source || body.dsSource || 'custom';
@@ -1997,7 +2117,16 @@ app.post('/api/agents/generate', async (req, res) => {
   }
   const dsPackage = resolveDsPackageForContext(dsPackageRaw, contextProfile);
 
-  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  if (
+    !legacyFileKey &&
+    !(body?.design_document && typeof body.design_document === 'object') &&
+    !(body?.designDocument && typeof body.designDocument === 'object') &&
+    !(body?.file_json && typeof body.file_json === 'object') &&
+    !(body?.fileJson && typeof body.fileJson === 'object') &&
+    !(body?.source_ref && typeof body.source_ref === 'object')
+  ) {
+    return res.status(400).json({ error: 'file_key/source_ref.doc_id or design_document required' });
+  }
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
 
@@ -2011,6 +2140,13 @@ app.post('/api/agents/generate', async (req, res) => {
 
   let variant = Math.random() < 0.5 ? 'B' : 'A';
   const startMs = Date.now();
+  const phaseTimers = {
+    started_at_ms: startMs,
+    resolve_source_ms: null,
+    model_ms: null,
+    validation_ms: null,
+    total_ms: null,
+  };
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let asciiWireframe = null;
@@ -2027,36 +2163,21 @@ app.post('/api/agents/generate', async (req, res) => {
   }
 
   try {
-    let accessToken = await getFigmaAccessToken(dbSql, userId);
-    if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-    if (!accessToken) {
-      return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-    }
     let fileJson;
-    let fetchErr = null;
+    let resolvedDocKey = legacyFileKey || '';
     try {
-      fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, 'all', null, null, null);
-    } catch (err) {
-      fetchErr = err;
+      const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
+      fileJson = resolved.fileJson;
+      resolvedDocKey = resolved.fileKey || resolvedDocKey;
+      phaseTimers.resolve_source_ms = Date.now() - startMs;
+    } catch (resolveErr) {
+      const status = Number(resolveErr?.status) || 400;
+      const code = resolveErr?.code;
+      const msg = resolveErr?.message || 'Invalid design source';
+      if (code) return res.status(status).json({ error: msg, code });
+      return res.status(status).json({ error: msg });
     }
-    if (fetchErr?.message?.includes('re-login')) {
-      const newToken = await forceRefreshFigmaToken(userId);
-      if (newToken) {
-        try {
-          fileJson = await fetchFigmaFileForAudit(newToken, fileKey, 'all', null, null, null);
-          fetchErr = null;
-        } catch (e) {
-          fetchErr = e;
-        }
-      }
-    }
-    if (fetchErr || !fileJson) {
-      const msg = fetchErr?.message || 'Figma API error';
-      if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-      if (msg.includes('not found')) return res.status(404).json({ error: msg });
-      return res.status(400).json({ error: msg });
-    }
-
+    const docContextKey = resolvedDocKey || 'inline-design-document';
     const pageCount = fileJson?.document?.children?.length ?? 0;
     const dsContextBlock = dsPackage ? buildDsContextForPrompt(dsPackage, contextProfile) : 'Resolved DS package: unavailable (fallback to semantic DS hint only).';
     const dsIndexForValidation =
@@ -2090,7 +2211,7 @@ app.post('/api/agents/generate', async (req, res) => {
         ].join('\n')
       : '';
     const inferredScreenArchetype = inferFocusedScreenType(prompt);
-    const designIntelBlock = formatDesignIntelligenceForPrompt(fileKey, {
+    const designIntelBlock = formatDesignIntelligenceForPrompt(docContextKey, {
       focusScreenType: inferredScreenArchetype,
     });
     const contextBlob = [
@@ -2186,6 +2307,8 @@ app.post('/api/agents/generate', async (req, res) => {
       console.error('Generate: invalid or missing JSON from Kimi');
       return res.status(502).json({ error: 'Invalid response from AI' });
     }
+    const afterModelMs = Date.now();
+    phaseTimers.model_ms = afterModelMs - startMs - (phaseTimers.resolve_source_ms || 0);
 
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
@@ -2297,6 +2420,9 @@ app.post('/api/agents/generate', async (req, res) => {
 
     const creditsConsumed = actionPlan.metadata?.estimated_credits ?? 3;
     const latencyMs = Date.now() - startMs;
+    phaseTimers.validation_ms =
+      Date.now() - afterModelMs;
+    phaseTimers.total_ms = latencyMs;
 
     if (dbSql) {
       dbSql`
@@ -2317,6 +2443,7 @@ app.post('/api/agents/generate', async (req, res) => {
         request_id: requestId,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
+        phase_timers: phaseTimers,
       });
     } else {
       res.json({
@@ -2325,6 +2452,7 @@ app.post('/api/agents/generate', async (req, res) => {
         request_id: null,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
+        phase_timers: phaseTimers,
       });
     }
   } catch (err) {
@@ -2581,48 +2709,19 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
-  const fileKey = (body.file_key || body.fileKey || '').trim();
-  const fileJsonFromBody = body.file_json || body.fileJson;
-
-  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
   if (!POSTGRES_URL) return res.status(503).json({ error: 'A11Y Audit requires database' });
 
   try {
     let fileJson;
-    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
-      fileJson = fileJsonFromBody;
-    } else if (fileKey) {
-      let accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-      if (!accessToken) {
-        console.warn('POST /api/agents/a11y-audit: no token for user_id=', userId);
-        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-      }
-      let fetchErr = null;
-      try {
-        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-      } catch (err) {
-        fetchErr = err;
-      }
-      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
-        const newToken = await forceRefreshFigmaToken(userId);
-        if (newToken) {
-          try {
-            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-            fetchErr = null;
-          } catch (e) {
-            fetchErr = e;
-          }
-        }
-      }
-      if (fetchErr) {
-        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
-        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-        if (msg.includes('not found')) return res.status(404).json({ error: msg });
-        return res.status(400).json({ error: msg });
-      }
-    } else {
-      return res.status(400).json({ error: 'file_key or file_json required' });
+    try {
+      const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
+      fileJson = resolved.fileJson;
+    } catch (resolveErr) {
+      const status = Number(resolveErr?.status) || 400;
+      const code = resolveErr?.code;
+      const msg = resolveErr?.message || 'Invalid design source';
+      if (code) return res.status(status).json({ error: msg, code });
+      return res.status(status).json({ error: msg });
     }
     const { issues } = runA11yAudit(fileJson);
     res.json({ issues });
@@ -2665,10 +2764,6 @@ app.post('/api/agents/ux-audit', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
-  const fileKey = (body.file_key || body.fileKey || '').trim();
-  const fileJsonFromBody = body.file_json || body.fileJson;
-
-  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
   if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
 
   let systemPrompt;
@@ -2686,40 +2781,15 @@ app.post('/api/agents/ux-audit', async (req, res) => {
 
   try {
     let fileJson;
-    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
-      fileJson = fileJsonFromBody;
-    } else if (fileKey) {
-      let accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-      if (!accessToken) {
-        console.warn('POST /api/agents/ux-audit: no token for user_id=', userId);
-        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-      }
-      let fetchErr = null;
-      try {
-        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-      } catch (err) {
-        fetchErr = err;
-      }
-      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
-        const newToken = await forceRefreshFigmaToken(userId);
-        if (newToken) {
-          try {
-            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope, body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-            fetchErr = null;
-          } catch (e) {
-            fetchErr = e;
-          }
-        }
-      }
-      if (fetchErr) {
-        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
-        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-        if (msg.includes('not found')) return res.status(404).json({ error: msg });
-        return res.status(400).json({ error: msg });
-      }
-    } else {
-      return res.status(400).json({ error: 'file_json must include document' });
+    try {
+      const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
+      fileJson = resolved.fileJson;
+    } catch (resolveErr) {
+      const status = Number(resolveErr?.status) || 400;
+      const code = resolveErr?.code;
+      const msg = resolveErr?.message || 'Invalid design source';
+      if (code) return res.status(status).json({ error: msg, code });
+      return res.status(status).json({ error: msg });
     }
 
     // Keep UX payload under model context budget. System prompt for UX is large,
@@ -2818,51 +2888,24 @@ app.post('/api/agents/sync-scan', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const body = req.body || {};
-  const fileKey = (body.file_key || body.fileKey || '').trim();
-  const fileJsonFromBody = body.file_json || body.fileJson;
   const storybookUrl = (body.storybook_url || body.storybookUrl || '').trim();
   const storybookToken = (body.storybook_token || body.storybookToken || '').trim() || undefined;
   // Do not log body or storybookToken; token is used only for fetch and must not be persisted or logged.
 
   if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
-  if (!fileKey && !fileJsonFromBody) return res.status(400).json({ error: 'file_key or file_json required' });
   if (!POSTGRES_URL) return res.status(503).json({ error: 'Sync Scan requires database' });
 
   try {
     let fileJson;
-    if (fileJsonFromBody && typeof fileJsonFromBody === 'object' && fileJsonFromBody.document) {
-      fileJson = fileJsonFromBody;
-    } else if (fileKey) {
-      let accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-      if (!accessToken) {
-        return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-      }
-      let fetchErr = null;
-      try {
-        fileJson = await fetchFigmaFileForAudit(accessToken, fileKey, body.scope || 'all', body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-      } catch (err) {
-        fetchErr = err;
-      }
-      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
-        const newToken = await forceRefreshFigmaToken(userId);
-        if (newToken) {
-          try {
-            fileJson = await fetchFigmaFileForAudit(newToken, fileKey, body.scope || 'all', body.page_id || body.pageId, body.node_ids || body.nodeIds, body.page_ids || body.pageIds);
-            fetchErr = null;
-          } catch (e) {
-            fetchErr = e;
-          }
-        }
-      }
-      if (fetchErr) {
-        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
-        if (msg.includes('re-login')) return res.status(403).json({ error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.', code: 'FIGMA_RECONNECT' });
-        if (msg.includes('not found')) return res.status(404).json({ error: msg });
-        return res.status(400).json({ error: msg });
-      }
-    } else {
-      return res.status(400).json({ error: 'file_json must include document' });
+    try {
+      const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
+      fileJson = resolved.fileJson;
+    } catch (resolveErr) {
+      const status = Number(resolveErr?.status) || 400;
+      const code = resolveErr?.code;
+      const msg = resolveErr?.message || 'Invalid design source';
+      if (code) return res.status(status).json({ error: msg, code });
+      return res.status(status).json({ error: msg });
     }
 
     const result = await runSyncScan(fileJson, storybookUrl, storybookToken);
@@ -2978,6 +3021,96 @@ app.post('/api/agents/code-gen', async (req, res) => {
     const msg = err?.message || 'Server error';
     if (String(msg).includes('429')) return res.status(429).json({ error: 'Rate limited; try again shortly.' });
     res.status(500).json({ error: String(msg).length < 240 ? msg : 'Server error' });
+  }
+});
+
+function normalizeHistoryLimit(raw, fallback = 30, max = 100) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(max, Math.max(1, Math.floor(n)));
+}
+
+// --- History (webapp/read model): recent generate runs + recent credit/activity events
+app.get('/api/history', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.json({ generate: [], activity: [] });
+
+  const q = req.query || {};
+  const include = String(q.include || 'all').trim().toLowerCase();
+  const includeGenerate = include === 'all' || include === 'generate';
+  const includeActivity = include === 'all' || include === 'activity';
+  const limitGenerate = normalizeHistoryLimit(q.limit_generate || q.limitGenerate, 20, 80);
+  const limitActivity = normalizeHistoryLimit(q.limit_activity || q.limitActivity, 40, 120);
+
+  try {
+    let generate = [];
+    let activity = [];
+    if (includeGenerate) {
+      const gr = await dbSql`
+        SELECT
+          r.id,
+          r.variant,
+          r.input_tokens,
+          r.output_tokens,
+          r.credits_consumed,
+          r.latency_ms,
+          r.created_at,
+          f.thumbs,
+          f.comment,
+          f.created_at AS feedback_at
+        FROM generate_ab_requests r
+        LEFT JOIN LATERAL (
+          SELECT thumbs, comment, created_at
+          FROM generate_ab_feedback
+          WHERE request_id = r.id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) f ON true
+        WHERE r.user_id = ${userId}
+        ORDER BY r.created_at DESC
+        LIMIT ${limitGenerate}
+      `;
+      generate = (gr.rows || []).map((row) => ({
+        id: row.id,
+        variant: row.variant,
+        input_tokens: Number(row.input_tokens) || 0,
+        output_tokens: Number(row.output_tokens) || 0,
+        credits_consumed: Number(row.credits_consumed) || 0,
+        latency_ms: Number(row.latency_ms) || 0,
+        created_at: row.created_at,
+        feedback: row.thumbs
+          ? {
+              thumbs: row.thumbs,
+              comment: row.comment || '',
+              created_at: row.feedback_at || null,
+            }
+          : null,
+      }));
+    }
+    if (includeActivity) {
+      const ar = await dbSql`
+        SELECT
+          action_type,
+          credits_consumed,
+          file_id,
+          created_at
+        FROM credit_transactions
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT ${limitActivity}
+      `;
+      activity = (ar.rows || []).map((row) => ({
+        action_type: row.action_type,
+        credits_consumed: Number(row.credits_consumed) || 0,
+        file_id: row.file_id || null,
+        created_at: row.created_at,
+      }));
+    }
+    return res.json({ generate, activity });
+  } catch (err) {
+    console.error('GET /api/history', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 

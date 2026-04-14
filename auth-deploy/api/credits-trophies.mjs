@@ -55,6 +55,12 @@ export default function handler(req, res) {
     return app(req, res);
   }
 
+  if (service === 'history') {
+    if (req.method !== 'GET') return res.status(405).end();
+    req.url = '/api/history' + qs;
+    return app(req, res);
+  }
+
   if (service === 'report-throttle') {
     if (req.method !== 'POST') return res.status(405).end();
     req.url = '/api/report-throttle';
@@ -102,5 +108,5 @@ export default function handler(req, res) {
     return res.status(405).end();
   }
 
-  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|report-throttle|throttle-discount|feedback|support|ds-catalog|user-ds-imports' });
+  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|feedback|support|ds-catalog|user-ds-imports' });
 }

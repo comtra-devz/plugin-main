@@ -1451,18 +1451,8 @@ export default function AppTest() {
       if (dsCacheHash != null && String(dsCacheHash).trim() !== '') payload.ds_cache_hash = String(dsCacheHash).trim();
       const sb = body.screenshot_base64;
       if (sb != null && String(sb).trim() !== '') payload.screenshot_base64 = String(sb).trim();
-
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify(payload),
-      });
-      if (r.status === 503) {
-        handle503();
-        throw new Error('Service temporarily unavailable');
-      }
-      if (!r.ok) {
-        const text = await r.text();
+      const parseErrorMessage = async (res: Response): Promise<string> => {
+        const text = await res.text();
         let msg = text;
         try {
           const j = JSON.parse(text);
@@ -1470,9 +1460,42 @@ export default function AppTest() {
         } catch {
           // keep as-is
         }
-        throw new Error(msg);
+        return msg;
+      };
+      const endpoints = [
+        `${AUTH_BACKEND_URL}/api/agents/generate-v2`,
+        `${AUTH_BACKEND_URL}/api/agents/generate`,
+      ];
+      let lastError: Error | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const endpoint = endpoints[i];
+        try {
+          const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+            body: JSON.stringify(payload),
+          });
+          if (r.status === 503) {
+            handle503();
+            // On v2 rollout delays we fallback to v1 once.
+            if (i === 0 && endpoints.length > 1) continue;
+            throw new Error('Service temporarily unavailable');
+          }
+          if (!r.ok) {
+            const msg = await parseErrorMessage(r);
+            // Backward-compatible fallback when v2 route isn't deployed yet.
+            if (i === 0 && (r.status === 404 || r.status === 405) && endpoints.length > 1) continue;
+            throw new Error(msg);
+          }
+          return r.json();
+        } catch (e) {
+          lastError = e instanceof Error ? e : new Error(String(e));
+          // Network failure on first endpoint -> try legacy endpoint.
+          if (i === 0 && endpoints.length > 1) continue;
+          throw lastError;
+        }
       }
-      return r.json();
+      throw lastError || new Error('Generate request failed');
     },
     [user?.authToken, handle503, requestDsContextIndex, fetchDsImportContextSnapshot, AUTH_BACKEND_URL],
   );

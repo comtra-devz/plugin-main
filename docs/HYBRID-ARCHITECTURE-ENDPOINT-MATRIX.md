@@ -18,9 +18,10 @@ Purpose: map current API contracts to a tool-agnostic v2 contract (Figma adapter
 | `POST /api/agents/a11y-audit` | `file_key` or `file_json` + scope fields | Medium (same as above) | Same v2 shape as ds-audit | Medium | Same dual-path migration |
 | `POST /api/agents/ux-audit` | `file_key` or `file_json` + scope fields | Medium (Figma fetch path + Kimi) | Same v2 shape + optional `document_budget` hints | Medium | Same dual-path migration |
 | `POST /api/agents/sync-scan` | `file_key` or `file_json` + storybook URL/token + scope fields | Medium (Figma fetch path) | `source_tool`, `design_document`, `selection_context`, `external_targets.storybook` | Medium | Add v2 payload while preserving old storybook fields |
-| `POST /api/agents/generate` | `file_key` (required), `prompt`, mode, ds fields, optional screenshot | High (`file_key` mandatory, fetch from Figma always) | `source_tool`, `design_document` or `source_ref`, `prompt`, `generation_context`, `ds_context_index` | High | Introduce `/api/agents/generate-v2` first; keep old endpoint stable |
+| `POST /api/agents/generate` | `file_key` (legacy) or `design_document/source_ref` (new), `prompt`, mode, ds fields, optional screenshot | Medium-high (engine still assumes Figma adapter when source is not inline) | `source_tool`, `design_document` or `source_ref`, `prompt`, `generation_context`, `ds_context_index` | High | `/api/agents/generate-v2` added as alias; migrate callers by feature flag then finalize adapter split |
 | `POST /api/agents/generate-feedback` | request id + thumbs/comment | Low | unchanged | Low | no change needed |
 | `GET /api/user/ds-imports/context` | file-scoped DS context lookup | Low-medium (keyed by current file model) | `source_tool + source_doc_id` keying | Medium | Backward-compatible lookup aliases |
+| `GET /api/history` | new read-model endpoint (`generate_ab_requests` + `credit_transactions`) | None (user-token based) | same endpoint, later split by webapp BFF only if needed | Low | enabled now for webapp/account history views |
 | `GET /api/credits` and related credit endpoints | user token based | None (tool-neutral already) | unchanged | Low | immediate reuse from webapp |
 | `GET /api/trophies` | user token based | None | unchanged | Low | immediate reuse from webapp |
 
@@ -73,11 +74,11 @@ Rules:
 
 ## 4) First-step sequence (lowest risk)
 
-1. Add v2 fields to `ds-audit`, `a11y-audit`, `ux-audit`, `sync-scan` without breaking v1.
-2. Implement adapter function `resolveDesignDocument(payload)` in backend and reuse across agent endpoints.
-3. Add `generate-v2` (parallel endpoint), keep existing `generate` untouched until parity.
-4. Introduce lightweight webapp screens reusing existing auth/credits/trophies + new read-only history endpoints.
-5. After parity, switch plugin caller to v2 gradually via feature flag.
+1. [x] Add v2 fields to `ds-audit`, `a11y-audit`, `ux-audit`, `sync-scan` without breaking v1.
+2. [x] Implement adapter function `resolveDesignDocument(payload)` in backend and reuse across agent endpoints.
+3. [x] Add `generate-v2` (parallel endpoint), keep existing `generate` untouched until parity.
+4. [~] Introduce lightweight webapp screens reusing existing auth/credits/trophies + new read-only history endpoints (backend read-model endpoint now available: `/api/history`; MVP scaffold added in `webapp/`).
+5. [x] Start plugin cutover to v2 with automatic fallback to legacy endpoint.
 
 ---
 

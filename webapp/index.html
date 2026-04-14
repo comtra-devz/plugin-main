@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comtra Webapp (Read-Only MVP)</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>Comtra Webapp MVP</h1>
+        <p>Read-only account dashboard (credits, trophies, history)</p>
+      </header>
+
+      <section class="card">
+        <label for="backendUrl">Auth backend URL</label>
+        <input id="backendUrl" type="text" value="https://auth.comtra.dev" />
+
+        <label for="token">JWT token</label>
+        <textarea
+          id="token"
+          rows="4"
+          placeholder="Paste auth token from Comtra plugin session"
+        ></textarea>
+
+        <div class="row">
+          <button id="loadBtn" type="button">Load Data</button>
+          <button id="clearBtn" type="button" class="secondary">Clear</button>
+        </div>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Credits</h2>
+          <pre id="creditsOut">-</pre>
+        </article>
+        <article class="card">
+          <h2>Trophies</h2>
+          <pre id="trophiesOut">-</pre>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>History</h2>
+        <pre id="historyOut">-</pre>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
