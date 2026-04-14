@@ -15,7 +15,13 @@
 
       <section class="card">
         <label for="backendUrl">Auth backend URL</label>
-        <input id="backendUrl" type="text" value="https://auth.comtra.dev" />
+        <input
+          id="backendUrl"
+          type="text"
+          autocomplete="url"
+          placeholder="https://auth.comtra.dev"
+          value=""
+        />
 
         <div id="sessionRow" class="session-row hidden">
           <p id="sessionLabel" class="session-label"></p>
@@ -58,6 +64,7 @@
       </section>
     </main>
 
+    <script src="./config.js"></script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>

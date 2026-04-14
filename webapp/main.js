@@ -258,9 +258,21 @@ function logout() {
   setStatus("Logged out.");
 }
 
+function deployDefaultBackend() {
+  const raw =
+    typeof window !== "undefined" && window.COMTRA_AUTH_BACKEND != null
+      ? String(window.COMTRA_AUTH_BACKEND).trim()
+      : "";
+  return raw.replace(/\/$/, "");
+}
+
 function restoreFromStorage() {
   const savedBackend = localStorage.getItem(LS_BACKEND);
   if (savedBackend) backendInput.value = savedBackend;
+  else {
+    const def = deployDefaultBackend();
+    if (def) backendInput.value = def;
+  }
   const savedToken = localStorage.getItem(LS_TOKEN);
   if (savedToken) tokenInput.value = "";
   updateSessionUi();
