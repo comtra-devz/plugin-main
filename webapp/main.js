@@ -6,6 +6,7 @@ const LS_USER_LABEL = "comtra_web_user_label";
 
 /** Server flow store TTL is 600s; stop slightly before to avoid racing 404. */
 const OAUTH_FLOW_MAX_MS = 580_000;
+const AUTO_REFRESH_MS = 30_000;
 
 const backendInput = $("backendUrl");
 const tokenInput = $("token");
@@ -13,7 +14,12 @@ const statusEl = $("status");
 const creditsOut = $("creditsOut");
 const trophiesOut = $("trophiesOut");
 const historyOut = $("historyOut");
+const summaryOut = $("summaryOut");
+const sessionOut = $("sessionOut");
 const loadBtn = $("loadBtn");
+const refreshBtn = $("refreshBtn");
+const autoRefreshBtn = $("autoRefreshBtn");
+const exportBtn = $("exportBtn");
 const clearBtn = $("clearBtn");
 const loginFigmaBtn = $("loginFigmaBtn");
 const cancelOauthBtn = $("cancelOauthBtn");
@@ -24,6 +30,8 @@ const sessionLabel = $("sessionLabel");
 let oauthPollInterval = null;
 let oauthDeadlineTimeout = null;
 let oauthWindow = null;
+let dashboardCache = null;
+let autoRefreshInterval = null;
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -56,16 +64,23 @@ function updateSessionUi() {
     sessionRow.classList.remove("hidden");
     sessionLabel.textContent = `Signed in as ${label}`;
     loadBtn.disabled = false;
+    refreshBtn.disabled = false;
+    exportBtn.disabled = false;
     return;
   }
   if (token) {
     sessionRow.classList.remove("hidden");
     sessionLabel.textContent = "Signed in (token saved)";
     loadBtn.disabled = false;
+    refreshBtn.disabled = false;
+    exportBtn.disabled = false;
     return;
   }
   sessionRow.classList.add("hidden");
   sessionLabel.textContent = "";
+  loadBtn.disabled = true;
+  refreshBtn.disabled = true;
+  exportBtn.disabled = dashboardCache == null;
 }
 
 function persistSession(token, userLabel) {
@@ -76,6 +91,7 @@ function persistSession(token, userLabel) {
   if (userLabel) localStorage.setItem(LS_USER_LABEL, userLabel);
   else localStorage.removeItem(LS_USER_LABEL);
   updateSessionUi();
+  renderSessionInfo();
 }
 
 function stopOauthFlow() {
@@ -94,6 +110,27 @@ function clearOauthWindow() {
     if (oauthWindow && !oauthWindow.closed) oauthWindow.close();
   } catch (_) {}
   oauthWindow = null;
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+  autoRefreshBtn.textContent = "Auto refresh: off";
+}
+
+function toggleAutoRefresh() {
+  if (autoRefreshInterval) {
+    stopAutoRefresh();
+    setStatus("Auto refresh disabled.");
+    return;
+  }
+  autoRefreshInterval = setInterval(() => {
+    loadAll({ quiet: true });
+  }, AUTO_REFRESH_MS);
+  autoRefreshBtn.textContent = "Auto refresh: on";
+  setStatus("Auto refresh every 30s enabled.");
 }
 
 async function authGet(base, token, path) {
@@ -117,7 +154,37 @@ async function authGet(base, token, path) {
   return data;
 }
 
-async function loadAll() {
+function buildDashboardSummary(credits, trophies, history) {
+  const generate = Array.isArray(history?.generate) ? history.generate : [];
+  const activity = Array.isArray(history?.activity) ? history.activity : [];
+  const consumed = activity.reduce((acc, it) => acc + (Number(it?.credits_consumed) || 0), 0);
+  return {
+    credits_available: Number(credits?.credits_left ?? 0),
+    credits_total: Number(credits?.credits_total ?? 0),
+    trophies_unlocked: Array.isArray(trophies?.unlocked_ids) ? trophies.unlocked_ids.length : 0,
+    runs_count: generate.length,
+    activity_count: activity.length,
+    credits_consumed_in_activity_window: consumed,
+    latest_generate_at: generate[0]?.created_at || null,
+    latest_activity_at: activity[0]?.created_at || null,
+  };
+}
+
+function renderSessionInfo() {
+  const token = effectiveToken();
+  const label = localStorage.getItem(LS_USER_LABEL) || null;
+  const backend = baseUrl() || null;
+  sessionOut.textContent = pretty({
+    user_label: label,
+    backend,
+    has_token: Boolean(token),
+    token_source: String(tokenInput.value || "").trim() ? "manual_textarea" : "saved_session",
+    auto_refresh: Boolean(autoRefreshInterval),
+  });
+}
+
+async function loadAll(opts = {}) {
+  const { quiet = false } = opts;
   const base = baseUrl();
   const token = effectiveToken();
   if (!base) {
@@ -129,8 +196,12 @@ async function loadAll() {
     return;
   }
 
-  loadBtn.disabled = true;
-  setStatus("Loading...");
+  if (!quiet) {
+    loadBtn.disabled = true;
+    refreshBtn.disabled = true;
+    setStatus("Loading...");
+  }
+
   try {
     const [credits, trophies, history] = await Promise.all([
       authGet(base, token, "/api/credits?lite=1"),
@@ -138,30 +209,68 @@ async function loadAll() {
       authGet(base, token, "/api/history?include=all&limit_generate=10&limit_activity=20"),
     ]);
 
+    dashboardCache = {
+      loaded_at: new Date().toISOString(),
+      credits,
+      trophies,
+      history,
+      summary: history?.summary || buildDashboardSummary(credits, trophies, history),
+    };
+
     creditsOut.textContent = pretty(credits);
     trophiesOut.textContent = pretty({
       unlocked_count: Array.isArray(trophies?.unlocked_ids) ? trophies.unlocked_ids.length : 0,
       unlocked_ids: trophies?.unlocked_ids || [],
     });
     historyOut.textContent = pretty(history);
-    setStatus("Loaded.");
+    summaryOut.textContent = pretty(dashboardCache.summary);
+    renderSessionInfo();
+    exportBtn.disabled = false;
+
+    if (!quiet) setStatus("Loaded.");
   } catch (err) {
     setStatus(err instanceof Error ? err.message : String(err), true);
   } finally {
-    loadBtn.disabled = false;
+    if (!quiet) {
+      loadBtn.disabled = false;
+      refreshBtn.disabled = false;
+    }
+    updateSessionUi();
   }
+}
+
+function exportJson() {
+  if (!dashboardCache) {
+    setStatus("Nothing to export yet. Load data first.", true);
+    return;
+  }
+  const blob = new Blob([pretty(dashboardCache)], { type: "application/json" });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = `comtra-dashboard-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+  setStatus("Dashboard exported.");
 }
 
 function clearAll() {
   stopOauthFlow();
   setOauthWaiting(false);
   clearOauthWindow();
+  stopAutoRefresh();
   tokenInput.value = "";
   localStorage.removeItem(LS_TOKEN);
   localStorage.removeItem(LS_USER_LABEL);
+  dashboardCache = null;
   creditsOut.textContent = "-";
   trophiesOut.textContent = "-";
   historyOut.textContent = "-";
+  summaryOut.textContent = "-";
+  sessionOut.textContent = "-";
+  exportBtn.disabled = true;
   setStatus("Session cleared.");
   updateSessionUi();
 }
@@ -291,10 +400,12 @@ function logout() {
   stopOauthFlow();
   setOauthWaiting(false);
   clearOauthWindow();
+  stopAutoRefresh();
   tokenInput.value = "";
   localStorage.removeItem(LS_TOKEN);
   localStorage.removeItem(LS_USER_LABEL);
   updateSessionUi();
+  renderSessionInfo();
   setStatus("Logged out.");
 }
 
@@ -315,13 +426,23 @@ function restoreFromStorage() {
   }
   const savedToken = localStorage.getItem(LS_TOKEN);
   if (savedToken) tokenInput.value = "";
+  summaryOut.textContent = "Load data to build a dashboard summary.";
+  renderSessionInfo();
   updateSessionUi();
 }
 
-loadBtn.addEventListener("click", loadAll);
+loadBtn.addEventListener("click", () => loadAll());
+refreshBtn.addEventListener("click", () => loadAll());
+autoRefreshBtn.addEventListener("click", toggleAutoRefresh);
+exportBtn.addEventListener("click", exportJson);
 clearBtn.addEventListener("click", clearAll);
 loginFigmaBtn.addEventListener("click", loginWithFigma);
 cancelOauthBtn.addEventListener("click", cancelOauth);
 logoutBtn.addEventListener("click", logout);
+backendInput.addEventListener("change", () => {
+  const b = baseUrl();
+  if (b) localStorage.setItem(LS_BACKEND, b);
+  renderSessionInfo();
+});
 
 restoreFromStorage();

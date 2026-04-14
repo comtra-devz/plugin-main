@@ -3107,7 +3107,14 @@ app.get('/api/history', async (req, res) => {
         created_at: row.created_at,
       }));
     }
-    return res.json({ generate, activity });
+    const summary = {
+      generate_count: Array.isArray(generate) ? generate.length : 0,
+      activity_count: Array.isArray(activity) ? activity.length : 0,
+      credits_consumed_activity_window: (Array.isArray(activity) ? activity : []).reduce((acc, row) => acc + (Number(row.credits_consumed) || 0), 0),
+      latest_generate_at: generate[0]?.created_at || null,
+      latest_activity_at: activity[0]?.created_at || null,
+    };
+    return res.json({ generate, activity, summary });
   } catch (err) {
     console.error('GET /api/history', err);
     return res.status(500).json({ error: 'Server error' });

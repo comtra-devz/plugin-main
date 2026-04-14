@@ -77,7 +77,7 @@ Rules:
 1. [x] Add v2 fields to `ds-audit`, `a11y-audit`, `ux-audit`, `sync-scan` without breaking v1.
 2. [x] Implement adapter function `resolveDesignDocument(payload)` in backend and reuse across agent endpoints.
 3. [x] Add `generate-v2` (parallel endpoint), keep existing `generate` untouched until parity.
-4. [~] Introduce lightweight webapp screens reusing existing auth/credits/trophies + new read-only history endpoints (backend read-model endpoint now available: `/api/history`; MVP scaffold added in `webapp/`).
+4. [x] Introduce lightweight webapp screens reusing existing auth/credits/trophies + read-only history endpoint (`/api/history`) with browser OAuth (popup + poll), local session, refresh/export UX, and dashboard summary.
 5. [x] Start plugin cutover to v2 with automatic fallback to legacy endpoint.
 
 ---
@@ -97,4 +97,16 @@ Rules:
 - **Plugin adapter slimming:** Ben + Cursor
 - **Webapp MVP read layer:** shared
 - **Penpot adapter spike:** dedicated branch once v2 contract is merged
+
+---
+
+## 7) Web auth + session decision (current)
+
+- Primary auth provider stays Figma OAuth (same existing backend flow and callback page).
+- Webapp session currently uses Bearer JWT from OAuth poll response, stored client-side for MVP.
+- No httpOnly cookie session yet: this avoids immediate cross-subdomain credential/CORS complexity while webapp remains read-only.
+- If/when migrating to cookie session for web, plan for:
+  - `Access-Control-Allow-Credentials: true` and explicit origin allowlist for `app.comtra.dev`
+  - cookie attributes tuned for cross-subdomain behavior (`Secure`, `SameSite`, domain strategy)
+  - CSRF protections on state-changing routes
 

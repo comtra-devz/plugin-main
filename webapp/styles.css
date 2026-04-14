@@ -56,6 +56,14 @@ body {
   gap: 16px;
 }
 
+.dashboard-actions {
+  margin-top: 0;
+}
+
+.summary-grid pre {
+  min-height: 120px;
+}
+
 .grid {
   display: grid;
   gap: 16px;

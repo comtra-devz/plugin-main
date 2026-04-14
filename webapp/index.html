@@ -58,6 +58,21 @@
       </section>
 
       <div id="panel-dashboard">
+        <section class="row row-wrap dashboard-actions">
+          <button id="refreshBtn" type="button">Refresh</button>
+          <button id="autoRefreshBtn" type="button" class="secondary">Auto refresh: off</button>
+          <button id="exportBtn" type="button" class="secondary">Export JSON</button>
+        </section>
+        <section class="grid summary-grid">
+          <article class="card">
+            <h2>Summary</h2>
+            <pre id="summaryOut">-</pre>
+          </article>
+          <article class="card">
+            <h2>Session</h2>
+            <pre id="sessionOut">-</pre>
+          </article>
+        </section>
         <section class="grid">
           <article class="card">
             <h2>Credits</h2>
