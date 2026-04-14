@@ -4,7 +4,6 @@ import { Button } from '../components/ui/Button';
 import {
   loadDsImports,
   upsertDsImport,
-  hasImportForFileKey,
   setSessionCatalogPrepared,
   enforceSingleImportForFreeTier,
   canFreeTierUseFileForDsImport,
@@ -364,7 +363,7 @@ export type GenerateDsImportProps = {
   onInvalidateCatalog: () => void;
   dsImportBusy: boolean;
   onBusyChange: (busy: boolean) => void;
-  /** If false, only one DS file on Free; another Figma file triggers Pro upsell. */
+  /** Se false, un solo file DS importabile; altro file → CTA Pro. */
   isPro: boolean;
   onUnlockRequest: () => void;
   persistDsImportToServer: (body: {
@@ -455,19 +454,15 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setDismissedStep3GapIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }, []);
 
-  const keyMatch = Boolean(fileKey && hasImportForFileKey(fileKey));
-  const hasCatalogForCurrentFile = keyMatch || catalogReady;
-  const freeTierFileBlocked =
-    !isPro &&
-    fileKey &&
-    canFreeTierUseFileForDsImport(fileKey, isPro).ok === false;
-  /** Free: at most one record; Pro: show select only when more than one import exists. */
-  const showImportSelect = isPro && imports.length > 1;
-
   useEffect(() => {
     if (!isPro) enforceSingleImportForFreeTier();
     setImports(loadDsImports());
   }, [fileKey, wizardOpen, isPro]);
+
+  const needsProForCurrentFile =
+    Boolean(fileKey) &&
+    !isPro &&
+    canFreeTierUseFileForDsImport(fileKey, isPro).ok === false;
 
   useEffect(() => {
     if (!fileKey || !imports.length) {
@@ -482,11 +477,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     () => imports.find((i) => i.id === selectedImportId) ?? null,
     [imports, selectedImportId],
   );
-
-  const mismatchLabel =
-    selectedImport && fileKey && selectedImport.fileKey !== fileKey
-      ? 'The catalog is always read from the Figma file you have open. The selected entry refers to a different file saved earlier.'
-      : null;
 
   const openWizard = useCallback(() => {
     if (fileKey && !canFreeTierUseFileForDsImport(fileKey, isPro).ok) {
@@ -539,89 +529,112 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     }
   }, []);
 
-  const finishWizard = useCallback(() => {
-    if (fileKey) {
-      const gate = canFreeTierUseFileForDsImport(fileKey, isPro);
-      if (!gate.ok) {
-        onBusyChange(false);
-        setWizardOpen(false);
-        onUnlockRequest();
-        return;
-      }
-      const label =
-        selectedImport?.fileKey === fileKey
-          ? selectedImport.displayName
-          : fileName || 'This file';
-      upsertDsImport({
-        fileKey,
-        displayName: label,
-        figmaFileName: fileName || '',
+  const finishWizard = useCallback(async () => {
+    if (!fileKey) {
+      onBusyChange(false);
+      return;
+    }
+    const tierGate = canFreeTierUseFileForDsImport(fileKey, isPro);
+    if (!tierGate.ok) {
+      onUnlockRequest();
+      onBusyChange(false);
+      return;
+    }
+
+    const label =
+      selectedImport?.fileKey === fileKey
+        ? selectedImport.displayName
+        : fileName || 'This file';
+
+    if (!wizardCapture?.fullIndex) {
+      showToast({
+        title: 'Server: nessuno snapshot inviato',
+        description:
+          'Manca l’indice completo (wizard). Rifai lo step componenti e conferma di nuovo: altrimenti su /ds-imports/context il payload resta vuoto.',
+        variant: 'warning',
+        dismissible: true,
       });
-      if (!isPro) enforceSingleImportForFreeTier();
-      setImports(loadDsImports());
-      const topLevel = wizardCapture?.fullIndex && typeof wizardCapture.fullIndex === 'object'
+      onBusyChange(false);
+      return;
+    }
+
+    const topLevel =
+      wizardCapture.fullIndex && typeof wizardCapture.fullIndex === 'object'
         ? (wizardCapture.fullIndex as Record<string, unknown>)
         : null;
-      const componentCountFromIndex =
-        indexResult?.catalogPreview?.inIndex ??
-        (Array.isArray(topLevel?.components) ? topLevel!.components.length : 0);
-      const tokenCountFromIndex =
-        typeof topLevel?.total_tokens === 'number'
-          ? topLevel.total_tokens
-          : (indexResult?.total_tokens ?? 0);
-      const hashForMeta =
-        (wizardCapture?.hash || '').trim() ||
-        (typeof topLevel?.hash === 'string' ? topLevel.hash : '') ||
+    const componentCountFromIndex =
+      indexResult?.catalogPreview?.inIndex ??
+      (Array.isArray(topLevel?.components) ? topLevel!.components.length : 0);
+    const tokenCountFromIndex =
+      typeof topLevel?.total_tokens === 'number'
+        ? topLevel.total_tokens
+        : (indexResult?.total_tokens ?? 0);
+    const hashForMeta =
+      (wizardCapture?.hash || '').trim() ||
+      (typeof topLevel?.hash === 'string' ? topLevel.hash : '') ||
         '';
-      void writeDsImportMeta({
-        fileKey,
-        importedAt: new Date().toISOString(),
-        dsCacheHash: hashForMeta,
-        componentCount: componentCountFromIndex,
-        tokenCount: tokenCountFromIndex,
-        name: label,
+    const h =
+      wizardCapture.hash.trim() ||
+      String((wizardCapture.fullIndex as { hash?: string }).hash || '').trim() ||
+      '';
+    const topKeys = Object.keys(wizardCapture.fullIndex as object).length;
+
+    onBusyChange(true);
+    setWizardError(null);
+    try {
+      await persistDsImportToServer({
+        figma_file_key: fileKey,
+        display_name: label,
+        figma_file_name: fileName || '',
+        ds_cache_hash: h,
+        ds_context_index: wizardCapture.fullIndex,
       });
-      if (wizardCapture?.fullIndex) {
-        const h =
-          wizardCapture.hash.trim() ||
-          String((wizardCapture.fullIndex as { hash?: string }).hash || '').trim() ||
-          '';
-        const topKeys = Object.keys(wizardCapture.fullIndex as object).length;
-        void (async () => {
-          try {
-            await persistDsImportToServer({
-              figma_file_key: fileKey,
-              display_name: label,
-              figma_file_name: fileName || '',
-              ds_cache_hash: h,
-              ds_context_index: wizardCapture.fullIndex,
-            });
-            showToast({
-              title: 'Server: salvataggio OK',
-              description: `PUT /api/user/ds-imports · 200 · indice con ${topKeys} chiavi in cima al JSON. Così anche altre sessioni / verify-ds-import vedono lo snapshot.`,
-              dismissible: true,
-            });
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            showToast({
-              title: 'Server: salvataggio non riuscito',
-              description: `${msg} In questa sessione il catalogo resta usabile; controlla rete o login e riprova l’import.`,
-              variant: 'warning',
-              dismissible: true,
-            });
-          }
-        })();
-      } else if (fileKey) {
-        showToast({
-          title: 'Server: nessuno snapshot inviato',
-          description:
-            'Manca l’indice completo (wizard). Rifai lo step componenti e conferma di nuovo: altrimenti su /ds-imports/context il payload resta vuoto.',
-          variant: 'warning',
-          dismissible: true,
-        });
-      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setWizardError(msg);
+      showToast({
+        title: 'Salvataggio non completato',
+        description: `${msg} Il catalogo non è considerato pronto finché il server non conferma lo snapshot. Riprova.`,
+        variant: 'warning',
+        dismissible: true,
+      });
+      onBusyChange(false);
+      return;
     }
-    if (fileKey) setSessionCatalogPrepared(fileKey);
+
+    upsertDsImport({
+      fileKey,
+      displayName: label,
+      figmaFileName: fileName || '',
+    });
+    if (!isPro) enforceSingleImportForFreeTier();
+    setImports(loadDsImports());
+
+    const metaRes = await writeDsImportMeta({
+      fileKey,
+      importedAt: new Date().toISOString(),
+      dsCacheHash: hashForMeta,
+      componentCount: componentCountFromIndex,
+      tokenCount: tokenCountFromIndex,
+      name: label,
+    });
+    if (!metaRes.ok) {
+      const err = metaRes.error || 'Timeout writing DS metadata';
+      showToast({
+        title: 'Metadati Figma non salvati',
+        description: `${err} Lo snapshot è comunque sul server e verificato; il catalogo è sbloccato. Puoi ripetere l’import se vuoi riscrivere i metadati locali.`,
+        variant: 'warning',
+        dismissible: true,
+      });
+    } else {
+      showToast({
+        title: 'Design system salvato',
+        description: `Snapshot verificato sul server (${topKeys} chiavi in cima al JSON). Elenco import aggiornato.`,
+        dismissible: true,
+      });
+    }
+
+    setSessionCatalogPrepared(fileKey);
     onCatalogReady();
     setWizardOpen(false);
     onBusyChange(false);
@@ -633,11 +646,11 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     persistDsImportToServer,
     onCatalogReady,
     onBusyChange,
-    isPro,
-    onUnlockRequest,
     showToast,
     indexResult,
     writeDsImportMeta,
+    isPro,
+    onUnlockRequest,
   ]);
 
   const parseIndexToSummary = useCallback((raw: object): DsIndexSummary => {
@@ -784,28 +797,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     );
   }
 
-  if (freeTierFileBlocked) {
-    return (
-      <div className={`${BRUTAL.card} bg-violet-50 border-2 border-black p-3 space-y-3`}>
-        <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-bold leading-snug text-black">
-              On <strong>Free</strong> you already linked a design system. To import and use Generate with{' '}
-              <strong>another</strong> Figma file you need <strong>Pro</strong> (multiple files and DS).
-            </p>
-            <span className="shrink-0 text-[9px] font-black uppercase bg-black text-white px-2 py-1 border-2 border-black shadow-[2px_2px_0_0_#ff90e8]">
-              Pro
-            </span>
-          </div>
-        <Button variant="primary" fullWidth className="relative text-xs" onClick={onUnlockRequest}>
-          Unlock Pro
-          <span className="absolute bottom-0.5 right-1 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm border border-black">
-            PRO
-          </span>
-        </Button>
-      </div>
-    );
-  }
-
   if (catalogReady) return null;
 
   return (
@@ -843,59 +834,43 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           </span>
         </div>
 
-        {hasCatalogForCurrentFile ? (
+        {needsProForCurrentFile ? (
           <>
-            {showImportSelect ? (
-              <>
-                <label className="block text-sm font-bold text-gray-700">Your imported design systems</label>
-                <select
-                  className="w-full border-2 border-black p-2 text-sm font-bold bg-white"
-                  value={selectedImportId ?? ''}
-                  onChange={(e) => setSelectedImportId(e.target.value || null)}
-                  disabled={dsImportBusy}
-                >
-                  {imports.map((imp) => (
-                    <option key={imp.id} value={imp.id}>
-                      {imp.displayName}
-                      {imp.figmaFileName && imp.figmaFileName !== imp.displayName
-                        ? ` · ${imp.figmaFileName}`
-                        : ''}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : (
-              <p className="text-sm font-normal text-gray-900 leading-normal">
-                <span className="font-bold">Linked DS:</span>{' '}
-                {selectedImport?.displayName || fileName || 'This file'}
-              </p>
-            )}
             <p className="text-sm font-normal text-gray-900 leading-normal">
-              This file is already in your imported design systems. You can update the snapshot anytime.
+              <strong>Free</strong> includes <strong>one</strong> linked Figma file for Custom (Current). The file you
+              have open is <strong>not</strong> that linked file — import here requires <strong>Pro</strong> (multiple
+              design systems and files).
             </p>
-            {mismatchLabel && (
-              <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 p-2 leading-snug">{mismatchLabel}</p>
-            )}
             <Button
               variant="primary"
               fullWidth
-              onClick={openWizard}
+              className="relative min-h-[44px]"
+              onClick={onUnlockRequest}
               disabled={dsImportBusy}
             >
-              {dsImportBusy ? 'Importing…' : 'Update Design System'}
+              <span className="relative z-10">
+                {dsImportBusy ? 'Importing…' : 'Import Design System'}
+              </span>
+              {!dsImportBusy && (
+                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1.5 py-0.5 font-black uppercase rounded-sm border border-black">
+                  Pro
+                </span>
+              )}
             </Button>
           </>
         ) : (
           <>
             <p className="text-sm font-normal text-gray-900 leading-normal">
-              This file is not yet among the design systems you imported. Start an import from this Figma file.
+              No verified server snapshot for this file yet. Complete the import wizard: we only unlock Generate after
+              the snapshot is saved and read back from your account.
             </p>
-            <Button
-              variant="primary"
-              fullWidth
-              onClick={openWizard}
-              disabled={dsImportBusy}
-            >
+            {isPro && imports.length > 1 && (
+              <p className="text-[10px] text-gray-600 leading-snug">
+                You have {imports.length} design systems saved; this file still needs its own import (or open a file
+                that already has one).
+              </p>
+            )}
+            <Button variant="primary" fullWidth className="min-h-[44px]" onClick={openWizard} disabled={dsImportBusy}>
               {dsImportBusy ? 'Importing…' : 'Import Design System'}
             </Button>
           </>
@@ -1218,7 +1193,13 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                     </Button>
                   )}
                   {wizardStep === 4 && importFlowPhase === 'full' && wizardCapture && (
-                    <Button variant="primary" className="flex-1 min-h-[44px] text-xs font-black uppercase py-3" onClick={finishWizard}>
+                    <Button
+                      variant="primary"
+                      className="flex-1 min-h-[44px] text-xs font-black uppercase py-3"
+                      onClick={() => {
+                        void finishWizard();
+                      }}
+                    >
                       Confirm and import
                     </Button>
                   )}

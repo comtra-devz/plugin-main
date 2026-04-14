@@ -6,6 +6,10 @@
     }
   },
   "rewrites": [
+    {
+      "source": "/api/agents/generate-v2",
+      "destination": "/api/agents/generate"
+    },
     { "source": "/api/design-systems", "destination": "/api/credits-trophies?service=ds-catalog" },
     { "source": "/api/user/ds-imports", "destination": "/api/credits-trophies?service=user-ds-imports" },
     { "source": "/api/user/ds-imports/context", "destination": "/api/credits-trophies?service=user-ds-imports&sub=context" },

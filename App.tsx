@@ -43,6 +43,12 @@ const CREDITS_GIFT_SEEN_KEY = 'comtra.creditGiftSeen.v1';
 const CREDITS_FETCH_TIMEOUT_LITE_MS = 18_000;
 const CREDITS_FETCH_TIMEOUT_FULL_MS = 28_000;
 
+function delayMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 /** Coalesce parallel GET /api/credits (stesso iframe): più effect/handler non duplicano la richiesta. */
 let creditsInflightLite: Promise<CreditsFetchOutcome> | null = null;
 let creditsInflightFull: Promise<CreditsFetchOutcome> | null = null;
@@ -1344,28 +1350,75 @@ export default function AppTest() {
       ds_cache_hash: string;
       ds_context_index: object;
     }) => {
-      if (!user?.authToken || dsImportsUnauthorizedRef.current) return;
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/user/ds-imports`, {
-        method: 'PUT',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify(body),
-      });
-      if (r.status === 401) {
-        dsImportsUnauthorizedRef.current = true;
+      if (!user?.authToken || dsImportsUnauthorizedRef.current) {
         throw new Error('Unauthorized');
       }
-      if (r.status === 503) {
-        handle503();
-        throw new Error('Service temporarily unavailable');
+
+      const url = `${AUTH_BACKEND_URL}/api/user/ds-imports`;
+      const reqHeaders = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user.authToken}`,
+      };
+
+      let putOk = false;
+      let lastPutError: Error | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let r: Response;
+        try {
+          r = await fetch(url, {
+            method: 'PUT',
+            cache: 'no-store',
+            headers: reqHeaders,
+            body: JSON.stringify(body),
+          });
+        } catch (e) {
+          lastPutError = e instanceof Error ? e : new Error(String(e));
+          if (attempt < 2) await delayMs(400 * 2 ** attempt);
+          continue;
+        }
+        if (r.status === 401) {
+          dsImportsUnauthorizedRef.current = true;
+          throw new Error('Unauthorized');
+        }
+        if (r.status === 503) {
+          handle503();
+          lastPutError = new Error('Service temporarily unavailable');
+          if (attempt < 2) await delayMs(400 * 2 ** attempt);
+          continue;
+        }
+        if (!r.ok) {
+          const d = (await r.json().catch(() => ({}))) as { error?: string };
+          lastPutError = new Error(d.error || `ds-imports save failed (${r.status})`);
+          if (r.status >= 500 && attempt < 2) {
+            await delayMs(400 * 2 ** attempt);
+            continue;
+          }
+          throw lastPutError;
+        }
+        putOk = true;
+        break;
       }
-      if (!r.ok) {
-        const d = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(d.error || `ds-imports save failed (${r.status})`);
+      if (!putOk) {
+        throw lastPutError || new Error('ds-imports save failed');
       }
+
       await syncDsImportsFromServer();
+
+      let verified = false;
+      for (let v = 0; v < 3; v++) {
+        const snap = await fetchDsImportContextSnapshot(body.figma_file_key);
+        const idx = snap?.ds_context_index;
+        if (idx && typeof idx === 'object' && !Array.isArray(idx) && Object.keys(idx).length > 0) {
+          verified = true;
+          break;
+        }
+        if (v < 2) await delayMs(350 * (v + 1));
+      }
+      if (!verified) {
+        throw new Error('Verification failed: saved snapshot not readable from server after upload.');
+      }
     },
-    [user?.authToken, AUTH_BACKEND_URL, handle503, syncDsImportsFromServer],
+    [user?.authToken, AUTH_BACKEND_URL, handle503, syncDsImportsFromServer, fetchDsImportContextSnapshot],
   );
 
   useEffect(() => {
@@ -1453,14 +1506,24 @@ export default function AppTest() {
       if (sb != null && String(sb).trim() !== '') payload.screenshot_base64 = String(sb).trim();
       const parseErrorMessage = async (res: Response): Promise<string> => {
         const text = await res.text();
-        let msg = text;
         try {
-          const j = JSON.parse(text);
-          msg = j.error || text;
+          const j = JSON.parse(text) as {
+            error?: string;
+            code?: string;
+            details?: unknown;
+            message?: string;
+          };
+          let msg = (j.error || j.message || text).trim() || text;
+          if (j.code) msg = `${msg} [${j.code}]`;
+          if (Array.isArray(j.details) && j.details.length > 0) {
+            const first = j.details[0];
+            const bit = typeof first === 'string' ? first : JSON.stringify(first);
+            if (bit) msg = `${msg} — ${bit.length > 280 ? `${bit.slice(0, 280)}…` : bit}`;
+          }
+          return msg;
         } catch {
-          // keep as-is
+          return text.trim() || `HTTP ${res.status}`;
         }
-        return msg;
       };
       const endpoints = [
         `${AUTH_BACKEND_URL}/api/agents/generate-v2`,
@@ -1511,29 +1574,6 @@ export default function AppTest() {
           r({ fileKey: null, fileName: null, error: 'Timeout' });
         }
       }, 15000);
-    });
-  }, []);
-
-  const readDsImportMeta = useCallback(async (fileKey: string) => {
-    const key = String(fileKey || '').trim();
-    if (!key) return null;
-    return new Promise<{
-      fileKey: string;
-      importedAt: string;
-      dsCacheHash: string;
-      componentCount: number;
-      tokenCount: number;
-      name: string;
-    } | null>((resolve) => {
-      const requestId = `dsm-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      dsImportMetaWaitersRef.current.set(requestId, (r) => resolve(r.meta));
-      window.parent.postMessage({ pluginMessage: { type: 'get-ds-import-meta', requestId, fileKey: key } }, '*');
-      window.setTimeout(() => {
-        const fn = dsImportMetaWaitersRef.current.get(requestId);
-        if (!fn) return;
-        dsImportMetaWaitersRef.current.delete(requestId);
-        resolve(null);
-      }, 7000);
     });
   }, []);
 
@@ -1662,7 +1702,6 @@ export default function AppTest() {
             initialPrompt={genPrompt}
             fetchGenerate={fetchGenerate}
             requestFileContext={requestFileContext}
-            readDsImportMeta={readDsImportMeta}
             writeDsImportMeta={writeDsImportMeta}
             requestDsContextIndex={requestDsContextIndex}
             checkServerHasDsContext={checkServerHasDsContext}

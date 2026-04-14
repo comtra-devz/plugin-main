@@ -4,12 +4,7 @@ import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
 import { GenerateDsImport, type RequestDsContextIndexFn } from './GenerateDsImport';
-import {
-  clearSessionCatalogPrepared,
-  hasImportForFileKey,
-  isSessionCatalogPreparedForFile,
-  setSessionCatalogPrepared,
-} from '../lib/dsImportsStorage';
+import { clearSessionCatalogPrepared, setSessionCatalogPrepared } from '../lib/dsImportsStorage';
 import {
   BrutalDropdown,
   brutalSelectOptionRowClass,
@@ -42,14 +37,6 @@ interface Props {
     fileName?: string | null;
     error?: string | null;
   }>;
-  readDsImportMeta: (fileKey: string) => Promise<{
-    fileKey: string;
-    importedAt: string;
-    dsCacheHash: string;
-    componentCount: number;
-    tokenCount: number;
-    name: string;
-  } | null>;
   writeDsImportMeta: (payload: {
     fileKey: string;
     importedAt: string;
@@ -125,7 +112,6 @@ export const Generate: React.FC<Props> = ({
   initialPrompt,
   fetchGenerate,
   requestFileContext,
-  readDsImportMeta,
   writeDsImportMeta,
   requestDsContextIndex,
   checkServerHasDsContext,
@@ -255,23 +241,6 @@ export const Generate: React.FC<Props> = ({
             : null;
       setGenFileCtxError(err);
       if (err || !r.fileKey) return;
-      const meta = await readDsImportMeta(r.fileKey);
-      if (cancelled) return;
-      if (meta && meta.fileKey === r.fileKey) {
-        setSessionCatalogPrepared(r.fileKey);
-        setCatalogReady(true);
-        return;
-      }
-      if (hasImportForFileKey(r.fileKey)) {
-        setSessionCatalogPrepared(r.fileKey);
-        setCatalogReady(true);
-        return;
-      }
-      if (isSessionCatalogPreparedForFile(r.fileKey)) {
-        setCatalogReady(true);
-        return;
-      }
-      // Always re-fetch server snapshot when this effect runs (same file_key may become valid after login or PUT).
       const serverOk = await checkServerHasDsContext(r.fileKey);
       if (cancelled) return;
       if (serverOk) {
@@ -284,7 +253,7 @@ export const Generate: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [usesFileDs, requestFileContext, readDsImportMeta, checkServerHasDsContext]);
+  }, [usesFileDs, requestFileContext, checkServerHasDsContext]);
 
   const handleInvalidateCatalog = useCallback(() => {
     clearSessionCatalogPrepared();
@@ -670,18 +639,36 @@ export const Generate: React.FC<Props> = ({
   const filteredSystems = availableSystems.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
   const dsConnectionText = usesFileDs
     ? catalogReady
-      ? `Connected to this file${genFileName ? ` (${genFileName})` : ''}. Generate will use imported rules, tokens, and components.`
+      ? 'Connected to this file. Generate will use imported rules, tokens, and components.'
       : dsImportBusy
         ? 'Importing design system data for this file…'
         : 'Import the design system for this file to unlock Generate with Custom (Current).'
     : `Using ${selectedSystem} as the active reference system.`;
   const dsConnectionTone = usesFileDs
     ? catalogReady
-      ? 'bg-emerald-50 text-emerald-900 border-emerald-700'
+      ? 'bg-emerald-50 text-emerald-900'
       : dsImportBusy
-        ? 'bg-amber-50 text-amber-900 border-amber-700'
-        : 'bg-yellow-50 text-yellow-900 border-yellow-700'
-    : 'bg-sky-50 text-sky-900 border-sky-700';
+        ? 'bg-amber-50 text-amber-900'
+        : 'bg-yellow-50 text-yellow-900'
+    : 'bg-sky-50 text-sky-900';
+  const dsCardHeaderRight =
+    usesFileDs && genFileName ? (
+      <span
+        data-component="Generate: DS Name Header"
+        className="max-w-[60%] truncate text-[9px] font-black uppercase text-emerald-900 tracking-tight"
+        title={genFileName}
+      >
+        {genFileName}
+      </span>
+    ) : usesFileDs && fileCtxLoading ? (
+      <span className="text-[9px] font-bold uppercase text-gray-400" aria-hidden>
+        …
+      </span>
+    ) : !usesFileDs ? (
+      <span className="max-w-[60%] truncate text-right" title={selectedSystem}>
+        {selectedSystem}
+      </span>
+    ) : undefined;
 
   return (
     <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-28 min-h-full relative">
@@ -718,6 +705,18 @@ export const Generate: React.FC<Props> = ({
           isPro={isPro || !!useInfiniteCreditsForTest}
           onUnlockRequest={onUnlockRequest}
         />
+      )}
+
+      {usesFileDs && catalogReady && !showReport && (
+        <div data-component="Generate: DS Re-import" className="flex justify-end -mt-1">
+          <button
+            type="button"
+            onClick={handleInvalidateCatalog}
+            className="text-[10px] font-black uppercase underline text-gray-600 hover:text-[#ff90e8]"
+          >
+            Re-import design system (new server snapshot)
+          </button>
+        </div>
       )}
 
       {showGenerateComposer && !showReport && (
@@ -782,69 +781,75 @@ export const Generate: React.FC<Props> = ({
           <SectionCard
             dataComponent="Generate: DS Card"
             title="Design System"
+            headerRight={dsCardHeaderRight}
             className="z-[4]"
           >
-            <div className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] overflow-hidden">
-              <BrutalDropdown
-                open={isSystemOpen}
-                onOpenChange={setIsSystemOpen}
-                maxHeightClassName="max-h-[240px]"
-                panelClassName="!overflow-hidden flex flex-col p-0"
-                trigger={
-                  <button
-                    type="button"
-                    data-component="Generate: DS Selector"
-                    onClick={() => setIsSystemOpen(!isSystemOpen)}
-                    className="w-full border-b-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
-                  >
-                    <span className="truncate min-w-0">{selectedSystem}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {selectedSystem !== availableSystems[0] && (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => { e.stopPropagation(); setSelectedSystem(availableSystems[0]); }}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(availableSystems[0]); } }}
-                          className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
-                        >
-                          ✕
-                        </span>
-                      )}
-                      <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
-                    </div>
-                  </button>
-                }
-              >
-                <input
-                  type="text"
-                  placeholder="Search System..."
-                  autoFocus
-                  value={systemSearch}
-                  onChange={(e) => setSystemSearch(e.target.value)}
-                  className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
-                  {filteredSystems.map((sys) => (
-                    <div
-                      key={sys}
-                      role="option"
-                      onClick={() => {
-                        setSelectedSystem(sys);
-                        setIsSystemOpen(false);
-                        setSystemSearch('');
-                      }}
-                      className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+            <div className="flex flex-col gap-2.5">
+              <div className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] overflow-hidden">
+                <BrutalDropdown
+                  open={isSystemOpen}
+                  onOpenChange={setIsSystemOpen}
+                  maxHeightClassName="max-h-[240px]"
+                  panelClassName="!overflow-hidden flex flex-col p-0"
+                  trigger={
+                    <button
+                      type="button"
+                      data-component="Generate: DS Selector"
+                      onClick={() => setIsSystemOpen(!isSystemOpen)}
+                      className="w-full border-b-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
                     >
-                      {sys}
-                    </div>
-                  ))}
-                  {filteredSystems.length === 0 && (
-                    <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
-                  )}
-                </div>
-              </BrutalDropdown>
-              <div className={`border-t-2 px-2.5 py-2 text-[10px] leading-snug font-bold ${dsConnectionTone}`}>
+                      <span className="truncate min-w-0">{selectedSystem}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {selectedSystem !== availableSystems[0] && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); setSelectedSystem(availableSystems[0]); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(availableSystems[0]); } }}
+                            className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
+                          >
+                            ✕
+                          </span>
+                        )}
+                        <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+                  }
+                >
+                  <input
+                    type="text"
+                    placeholder="Search System..."
+                    autoFocus
+                    value={systemSearch}
+                    onChange={(e) => setSystemSearch(e.target.value)}
+                    className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+                    {filteredSystems.map((sys) => (
+                      <div
+                        key={sys}
+                        role="option"
+                        onClick={() => {
+                          setSelectedSystem(sys);
+                          setIsSystemOpen(false);
+                          setSystemSearch('');
+                        }}
+                        className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                      >
+                        {sys}
+                      </div>
+                    ))}
+                    {filteredSystems.length === 0 && (
+                      <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+                    )}
+                  </div>
+                </BrutalDropdown>
+              </div>
+              <div
+                data-component="Generate: DS Connection Status"
+                className={`border-2 border-black px-2.5 py-2 text-[10px] leading-snug font-bold shadow-[3px_3px_0_0_#000] ${dsConnectionTone}`}
+              >
                 {dsConnectionText}
               </div>
             </div>
@@ -913,13 +918,23 @@ export const Generate: React.FC<Props> = ({
               layout="row"
               onClick={handleGen}
               disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
-              className="relative"
+              className="relative overflow-hidden min-h-[48px]"
+              aria-busy={loading}
             >
-              {loading ? 'Weaving Magic...' : ctaLabel}
-              {!loading && canGenerate && (
-                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
-                  -{creditEstimate} Credits
+              {loading ? (
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  <span className="w-2 h-2 shrink-0 bg-black animate-pulse" aria-hidden />
+                  Weaving Magic...
                 </span>
+              ) : (
+                <>
+                  <span className="relative z-10">{ctaLabel}</span>
+                  {canGenerate && (
+                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
+                      -{creditEstimate} Credits
+                    </span>
+                  )}
+                </>
               )}
             </Button>
 

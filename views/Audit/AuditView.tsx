@@ -348,7 +348,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     activeTab === 'DS'
       ? (showHiddenLayers ? filteredIssues : filteredIssues.filter(i => i.isOnHiddenLayer !== true))
       : filteredIssues;
-  // A11Y: apply WCAG filter only to the list; categories use a11yVisibleIssues
+  // A11Y: apply WCAG filter to the list AND to category counts (same source), so AA mode does not
+  // show category totals that include hidden AAA rows (e.g. touch TGT-003) while the list is empty.
   const listIssues =
     activeTab === 'A11Y'
       ? (wcagLevelFilter === 'AA' ? a11yVisibleIssues.filter(i => i.wcag_level !== 'AAA') : a11yVisibleIssues)
@@ -381,7 +382,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const a11yScore = activeTab === 'A11Y'
     ? (a11yAuditIssues != null ? (a11yFullForScore.length === 0 ? 100 : computeDsScoreFromIssues(a11yFullForScore)) : 100)
     : 100;
-  const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(a11yVisibleIssues) : [];
+  const a11yCategories = activeTab === 'A11Y' ? buildA11yCategoriesFromIssues(listIssues) : [];
   const a11yScoreCopy = activeTab === 'A11Y' ? getDsScoreCopy(a11yScore) : { status: '', target: '' };
 
   // UX tab: categories and score from UX Logic ruleset (no scope / no "All Pages")

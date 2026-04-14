@@ -145,7 +145,7 @@ export function setSessionCatalogPrepared(fileKey: string): void {
 }
 
 /**
- * Free tier: un solo DS in elenco. Se in passato l’utente aveva più record, mantiene il più recente.
+ * Free tier: al massimo un record in elenco (il più recente se in passato ce n’erano più).
  */
 export function enforceSingleImportForFreeTier(): void {
   const list = loadDsImports();
@@ -154,13 +154,12 @@ export function enforceSingleImportForFreeTier(): void {
   saveDsImports([keep]);
 }
 
-/** Utente non Pro: può associare l’import solo al file già registrato (un solo slot). */
+/** Free: un solo file DS; stesso `fileKey` del salvato → ok, altro file → serve Pro. Solo lettura (chiamare `enforceSingleImportForFreeTier` in effect al mount). */
 export function canFreeTierUseFileForDsImport(
   fileKey: string | null,
   isPro: boolean,
 ): { ok: true } | { ok: false; needsProForDifferentFile: true } {
   if (isPro || !fileKey) return { ok: true };
-  enforceSingleImportForFreeTier();
   const list = loadDsImports();
   if (list.length === 0) return { ok: true };
   if (list.some((i) => i.fileKey === fileKey)) return { ok: true };
