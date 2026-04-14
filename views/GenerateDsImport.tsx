@@ -20,6 +20,7 @@ export type RequestDsContextIndexFn = (opts: {
   timeoutMs?: number;
   /** Wizard: read tokens/styles only, or merge component scan (after tokens). */
   phase?: 'rules' | 'tokens' | 'components';
+  onProgress?: (p: { phase: 'components'; pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
 }) => Promise<{ index: object | null; hash: string | null; error?: string }>;
 
 type DsIndexSummary = {
@@ -373,6 +374,14 @@ export type GenerateDsImportProps = {
     ds_cache_hash: string;
     ds_context_index: object;
   }) => Promise<void>;
+  writeDsImportMeta: (payload: {
+    fileKey: string;
+    importedAt: string;
+    dsCacheHash: string;
+    componentCount: number;
+    tokenCount: number;
+    name: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
 };
 
 export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
@@ -389,6 +398,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   isPro,
   onUnlockRequest,
   persistDsImportToServer,
+  writeDsImportMeta,
 }) => {
   const { showToast } = useToast();
   const [introSeen, setIntroSeen] = useState(readIntroSeen);
@@ -410,6 +420,12 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   const importFlowCancelledRef = useRef(false);
   const [dismissedStep2GapIds, setDismissedStep2GapIds] = useState<string[]>([]);
   const [dismissedStep3GapIds, setDismissedStep3GapIds] = useState<string[]>([]);
+  const [componentsScanProgress, setComponentsScanProgress] = useState<{
+    pageName: string;
+    pageIndex: number;
+    pageTotal: number;
+    scanned: number;
+  } | null>(null);
   const dismissedStep2GapSet = useMemo(() => new Set(dismissedStep2GapIds), [dismissedStep2GapIds]);
   const dismissedStep3GapSet = useMemo(() => new Set(dismissedStep3GapIds), [dismissedStep3GapIds]);
 
@@ -543,6 +559,28 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       });
       if (!isPro) enforceSingleImportForFreeTier();
       setImports(loadDsImports());
+      const topLevel = wizardCapture?.fullIndex && typeof wizardCapture.fullIndex === 'object'
+        ? (wizardCapture.fullIndex as Record<string, unknown>)
+        : null;
+      const componentCountFromIndex =
+        indexResult?.catalogPreview?.inIndex ??
+        (Array.isArray(topLevel?.components) ? topLevel!.components.length : 0);
+      const tokenCountFromIndex =
+        typeof topLevel?.total_tokens === 'number'
+          ? topLevel.total_tokens
+          : (indexResult?.total_tokens ?? 0);
+      const hashForMeta =
+        (wizardCapture?.hash || '').trim() ||
+        (typeof topLevel?.hash === 'string' ? topLevel.hash : '') ||
+        '';
+      void writeDsImportMeta({
+        fileKey,
+        importedAt: new Date().toISOString(),
+        dsCacheHash: hashForMeta,
+        componentCount: componentCountFromIndex,
+        tokenCount: tokenCountFromIndex,
+        name: label,
+      });
       if (wizardCapture?.fullIndex) {
         const h =
           wizardCapture.hash.trim() ||
@@ -598,6 +636,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     isPro,
     onUnlockRequest,
     showToast,
+    indexResult,
+    writeDsImportMeta,
   ]);
 
   const parseIndexToSummary = useCallback((raw: object): DsIndexSummary => {
@@ -674,8 +714,22 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     if (!wizardOpen || wizardStep !== 3 || importFlowPhase !== 'tokens' || wizardError) return;
     let cancelled = false;
     onBusyChange(true);
+    setComponentsScanProgress(null);
     (async () => {
-      const res = await requestDsContextIndex({ reuseCached: false, timeoutMs: 120000, phase: 'components' });
+      const res = await requestDsContextIndex({
+        reuseCached: false,
+        timeoutMs: 120000,
+        phase: 'components',
+        onProgress: (p) => {
+          if (cancelled) return;
+          setComponentsScanProgress({
+            pageName: p.pageName,
+            pageIndex: p.pageIndex,
+            pageTotal: p.pageTotal,
+            scanned: p.scanned,
+          });
+        },
+      });
       if (cancelled) return;
       if (res.error || !res.index || typeof res.index !== 'object') {
         setWizardError(res.error || 'Could not scan components in this file.');
@@ -701,6 +755,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     })();
     return () => {
       cancelled = true;
+      setComponentsScanProgress(null);
       onBusyChange(false);
     };
   }, [wizardOpen, wizardStep, importFlowPhase, wizardError, requestDsContextIndex, onBusyChange, parseIndexToSummary]);
@@ -985,7 +1040,34 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               )}
 
               {wizardStep === 3 && dsImportBusy && importFlowPhase === 'tokens' && !wizardError && (
-                <p className="text-xs font-black uppercase animate-pulse">Scanning components and variant sets…</p>
+                <div className="space-y-2">
+                  <p className="text-xs font-black uppercase animate-pulse">Scanning components and variant sets…</p>
+                  {componentsScanProgress && componentsScanProgress.pageTotal > 0 && (
+                    <div className="border-2 border-black bg-white p-2 shadow-[2px_2px_0_0_#000]">
+                      <p className="text-[10px] font-black uppercase">
+                        Page {componentsScanProgress.pageIndex}/{componentsScanProgress.pageTotal}:{' '}
+                        <span className="font-bold normal-case">{componentsScanProgress.pageName || 'Unnamed'}</span>
+                      </p>
+                      <p className="mt-1 text-[10px] font-bold text-gray-700">
+                        Indexed so far: {componentsScanProgress.scanned}
+                      </p>
+                      <div className="mt-1 h-2 border border-black bg-neutral-100">
+                        <div
+                          className="h-full bg-[#ff90e8] transition-[width] duration-150 ease-out"
+                          style={{
+                            width: `${Math.max(
+                              2,
+                              Math.min(
+                                100,
+                                Math.round((componentsScanProgress.pageIndex / componentsScanProgress.pageTotal) * 100),
+                              ),
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {wizardStep === 3 && indexResult && importFlowPhase === 'full' && (

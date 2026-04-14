@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, startTransition } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
@@ -42,6 +42,22 @@ interface Props {
     fileName?: string | null;
     error?: string | null;
   }>;
+  readDsImportMeta: (fileKey: string) => Promise<{
+    fileKey: string;
+    importedAt: string;
+    dsCacheHash: string;
+    componentCount: number;
+    tokenCount: number;
+    name: string;
+  } | null>;
+  writeDsImportMeta: (payload: {
+    fileKey: string;
+    importedAt: string;
+    dsCacheHash: string;
+    componentCount: number;
+    tokenCount: number;
+    name: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   requestDsContextIndex: RequestDsContextIndexFn;
   /** When the plugin has no session cache, check the backend for a stored DS snapshot for this file. */
   checkServerHasDsContext: (fileKey: string) => Promise<boolean>;
@@ -109,6 +125,8 @@ export const Generate: React.FC<Props> = ({
   initialPrompt,
   fetchGenerate,
   requestFileContext,
+  readDsImportMeta,
+  writeDsImportMeta,
   requestDsContextIndex,
   checkServerHasDsContext,
   persistDsImportToServer,
@@ -171,8 +189,6 @@ export const Generate: React.FC<Props> = ({
   const [genFileCtxError, setGenFileCtxError] = useState<string | null>(null);
   const [catalogReady, setCatalogReady] = useState(false);
   const [dsImportBusy, setDsImportBusy] = useState(false);
-  /** Avoid repeated server probe loops for the same file when network/CORS fails. */
-  const fileCatalogProbeRef = useRef<string | null>(null);
 
   const runCanvasApply = useCallback(
     async (actionPlan: object, opts?: { modifyMode?: boolean }) => {
@@ -218,7 +234,6 @@ export const Generate: React.FC<Props> = ({
       setGenFileName(null);
       setGenFileCtxError(null);
       setFileCtxLoading(false);
-      fileCatalogProbeRef.current = null;
       return;
     }
     setCatalogReady(false);
@@ -240,6 +255,13 @@ export const Generate: React.FC<Props> = ({
             : null;
       setGenFileCtxError(err);
       if (err || !r.fileKey) return;
+      const meta = await readDsImportMeta(r.fileKey);
+      if (cancelled) return;
+      if (meta && meta.fileKey === r.fileKey) {
+        setSessionCatalogPrepared(r.fileKey);
+        setCatalogReady(true);
+        return;
+      }
       if (hasImportForFileKey(r.fileKey)) {
         setSessionCatalogPrepared(r.fileKey);
         setCatalogReady(true);
@@ -249,8 +271,7 @@ export const Generate: React.FC<Props> = ({
         setCatalogReady(true);
         return;
       }
-      if (fileCatalogProbeRef.current === r.fileKey) return;
-      fileCatalogProbeRef.current = r.fileKey;
+      // Always re-fetch server snapshot when this effect runs (same file_key may become valid after login or PUT).
       const serverOk = await checkServerHasDsContext(r.fileKey);
       if (cancelled) return;
       if (serverOk) {
@@ -263,7 +284,7 @@ export const Generate: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [usesFileDs, requestFileContext, checkServerHasDsContext]);
+  }, [usesFileDs, requestFileContext, readDsImportMeta, checkServerHasDsContext]);
 
   const handleInvalidateCatalog = useCallback(() => {
     clearSessionCatalogPrepared();
@@ -272,8 +293,11 @@ export const Generate: React.FC<Props> = ({
 
   const handleCatalogReady = useCallback(() => {
     setCatalogReady(true);
-    setCatalogConfettiKey((k) => k + 1);
-    setShowCatalogReadyModal(true);
+    // Defer modal + confetti so the wizard can unmount and the main thread breathes (avoids “frozen” dialog).
+    startTransition(() => {
+      setCatalogConfettiKey((k) => k + 1);
+      setShowCatalogReadyModal(true);
+    });
   }, []);
   const creditsDisplay = infiniteForTest || isPro ? '∞' : (creditsRemaining === null ? '—' : `${creditsRemaining}`);
   const knownZeroCredits = !infiniteForTest && !isPro && creditsRemaining !== null && creditsRemaining <= 0;
@@ -685,6 +709,7 @@ export const Generate: React.FC<Props> = ({
           fileContextError={genFileCtxError}
           requestDsContextIndex={requestDsContextIndex}
           persistDsImportToServer={persistDsImportToServer}
+          writeDsImportMeta={writeDsImportMeta}
           catalogReady={catalogReady}
           onCatalogReady={handleCatalogReady}
           onInvalidateCatalog={handleInvalidateCatalog}
@@ -1049,7 +1074,7 @@ export const Generate: React.FC<Props> = ({
 
       {showCatalogReadyModal && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4 animate-in fade-in"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4"
           onClick={() => setShowCatalogReadyModal(false)}
         >
           <Confetti key={catalogConfettiKey} density="lite" />

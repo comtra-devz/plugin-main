@@ -59,6 +59,14 @@ let cacheBuiltAtEpoch: number | null = null;
 
 const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0));
 
+function withFastTraversal<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = figma.skipInvisibleInstanceChildren;
+  figma.skipInvisibleInstanceChildren = true;
+  return fn().finally(() => {
+    figma.skipInvisibleInstanceChildren = prev;
+  });
+}
+
 function isIndexCacheFresh(): boolean {
   return cache !== null && cacheBuiltAtEpoch !== null && cacheBuiltAtEpoch === docEpoch;
 }
@@ -250,7 +258,7 @@ async function collectRulesAndGuidanceSummary(): Promise<DsContextIndexPayload['
     } catch {
       continue;
     }
-    const textNodes = child.findAll((n) => n.type === 'TEXT') as TextNode[];
+    const textNodes = child.findAllWithCriteria({ types: ['TEXT'] });
     for (const t of textNodes) {
       let chars = '';
       try {
@@ -391,18 +399,23 @@ async function assembleFromParts(
   return { index, canonicalJson };
 }
 
-async function collectAllLocalComponents(): Promise<(ComponentNode | ComponentSetNode)[]> {
+async function collectAllLocalComponents(opts?: {
+  onPageProgress?: (payload: { pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
+}): Promise<(ComponentNode | ComponentSetNode)[]> {
   await ensureAllPagesLoaded();
   const out: (ComponentNode | ComponentSetNode)[] = [];
+  const pages = figma.root.children.filter((n): n is PageNode => n.type === 'PAGE');
   let pageIdx = 0;
-  for (const child of figma.root.children) {
+  for (const child of pages) {
     if (child.type !== 'PAGE') continue;
     try {
       await child.loadAsync();
     } catch (_) {
       continue;
     }
-    const found = child.findAll((n) => n.type === 'COMPONENT' || n.type === 'COMPONENT_SET');
+    const foundSets = child.findAllWithCriteria({ types: ['COMPONENT_SET'] });
+    const foundComponents = child.findAllWithCriteria({ types: ['COMPONENT'] });
+    const found = [...foundSets, ...foundComponents];
     for (const n of found) {
       if (n.type === 'COMPONENT_SET') {
         out.push(n);
@@ -411,9 +424,15 @@ async function collectAllLocalComponents(): Promise<(ComponentNode | ComponentSe
         out.push(n);
       }
     }
+    opts?.onPageProgress?.({
+      pageName: child.name || `Page ${pageIdx + 1}`,
+      pageIndex: pageIdx + 1,
+      pageTotal: pages.length,
+      scanned: out.length,
+    });
     pageIdx++;
-    // `findAll` è sincrono e su file grandi blocca il main thread: cedi tra una pagina e l’altra.
-    if (pageIdx % 2 === 0) await yieldToMain();
+    // Cedi ad ogni pagina: evita blocchi lunghi su documenti DS estesi.
+    await yieldToMain();
   }
   return out;
 }
@@ -430,49 +449,59 @@ function processComponentNodes(
 }
 
 export async function buildDsContextIndex(): Promise<BuildResult> {
-  const [componentsRaw, tokens] = await Promise.all([
-    collectAllLocalComponents(),
-    collectTokensAndStylesSlice(),
-  ]);
-  const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
-  return assembleFromParts(tokens, components, totalInFile, truncated);
+  return withFastTraversal(async () => {
+    const [componentsRaw, tokens] = await Promise.all([
+      collectAllLocalComponents(),
+      collectTokensAndStylesSlice(),
+    ]);
+    const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
+    return assembleFromParts(tokens, components, totalInFile, truncated);
+  });
 }
 
 /** Wizard step: variables + local styles only (no `findAll` on components). Hash is final only after `buildDsContextIndexComponentsMerge`. */
 export async function buildDsContextIndexTokensOnly(): Promise<BuildResult> {
-  const tokens = await collectTokensAndStylesSlice();
-  lastWizardTokensSlice = tokens;
-  return assembleFromParts(tokens, [], 0, false);
+  return withFastTraversal(async () => {
+    const tokens = await collectTokensAndStylesSlice();
+    lastWizardTokensSlice = tokens;
+    return assembleFromParts(tokens, [], 0, false);
+  });
 }
 
 /** Wizard intro step: read only global rules/guidance hints from file metadata/docs. */
 export async function buildDsContextIndexRulesOnly(): Promise<BuildResult> {
-  const rules_summary = await collectRulesAndGuidanceSummary();
-  const tokens: TokensSlice = {
-    token_categories: {},
-    modes: [],
-    variable_names: [],
-    variable_names_truncated: false,
-    styles_summary: { paintStyles: 0, textStyles: 0, effectStyles: 0 },
-    total_tokens: 0,
-    fileName: figma.root.name || '',
-    rules_summary,
-  };
-  return assembleFromParts(tokens, [], 0, false);
+  return withFastTraversal(async () => {
+    const rules_summary = await collectRulesAndGuidanceSummary();
+    const tokens: TokensSlice = {
+      token_categories: {},
+      modes: [],
+      variable_names: [],
+      variable_names_truncated: false,
+      styles_summary: { paintStyles: 0, textStyles: 0, effectStyles: 0 },
+      total_tokens: 0,
+      fileName: figma.root.name || '',
+      rules_summary,
+    };
+    return assembleFromParts(tokens, [], 0, false);
+  });
 }
 
 /** Wizard step: fresh tokens/styles + component scan in parallel (same data as full index; split only for wizard UX). Updates plugin cache. */
-export async function buildDsContextIndexComponentsMerge(): Promise<BuildResult> {
-  const [tokens, componentsRaw] = await Promise.all([
-    collectTokensAndStylesSlice(),
-    collectAllLocalComponents(),
-  ]);
-  lastWizardTokensSlice = tokens;
-  const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
-  const r = await assembleFromParts(tokens, components, totalInFile, truncated);
-  cache = toCachedBuildResult(r);
-  cacheBuiltAtEpoch = docEpoch;
-  return r;
+export async function buildDsContextIndexComponentsMerge(opts?: {
+  onPageProgress?: (payload: { pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
+}): Promise<BuildResult> {
+  return withFastTraversal(async () => {
+    const [tokens, componentsRaw] = await Promise.all([
+      collectTokensAndStylesSlice(),
+      collectAllLocalComponents({ onPageProgress: opts?.onPageProgress }),
+    ]);
+    lastWizardTokensSlice = tokens;
+    const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
+    const r = await assembleFromParts(tokens, components, totalInFile, truncated);
+    cache = toCachedBuildResult(r);
+    cacheBuiltAtEpoch = docEpoch;
+    return r;
+  });
 }
 
 function runDebouncedRefresh(): void {

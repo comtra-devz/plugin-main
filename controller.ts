@@ -23,6 +23,33 @@ setTimeout(() => {
 }, 0);
 
 const SESSION_DAYS = 30; // Durata sessione in giorni; 0 = nessuna scadenza (solo logout manuale)
+const DS_IMPORT_META_STORAGE_KEY = 'comtra-ds-import-meta-v1';
+
+type DsImportMetaRow = {
+  fileKey: string;
+  importedAt: string;
+  dsCacheHash: string;
+  componentCount: number;
+  tokenCount: number;
+  name: string;
+};
+
+async function readDsImportMetaMap(): Promise<Record<string, DsImportMetaRow>> {
+  try {
+    const raw = await figma.clientStorage.getAsync(DS_IMPORT_META_STORAGE_KEY);
+    if (!raw || typeof raw !== 'object') return {};
+    return raw as Record<string, DsImportMetaRow>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeDsImportMetaRow(row: DsImportMetaRow): Promise<void> {
+  if (!row.fileKey) return;
+  const map = await readDsImportMetaMap();
+  map[row.fileKey] = row;
+  await figma.clientStorage.setAsync(DS_IMPORT_META_STORAGE_KEY, map);
+}
 
 async function getStoredUser(): Promise<any> {
   try {
@@ -1667,7 +1694,19 @@ figma.ui.onmessage = async (raw: any) => {
       try {
         const r =
           phase === 'components'
-            ? await buildDsContextIndexComponentsMerge()
+            ? await buildDsContextIndexComponentsMerge({
+                onPageProgress: ({ pageName, pageIndex, pageTotal, scanned }) => {
+                  figma.ui.postMessage({
+                    type: 'ds-import-progress',
+                    requestId,
+                    phase: 'components',
+                    pageName,
+                    pageIndex,
+                    pageTotal,
+                    scanned,
+                  });
+                },
+              })
             : phase === 'rules'
               ? await buildDsContextIndexRulesOnly()
               : await buildDsContextIndexTokensOnly();
@@ -2073,6 +2112,48 @@ figma.ui.onmessage = async (raw: any) => {
         figma.ui.postMessage({ type: 'file-context-result', fileKey: null, scope: scope ?? 'all', pageId: null, nodeIds: null, error: String(e) });
       }
     })();
+  }
+
+  if (msg.type === 'get-ds-import-meta') {
+    const requestId = String(msg.requestId || '');
+    const fileKey = String(msg.fileKey || '').trim();
+    const map = await readDsImportMetaMap();
+    figma.ui.postMessage({
+      type: 'ds-import-meta-result',
+      requestId,
+      fileKey,
+      meta: fileKey ? map[fileKey] ?? null : null,
+    });
+    return;
+  }
+
+  if (msg.type === 'set-ds-import-meta') {
+    const requestId = String(msg.requestId || '');
+    const payload = msg.payload && typeof msg.payload === 'object' ? msg.payload : {};
+    const row: DsImportMetaRow = {
+      fileKey: String((payload as { fileKey?: unknown }).fileKey || '').trim(),
+      importedAt: String((payload as { importedAt?: unknown }).importedAt || new Date().toISOString()),
+      dsCacheHash: String((payload as { dsCacheHash?: unknown }).dsCacheHash || ''),
+      componentCount: Number((payload as { componentCount?: unknown }).componentCount || 0),
+      tokenCount: Number((payload as { tokenCount?: unknown }).tokenCount || 0),
+      name: String((payload as { name?: unknown }).name || ''),
+    };
+    if (!row.fileKey) {
+      figma.ui.postMessage({ type: 'ds-import-meta-set-result', requestId, ok: false, error: 'fileKey required' });
+      return;
+    }
+    try {
+      await writeDsImportMetaRow(row);
+      figma.ui.postMessage({ type: 'ds-import-meta-set-result', requestId, ok: true });
+    } catch (e) {
+      figma.ui.postMessage({
+        type: 'ds-import-meta-set-result',
+        requestId,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    return;
   }
 
   // Count nodes: batch traversal with yield between batches only. Fast; UI stays responsive.

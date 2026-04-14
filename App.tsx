@@ -626,6 +626,26 @@ export default function AppTest() {
   const dsContextIndexWaitersRef = useRef<
     Map<string, (r: { index: object | null; hash: string | null; error?: string }) => void>
   >(new Map());
+  const dsContextIndexProgressRef = useRef<
+    Map<string, (p: { phase: 'components'; pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void>
+  >(new Map());
+  const dsImportMetaWaitersRef = useRef<
+    Map<
+      string,
+      (r: {
+        fileKey: string;
+        meta: {
+          fileKey: string;
+          importedAt: string;
+          dsCacheHash: string;
+          componentCount: number;
+          tokenCount: number;
+          name: string;
+        } | null;
+      }) => void
+    >
+  >(new Map());
+  const dsImportMetaSetWaitersRef = useRef<Map<string, (r: { ok: boolean; error?: string }) => void>>(new Map());
 
   const requestActionPlanExecution = React.useCallback(
     (plan: object, opts?: { modifyMode?: boolean }) => {
@@ -717,12 +737,54 @@ export default function AppTest() {
         const fn = rid ? dsContextIndexWaitersRef.current.get(rid) : undefined;
         if (fn) {
           dsContextIndexWaitersRef.current.delete(rid);
+          dsContextIndexProgressRef.current.delete(rid);
           const idx = msg.index;
           fn({
             index: idx && typeof idx === 'object' ? (idx as object) : null,
             hash: msg.hash != null ? String(msg.hash) : null,
             error: msg.error ? String(msg.error) : undefined,
           });
+        }
+      }
+      if (msg.type === 'ds-import-progress') {
+        const rid = String(msg.requestId || '');
+        const fn = rid ? dsContextIndexProgressRef.current.get(rid) : undefined;
+        if (fn) {
+          fn({
+            phase: 'components',
+            pageName: String(msg.pageName || ''),
+            pageIndex: Number(msg.pageIndex || 0),
+            pageTotal: Number(msg.pageTotal || 0),
+            scanned: Number(msg.scanned || 0),
+          });
+        }
+      }
+      if (msg.type === 'ds-import-meta-result') {
+        const rid = String(msg.requestId || '');
+        const fn = rid ? dsImportMetaWaitersRef.current.get(rid) : undefined;
+        if (fn) {
+          dsImportMetaWaitersRef.current.delete(rid);
+          fn({
+            fileKey: String(msg.fileKey || ''),
+            meta: msg.meta && typeof msg.meta === 'object'
+              ? ({
+                  fileKey: String((msg.meta as { fileKey?: unknown }).fileKey || ''),
+                  importedAt: String((msg.meta as { importedAt?: unknown }).importedAt || ''),
+                  dsCacheHash: String((msg.meta as { dsCacheHash?: unknown }).dsCacheHash || ''),
+                  componentCount: Number((msg.meta as { componentCount?: unknown }).componentCount || 0),
+                  tokenCount: Number((msg.meta as { tokenCount?: unknown }).tokenCount || 0),
+                  name: String((msg.meta as { name?: unknown }).name || ''),
+                })
+              : null,
+          });
+        }
+      }
+      if (msg.type === 'ds-import-meta-set-result') {
+        const rid = String(msg.requestId || '');
+        const fn = rid ? dsImportMetaSetWaitersRef.current.get(rid) : undefined;
+        if (fn) {
+          dsImportMetaSetWaitersRef.current.delete(rid);
+          fn({ ok: msg.ok === true, error: msg.error ? String(msg.error) : undefined });
         }
       }
     };
@@ -1171,7 +1233,12 @@ export default function AppTest() {
   }, []);
 
   const requestDsContextIndex = useCallback(
-    (opts?: { reuseCached?: boolean; timeoutMs?: number; phase?: 'rules' | 'tokens' | 'components' }) => {
+    (opts?: {
+      reuseCached?: boolean;
+      timeoutMs?: number;
+      phase?: 'rules' | 'tokens' | 'components';
+      onProgress?: (p: { phase: 'components'; pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
+    }) => {
       const reuseCached = opts?.reuseCached !== false;
       const timeoutMs =
         typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
@@ -1179,6 +1246,7 @@ export default function AppTest() {
       return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
         const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
         dsContextIndexWaitersRef.current.set(requestId, resolve);
+        if (opts?.onProgress) dsContextIndexProgressRef.current.set(requestId, opts.onProgress);
         if (phase === 'rules' || phase === 'tokens' || phase === 'components') {
           window.parent.postMessage(
             { pluginMessage: { type: 'get-ds-context-index-phase', requestId, phase } },
@@ -1194,6 +1262,7 @@ export default function AppTest() {
           const fn = dsContextIndexWaitersRef.current.get(requestId);
           if (!fn) return;
           dsContextIndexWaitersRef.current.delete(requestId);
+          dsContextIndexProgressRef.current.delete(requestId);
           fn({ index: null, hash: null, error: 'Timeout waiting for DS context index from Figma.' });
         }, timeoutMs);
       });
@@ -1224,9 +1293,12 @@ export default function AppTest() {
         ds_context_index?: unknown;
         ds_cache_hash?: string | null;
       };
-      if (!j.ds_context_index || typeof j.ds_context_index !== 'object') return null;
+      const raw = j.ds_context_index;
+      if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const idx = raw as Record<string, unknown>;
+      if (Object.keys(idx).length === 0) return null;
       return {
-        ds_context_index: j.ds_context_index as object,
+        ds_context_index: idx,
         ds_cache_hash: j.ds_cache_hash != null && String(j.ds_cache_hash).trim() !== '' ? String(j.ds_cache_hash) : null,
       };
     },
@@ -1291,8 +1363,9 @@ export default function AppTest() {
         const d = (await r.json().catch(() => ({}))) as { error?: string };
         throw new Error(d.error || `ds-imports save failed (${r.status})`);
       }
+      await syncDsImportsFromServer();
     },
-    [user?.authToken, AUTH_BACKEND_URL, handle503],
+    [user?.authToken, AUTH_BACKEND_URL, handle503, syncDsImportsFromServer],
   );
 
   useEffect(() => {
@@ -1418,6 +1491,53 @@ export default function AppTest() {
     });
   }, []);
 
+  const readDsImportMeta = useCallback(async (fileKey: string) => {
+    const key = String(fileKey || '').trim();
+    if (!key) return null;
+    return new Promise<{
+      fileKey: string;
+      importedAt: string;
+      dsCacheHash: string;
+      componentCount: number;
+      tokenCount: number;
+      name: string;
+    } | null>((resolve) => {
+      const requestId = `dsm-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      dsImportMetaWaitersRef.current.set(requestId, (r) => resolve(r.meta));
+      window.parent.postMessage({ pluginMessage: { type: 'get-ds-import-meta', requestId, fileKey: key } }, '*');
+      window.setTimeout(() => {
+        const fn = dsImportMetaWaitersRef.current.get(requestId);
+        if (!fn) return;
+        dsImportMetaWaitersRef.current.delete(requestId);
+        resolve(null);
+      }, 7000);
+    });
+  }, []);
+
+  const writeDsImportMeta = useCallback(
+    async (payload: {
+      fileKey: string;
+      importedAt: string;
+      dsCacheHash: string;
+      componentCount: number;
+      tokenCount: number;
+      name: string;
+    }) => {
+      return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        const requestId = `dsmw-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        dsImportMetaSetWaitersRef.current.set(requestId, resolve);
+        window.parent.postMessage({ pluginMessage: { type: 'set-ds-import-meta', requestId, payload } }, '*');
+        window.setTimeout(() => {
+          const fn = dsImportMetaSetWaitersRef.current.get(requestId);
+          if (!fn) return;
+          dsImportMetaSetWaitersRef.current.delete(requestId);
+          resolve({ ok: false, error: 'Timeout writing DS metadata' });
+        }, 7000);
+      });
+    },
+    [],
+  );
+
   const creditsLabel = useInfiniteCreditsForTest
     ? '∞ (test)'
     : user?.plan === 'PRO'
@@ -1519,6 +1639,8 @@ export default function AppTest() {
             initialPrompt={genPrompt}
             fetchGenerate={fetchGenerate}
             requestFileContext={requestFileContext}
+            readDsImportMeta={readDsImportMeta}
+            writeDsImportMeta={writeDsImportMeta}
             requestDsContextIndex={requestDsContextIndex}
             checkServerHasDsContext={checkServerHasDsContext}
             persistDsImportToServer={persistDsImportToServer}
