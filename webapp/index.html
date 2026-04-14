@@ -17,17 +17,27 @@
         <label for="backendUrl">Auth backend URL</label>
         <input id="backendUrl" type="text" value="https://auth.comtra.dev" />
 
-        <label for="token">JWT token</label>
-        <textarea
-          id="token"
-          rows="4"
-          placeholder="Paste auth token from Comtra plugin session"
-        ></textarea>
-
-        <div class="row">
-          <button id="loadBtn" type="button">Load Data</button>
-          <button id="clearBtn" type="button" class="secondary">Clear</button>
+        <div id="sessionRow" class="session-row hidden">
+          <p id="sessionLabel" class="session-label"></p>
+          <button id="logoutBtn" type="button" class="secondary">Log out</button>
         </div>
+
+        <div class="row row-wrap">
+          <button id="loginFigmaBtn" type="button" class="primary">Log in with Figma</button>
+          <button id="loadBtn" type="button">Load data</button>
+          <button id="clearBtn" type="button" class="secondary">Clear session</button>
+        </div>
+
+        <details class="advanced">
+          <summary>Manual JWT (debug)</summary>
+          <label for="token">JWT token</label>
+          <textarea
+            id="token"
+            rows="3"
+            placeholder="Optional: paste token if you cannot use browser login"
+          ></textarea>
+        </details>
+
         <p id="status" class="status"></p>
       </section>
 

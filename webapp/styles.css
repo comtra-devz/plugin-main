@@ -61,6 +61,61 @@ textarea {
   gap: 8px;
 }
 
+.row-wrap {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.session-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+}
+
+.session-row.hidden {
+  display: none;
+}
+
+.session-label {
+  margin: 0;
+  font-size: 14px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+button.primary {
+  background: #ff90e8;
+  color: #111;
+  border-color: #111;
+}
+
+button.primary:hover {
+  filter: brightness(0.97);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.advanced {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: #52525b;
+}
+
 button {
   border: 1px solid #161616;
   border-radius: 8px;
