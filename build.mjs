@@ -16,7 +16,10 @@ if (!existsSync(uiPath)) {
   process.exit(1);
 }
 
-const uiHtml = readFileSync(uiPath, 'utf-8');
+const rawUiHtml = readFileSync(uiPath, 'utf-8');
+// Figma webview can reject module/import expressions from inline Vite bundles.
+// We emit classic <script> tags because the inlined singlefile payload is self-contained.
+const uiHtml = rawUiHtml.replace(/<script\b([^>]*?)\btype=["']module["']([^>]*)>/gi, '<script$1$2>');
 
 await build({
   entryPoints: ['./controller.ts'],

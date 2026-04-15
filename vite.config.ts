@@ -14,7 +14,14 @@ export default defineConfig(({ mode }) => {
         outDir: 'dist',
         emptyOutDir: true,
       },
-      plugins: [react(), viteSingleFile()],
+      plugins: [
+        react(),
+        viteSingleFile({
+          // Figma webview can reject module/import expressions at runtime.
+          // Emit a plain inlined script without Vite's module loader shim.
+          removeViteModuleLoader: true,
+        }),
+      ],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
