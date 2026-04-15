@@ -328,8 +328,9 @@ export function validateActionPlanSchema(actionPlan) {
 }
 
 /**
- * create mode: at least one CREATE_TEXT or CREATE_RECT whose parent is the generated root
- * (parentId/parent omitted, empty, or "root" — same default as action-plan-executor resolveParent).
+ * create/screenshot: reject empty structural shells (only nested frames, no leaves).
+ * Counts any CREATE_TEXT, CREATE_RECT, or INSTANCE_COMPONENT at any depth (parentId any ref or root).
+ * Public DS still cannot emit INSTANCE_COMPONENT (separate gate); custom DS may be instance-first.
  */
 export function validateActionPlanVisiblePrimitives(actionPlan) {
   if (!actionPlan || typeof actionPlan !== 'object') {
@@ -344,17 +345,14 @@ export function validateActionPlanVisiblePrimitives(actionPlan) {
     const da = actions[i];
     if (!da || typeof da !== 'object') continue;
     const t = String(da.type || '').trim();
-    if (t !== 'CREATE_TEXT' && t !== 'CREATE_RECT') continue;
-    const raw = da.parentId ?? da.parent;
-    const p = raw === undefined || raw === null || String(raw).trim() === '' ? 'root' : String(raw).trim();
-    if (p === 'root') {
+    if (t === 'CREATE_TEXT' || t === 'CREATE_RECT' || t === 'INSTANCE_COMPONENT') {
       return { valid: true, errors: [] };
     }
   }
   return {
     valid: false,
     errors: [
-      'VISIBLE_CONTENT_REQUIRED: create/screenshot mode requires at least one CREATE_TEXT or CREATE_RECT with parentId omitted or "root" (direct child of the generated root frame).',
+      'VISIBLE_CONTENT_REQUIRED: create/screenshot mode requires at least one CREATE_TEXT, CREATE_RECT, or INSTANCE_COMPONENT action (any parentId). Pure CREATE_FRAME-only trees are not allowed.',
     ],
   };
 }

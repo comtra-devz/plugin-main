@@ -2438,7 +2438,7 @@ app.post('/api/agents/generate', async (req, res) => {
     }
     if (!visibleValidation.valid) {
       return res.status(422).json({
-        error: 'Action plan missing visible primitives on root',
+        error: 'Action plan missing visible leaf actions (text, rect, or instance)',
         code: 'VISIBLE_CONTENT_REQUIRED',
         details: visibleValidation.errors,
       });
