@@ -359,12 +359,23 @@ async function resolveComponentForInstanceBySearch(hint: string): Promise<Compon
   return null;
 }
 
-async function resolveComponentForInstance(hint: string): Promise<ComponentNode | null> {
-  const rawKey = hint.trim();
-  if (!rawKey) return null;
-  const byId = await getComponentNodeByFigmaId(rawKey);
-  if (byId) return byId;
-  return resolveComponentForInstanceBySearch(rawKey);
+async function resolveComponentForInstance(hints: { nodeId?: string; componentKey?: string; fallback?: string }): Promise<ComponentNode | null> {
+  const rawNodeId = String(hints.nodeId || '').trim();
+  const rawComponentKey = String(hints.componentKey || '').trim();
+  const rawFallback = String(hints.fallback || '').trim();
+
+  if (rawComponentKey) {
+    const imported = await resolveComponentForInstanceBySearch(rawComponentKey);
+    if (imported) return imported;
+  }
+  if (rawNodeId) {
+    const byId = await getComponentNodeByFigmaId(rawNodeId);
+    if (byId) return byId;
+  }
+  if (rawFallback) {
+    return resolveComponentForInstanceBySearch(rawFallback);
+  }
+  return null;
 }
 
 /** Applica `variantProperties` / `properties` / `componentProperties` (valori stringa o boolean) come da API `instance.setProperties`. */
@@ -648,15 +659,14 @@ export async function executeActionPlanOnCanvas(
 
     if (type === 'INSTANCE_COMPONENT') {
       const parent = resolveParent(raw, idMap, root);
-      const key = String(
-        raw.component_node_id ||
-          raw.componentNodeId ||
-          raw.component_key ||
-          raw.componentKey ||
-          raw.component_id ||
-          '',
-      ).trim();
-      const comp = await resolveComponentForInstance(key);
+      const componentNodeId = String(raw.component_node_id || raw.componentNodeId || '').trim();
+      const componentKey = String(raw.component_key || raw.componentKey || raw.component_id || '').trim();
+      const componentName = String(raw.name || '').trim();
+      const comp = await resolveComponentForInstance({
+        nodeId: componentNodeId,
+        componentKey,
+        fallback: componentName || componentKey || componentNodeId,
+      });
       if (comp) {
         const inst = comp.createInstance();
         parent.appendChild(inst);
@@ -677,7 +687,7 @@ export async function executeActionPlanOnCanvas(
         if (typeof raw.name === 'string' && raw.name.trim()) inst.name = raw.name.trim();
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);
       } else {
-        await appendMissingComponentWireframe(parent, key || 'unknown');
+        await appendMissingComponentWireframe(parent, componentKey || componentNodeId || componentName || 'unknown');
       }
       continue;
     }

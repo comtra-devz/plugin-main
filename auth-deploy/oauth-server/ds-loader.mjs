@@ -418,6 +418,10 @@ function semanticComponentKeyMatchesIndex(key, components) {
   const k = String(key || '').trim().toLowerCase();
   if (!k) return false;
   for (const c of components) {
+    const ck = String(c?.componentKey || c?.component_key || '').trim().toLowerCase();
+    if (ck && ck === k) return true;
+    const cid = String(c?.id || '').trim().toLowerCase();
+    if (cid && cid === k) return true;
     const name = String(c?.name || '').trim();
     if (!name) continue;
     const nl = name.toLowerCase();
@@ -434,7 +438,7 @@ function semanticComponentKeyMatchesIndex(key, components) {
  * Con `components_truncated` non si validano id componente (falsi negativi); restano variabili se elencate.
  */
 export function validateActionPlanAgainstFileDsIndex(actionPlan, dsContextIndex) {
-  const emptyUsed = { componentNodeIds: [], variableRefs: [] };
+  const emptyUsed = { componentNodeIds: [], componentKeys: [], variableRefs: [] };
   if (!actionPlan || typeof actionPlan !== 'object') {
     return { valid: true, skipped: true, errors: [], warnings: [], used: emptyUsed };
   }
@@ -459,9 +463,15 @@ export function validateActionPlanAgainstFileDsIndex(actionPlan, dsContextIndex)
   const errors = [];
   const warnings = [];
   const usedComponentNodeIds = [];
+  const usedComponentKeys = [];
   const usedVariableRefs = [];
 
   const allowedIds = new Set(components.map((c) => (c && c.id ? String(c.id) : '')).filter(Boolean));
+  const allowedComponentKeys = new Set(
+    components
+      .map((c) => (c && (c.componentKey || c.component_key) ? String(c.componentKey || c.component_key).toLowerCase() : ''))
+      .filter(Boolean),
+  );
 
   if (truncatedComponents && components.length > 0) {
     warnings.push(
@@ -491,9 +501,11 @@ export function validateActionPlanAgainstFileDsIndex(actionPlan, dsContextIndex)
           );
         }
       } else if (key) {
-        if (!semanticComponentKeyMatchesIndex(key, components)) {
+        const keyLower = key.toLowerCase();
+        if (/^[a-z0-9_-]{20,}$/i.test(key)) usedComponentKeys.push(key);
+        if (!allowedComponentKeys.has(keyLower) && !semanticComponentKeyMatchesIndex(key, components)) {
           errors.push(
-            `actions[${i}] INSTANCE_COMPONENT: unknown component reference "${key}" (no matching id or name in index).`,
+            `actions[${i}] INSTANCE_COMPONENT: unknown component reference "${key}" (no matching key/id/name in index).`,
           );
         }
       } else {
@@ -501,6 +513,8 @@ export function validateActionPlanAgainstFileDsIndex(actionPlan, dsContextIndex)
       }
     } else if (figmaId && allowedIds.has(figmaId)) {
       usedComponentNodeIds.push(figmaId);
+    } else if (key && allowedComponentKeys.has(key.toLowerCase())) {
+      usedComponentKeys.push(key);
     }
   }
 
@@ -534,7 +548,7 @@ export function validateActionPlanAgainstFileDsIndex(actionPlan, dsContextIndex)
     skipped: false,
     errors,
     warnings,
-    used: { componentNodeIds: usedComponentNodeIds, variableRefs: usedVariableRefs },
+    used: { componentNodeIds: usedComponentNodeIds, componentKeys: usedComponentKeys, variableRefs: usedVariableRefs },
   };
 }
 

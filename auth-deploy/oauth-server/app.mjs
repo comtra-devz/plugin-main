@@ -2256,7 +2256,7 @@ app.post('/api/agents/generate', async (req, res) => {
       ? [
           '',
           '[DS CONTEXT INDEX]',
-          'Prompt-scoped DS index retrieved from a slim local snapshot. For file-scoped DS, use only component ids and token paths that appear in this JSON.',
+          'Prompt-scoped DS index retrieved from a slim local snapshot. For file-scoped DS, use only component ids/keys and token paths that appear in this JSON.',
           JSON.stringify(dsIndexForPrompt),
           '[END DS CONTEXT INDEX]',
           `ds_cache_hash: ${dsIndexHashLine}`,
@@ -2457,6 +2457,7 @@ app.post('/api/agents/generate', async (req, res) => {
       valid: fileIndexValidation.skipped ? null : fileIndexValidation.valid,
       warnings: fileIndexValidation.skipped ? [] : fileIndexValidation.warnings || [],
       component_node_ids_seen: fileIndexValidation.used?.componentNodeIds?.length ?? 0,
+      component_keys_seen: fileIndexValidation.used?.componentKeys?.length ?? 0,
       variable_refs_seen: fileIndexValidation.used?.variableRefs?.length ?? 0,
     };
 

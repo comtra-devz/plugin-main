@@ -17,6 +17,8 @@ const MAX_NAME_LEN = 160;
 
 export type DsComponentSummary = {
   id: string;
+  /** Figma published component key (portable across files/libraries), when available. */
+  componentKey?: string;
   name: string;
   type: 'COMPONENT' | 'COMPONENT_SET';
   variantAxes?: string[];
@@ -172,7 +174,9 @@ function summarizeComponent(node: ComponentNode | ComponentSetNode): DsComponent
     }
   }
   const name = node.name.length > MAX_NAME_LEN ? node.name.slice(0, MAX_NAME_LEN) : node.name;
+  const key = typeof node.key === 'string' && node.key.trim() ? node.key.trim() : undefined;
   const out: DsComponentSummary = { id: node.id, name, type: node.type };
+  if (key) out.componentKey = key;
   if (variantAxes && variantAxes.length) out.variantAxes = variantAxes;
   if (propertyKeys.length) out.propertyKeys = propertyKeys;
   if (slotHints.length) out.slotHints = slotHints;
