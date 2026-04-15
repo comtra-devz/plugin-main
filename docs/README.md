@@ -29,6 +29,7 @@ Per questo motivo questa ottimizzazione è **non distruttiva**: introduciamo ind
 - OAuth: `docs/OAUTH-FIGMA.md`
 - Generate: `docs/GENERATE-TAB-SPEC.md`
 - Generate design intelligence playbook: `docs/GENERATE-DESIGN-INTELLIGENCE-PLAYBOOK.md`
+- Generate conversational UX implementation plan: `docs/GENERATE-CONVERSATIONAL-UX-IMPLEMENTATION-PLAN.md`
 - **Generation Engine roadmap (Problem 1 + Swarm):** `docs/GENERATION-ENGINE-ROADMAP.md`
 - Sync: `docs/SYNC-INVESTIGATION.md`
 - Gamification: `docs/GAMIFICATION.md`

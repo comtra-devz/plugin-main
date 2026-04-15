@@ -316,6 +316,24 @@ app.get('/auth/figma/callback', async (req, res) => {
         user.xp_for_current_level_start = info.xpForCurrentLevelStart;
       }
       try {
+        const creditsRow = await dbSql`
+          SELECT credits_total, credits_used, plan
+          FROM users
+          WHERE id = ${user.id}
+          LIMIT 1
+        `;
+        if (creditsRow.rows.length > 0) {
+          const creditsTotal = Math.max(0, Number(creditsRow.rows[0].credits_total) || 0);
+          const creditsUsed = Math.max(0, Number(creditsRow.rows[0].credits_used) || 0);
+          user.credits_total = creditsTotal;
+          user.credits_used = creditsUsed;
+          user.credits_remaining = Math.max(0, creditsTotal - creditsUsed);
+          if (creditsRow.rows[0].plan) user.plan = String(creditsRow.rows[0].plan).toUpperCase();
+        }
+      } catch (err) {
+        console.error('OAuth callback: credits select failed (non-fatal)', err);
+      }
+      try {
         const tagRow = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${user.id} LIMIT 1`;
         if (tagRow.rows.length > 0) {
           const rawTags = tagRow.rows[0].tags;
@@ -2606,8 +2624,22 @@ app.get('/api/user/ds-imports/context', async (req, res) => {
     `;
     const row = sel?.rows?.[0];
     if (!row) return res.status(404).json({ error: 'Not found' });
+    const normalizeDsContextIndex = (raw) => {
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+      if (typeof raw === 'string' && raw.trim() !== '') {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+        } catch {
+          // fall through
+        }
+      }
+      return null;
+    };
+    const idx = normalizeDsContextIndex(row.ds_context_index);
+    if (!idx) return res.status(404).json({ error: 'Context snapshot unavailable' });
     res.json({
-      ds_context_index: row.ds_context_index,
+      ds_context_index: idx,
       ds_cache_hash: row.ds_cache_hash || null,
     });
   } catch (err) {

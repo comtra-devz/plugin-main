@@ -108,6 +108,7 @@ function normalizeOAuthUser(raw: {
   id?: string; name?: string; email?: string; img_url?: string | null; plan?: string;
   stats?: User['stats']; authToken?: string;
   total_xp?: number; current_level?: number; xp_for_next_level?: number; xp_for_current_level_start?: number;
+  credits_total?: number; credits_used?: number; credits_remaining?: number;
 }): User {
   const name = raw.name || 'User';
   const firstInitial = name.trim().charAt(0).toUpperCase() || 'U';
@@ -135,6 +136,22 @@ function normalizeOAuthUser(raw: {
     current_level: raw.current_level,
     xp_for_next_level: raw.xp_for_next_level,
     xp_for_current_level_start: raw.xp_for_current_level_start,
+  };
+}
+
+function creditsFromOAuthUser(raw: {
+  credits_total?: number;
+  credits_used?: number;
+  credits_remaining?: number;
+}): CreditsState | null {
+  const total = Number(raw.credits_total);
+  const used = Number(raw.credits_used);
+  const remaining = Number(raw.credits_remaining);
+  if (!Number.isFinite(total) || !Number.isFinite(used) || !Number.isFinite(remaining)) return null;
+  return {
+    total: Math.max(0, Math.floor(total)),
+    used: Math.max(0, Math.floor(used)),
+    remaining: Math.max(0, Math.floor(remaining)),
   };
 }
 
@@ -686,12 +703,24 @@ export default function AppTest() {
       if (msg.type === 'restore-user') {
         setSessionRestoring(false);
         if (msg.user) {
-          setUser(normalizeOAuthUser(msg.user));
+          const normalized = normalizeOAuthUser(msg.user);
+          setUser(normalized);
+          const optimisticCredits = creditsFromOAuthUser(msg.user);
+          if (optimisticCredits) {
+            setCredits(optimisticCredits);
+            if (normalized.id) writeCreditsCache(normalized.id, optimisticCredits);
+          }
           setShowLogin(false);
         }
       }
       if (msg.type === 'login-success' && msg.user) {
-        setUser(normalizeOAuthUser(msg.user));
+        const normalized = normalizeOAuthUser(msg.user);
+        setUser(normalized);
+        const optimisticCredits = creditsFromOAuthUser(msg.user);
+        if (optimisticCredits) {
+          setCredits(optimisticCredits);
+          if (normalized.id) writeCreditsCache(normalized.id, optimisticCredits);
+        }
         setShowLogin(false);
         setOauthInProgress(false);
         setOauthReadKey(null);
@@ -1300,8 +1329,20 @@ export default function AppTest() {
         ds_cache_hash?: string | null;
       };
       const raw = j.ds_context_index;
-      if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
-      const idx = raw as Record<string, unknown>;
+      let idx: Record<string, unknown> | null = null;
+      if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+        idx = raw as Record<string, unknown>;
+      } else if (typeof raw === 'string' && raw.trim() !== '') {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            idx = parsed as Record<string, unknown>;
+          }
+        } catch {
+          idx = null;
+        }
+      }
+      if (!idx) return null;
       if (Object.keys(idx).length === 0) return null;
       return {
         ds_context_index: idx,
