@@ -6,6 +6,7 @@ import { getCanonicalTrophyId, getLinkedInPostForTrophy } from '../linkedinTroph
 import { User, UserStats, Trophy } from '../types';
 import { UserStatsWidget } from '../components/UserStatsWidget';
 import { Confetti } from '../components/Confetti';
+import { useToast } from '../contexts/ToastContext';
 
 export interface RecentTransaction {
   action_type: string;
@@ -247,6 +248,13 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [shareCopyFeedback, setShareCopyFeedback] = useState(false);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [rewardCode, setRewardCode] = useState<string | null>(null);
+  const [rewardPercent, setRewardPercent] = useState<number>(0);
+  const [rewardLevel, setRewardLevel] = useState<number>(0);
+  const [rewardLoading, setRewardLoading] = useState(false);
+  const [rewardError, setRewardError] = useState<string | null>(null);
+  const { showToast, dismissToast } = useToast();
 
   // Livello e XP: da backend (user) se presenti, altrimenti fallback da stats
   const level = user?.current_level ?? 1;
@@ -337,6 +345,61 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
       setTimeout(() => setShowConfetti(false), 2000);
   };
 
+  const handleOpenRewardModal = async () => {
+    if (!user?.authToken) {
+      setRewardError('Log in required to load your discount code.');
+      setShowRewardModal(true);
+      return;
+    }
+    setRewardLoading(true);
+    setRewardError(null);
+    setRewardCode(null);
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/discounts/me`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+      if (data?.locked_until_renewal) {
+        setRewardError('You already used a discount. Next code unlocks after your next paid renewal.');
+      } else
+      if (data?.code) {
+        setRewardCode(String(data.code));
+        setRewardPercent(Number(data.percent) || discountPercent);
+        setRewardLevel(Number(data.level) || level);
+      } else {
+        setRewardError('No active level discount code found yet.');
+      }
+    } catch (_) {
+      setRewardError('Cannot load your discount code right now. Please retry.');
+    } finally {
+      setRewardLoading(false);
+      setShowRewardModal(true);
+    }
+  };
+
+  const handleCopyRewardCode = async () => {
+    if (!rewardCode) return;
+    try {
+      await navigator.clipboard.writeText(rewardCode);
+      const toastId = showToast({
+        title: 'Yay, you got it!',
+        description: 'Discount code copied.',
+        dismissible: false,
+        variant: 'info',
+      });
+      window.setTimeout(() => dismissToast(toastId), 1100);
+    } catch (_) {
+      const toastId = showToast({
+        title: 'Copy failed',
+        description: 'Please copy manually.',
+        dismissible: false,
+        variant: 'warning',
+      });
+      window.setTimeout(() => dismissToast(toastId), 1400);
+    }
+  };
+
   return (
     <div className="p-4 pb-16 flex flex-col gap-6">
       {showConfetti && <Confetti />}
@@ -379,8 +442,20 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
           
           {/* Discount Reward Text */}
           {discountPercent > 0 ? (
-              <div className="mt-2 text-[9px] font-bold uppercase text-[#ffc900] relative z-[1]">
-                  Current Reward: {discountPercent}% OFF Annual Plan
+              <div className="mt-2 pt-1 text-[9px] font-bold uppercase text-[#ffc900] relative z-[1] flex items-start justify-between gap-2">
+                  <span className="leading-tight">Current Reward: {discountPercent}% OFF Annual Plan</span>
+                  <button
+                    type="button"
+                    onClick={handleOpenRewardModal}
+                    className="w-6 h-6 -mt-1 -mr-1 shrink-0 inline-flex items-center justify-center text-[#ffc900] hover:text-white transition-colors"
+                    title="Show discount code"
+                    aria-label="Show discount code"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none">
+                      <path d="M7 17L17 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" />
+                      <path d="M9 7H17V15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" />
+                    </svg>
+                  </button>
               </div>
           ) : (
               <div className="mt-2 text-[9px] font-bold uppercase text-gray-500 relative z-[1]">
@@ -479,6 +554,59 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
                   )}
               </div>
           </div>
+      )}
+
+      {/* Discount code quick access modal */}
+      {showRewardModal && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6" onClick={() => setShowRewardModal(false)}>
+          <div className={`${BRUTAL.card} bg-white max-w-xs w-full text-left relative animate-in zoom-in-95`} onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShowRewardModal(false)}
+              className="absolute top-2 right-2 text-xl font-black hover:text-red-600 w-8 h-8 flex items-center justify-center"
+              aria-label="Close discount code dialog"
+            >
+              ×
+            </button>
+            <h3 className="text-lg font-black uppercase pr-8">Your Reward Code</h3>
+            <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+              Use this code on your next Lemon Squeezy checkout to apply your annual plan discount.
+              {rewardCode && rewardPercent > 0 ? ` (Level ${rewardLevel} · ${rewardPercent}% off)` : ''}
+            </p>
+
+            <div className="mt-4">
+              {rewardLoading ? (
+                <div className="text-[10px] font-bold uppercase text-gray-500">Loading code...</div>
+              ) : rewardCode ? (
+                <div className="flex items-center border-2 border-black bg-white">
+                  <input
+                    type="text"
+                    readOnly
+                    value={rewardCode}
+                    className="w-full px-2 py-2 text-[12px] font-mono font-bold outline-none"
+                    aria-label="Discount code"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyRewardCode}
+                    className="w-10 h-10 border-l-2 border-black flex items-center justify-center hover:bg-[#ffc900] transition-colors"
+                    aria-label="Copy discount code"
+                    title="Copy code"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <rect x="9" y="9" width="11" height="11" stroke="black" strokeWidth="2" />
+                      <path d="M5 15V5H15" stroke="black" strokeWidth="2" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="text-[10px] font-bold uppercase text-red-600">
+                  {rewardError || 'No code available yet.'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

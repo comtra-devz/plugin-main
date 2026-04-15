@@ -829,13 +829,28 @@ app.get('/api/discounts/me', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   if (!POSTGRES_URL) return res.json({ code: null, level: null, percent: null });
   try {
+    let lockedUntilRenewal = false;
+    try {
+      const u = await dbSql`
+        SELECT level_discount_locked_until_renewal
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `;
+      lockedUntilRenewal = Boolean(u.rows?.[0]?.level_discount_locked_until_renewal);
+    } catch (_) {
+      lockedUntilRenewal = false;
+    }
+    if (lockedUntilRenewal) {
+      return res.json({ code: null, level: null, percent: null, locked_until_renewal: true });
+    }
     const r = await dbSql`
       SELECT level, code FROM user_level_discounts WHERE user_id = ${userId} LIMIT 1
     `;
     const row = r.rows[0];
-    if (!row) return res.json({ code: null, level: null, percent: null });
+    if (!row) return res.json({ code: null, level: null, percent: null, locked_until_renewal: false });
     const percent = discountPercentForLevel(row.level);
-    return res.json({ code: row.code, level: Number(row.level), percent });
+    return res.json({ code: row.code, level: Number(row.level), percent, locked_until_renewal: false });
   } catch (e) {
     console.error('GET /api/discounts/me', e);
     res.status(500).json({ error: 'Server error' });
@@ -927,7 +942,19 @@ app.post('/api/credits/consume', async (req, res) => {
     }
 
     let levelDiscountCode = null;
-    if (POSTGRES_URL && isLevelWithDiscount(currentLevel)) {
+    let levelDiscountLockedUntilRenewal = false;
+    try {
+      const ru = await dbSql`
+        SELECT level_discount_locked_until_renewal
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `;
+      levelDiscountLockedUntilRenewal = Boolean(ru.rows?.[0]?.level_discount_locked_until_renewal);
+    } catch (_) {
+      levelDiscountLockedUntilRenewal = false;
+    }
+    if (!levelDiscountLockedUntilRenewal && POSTGRES_URL && isLevelWithDiscount(currentLevel)) {
       try {
         const existing = await dbSql`
           SELECT level, lemon_discount_id, code FROM user_level_discounts WHERE user_id = ${userId} LIMIT 1
@@ -969,6 +996,7 @@ app.post('/api/credits/consume', async (req, res) => {
       credits_used: newUsed,
       level_up: levelUp,
       ...(levelUp && levelUpPreviousLevel != null ? { level_up_previous_level: levelUpPreviousLevel } : {}),
+      level_discount_locked_until_renewal: levelDiscountLockedUntilRenewal,
       current_level: currentLevel,
       total_xp: totalXp,
       xp_for_next_level: xpForNextLevel,

@@ -128,6 +128,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS consecutive_fixes INTEGER NOT NULL DE
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_fixes_total INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bug_reports_total INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_shared BOOLEAN NOT NULL DEFAULT false;
+-- Level discounts lifecycle:
+-- - locked_until_renewal=true after a discounted purchase (must wait next paid renewal to use another discount)
+-- - reset to false on next paid cycle without discount
+ALTER TABLE users ADD COLUMN IF NOT EXISTS level_discount_locked_until_renewal BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS level_discount_used_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS level_discount_used_code TEXT;
 
 -- Seed of 20 trophies (id, name, description in English, unlock_condition, icon_id, sort_order)
 INSERT INTO trophies (id, name, description, unlock_condition, icon_id, sort_order) VALUES

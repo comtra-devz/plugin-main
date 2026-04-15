@@ -51,6 +51,25 @@ function verifySignature(rawBody, signature, secret) {
   }
 }
 
+function parseMoneyLike(value) {
+  if (value == null) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const s = String(value).replace(',', '.').trim();
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function hasAnyDiscountApplied(attrs) {
+  // Lemon payloads may vary by event/version; support common shapes.
+  const candidates = [
+    attrs.discount_total,
+    attrs.discount_total_usd,
+    attrs.discount_amount,
+    attrs.discount_amount_usd,
+  ];
+  return candidates.some((v) => parseMoneyLike(v) > 0);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).end();
@@ -102,6 +121,11 @@ export default async function handler(req, res) {
   const customData = payload?.meta?.custom_data || {};
   const affCode = typeof customData.aff === 'string' ? customData.aff.trim() : null;
   const buyerEmail = (typeof customData.email === 'string' ? customData.email.trim() : null) || (typeof attrs.user_email === 'string' ? attrs.user_email.trim() : null) || null;
+  const discountUsed = hasAnyDiscountApplied(attrs);
+  const usedCodeFromPayload =
+    (typeof customData.level_discount_code === 'string' ? customData.level_discount_code.trim() : '') ||
+    (typeof attrs.discount_code === 'string' ? attrs.discount_code.trim() : '') ||
+    null;
 
   const firstItem = attrs.first_order_item;
   const variantId = firstItem?.variant_id != null ? String(firstItem.variant_id) : null;
@@ -133,6 +157,35 @@ export default async function handler(req, res) {
       if (r.rowCount > 0) result.buyer_updated = true;
     }
 
+    // 1b) Discount lifecycle rule:
+    // - if a discount was used on this paid order => block new discount codes until next paid renewal
+    // - if no discount used on this paid order => unlock for next cycle
+    if (buyerEmail) {
+      if (discountUsed) {
+        await sql`
+          UPDATE users
+          SET level_discount_locked_until_renewal = true,
+              level_discount_used_at = NOW(),
+              level_discount_used_code = ${usedCodeFromPayload},
+              updated_at = NOW()
+          WHERE LOWER(TRIM(email)) = LOWER(TRIM(${buyerEmail}))
+        `;
+        await sql`
+          DELETE FROM user_level_discounts
+          WHERE user_id IN (
+            SELECT id FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(${buyerEmail}))
+          )
+        `;
+      } else {
+        await sql`
+          UPDATE users
+          SET level_discount_locked_until_renewal = false,
+              updated_at = NOW()
+          WHERE LOWER(TRIM(email)) = LOWER(TRIM(${buyerEmail}))
+        `;
+      }
+    }
+
     // 2) Incrementa referral affiliato se presente
     if (affCode) {
       const r = await sql`
@@ -145,7 +198,7 @@ export default async function handler(req, res) {
       if (r.rowCount > 0) result.affiliate_updated = true;
     }
 
-    res.status(200).json(result);
+    res.status(200).json({ ...result, discount_used: discountUsed });
   } catch (err) {
     console.error('Webhook lemonsqueezy', err);
     res.status(500).json({ error: 'Database error' });
