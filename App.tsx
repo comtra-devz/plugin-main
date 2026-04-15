@@ -1525,10 +1525,9 @@ export default function AppTest() {
           return text.trim() || `HTTP ${res.status}`;
         }
       };
-      const endpoints = [
-        `${AUTH_BACKEND_URL}/api/agents/generate-v2`,
-        `${AUTH_BACKEND_URL}/api/agents/generate`,
-      ];
+      // generate-v2 is rollout-dependent on deploy; use stable route first to avoid
+      // CORS/404 noise in plugin webview when v2 alias is not yet active.
+      const endpoints = [`${AUTH_BACKEND_URL}/api/agents/generate`];
       let lastError: Error | null = null;
       for (let i = 0; i < endpoints.length; i++) {
         const endpoint = endpoints[i];
