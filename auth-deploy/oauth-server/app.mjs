@@ -2096,6 +2096,40 @@ async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, prompt
   );
 }
 
+function ensureCreateModeHasCreateFrameAction(actionPlan, mode) {
+  if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
+  if (String(mode || '').toLowerCase() !== 'create') return actionPlan;
+  const plan = actionPlan;
+  if (!Array.isArray(plan.actions)) plan.actions = [];
+  const hasCreateFrame = plan.actions.some(
+    (a) => a && typeof a === 'object' && String(a.type || '').toUpperCase() === 'CREATE_FRAME',
+  );
+  if (hasCreateFrame) return plan;
+
+  const frame = plan.frame && typeof plan.frame === 'object' ? plan.frame : {};
+  if (!plan.frame || typeof plan.frame !== 'object') {
+    plan.frame = frame;
+  }
+  if (typeof frame.name !== 'string' || frame.name.trim() === '') {
+    frame.name = 'Generated Screen';
+  }
+  if (!Number.isFinite(Number(frame.width)) || Number(frame.width) <= 0) frame.width = 1440;
+  if (!Number.isFinite(Number(frame.height)) || Number(frame.height) <= 0) frame.height = 1024;
+  if (typeof frame.layoutMode !== 'string' || frame.layoutMode.trim() === '') frame.layoutMode = 'VERTICAL';
+
+  plan.actions.unshift({
+    type: 'CREATE_FRAME',
+    ref: 'content_root',
+    parent: 'root',
+    name: 'Content',
+    layoutMode: 'VERTICAL',
+    width: 1200,
+    height: 800,
+    itemSpacing: 16,
+  });
+  return plan;
+}
+
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -2328,6 +2362,7 @@ app.post('/api/agents/generate', async (req, res) => {
     const afterModelMs = Date.now();
     phaseTimers.model_ms = afterModelMs - startMs - (phaseTimers.resolve_source_ms || 0);
 
+    actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
     let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2350,6 +2385,7 @@ app.post('/api/agents/generate', async (req, res) => {
       const repaired = extractJsonFromContent(repair?.content);
       if (repaired && typeof repaired === 'object') {
         actionPlan = repaired;
+        actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
         schemaValidation = validateActionPlanSchema(actionPlan);
         dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
         visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);

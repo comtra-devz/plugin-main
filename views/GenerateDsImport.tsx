@@ -225,7 +225,7 @@ function buildTokenAndStyleGapHints(s: DsIndexSummary): ImportGapHint[] {
     hints.push({
       id: 'tokens',
       title: 'No variables (tokens) in this file',
-      body: 'Tokens tie color, spacing, and typography to a single source of truth. When none exist, Generate still runs, but values are less likely to match your published system and library modes.',
+      body: 'Generate still works, but output is less aligned to your DS color, spacing, and type decisions.',
     });
   }
   const st = s.styles_summary;
@@ -234,7 +234,7 @@ function buildTokenAndStyleGapHints(s: DsIndexSummary): ImportGapHint[] {
     hints.push({
       id: 'styles',
       title: 'No local paint, text, or effect styles',
-      body: 'Styles capture how type and surfaces are meant to look in production. Many teams rely only on variables — that is fine — but if you use styles elsewhere, adding them here keeps generated frames closer to your real UI polish.',
+      body: 'Output can be less polished and less consistent with production if your DS relies on local styles.',
     });
   }
   return hints;
@@ -248,7 +248,7 @@ function buildComponentsGapHints(s: DsIndexSummary): ImportGapHint[] {
       {
         id: 'components',
         title: 'No components in the index',
-        body: 'Comtra maps generated layouts to real Figma components and variants. Without a catalog, we cannot anchor screens to the instances you maintain — outputs stay more generic and harder to hand off.',
+        body: 'Without indexed components, Generate cannot anchor layouts to your real variants and stays more generic.',
       },
     ];
   }
@@ -257,36 +257,21 @@ function buildComponentsGapHints(s: DsIndexSummary): ImportGapHint[] {
 
 function WizardImportGapSnackbars({
   hints,
-  dismissedIds,
-  onDismiss,
   ariaLabel,
 }: {
   hints: ImportGapHint[];
-  dismissedIds: Set<string>;
-  onDismiss: (id: string) => void;
   ariaLabel: string;
 }) {
-  const visible = hints.filter((h) => !dismissedIds.has(h.id));
-  if (visible.length === 0) return null;
+  if (hints.length === 0) return null;
   return (
-    <div className="shrink-0 space-y-2 border-t-2 border-dashed border-gray-300 bg-neutral-50 px-3 py-3" role="region" aria-label={ariaLabel}>
-      {visible.map((h) => (
+    <div className="shrink-0 space-y-2" role="region" aria-label={ariaLabel}>
+      {hints.map((h) => (
         <div
           key={h.id}
-          className="flex gap-2 border-2 border-amber-800 bg-amber-50 p-2.5 shadow-[3px_3px_0_0_#000]"
+          className="border-2 border-amber-800 bg-amber-50 p-2.5 shadow-[3px_3px_0_0_#000]"
         >
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase leading-tight tracking-wide text-amber-950">{h.title}</p>
-            <p className="mt-1 text-[11px] font-medium leading-snug text-amber-950/95">{h.body}</p>
-          </div>
-          <button
-            type="button"
-            className="shrink-0 size-7 border-2 border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_0_#000] hover:bg-amber-100"
-            aria-label={`Dismiss: ${h.title}`}
-            onClick={() => onDismiss(h.id)}
-          >
-            ×
-          </button>
+          <p className="text-[10px] font-black uppercase leading-tight tracking-wide text-amber-950">{h.title}</p>
+          <p className="mt-1 text-[11px] font-medium leading-snug text-amber-950/95">{h.body}</p>
         </div>
       ))}
     </div>
@@ -417,16 +402,12 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   /** Minimum dwell on intro steps (Rules + Guidance) with CTA progress bar. */
   const [introStepLoading, setIntroStepLoading] = useState<IntroStepLoading>(null);
   const importFlowCancelledRef = useRef(false);
-  const [dismissedStep2GapIds, setDismissedStep2GapIds] = useState<string[]>([]);
-  const [dismissedStep3GapIds, setDismissedStep3GapIds] = useState<string[]>([]);
   const [componentsScanProgress, setComponentsScanProgress] = useState<{
     pageName: string;
     pageIndex: number;
     pageTotal: number;
     scanned: number;
   } | null>(null);
-  const dismissedStep2GapSet = useMemo(() => new Set(dismissedStep2GapIds), [dismissedStep2GapIds]);
-  const dismissedStep3GapSet = useMemo(() => new Set(dismissedStep3GapIds), [dismissedStep3GapIds]);
 
   const step2GapHints = useMemo(() => {
     if (wizardStep !== 2 || !indexResult || importFlowPhase === 'none') return [];
@@ -437,22 +418,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     if (wizardStep !== 3 || !indexResult || importFlowPhase !== 'full') return [];
     return buildComponentsGapHints(indexResult);
   }, [wizardStep, indexResult, importFlowPhase]);
-
-  useEffect(() => {
-    if (wizardStep !== 2) setDismissedStep2GapIds([]);
-  }, [wizardStep]);
-
-  useEffect(() => {
-    if (wizardStep !== 3) setDismissedStep3GapIds([]);
-  }, [wizardStep]);
-
-  const dismissStep2Gap = useCallback((id: string) => {
-    setDismissedStep2GapIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
-
-  const dismissStep3Gap = useCallback((id: string) => {
-    setDismissedStep3GapIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
 
   useEffect(() => {
     if (!isPro) enforceSingleImportForFreeTier();
@@ -927,7 +892,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             </button>
           </header>
 
-          <div className="shrink-0 border-b-2 border-black bg-neutral-100 pt-4 pb-4">
+          <div className="shrink-0 border-b-2 border-black bg-neutral-100 pt-4 pb-0">
             <ImportFlowStepper currentStep={wizardStep} />
           </div>
 
@@ -1079,8 +1044,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               {step2GapHints.length > 0 && (
                 <WizardImportGapSnackbars
                   hints={step2GapHints}
-                  dismissedIds={dismissedStep2GapSet}
-                  onDismiss={dismissStep2Gap}
                   ariaLabel="Variables and styles notes"
                 />
               )}
@@ -1088,8 +1051,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               {step3GapHints.length > 0 && (
                 <WizardImportGapSnackbars
                   hints={step3GapHints}
-                  dismissedIds={dismissedStep3GapSet}
-                  onDismiss={dismissStep3Gap}
                   ariaLabel="Components catalog notes"
                 />
               )}
