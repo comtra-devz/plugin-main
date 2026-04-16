@@ -682,6 +682,8 @@ async function appendMissingComponentWireframe(
 export type ExecuteActionPlanOptions = {
   /** Fase 6: duplica la selezione e costruisce il nuovo layout nella copia (frame/gruppo/sezione) o sotto di essa. */
   modifyMode?: boolean;
+  /** Segnala avanzamento su operazioni lunghe (import componenti, molte azioni) così la UI può evitare timeout postMessage. */
+  onProgress?: (p: { phase: string; actionIndex?: number }) => void;
 };
 
 function prepareModifyModeCloneHost(page: PageNode): {
@@ -745,12 +747,14 @@ export async function executeActionPlanOnCanvas(
   actionPlan: unknown,
   options?: ExecuteActionPlanOptions,
 ): Promise<{ rootId: string; clonedFromId?: string | null }> {
+  const onProgress = options?.onProgress;
   if (!isRecord(actionPlan)) throw new Error('Action plan non valido');
   const frameSpec = actionPlan.frame;
   const actions = actionPlan.actions;
   if (!isRecord(frameSpec)) throw new Error('Action plan: manca frame');
   if (!Array.isArray(actions)) throw new Error('Action plan: manca actions');
 
+  onProgress?.({ phase: 'init' });
   const varMap = await buildLocalVariableMap();
   try {
     await figma.loadAllPagesAsync();
@@ -760,6 +764,7 @@ export async function executeActionPlanOnCanvas(
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }).catch(() => undefined);
 
   const preflight = await preflightActionPlanExecution(actionPlan, actions, varMap);
+  onProgress?.({ phase: 'post_preflight' });
   const meta = isRecord(actionPlan.metadata) ? actionPlan.metadata : {};
   const mode = String(meta.mode || '').trim().toLowerCase();
   const dsSource = String(meta.ds_source || meta.dsSource || '').trim().toLowerCase();
@@ -798,6 +803,7 @@ export async function executeActionPlanOnCanvas(
 
   for (let i = 0; i < actions.length; i++) {
     if (i > 0 && i % 15 === 0) await yieldToMain();
+    if (i > 0 && i % 12 === 0) onProgress?.({ phase: 'actions', actionIndex: i });
     const raw = actions[i];
     if (!isRecord(raw)) continue;
     const type = String(raw.type || '').trim();

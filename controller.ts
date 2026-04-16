@@ -1640,7 +1640,18 @@ figma.ui.onmessage = async (raw: any) => {
     (async () => {
       setDsContextIndexRefreshSuspended(true);
       try {
-        const { rootId } = await executeActionPlanOnCanvas(actionPlan, { modifyMode });
+        figma.ui.postMessage({ type: 'action-plan-execute-progress', requestId, phase: 'start' });
+        const { rootId } = await executeActionPlanOnCanvas(actionPlan, {
+          modifyMode,
+          onProgress: (p) => {
+            figma.ui.postMessage({
+              type: 'action-plan-execute-progress',
+              requestId,
+              phase: p.phase,
+              actionIndex: p.actionIndex,
+            });
+          },
+        });
         figma.ui.postMessage({ type: 'action-plan-executed', requestId, rootId });
         figma.notify(
           modifyMode

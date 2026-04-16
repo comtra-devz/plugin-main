@@ -646,6 +646,8 @@ export default function AppTest() {
   const actionPlanExecWaitersRef = useRef<
     Map<string, (r: { ok: boolean; error?: string; rootId?: string }) => void>
   >(new Map());
+  /** Timeout UI ↔ main durante execute-action-plan: sliding su heartbeat da controller. */
+  const actionPlanExecTimeoutIdsRef = useRef<Map<string, number>>(new Map());
   const dsContextIndexWaitersRef = useRef<
     Map<string, (r: { index: object | null; hash: string | null; error?: string }) => void>
   >(new Map());
@@ -674,7 +676,28 @@ export default function AppTest() {
     (plan: object, opts?: { modifyMode?: boolean }) => {
       return new Promise<{ ok: boolean; error?: string; rootId?: string }>((resolve) => {
         const requestId = `apx-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-        actionPlanExecWaitersRef.current.set(requestId, resolve);
+        const clearExecTimeout = () => {
+          const tid = actionPlanExecTimeoutIdsRef.current.get(requestId);
+          if (tid != null) {
+            window.clearTimeout(tid);
+            actionPlanExecTimeoutIdsRef.current.delete(requestId);
+          }
+        };
+        const armExecTimeout = () => {
+          clearExecTimeout();
+          const tid = window.setTimeout(() => {
+            if (!actionPlanExecWaitersRef.current.has(requestId)) return;
+            actionPlanExecWaitersRef.current.delete(requestId);
+            clearExecTimeout();
+            resolve({ ok: false, error: 'Timeout: nessuna risposta da Figma.' });
+          }, 120000);
+          actionPlanExecTimeoutIdsRef.current.set(requestId, tid);
+        };
+        const finish = (r: { ok: boolean; error?: string; rootId?: string }) => {
+          clearExecTimeout();
+          resolve(r);
+        };
+        actionPlanExecWaitersRef.current.set(requestId, finish);
         window.parent.postMessage(
           {
             pluginMessage: {
@@ -686,11 +709,7 @@ export default function AppTest() {
           },
           '*'
         );
-        window.setTimeout(() => {
-          if (!actionPlanExecWaitersRef.current.has(requestId)) return;
-          actionPlanExecWaitersRef.current.delete(requestId);
-          resolve({ ok: false, error: 'Timeout: nessuna risposta da Figma.' });
-        }, 25000);
+        armExecTimeout();
       });
     },
     [],
@@ -756,6 +775,11 @@ export default function AppTest() {
         const fn = rid ? actionPlanExecWaitersRef.current.get(rid) : undefined;
         if (fn) {
           actionPlanExecWaitersRef.current.delete(rid);
+          const tid = actionPlanExecTimeoutIdsRef.current.get(rid);
+          if (tid != null) {
+            window.clearTimeout(tid);
+            actionPlanExecTimeoutIdsRef.current.delete(rid);
+          }
           fn({ ok: true, rootId: msg.rootId ? String(msg.rootId) : undefined });
         }
       }
@@ -764,8 +788,27 @@ export default function AppTest() {
         const fn = rid ? actionPlanExecWaitersRef.current.get(rid) : undefined;
         if (fn) {
           actionPlanExecWaitersRef.current.delete(rid);
+          const tid = actionPlanExecTimeoutIdsRef.current.get(rid);
+          if (tid != null) {
+            window.clearTimeout(tid);
+            actionPlanExecTimeoutIdsRef.current.delete(rid);
+          }
           fn({ ok: false, error: String(msg.error || 'Errore creazione su Figma') });
         }
+      }
+      if (msg.type === 'action-plan-execute-progress') {
+        const rid = String(msg.requestId || '');
+        if (!rid || !actionPlanExecWaitersRef.current.has(rid)) return;
+        const tid = actionPlanExecTimeoutIdsRef.current.get(rid);
+        if (tid != null) window.clearTimeout(tid);
+        const newTid = window.setTimeout(() => {
+          if (!actionPlanExecWaitersRef.current.has(rid)) return;
+          const fn = actionPlanExecWaitersRef.current.get(rid);
+          actionPlanExecWaitersRef.current.delete(rid);
+          actionPlanExecTimeoutIdsRef.current.delete(rid);
+          fn?.({ ok: false, error: 'Timeout: nessuna risposta da Figma.' });
+        }, 120000);
+        actionPlanExecTimeoutIdsRef.current.set(rid, newTid);
       }
       if (msg.type === 'ds-context-index-result') {
         const rid = String(msg.requestId || '');
