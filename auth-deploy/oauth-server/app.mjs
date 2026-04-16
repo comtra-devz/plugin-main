@@ -2267,6 +2267,382 @@ function enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsCont
   return plan;
 }
 
+function validateCustomDsIndexReadiness(mode, dsSource, dsIndexForValidation) {
+  const modeNorm = String(mode || '').toLowerCase();
+  if (modeNorm !== 'create' && modeNorm !== 'screenshot') {
+    return { valid: true, errors: [] };
+  }
+  if (!isCustomDsSource(dsSource)) {
+    return { valid: true, errors: [] };
+  }
+  if (!dsIndexForValidation || typeof dsIndexForValidation !== 'object') {
+    return {
+      valid: false,
+      errors: ['Missing ds_context_index for custom DS generation. Re-import design system for this file and retry.'],
+    };
+  }
+  const components = Array.isArray(dsIndexForValidation.components) ? dsIndexForValidation.components : [];
+  const minComponents = Number(process.env.GENERATE_MIN_COMPONENTS_FOR_CUSTOM_DS || 4);
+  if (components.length < minComponents) {
+    return {
+      valid: false,
+      errors: [
+        `ds_context_index has too few components (${components.length}). Minimum required for reliable custom DS generation: ${minComponents}.`,
+      ],
+    };
+  }
+  return { valid: true, errors: [] };
+}
+
+const SLOT_BLUEPRINTS = {
+  login: [
+    { id: 'email_input', required: true, hints: ['email', 'input', 'field', 'text field'] },
+    { id: 'password_input', required: true, hints: ['password', 'input', 'field', 'text field'] },
+    { id: 'primary_cta', required: true, hints: ['button', 'cta', 'primary', 'submit', 'sign in', 'continue'] },
+    { id: 'secondary_action', required: false, hints: ['link', 'secondary', 'forgot', 'reset'] },
+  ],
+  profile: [
+    { id: 'info_row', required: true, hints: ['row', 'item', 'list', 'info'] },
+    { id: 'primary_cta', required: false, hints: ['button', 'cta', 'primary', 'save', 'edit'] },
+  ],
+  dashboard: [
+    { id: 'stat_card', required: true, hints: ['card', 'stat', 'metric', 'tile'] },
+    { id: 'action_button', required: false, hints: ['button', 'cta', 'primary'] },
+  ],
+  form: [
+    { id: 'form_input', required: true, hints: ['input', 'field', 'text field', 'select', 'dropdown'] },
+    { id: 'primary_cta', required: true, hints: ['button', 'cta', 'primary', 'submit', 'continue'] },
+  ],
+};
+
+function componentScoreForSlot(name, slotHints, promptTokens) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return -999;
+  let score = 0;
+  for (const h of slotHints) {
+    if (n.includes(h)) score += 4;
+  }
+  for (const t of promptTokens) {
+    if (t.length > 2 && n.includes(t)) score += 1;
+  }
+  if (/\b(step|progress|wizard|breadcrumb|timeline)\b/i.test(n)) score -= 10;
+  return score;
+}
+
+function buildSlotCandidatePack(dsIndexForValidation, archetype, prompt) {
+  if (!dsIndexForValidation || typeof dsIndexForValidation !== 'object') return null;
+  const components = Array.isArray(dsIndexForValidation.components) ? dsIndexForValidation.components : [];
+  if (!components.length) return null;
+  const slots = SLOT_BLUEPRINTS[archetype] || [];
+  if (!slots.length) return null;
+  const promptTokens = String(prompt || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean);
+
+  const out = [];
+  for (const slot of slots) {
+    const ranked = components
+      .map((c) => ({
+        c,
+        score: componentScoreForSlot(c?.name, slot.hints || [], promptTokens),
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((x) => ({
+        id: String(x.c?.id || ''),
+        componentKey: String(x.c?.componentKey || x.c?.component_key || ''),
+        name: String(x.c?.name || ''),
+      }));
+    if (ranked.length > 0) {
+      out.push({
+        id: slot.id,
+        required: Boolean(slot.required),
+        hints: slot.hints || [],
+        candidates: ranked,
+      });
+    }
+  }
+  return out.length ? { archetype, slots: out } : null;
+}
+
+function formatSlotCandidateBlock(pack) {
+  if (!pack || !Array.isArray(pack.slots) || pack.slots.length === 0) return '';
+  return [
+    '',
+    '[COMPONENT_SLOT_CANDIDATES]',
+    'Use INSTANCE_COMPONENT picks from these slot candidates first (exact key/id).',
+    JSON.stringify(pack),
+    '[END COMPONENT_SLOT_CANDIDATES]',
+  ].join('\n');
+}
+
+function assignSlotToAction(action, slotPack) {
+  const n = String(action?.name || '').toLowerCase();
+  if (!n || !slotPack?.slots?.length) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const s of slotPack.slots) {
+    let score = 0;
+    for (const h of s.hints || []) {
+      if (n.includes(String(h).toLowerCase())) score += 1;
+    }
+    if (score > bestScore) {
+      best = s;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function enforceSlotCandidateBinding(actionPlan, slotPack) {
+  if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
+  if (!slotPack || !Array.isArray(slotPack.slots) || !slotPack.slots.length) return actionPlan;
+  const plan = actionPlan;
+  if (!Array.isArray(plan.actions)) return plan;
+  for (let i = 0; i < plan.actions.length; i++) {
+    const a = plan.actions[i];
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+    const slot = assignSlotToAction(a, slotPack);
+    if (!slot || !Array.isArray(slot.candidates) || slot.candidates.length === 0) continue;
+    const currentId = String(a.component_node_id || a.componentNodeId || '').trim();
+    const currentKey = String(a.component_key || a.componentKey || a.component_id || '').trim();
+    const alreadyValid = slot.candidates.some(
+      (c) => (c.id && c.id === currentId) || (c.componentKey && c.componentKey === currentKey),
+    );
+    if (alreadyValid) continue;
+    const chosen = slot.candidates[0];
+    if (chosen.componentKey) a.component_key = chosen.componentKey;
+    if (chosen.id) a.component_node_id = chosen.id;
+  }
+  return plan;
+}
+
+function validateSlotCoverage(actionPlan, slotPack) {
+  if (!slotPack || !Array.isArray(slotPack.slots) || !slotPack.slots.length) return { valid: true, errors: [] };
+  if (!actionPlan || typeof actionPlan !== 'object') return { valid: true, errors: [] };
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  const covered = new Set();
+  for (const a of actions) {
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+    const id = String(a.component_node_id || a.componentNodeId || '').trim();
+    const key = String(a.component_key || a.componentKey || a.component_id || '').trim();
+    for (const s of slotPack.slots) {
+      const ok = (s.candidates || []).some((c) => (c.id && c.id === id) || (c.componentKey && c.componentKey === key));
+      if (ok) covered.add(s.id);
+    }
+  }
+  const missing = slotPack.slots.filter((s) => s.required && !covered.has(s.id)).map((s) => s.id);
+  if (missing.length) {
+    return {
+      valid: false,
+      errors: [`Required component slots not covered by valid DS instance candidates: ${missing.join(', ')}`],
+    };
+  }
+  return { valid: true, errors: [] };
+}
+
+function validateLayoutQualityContract(actionPlan, prompt, mode, dsSource, dsIndexForValidation, slotPack) {
+  const modeNorm = String(mode || '').toLowerCase();
+  if (modeNorm !== 'create' && modeNorm !== 'screenshot') return { valid: true, errors: [] };
+  if (!actionPlan || typeof actionPlan !== 'object') return { valid: true, errors: [] };
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  if (!actions.length) return { valid: false, errors: ['Action plan has no actions.'] };
+
+  const isDesktop = /\bdesktop\b/i.test(String(prompt || ''));
+  const isCustom = isCustomDsSource(dsSource);
+  const componentsInIndex = Array.isArray(dsIndexForValidation?.components) ? dsIndexForValidation.components.length : 0;
+  const minInstances = Number(process.env.GENERATE_QUALITY_MIN_INSTANCES || (isDesktop ? 3 : 2));
+  const minFrames = Number(process.env.GENERATE_QUALITY_MIN_FRAMES || (isDesktop ? 2 : 1));
+
+  let instanceCount = 0;
+  let frameCount = 0;
+  let textCount = 0;
+  for (const a of actions) {
+    const t = String(a?.type || '').toUpperCase();
+    if (t === 'INSTANCE_COMPONENT') instanceCount += 1;
+    if (t === 'CREATE_FRAME') frameCount += 1;
+    if (t === 'CREATE_TEXT') textCount += 1;
+  }
+
+  const errors = [];
+  if (frameCount < minFrames) {
+    errors.push(`Layout contract: requires at least ${minFrames} CREATE_FRAME actions (found ${frameCount}).`);
+  }
+  if (isCustom && componentsInIndex > 0 && instanceCount < minInstances) {
+    errors.push(
+      `Layout contract: requires at least ${minInstances} INSTANCE_COMPONENT actions for custom DS output (found ${instanceCount}).`,
+    );
+  }
+  if (textCount < 1) {
+    errors.push('Layout contract: requires at least one CREATE_TEXT action for visible semantic content.');
+  }
+
+  const requiredSlots = (slotPack?.slots || []).filter((s) => s.required).length;
+  if (requiredSlots >= 2 && instanceCount < 2) {
+    errors.push(
+      `Layout contract: this archetype expects multiple DS component slots; at least 2 INSTANCE_COMPONENT required (found ${instanceCount}).`,
+    );
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+function summarizeActionPlanShape(actionPlan) {
+  const actions = Array.isArray(actionPlan?.actions) ? actionPlan.actions : [];
+  let createFrame = 0;
+  let createText = 0;
+  let createRect = 0;
+  let instanceComponent = 0;
+  const componentRefs = [];
+  for (const a of actions) {
+    const t = String(a?.type || '').toUpperCase();
+    if (t === 'CREATE_FRAME') createFrame += 1;
+    if (t === 'CREATE_TEXT') createText += 1;
+    if (t === 'CREATE_RECT') createRect += 1;
+    if (t === 'INSTANCE_COMPONENT') {
+      instanceComponent += 1;
+      const componentKey = String(a?.component_key || a?.componentKey || a?.component_id || '').trim();
+      const componentNodeId = String(a?.component_node_id || a?.componentNodeId || '').trim();
+      if (componentKey || componentNodeId) {
+        componentRefs.push({ component_key: componentKey || null, component_node_id: componentNodeId || null });
+      }
+    }
+  }
+  return {
+    actions_total: actions.length,
+    create_frame: createFrame,
+    create_text: createText,
+    create_rect: createRect,
+    instance_component: instanceComponent,
+    component_refs_sample: componentRefs.slice(0, 12),
+  };
+}
+
+function summarizeSlotPack(slotPack) {
+  if (!slotPack || !Array.isArray(slotPack.slots)) return null;
+  return {
+    archetype: slotPack.archetype || null,
+    slots_total: slotPack.slots.length,
+    required_slots: slotPack.slots.filter((s) => s.required).map((s) => s.id),
+    candidate_counts: slotPack.slots.map((s) => ({ id: s.id, count: Array.isArray(s.candidates) ? s.candidates.length : 0 })),
+  };
+}
+
+function snapshotValidationState(validators) {
+  return {
+    schema: Boolean(validators.schemaValidation?.valid),
+    ds: Boolean(validators.dsValidation?.valid),
+    visible: Boolean(validators.visibleValidation?.valid),
+    public_ds_instance: Boolean(validators.publicDsInstanceValidation?.valid),
+    custom_ds_instances: Boolean(validators.customDsInstanceValidation?.valid),
+    semantic_fit: Boolean(validators.semanticFitValidation?.valid),
+    desktop_structure: Boolean(validators.desktopStructureValidation?.valid),
+    slot_coverage: Boolean(validators.slotCoverageValidation?.valid),
+    quality_contract: Boolean(validators.qualityContractValidation?.valid),
+  };
+}
+
+function buildDeterministicFallbackPlan({
+  prompt,
+  mode,
+  dsSource,
+  dsIndexForValidation,
+  slotPack,
+  inferredScreenArchetype,
+  baseMetadata,
+}) {
+  const modeNorm = String(mode || '').toLowerCase();
+  if (modeNorm !== 'create' && modeNorm !== 'screenshot') return null;
+  if (!isCustomDsSource(dsSource)) return null;
+  if (!slotPack || !Array.isArray(slotPack.slots) || slotPack.slots.length === 0) return null;
+  const components = Array.isArray(dsIndexForValidation?.components) ? dsIndexForValidation.components : [];
+  if (!components.length) return null;
+
+  const actions = [];
+  actions.push({
+    type: 'CREATE_FRAME',
+    ref: 'root_content',
+    parent: 'root',
+    name: 'Content',
+    layoutMode: 'VERTICAL',
+    width: /\bdesktop\b/i.test(String(prompt || '')) ? 1200 : 390,
+    height: /\bdesktop\b/i.test(String(prompt || '')) ? 820 : 780,
+    itemSpacing: 16,
+    paddingTop: 24,
+    paddingRight: 24,
+    paddingBottom: 24,
+    paddingLeft: 24,
+  });
+  actions.push({
+    type: 'CREATE_TEXT',
+    parent: 'root_content',
+    name: 'Screen Title',
+    text: inferredScreenArchetype === 'login' ? 'Welcome back' : 'Generated screen',
+  });
+
+  const pickFromSlot = (slotId) => slotPack.slots.find((s) => s.id === slotId)?.candidates?.[0] || null;
+  const requiredSlots = slotPack.slots.filter((s) => s.required);
+  const used = new Set();
+
+  for (const s of requiredSlots) {
+    let candidate = pickFromSlot(s.id);
+    if (!candidate) {
+      candidate = components
+        .map((c) => ({
+          id: String(c?.id || ''),
+          componentKey: String(c?.componentKey || c?.component_key || ''),
+          name: String(c?.name || ''),
+        }))
+        .find((c) => c.id || c.componentKey);
+    }
+    if (!candidate) continue;
+    const uniq = `${candidate.componentKey || ''}::${candidate.id || ''}`;
+    if (used.has(uniq)) continue;
+    used.add(uniq);
+    actions.push({
+      type: 'INSTANCE_COMPONENT',
+      parent: 'root_content',
+      name: `${s.id}_instance`,
+      ...(candidate.componentKey ? { component_key: candidate.componentKey } : {}),
+      ...(candidate.id ? { component_node_id: candidate.id } : {}),
+    });
+  }
+
+  if (requiredSlots.length === 0) {
+    const firstCandidate = slotPack.slots[0]?.candidates?.[0];
+    if (firstCandidate) {
+      actions.push({
+        type: 'INSTANCE_COMPONENT',
+        parent: 'root_content',
+        name: 'primary_component',
+        ...(firstCandidate.componentKey ? { component_key: firstCandidate.componentKey } : {}),
+        ...(firstCandidate.id ? { component_node_id: firstCandidate.id } : {}),
+      });
+    }
+  }
+
+  if (!actions.some((a) => String(a.type || '').toUpperCase() === 'INSTANCE_COMPONENT')) return null;
+
+  return {
+    frame: {
+      name: inferredScreenArchetype === 'login' ? 'Login Screen' : 'Generated Screen',
+      width: /\bdesktop\b/i.test(String(prompt || '')) ? 1440 : 390,
+      height: /\bdesktop\b/i.test(String(prompt || '')) ? 1024 : 844,
+      layoutMode: 'VERTICAL',
+    },
+    actions,
+    metadata: {
+      ...(baseMetadata && typeof baseMetadata === 'object' ? baseMetadata : {}),
+      fallback_strategy: 'deterministic_slot_blueprint',
+      fallback_applied: true,
+    },
+  };
+}
+
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -2340,6 +2716,12 @@ app.post('/api/agents/generate', async (req, res) => {
   let totalOutputTokens = 0;
   let generationPipeline = 'legacy_ab';
   let dualPipelineSucceeded = false;
+  const repairStats = {
+    repair_passes_attempted: 0,
+    repair_passes_with_valid_json: 0,
+    semantic_escape_hatch_attempted: false,
+    semantic_escape_hatch_with_valid_json: false,
+  };
 
   let systemPrompt;
   try {
@@ -2372,6 +2754,14 @@ app.post('/api/agents/generate', async (req, res) => {
       dsContextIndex && typeof dsContextIndex === 'object' && !Array.isArray(dsContextIndex)
         ? dsContextIndex
         : null;
+    const customDsIndexReadiness = validateCustomDsIndexReadiness(mode, dsSource, dsIndexForValidation);
+    if (!customDsIndexReadiness.valid) {
+      return res.status(412).json({
+        error: 'Custom DS context index is missing or incomplete',
+        code: 'DS_CONTEXT_INDEX_REQUIRED',
+        details: customDsIndexReadiness.errors,
+      });
+    }
     const dsIndexSlim = dsIndexForValidation
       ? buildDsSlimIndex(dsIndexForValidation, {
           maxComponents: Number(process.env.GENERATE_DS_SLIM_COMPONENTS || 120),
@@ -2406,6 +2796,12 @@ app.post('/api/agents/generate', async (req, res) => {
         ].join('\n')
       : '';
     const inferredScreenArchetype = inferFocusedScreenType(prompt);
+    const slotCandidatePack = buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
+    const slotCandidateBlock = formatSlotCandidateBlock(slotCandidatePack);
+    const qualityContractLine =
+      mode === 'create' || mode === 'screenshot'
+        ? 'QUALITY CONTRACT: produce a coherent, visible screen with real DS instances (not primitives-only), meaningful hierarchy, and semantic role coverage for the inferred archetype.'
+        : null;
     const designIntelBlock = formatDesignIntelligenceForPrompt(docContextKey, {
       focusScreenType: inferredScreenArchetype,
     });
@@ -2429,8 +2825,10 @@ app.post('/api/agents/generate', async (req, res) => {
       'Use only variable references (no raw hex/px).',
       ...(primaryCustomDsSuccessLine ? [primaryCustomDsSuccessLine] : []),
       ...(semanticGuardrailLine ? [semanticGuardrailLine] : []),
+      ...(qualityContractLine ? [qualityContractLine] : []),
       dsContextBlock,
       dsIndexBlock,
+      slotCandidateBlock,
       designIntelBlock,
     ].join('\n');
 
@@ -2490,6 +2888,7 @@ app.post('/api/agents/generate', async (req, res) => {
     actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
     actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
     actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
+    actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
     let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2501,6 +2900,15 @@ app.post('/api/agents/generate', async (req, res) => {
     );
     let semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
     let desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
+    let slotCoverageValidation = validateSlotCoverage(actionPlan, slotCandidatePack);
+    let qualityContractValidation = validateLayoutQualityContract(
+      actionPlan,
+      prompt,
+      mode,
+      dsSource,
+      dsIndexForValidation,
+      slotCandidatePack,
+    );
     const mustRepair =
       !schemaValidation.valid ||
       !dsValidation.valid ||
@@ -2508,7 +2916,9 @@ app.post('/api/agents/generate', async (req, res) => {
       !publicDsInstanceValidation.valid ||
       !customDsInstanceValidation.valid ||
       !semanticFitValidation.valid ||
-      !desktopStructureValidation.valid;
+      !desktopStructureValidation.valid ||
+      !slotCoverageValidation.valid ||
+      !qualityContractValidation.valid;
     if (mustRepair) {
       const structuralErrors = [
         ...schemaValidation.errors.map((e) => `schema: ${e}`),
@@ -2520,9 +2930,12 @@ app.post('/api/agents/generate', async (req, res) => {
         ...publicDsInstanceValidation.errors.map((e) => `public_ds: ${e}`),
         ...customDsInstanceValidation.errors.map((e) => `custom_ds_instances: ${e}`),
         ...semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`),
+        ...slotCoverageValidation.errors.map((e) => `slot_coverage: ${e}`),
+        ...qualityContractValidation.errors.map((e) => `quality_contract: ${e}`),
       ];
       const repairPasses = [structuralErrors, dsErrors].filter((errs) => errs.length > 0);
       for (let pass = 0; pass < repairPasses.length; pass++) {
+        repairStats.repair_passes_attempted += 1;
         const repair = await repairActionPlanWithKimi(
           systemPrompt,
           actionPlan,
@@ -2533,10 +2946,12 @@ app.post('/api/agents/generate', async (req, res) => {
         totalOutputTokens += Math.max(0, Number(repair?.usage?.output_tokens ?? repair?.usage?.completion_tokens ?? 0));
         const repaired = extractJsonFromContent(repair?.content);
         if (repaired && typeof repaired === 'object') {
+          repairStats.repair_passes_with_valid_json += 1;
           actionPlan = repaired;
           actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
           actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
           actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
+          actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
           schemaValidation = validateActionPlanSchema(actionPlan);
           dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
           visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2548,12 +2963,22 @@ app.post('/api/agents/generate', async (req, res) => {
           );
           semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
           desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
+          slotCoverageValidation = validateSlotCoverage(actionPlan, slotCandidatePack);
+          qualityContractValidation = validateLayoutQualityContract(
+            actionPlan,
+            prompt,
+            mode,
+            dsSource,
+            dsIndexForValidation,
+            slotCandidatePack,
+          );
         }
       }
     }
 
     // Final targeted semantic pass (escape hatch): try once more before returning 422.
     if (!semanticFitValidation.valid) {
+      repairStats.semantic_escape_hatch_attempted = true;
       const semanticOnlyErrors = semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`);
       const semanticRepair = await repairActionPlanWithKimi(
         systemPrompt,
@@ -2574,10 +2999,12 @@ app.post('/api/agents/generate', async (req, res) => {
       );
       const repairedSemantic = extractJsonFromContent(semanticRepair?.content);
       if (repairedSemantic && typeof repairedSemantic === 'object') {
+        repairStats.semantic_escape_hatch_with_valid_json = true;
         actionPlan = repairedSemantic;
         actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
+        actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
         schemaValidation = validateActionPlanSchema(actionPlan);
         dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
         visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2589,6 +3016,60 @@ app.post('/api/agents/generate', async (req, res) => {
         );
         semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
         desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
+        slotCoverageValidation = validateSlotCoverage(actionPlan, slotCandidatePack);
+        qualityContractValidation = validateLayoutQualityContract(
+          actionPlan,
+          prompt,
+          mode,
+          dsSource,
+          dsIndexForValidation,
+          slotCandidatePack,
+        );
+      }
+    }
+
+    // P4: final deterministic fallback before returning hard 422 for custom DS create/screenshot flows.
+    const fallbackNeeded =
+      !customDsInstanceValidation.valid ||
+      !semanticFitValidation.valid ||
+      !slotCoverageValidation.valid ||
+      !qualityContractValidation.valid;
+    if (fallbackNeeded) {
+      const deterministicFallback = buildDeterministicFallbackPlan({
+        prompt,
+        mode,
+        dsSource,
+        dsIndexForValidation,
+        slotPack: slotCandidatePack,
+        inferredScreenArchetype,
+        baseMetadata: actionPlan?.metadata,
+      });
+      if (deterministicFallback && typeof deterministicFallback === 'object') {
+        actionPlan = deterministicFallback;
+        actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+        actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
+        actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
+        actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
+        schemaValidation = validateActionPlanSchema(actionPlan);
+        dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
+        visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
+        publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
+        customDsInstanceValidation = validateCustomFileDsRequiresComponentInstances(
+          actionPlan,
+          dsSource,
+          dsIndexForValidation,
+        );
+        semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
+        desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
+        slotCoverageValidation = validateSlotCoverage(actionPlan, slotCandidatePack);
+        qualityContractValidation = validateLayoutQualityContract(
+          actionPlan,
+          prompt,
+          mode,
+          dsSource,
+          dsIndexForValidation,
+          slotCandidatePack,
+        );
       }
     }
 
@@ -2642,6 +3123,20 @@ app.post('/api/agents/generate', async (req, res) => {
         details: desktopStructureValidation.errors,
       });
     }
+    if (!slotCoverageValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan does not cover required DS component slots for this prompt archetype',
+        code: 'SLOT_CANDIDATE_COVERAGE_FAILED',
+        details: slotCoverageValidation.errors,
+      });
+    }
+    if (!qualityContractValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan does not satisfy layout quality contract',
+        code: 'QUALITY_CONTRACT_FAILED',
+        details: qualityContractValidation.errors,
+      });
+    }
 
     const fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
     if (!fileIndexValidation.skipped && !fileIndexValidation.valid) {
@@ -2680,6 +3175,31 @@ app.post('/api/agents/generate', async (req, res) => {
       component_keys_seen: fileIndexValidation.used?.componentKeys?.length ?? 0,
       variable_refs_seen: fileIndexValidation.used?.variableRefs?.length ?? 0,
     };
+    const validationStateFinal = snapshotValidationState({
+      schemaValidation,
+      dsValidation,
+      visibleValidation,
+      publicDsInstanceValidation,
+      customDsInstanceValidation,
+      semanticFitValidation,
+      desktopStructureValidation,
+      slotCoverageValidation,
+      qualityContractValidation,
+    });
+    const actionPlanShape = summarizeActionPlanShape(actionPlan);
+    const slotPackSummary = summarizeSlotPack(slotCandidatePack);
+    actionPlan.metadata.generation_diagnostics = {
+      pipeline: generationPipeline,
+      phase_timers: phaseTimers,
+      repair: repairStats,
+      validation_state_final: validationStateFinal,
+      action_plan_shape: actionPlanShape,
+      slot_candidates: slotPackSummary,
+      token_usage: {
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+      },
+    };
 
     if (screenshotDataUrl) {
       const metaEc = Number(actionPlan.metadata.estimated_credits);
@@ -2698,6 +3218,9 @@ app.post('/api/agents/generate', async (req, res) => {
     phaseTimers.validation_ms =
       Date.now() - afterModelMs;
     phaseTimers.total_ms = latencyMs;
+    actionPlan.metadata.generation_diagnostics.phase_timers = phaseTimers;
+
+    const responseDiagnostics = actionPlan.metadata.generation_diagnostics;
 
     if (dbSql) {
       dbSql`
@@ -2712,6 +3235,17 @@ app.post('/api/agents/generate', async (req, res) => {
       `.catch(() => ({ rows: [] }));
       const requestId = ins?.rows?.[0]?.id ?? null;
 
+      console.info(
+        '[generate_diagnostics]',
+        JSON.stringify({
+          request_id: requestId,
+          user_id: userId,
+          ds_source: dsSource,
+          ds_id: dsPackage?.ds_id || resolvedDsId || null,
+          diagnostics: responseDiagnostics,
+        }),
+      );
+
       res.json({
         action_plan: actionPlan,
         variant,
@@ -2719,8 +3253,19 @@ app.post('/api/agents/generate', async (req, res) => {
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
         phase_timers: phaseTimers,
+        generation_diagnostics: responseDiagnostics,
       });
     } else {
+      console.info(
+        '[generate_diagnostics]',
+        JSON.stringify({
+          request_id: null,
+          user_id: userId,
+          ds_source: dsSource,
+          ds_id: dsPackage?.ds_id || resolvedDsId || null,
+          diagnostics: responseDiagnostics,
+        }),
+      );
       res.json({
         action_plan: actionPlan,
         variant,
@@ -2728,6 +3273,7 @@ app.post('/api/agents/generate', async (req, res) => {
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
         phase_timers: phaseTimers,
+        generation_diagnostics: responseDiagnostics,
       });
     }
   } catch (err) {
