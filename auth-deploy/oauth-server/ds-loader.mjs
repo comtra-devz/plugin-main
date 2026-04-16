@@ -417,6 +417,98 @@ export function validateCustomFileDsRequiresComponentInstances(actionPlan, dsSou
   };
 }
 
+function resolveComponentRefFromIndex(action, components) {
+  const nodeId = String(action?.component_node_id || action?.componentNodeId || '').trim();
+  const key = String(action?.component_key || action?.componentKey || action?.component_id || '').trim();
+  if (nodeId) {
+    const byId = components.find((c) => String(c?.id || '').trim() === nodeId);
+    if (byId) return byId;
+  }
+  if (key) {
+    const k = key.toLowerCase();
+    const byKey = components.find((c) => String(c?.componentKey || c?.component_key || '').trim().toLowerCase() === k);
+    if (byKey) return byKey;
+    const byName = components.find((c) => String(c?.name || '').trim().toLowerCase() === k);
+    if (byName) return byName;
+  }
+  return null;
+}
+
+/**
+ * Hard guardrail: avoid semantically wrong components for common archetypes (e.g. Steps used as Input/Button in login).
+ */
+export function validateActionPlanComponentSemanticFit(actionPlan, dsContextIndex, userPrompt) {
+  if (!actionPlan || typeof actionPlan !== 'object') return { valid: true, errors: [] };
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') return { valid: true, errors: [] };
+  const components = Array.isArray(dsContextIndex.components) ? dsContextIndex.components : [];
+  if (components.length === 0) return { valid: true, errors: [] };
+
+  const prompt = String(userPrompt || '').toLowerCase();
+  const loginLike = /\b(login|sign[\s-]?in|auth|password|email)\b/i.test(prompt);
+  const stepLikePrompt = /\b(step|wizard|progress|breadcrumb|timeline)\b/i.test(prompt);
+  if (!loginLike || stepLikePrompt) return { valid: true, errors: [] };
+
+  const forbiddenRe = /\b(step|steps|wizard|progress|breadcrumb|timeline)\b/i;
+  const errors = [];
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+    const c = resolveComponentRefFromIndex(a, components);
+    const compName = String(c?.name || '').trim();
+    if (compName && forbiddenRe.test(compName)) {
+      errors.push(
+        `actions[${i}] INSTANCE_COMPONENT resolves to "${compName}", semantically incompatible with login/auth screens (step/progress-like component selected).`,
+      );
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Basic structural quality gate for desktop create flows (prevents tiny mobile-like stacks in 1440x900 roots).
+ */
+export function validateDesktopCreateStructure(actionPlan, userPrompt) {
+  if (!actionPlan || typeof actionPlan !== 'object') return { valid: true, errors: [] };
+  const mode = String(actionPlan.metadata?.mode || '').trim().toLowerCase();
+  if (mode !== 'create' && mode !== 'screenshot') return { valid: true, errors: [] };
+  const prompt = String(userPrompt || '').toLowerCase();
+  if (!/\bdesktop\b/i.test(prompt)) return { valid: true, errors: [] };
+
+  const frame = actionPlan.frame && typeof actionPlan.frame === 'object' ? actionPlan.frame : {};
+  const fw = Number(frame.width);
+  const fh = Number(frame.height);
+  const errors = [];
+  if (!Number.isFinite(fw) || fw < 1024) {
+    errors.push(`Desktop layout requires frame.width >= 1024 (found: ${Number.isFinite(fw) ? fw : 'n/a'}).`);
+  }
+  if (!Number.isFinite(fh) || fh < 700) {
+    errors.push(`Desktop layout requires frame.height >= 700 (found: ${Number.isFinite(fh) ? fh : 'n/a'}).`);
+  }
+
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  let sizableRootChildFrame = false;
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'CREATE_FRAME') continue;
+    const rawParent = a.parentId ?? a.parent;
+    const parent = rawParent == null || String(rawParent).trim() === '' ? 'root' : String(rawParent).trim();
+    if (parent !== 'root') continue;
+    const w = Number(a.width);
+    const h = Number(a.height);
+    if (Number.isFinite(w) && w >= 280 && Number.isFinite(h) && h >= 240) {
+      sizableRootChildFrame = true;
+      break;
+    }
+  }
+  if (!sizableRootChildFrame) {
+    errors.push('Desktop layout requires at least one substantial CREATE_FRAME directly under root (min 280x240).');
+  }
+  return { valid: errors.length === 0, errors };
+}
+
 const FIGMA_NODE_ID_RE = /^\d+:\d+$/;
 
 function normalizeFileVarRef(s) {

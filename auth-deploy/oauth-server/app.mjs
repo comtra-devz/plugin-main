@@ -35,6 +35,8 @@ import {
   validateActionPlanVisiblePrimitives,
   validateActionPlanNoInstanceForPublicDs,
   validateCustomFileDsRequiresComponentInstances,
+  validateActionPlanComponentSemanticFit,
+  validateDesktopCreateStructure,
   isCustomDsSource,
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
@@ -2407,12 +2409,16 @@ app.post('/api/agents/generate', async (req, res) => {
       dsSource,
       dsIndexForValidation,
     );
+    let semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
+    let desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
     const mustRepair =
       !schemaValidation.valid ||
       !dsValidation.valid ||
       !visibleValidation.valid ||
       !publicDsInstanceValidation.valid ||
-      !customDsInstanceValidation.valid;
+      !customDsInstanceValidation.valid ||
+      !semanticFitValidation.valid ||
+      !desktopStructureValidation.valid;
     if (mustRepair) {
       const firstPassErrors = [
         ...schemaValidation.errors.map((e) => `schema: ${e}`),
@@ -2420,6 +2426,8 @@ app.post('/api/agents/generate', async (req, res) => {
         ...visibleValidation.errors.map((e) => `visible: ${e}`),
         ...publicDsInstanceValidation.errors.map((e) => `public_ds: ${e}`),
         ...customDsInstanceValidation.errors.map((e) => `custom_ds_instances: ${e}`),
+        ...semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`),
+        ...desktopStructureValidation.errors.map((e) => `desktop_structure: ${e}`),
       ];
       const repair = await repairActionPlanWithKimi(systemPrompt, actionPlan, firstPassErrors, `User prompt: ${prompt}\n\n${contextBlob}`);
       totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
@@ -2437,6 +2445,8 @@ app.post('/api/agents/generate', async (req, res) => {
           dsSource,
           dsIndexForValidation,
         );
+        semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
+        desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
       }
     }
 
@@ -2474,6 +2484,20 @@ app.post('/api/agents/generate', async (req, res) => {
         error: 'Custom design system requires at least one component instance in the action plan',
         code: 'CUSTOM_DS_INSTANCES_REQUIRED',
         details: customDsInstanceValidation.errors,
+      });
+    }
+    if (!semanticFitValidation.valid) {
+      return res.status(422).json({
+        error: 'Action plan selected semantically incompatible DS components',
+        code: 'COMPONENT_SEMANTIC_MISMATCH',
+        details: semanticFitValidation.errors,
+      });
+    }
+    if (!desktopStructureValidation.valid) {
+      return res.status(422).json({
+        error: 'Desktop structure is not coherent for this prompt',
+        code: 'DESKTOP_STRUCTURE_INVALID',
+        details: desktopStructureValidation.errors,
       });
     }
 
