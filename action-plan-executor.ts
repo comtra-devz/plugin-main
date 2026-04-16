@@ -47,6 +47,63 @@ function lookupVariable(varMap: VarMap, ref: string): Variable | null {
   );
 }
 
+const VARIABLE_ID_CACHE_PREFIX = 'comtra_var_key::';
+
+function registerVariableInMap(varMap: VarMap, variable: Variable): void {
+  const name = String(variable.name || '').toLowerCase().trim();
+  if (name) {
+    varMap.set(name, variable);
+    varMap.set(name.replace(/\//g, '.'), variable);
+    varMap.set(normTokenKey(name), variable);
+  }
+  const key = String((variable as { key?: string }).key || '').toLowerCase().trim();
+  if (key) varMap.set(key, variable);
+}
+
+function looksLikeVariableKey(raw: string): boolean {
+  const s = String(raw || '').trim();
+  return /^[a-zA-Z0-9_-]{20,}$/.test(s) && !s.includes('/') && !s.includes('.');
+}
+
+async function resolveVariableForExecution(varMap: VarMap, ref: string): Promise<Variable | null> {
+  const raw = String(ref || '').trim();
+  if (!raw) return null;
+  const local = lookupVariable(varMap, raw);
+  if (local) return local;
+  if (!looksLikeVariableKey(raw)) return null;
+
+  const cacheKey = `${VARIABLE_ID_CACHE_PREFIX}${raw}`;
+  try {
+    const cachedId = await figma.clientStorage.getAsync(cacheKey);
+    if (typeof cachedId === 'string' && cachedId.trim()) {
+      try {
+        const cachedVar = await figma.variables.getVariableByIdAsync(cachedId.trim());
+        if (cachedVar) {
+          registerVariableInMap(varMap, cachedVar);
+          return cachedVar;
+        }
+      } catch {
+        /* stale cache -> continue with import */
+      }
+    }
+  } catch {
+    /* storage best effort */
+  }
+
+  try {
+    const imported = await figma.variables.importVariableByKeyAsync(raw);
+    registerVariableInMap(varMap, imported);
+    try {
+      await figma.clientStorage.setAsync(cacheKey, imported.id);
+    } catch {
+      /* cache best effort */
+    }
+    return imported;
+  } catch {
+    return null;
+  }
+}
+
 function nextPlacementOnPage(page: PageNode): { x: number; y: number } {
   let maxRight = -Infinity;
   let minTop = Infinity;
@@ -367,63 +424,135 @@ async function getComponentNodeByFigmaId(nodeId: string): Promise<ComponentNode 
   return null;
 }
 
-/**
- * Cerca in tutto il file (tutte le pagine), prova match su segmenti del path DS, poi import da libreria pubblicata se la chiave è una component key Figma.
- */
-async function resolveComponentForInstanceBySearch(hint: string): Promise<ComponentNode | null> {
-  const rawKey = hint.trim();
-  if (!rawKey) return null;
-  const h = rawKey.toLowerCase();
-  const nodes = collectAllLocalComponents();
-  const segments = h.split(/[/_.\s-]+/).filter((s) => s.length > 1);
-
-  for (const n of nodes) {
-    const nm = n.name.toLowerCase();
-    if (nm.includes(h) || n.id.toLowerCase() === h) return pickFromSet(n);
-  }
-  if (segments.length >= 2) {
-    for (const n of nodes) {
-      const nm = n.name.toLowerCase();
-      if (segments.every((seg) => nm.includes(seg))) return pickFromSet(n);
-    }
-  }
-  const last = segments[segments.length - 1];
-  if (last && last.length > 2) {
-    for (const n of nodes) {
-      const nm = n.name.toLowerCase();
-      if (nm.includes(last)) return pickFromSet(n);
-    }
-  }
-
-  const looksLikeFigmaKey =
-    /^[a-f0-9]{32,}$/i.test(rawKey) || (/^[a-zA-Z0-9_-]{22,}$/.test(rawKey) && !rawKey.includes('/') && !rawKey.includes('.'));
-  if (looksLikeFigmaKey) {
-    try {
-      return await figma.importComponentByKeyAsync(rawKey);
-    } catch {
-      /* libreria non collegata o chiave errata */
-    }
-  }
-  return null;
-}
-
-async function resolveComponentForInstance(hints: { nodeId?: string; componentKey?: string; fallback?: string }): Promise<ComponentNode | null> {
+async function resolveComponentForInstance(hints: {
+  nodeId?: string;
+  componentKey?: string;
+  componentName?: string;
+}): Promise<ComponentNode | null> {
   const rawNodeId = String(hints.nodeId || '').trim();
   const rawComponentKey = String(hints.componentKey || '').trim();
-  const rawFallback = String(hints.fallback || '').trim();
+  const rawComponentName = String(hints.componentName || '').trim().toLowerCase();
 
   if (rawComponentKey) {
-    const imported = await resolveComponentForInstanceBySearch(rawComponentKey);
-    if (imported) return imported;
+    try {
+      return await figma.importComponentByKeyAsync(rawComponentKey);
+    } catch {
+      /* key non importabile nel file corrente */
+    }
   }
   if (rawNodeId) {
     const byId = await getComponentNodeByFigmaId(rawNodeId);
     if (byId) return byId;
   }
-  if (rawFallback) {
-    return resolveComponentForInstanceBySearch(rawFallback);
+  if (rawComponentName) {
+    const nodes = collectAllLocalComponents();
+    for (const n of nodes) {
+      if (String(n.name || '').trim().toLowerCase() === rawComponentName) {
+        return pickFromSet(n);
+      }
+    }
   }
   return null;
+}
+
+type PreflightIssue = {
+  index: number;
+  type: 'INSTANCE_COMPONENT' | 'VARIABLE';
+  code: string;
+  reason: string;
+};
+
+type PreflightResult = {
+  issues: PreflightIssue[];
+  skippedInstanceIndexes: Set<number>;
+  resolvedComponentsByIndex: Map<number, ComponentNode>;
+  instanceRequested: number;
+  instanceResolved: number;
+  variableRequested: number;
+  variableResolved: number;
+};
+
+function collectVariableRefsFromPlan(plan: Record<string, unknown>): string[] {
+  const out = new Set<string>();
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+      return;
+    }
+    if (!isRecord(v)) return;
+    for (const [k, val] of Object.entries(v)) {
+      if (k.toLowerCase() === 'variable' && typeof val === 'string' && val.trim()) out.add(val.trim());
+      walk(val);
+    }
+  };
+  walk(plan);
+  return [...out];
+}
+
+async function preflightActionPlanExecution(
+  actionPlan: Record<string, unknown>,
+  actions: unknown[],
+  varMap: VarMap,
+): Promise<PreflightResult> {
+  const issues: PreflightIssue[] = [];
+  const skippedInstanceIndexes = new Set<number>();
+  const resolvedComponentsByIndex = new Map<number, ComponentNode>();
+  let instanceRequested = 0;
+  let instanceResolved = 0;
+
+  for (let i = 0; i < actions.length; i++) {
+    const raw = actions[i];
+    if (!isRecord(raw)) continue;
+    if (String(raw.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+    instanceRequested += 1;
+    const componentNodeId = String(raw.component_node_id || raw.componentNodeId || '').trim();
+    const componentKey = String(raw.component_key || raw.componentKey || raw.component_id || '').trim();
+    const componentName = String(raw.name || '').trim();
+    const comp = await resolveComponentForInstance({
+      nodeId: componentNodeId,
+      componentKey,
+      componentName,
+    });
+    if (!comp) {
+      skippedInstanceIndexes.add(i);
+      issues.push({
+        index: i,
+        type: 'INSTANCE_COMPONENT',
+        code: 'INSTANCE_UNRESOLVED',
+        reason: `INSTANCE_COMPONENT non risolvibile (key="${componentKey || 'n/a'}", nodeId="${componentNodeId || 'n/a'}", name="${componentName || 'n/a'}").`,
+      });
+      continue;
+    }
+    resolvedComponentsByIndex.set(i, comp);
+    instanceResolved += 1;
+  }
+
+  const variableRefs = collectVariableRefsFromPlan(actionPlan);
+  let variableResolved = 0;
+  for (let i = 0; i < variableRefs.length; i++) {
+    const ref = variableRefs[i];
+    const v = await resolveVariableForExecution(varMap, ref);
+    if (v) {
+      variableResolved += 1;
+    } else {
+      issues.push({
+        index: -1,
+        type: 'VARIABLE',
+        code: 'VARIABLE_UNRESOLVED',
+        reason: `Variabile non risolvibile/importabile: "${ref}".`,
+      });
+    }
+  }
+
+  return {
+    issues,
+    skippedInstanceIndexes,
+    resolvedComponentsByIndex,
+    instanceRequested,
+    instanceResolved,
+    variableRequested: variableRefs.length,
+    variableResolved,
+  };
 }
 
 /** Applica `variantProperties` / `properties` / `componentProperties` (valori stringa o boolean) come da API `instance.setProperties`. */
@@ -630,6 +759,21 @@ export async function executeActionPlanOnCanvas(
   }
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }).catch(() => undefined);
 
+  const preflight = await preflightActionPlanExecution(actionPlan, actions, varMap);
+  const meta = isRecord(actionPlan.metadata) ? actionPlan.metadata : {};
+  const mode = String(meta.mode || '').trim().toLowerCase();
+  const dsSource = String(meta.ds_source || meta.dsSource || '').trim().toLowerCase();
+  const isCreateLike = mode === 'create' || mode === 'screenshot';
+  const isCustomDs = dsSource === '' || dsSource === 'custom' || dsSource === 'file' || dsSource === 'current';
+  if (isCreateLike && isCustomDs && preflight.instanceRequested > 0 && preflight.instanceResolved === 0) {
+    const reasons = preflight.issues
+      .filter((x) => x.type === 'INSTANCE_COMPONENT')
+      .map((x) => `#${x.index}: ${x.reason}`)
+      .slice(0, 8)
+      .join(' | ');
+    throw new Error(`CUSTOM_DS_INSTANCE_PREFLIGHT_FAILED: nessuna istanza DS risolvibile. ${reasons}`);
+  }
+
   const page = figma.currentPage;
   let appendParent: ChildrenMixin = page;
   let rootPos = nextPlacementOnPage(page);
@@ -711,15 +855,20 @@ export async function executeActionPlanOnCanvas(
     }
 
     if (type === 'INSTANCE_COMPONENT') {
+      if (preflight.skippedInstanceIndexes.has(i)) {
+        continue;
+      }
       const parent = resolveParent(raw, idMap, root);
       const componentNodeId = String(raw.component_node_id || raw.componentNodeId || '').trim();
       const componentKey = String(raw.component_key || raw.componentKey || raw.component_id || '').trim();
       const componentName = String(raw.name || '').trim();
-      const comp = await resolveComponentForInstance({
-        nodeId: componentNodeId,
-        componentKey,
-        fallback: componentName || componentKey || componentNodeId,
-      });
+      const comp =
+        preflight.resolvedComponentsByIndex.get(i) ||
+        (await resolveComponentForInstance({
+          nodeId: componentNodeId,
+          componentKey,
+          componentName,
+        }));
       if (comp) {
         const inst = comp.createInstance();
         parent.appendChild(inst);
@@ -739,12 +888,6 @@ export async function executeActionPlanOnCanvas(
         if (raw.fills !== undefined) applyFillsToNode(inst, raw.fills, varMap, 'surface');
         if (typeof raw.name === 'string' && raw.name.trim()) inst.name = raw.name.trim();
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);
-      } else {
-        await appendMissingComponentWireframe(
-          parent,
-          componentKey || componentNodeId || componentName || 'unknown',
-          varMap,
-        );
       }
       continue;
     }
@@ -758,6 +901,18 @@ export async function executeActionPlanOnCanvas(
 
   figma.currentPage.selection = [root];
   figma.viewport.scrollAndZoomIntoView([root]);
+
+  const skippedInstances = preflight.instanceRequested - preflight.instanceResolved;
+  if (skippedInstances > 0) {
+    figma.notify(
+      `Generate: ${skippedInstances}/${preflight.instanceRequested} istanze DS saltate (key/id non risolvibili).`,
+    );
+  }
+  if (preflight.variableRequested > preflight.variableResolved) {
+    figma.notify(
+      `Generate: ${preflight.variableRequested - preflight.variableResolved}/${preflight.variableRequested} variabili non risolte.`,
+    );
+  }
 
   return { rootId: root.id, clonedFromId: clonedFromId ?? undefined };
 }

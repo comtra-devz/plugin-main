@@ -101,6 +101,21 @@ function getPlainTerminalText(el: HTMLDivElement | null): string {
   return normalizeTerminalText(clone.innerText);
 }
 
+function humanizeCanvasError(raw: string): string {
+  const msg = String(raw || '').trim();
+  if (!msg) return 'Canvas apply failed.';
+  if (msg.includes('CUSTOM_DS_INSTANCE_PREFLIGHT_FAILED')) {
+    return 'Generate blocked: no resolvable DS component instances were found for this file. Re-import DS / enable linked libraries, then retry.';
+  }
+  if (msg.includes('INSTANCE_UNRESOLVED')) {
+    return 'Some DS component instances are not resolvable in this file. Check DS import and linked libraries.';
+  }
+  if (msg.includes('VARIABLE_UNRESOLVED')) {
+    return 'Some DS variables are not available/importable in this file. Check linked libraries and token availability.';
+  }
+  return msg;
+}
+
 export const Generate: React.FC<Props> = ({
   plan,
   userTier,
@@ -534,6 +549,21 @@ export const Generate: React.FC<Props> = ({
         setLoading(false);
         return;
       }
+      lastActionPlanRef.current = actionPlan;
+      const isModify = mode === 'modify';
+      lastApplyWasModifyRef.current = isModify;
+      setRes(JSON.stringify(actionPlan, null, 2));
+      setLastRequestId(data?.request_id ?? null);
+      setLastVariant(data?.variant ?? null);
+      setFeedbackSent(false);
+
+      const canvasResult = await runCanvasApply(actionPlan, { modifyMode: isModify });
+      if (!canvasResult.ok) {
+        setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
+        setLoading(false);
+        return;
+      }
+
       const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
       const creditsToConsume = meta?.estimated_credits ?? 3;
       const consumed = await consumeCredits({
@@ -546,18 +576,10 @@ export const Generate: React.FC<Props> = ({
         setLoading(false);
         return;
       }
-      lastActionPlanRef.current = actionPlan;
-      const isModify = mode === 'modify';
-      lastApplyWasModifyRef.current = isModify;
-      setRes(JSON.stringify(actionPlan, null, 2));
-      setLastRequestId(data?.request_id ?? null);
-      setLastVariant(data?.variant ?? null);
-      setFeedbackSent(false);
-      await runCanvasApply(actionPlan, { modifyMode: isModify });
       setShowReport(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setGenError(msg);
+      setGenError(humanizeCanvasError(msg));
     } finally {
       setLoading(false);
     }
@@ -568,7 +590,8 @@ export const Generate: React.FC<Props> = ({
     if (!plan || canvasBusy) return;
     setCanvasBusy(true);
     try {
-      await runCanvasApply(plan, { modifyMode: lastApplyWasModifyRef.current });
+      const r = await runCanvasApply(plan, { modifyMode: lastApplyWasModifyRef.current });
+      if (!r.ok) setGenError(humanizeCanvasError(r.error || 'Canvas apply failed.'));
     } finally {
       setCanvasBusy(false);
     }
