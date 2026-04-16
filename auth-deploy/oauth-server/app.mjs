@@ -2198,6 +2198,75 @@ function ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt)
   return plan;
 }
 
+function scoreNameMatch(name, hints) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return 0;
+  let score = 0;
+  for (const h of hints) {
+    if (n.includes(h)) score += 3;
+  }
+  if (/\b(step|progress|wizard|breadcrumb|timeline)\b/i.test(n)) score -= 8;
+  return score;
+}
+
+function pickBestComponentCandidate(components, includeHints) {
+  let best = null;
+  let bestScore = -9999;
+  for (const c of components || []) {
+    const s = scoreNameMatch(c?.name, includeHints);
+    if (s > bestScore) {
+      best = c;
+      bestScore = s;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
+/**
+ * Deterministic binding: for login/auth flows, swap semantically wrong instance picks
+ * (step/progress-like) with better candidates from DS index when available.
+ */
+function enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsContextIndex) {
+  if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') return actionPlan;
+  const components = Array.isArray(dsContextIndex.components) ? dsContextIndex.components : [];
+  if (!components.length) return actionPlan;
+  const plan = actionPlan;
+  if (!Array.isArray(plan.actions)) return plan;
+
+  const isLoginLike = /\b(login|sign[\s-]?in|auth|password|email)\b/i.test(String(prompt || ''));
+  if (!isLoginLike) return plan;
+
+  const forbidden = /\b(step|progress|wizard|breadcrumb|timeline)\b/i;
+  const inputCandidate = pickBestComponentCandidate(components, ['input', 'field', 'text field', 'textfield', 'email', 'password']);
+  const buttonCandidate = pickBestComponentCandidate(components, ['button', 'btn', 'cta', 'primary']);
+
+  for (let i = 0; i < plan.actions.length; i++) {
+    const a = plan.actions[i];
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+
+    const nameHint = String(a.name || '').toLowerCase();
+    const key = String(a.component_key || a.componentKey || a.component_id || '').trim();
+    const nodeId = String(a.component_node_id || a.componentNodeId || '').trim();
+    const found =
+      components.find((c) => String(c?.componentKey || '').trim() === key) ||
+      components.find((c) => String(c?.id || '').trim() === nodeId) ||
+      null;
+    const foundName = String(found?.name || '').toLowerCase();
+    const badPick = !found || forbidden.test(foundName);
+    if (!badPick) continue;
+
+    const wantsInput = /\b(email|password|field|input)\b/i.test(nameHint);
+    const wantsButton = /\b(button|cta|submit|next|continue|sign[\s-]?in)\b/i.test(nameHint);
+    const candidate = wantsInput ? inputCandidate : wantsButton ? buttonCandidate : buttonCandidate || inputCandidate;
+    if (!candidate) continue;
+    if (candidate.componentKey) a.component_key = String(candidate.componentKey);
+    if (candidate.id) a.component_node_id = String(candidate.id);
+  }
+  return plan;
+}
+
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -2344,6 +2413,10 @@ app.post('/api/agents/generate', async (req, res) => {
       isCustomDsSource(dsSource) && (mode === 'create' || mode === 'screenshot')
         ? 'PRIMARY SUCCESS (custom/file DS): Ship the screen with INSTANCE_COMPONENT for real components from [DS CONTEXT INDEX] (buttons, inputs, cards, headers, etc.). Prefer components[].componentKey when present, else components[].id. If the index lists components, a primitives-only plan (frames + rects + plain text only) is a failed generation — not an acceptable fallback.'
         : null;
+    const semanticGuardrailLine =
+      inferredScreenArchetype === 'login'
+        ? 'SEMANTIC SAFETY (login/auth): never use step/progress/wizard/breadcrumb/timeline components for fields/buttons/CTA. If no suitable component exists, replace that slot with CREATE_RECT + CREATE_TEXT.'
+        : null;
     const contextBlob = [
       `Mode: ${mode}.`,
       inferredScreenArchetype
@@ -2355,6 +2428,7 @@ app.post('/api/agents/generate', async (req, res) => {
       `File has ${pageCount} page(s).`,
       'Use only variable references (no raw hex/px).',
       ...(primaryCustomDsSuccessLine ? [primaryCustomDsSuccessLine] : []),
+      ...(semanticGuardrailLine ? [semanticGuardrailLine] : []),
       dsContextBlock,
       dsIndexBlock,
       designIntelBlock,
@@ -2415,6 +2489,7 @@ app.post('/api/agents/generate', async (req, res) => {
 
     actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
     actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
+    actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
     let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2461,6 +2536,7 @@ app.post('/api/agents/generate', async (req, res) => {
           actionPlan = repaired;
           actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
           actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
+          actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
           schemaValidation = validateActionPlanSchema(actionPlan);
           dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
           visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2473,6 +2549,46 @@ app.post('/api/agents/generate', async (req, res) => {
           semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
           desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
         }
+      }
+    }
+
+    // Final targeted semantic pass (escape hatch): try once more before returning 422.
+    if (!semanticFitValidation.valid) {
+      const semanticOnlyErrors = semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`);
+      const semanticRepair = await repairActionPlanWithKimi(
+        systemPrompt,
+        actionPlan,
+        [
+          ...semanticOnlyErrors,
+          'Replace semantically incompatible INSTANCE_COMPONENT with either a correct DS component from index or CREATE_RECT + CREATE_TEXT fallback for that slot.',
+        ],
+        `User prompt: ${prompt}\n\n${contextBlob}`,
+      );
+      totalInputTokens += Math.max(
+        0,
+        Number(semanticRepair?.usage?.input_tokens ?? semanticRepair?.usage?.prompt_tokens ?? 0),
+      );
+      totalOutputTokens += Math.max(
+        0,
+        Number(semanticRepair?.usage?.output_tokens ?? semanticRepair?.usage?.completion_tokens ?? 0),
+      );
+      const repairedSemantic = extractJsonFromContent(semanticRepair?.content);
+      if (repairedSemantic && typeof repairedSemantic === 'object') {
+        actionPlan = repairedSemantic;
+        actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+        actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
+        actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
+        schemaValidation = validateActionPlanSchema(actionPlan);
+        dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
+        visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
+        publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
+        customDsInstanceValidation = validateCustomFileDsRequiresComponentInstances(
+          actionPlan,
+          dsSource,
+          dsIndexForValidation,
+        );
+        semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
+        desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
       }
     }
 
