@@ -34,6 +34,8 @@ import {
   validateActionPlanSchema,
   validateActionPlanVisiblePrimitives,
   validateActionPlanNoInstanceForPublicDs,
+  validateCustomFileDsRequiresComponentInstances,
+  isCustomDsSource,
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
 import { formatDesignIntelligenceForPrompt, inferFocusedScreenType } from './design-intelligence.mjs';
@@ -2294,6 +2296,10 @@ app.post('/api/agents/generate', async (req, res) => {
     const designIntelBlock = formatDesignIntelligenceForPrompt(docContextKey, {
       focusScreenType: inferredScreenArchetype,
     });
+    const primaryCustomDsSuccessLine =
+      isCustomDsSource(dsSource) && (mode === 'create' || mode === 'screenshot')
+        ? 'PRIMARY SUCCESS (custom/file DS): Ship the screen with INSTANCE_COMPONENT for real components from [DS CONTEXT INDEX] (buttons, inputs, cards, headers, etc.). Prefer components[].componentKey when present, else components[].id. If the index lists components, a primitives-only plan (frames + rects + plain text only) is a failed generation — not an acceptable fallback.'
+        : null;
     const contextBlob = [
       `Mode: ${mode}.`,
       inferredScreenArchetype
@@ -2304,6 +2310,7 @@ app.post('/api/agents/generate', async (req, res) => {
       `Context profile: platform=${contextProfile.platform}, density=${contextProfile.density}, input_mode=${contextProfile.input_mode}, selection_type=${contextProfile.selection_type}.`,
       `File has ${pageCount} page(s).`,
       'Use only variable references (no raw hex/px).',
+      ...(primaryCustomDsSuccessLine ? [primaryCustomDsSuccessLine] : []),
       dsContextBlock,
       dsIndexBlock,
       designIntelBlock,
@@ -2395,17 +2402,24 @@ app.post('/api/agents/generate', async (req, res) => {
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
     let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
     let publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
+    let customDsInstanceValidation = validateCustomFileDsRequiresComponentInstances(
+      actionPlan,
+      dsSource,
+      dsIndexForValidation,
+    );
     const mustRepair =
       !schemaValidation.valid ||
       !dsValidation.valid ||
       !visibleValidation.valid ||
-      !publicDsInstanceValidation.valid;
+      !publicDsInstanceValidation.valid ||
+      !customDsInstanceValidation.valid;
     if (mustRepair) {
       const firstPassErrors = [
         ...schemaValidation.errors.map((e) => `schema: ${e}`),
         ...dsValidation.errors.map((e) => `ds: ${e}`),
         ...visibleValidation.errors.map((e) => `visible: ${e}`),
         ...publicDsInstanceValidation.errors.map((e) => `public_ds: ${e}`),
+        ...customDsInstanceValidation.errors.map((e) => `custom_ds_instances: ${e}`),
       ];
       const repair = await repairActionPlanWithKimi(systemPrompt, actionPlan, firstPassErrors, `User prompt: ${prompt}\n\n${contextBlob}`);
       totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
@@ -2418,6 +2432,11 @@ app.post('/api/agents/generate', async (req, res) => {
         dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
         visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
         publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
+        customDsInstanceValidation = validateCustomFileDsRequiresComponentInstances(
+          actionPlan,
+          dsSource,
+          dsIndexForValidation,
+        );
       }
     }
 
@@ -2448,6 +2467,13 @@ app.post('/api/agents/generate', async (req, res) => {
         error: 'INSTANCE_COMPONENT not allowed for public design system packages',
         code: 'PUBLIC_DS_NO_INSTANCE',
         details: publicDsInstanceValidation.errors,
+      });
+    }
+    if (!customDsInstanceValidation.valid) {
+      return res.status(422).json({
+        error: 'Custom design system requires at least one component instance in the action plan',
+        code: 'CUSTOM_DS_INSTANCES_REQUIRED',
+        details: customDsInstanceValidation.errors,
       });
     }
 

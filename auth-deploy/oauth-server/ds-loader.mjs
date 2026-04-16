@@ -379,6 +379,44 @@ export function validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource) {
   return { valid: errors.length === 0, errors };
 }
 
+/**
+ * Success path for file-scoped DS: if the imported index lists components, the plan must
+ * actually instantiate the design system (not only frames + rects + plain text).
+ */
+export function validateCustomFileDsRequiresComponentInstances(actionPlan, dsSource, dsContextIndex) {
+  if (!isCustomDsSource(dsSource)) {
+    return { valid: true, errors: [] };
+  }
+  if (!actionPlan || typeof actionPlan !== 'object') {
+    return { valid: true, errors: [] };
+  }
+  const genMode = String(actionPlan.metadata?.mode || '').trim();
+  if (genMode !== 'create' && genMode !== 'screenshot') {
+    return { valid: true, errors: [] };
+  }
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') {
+    return { valid: true, errors: [] };
+  }
+  const components = Array.isArray(dsContextIndex.components) ? dsContextIndex.components : [];
+  if (components.length === 0) {
+    return { valid: true, errors: [] };
+  }
+  const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
+  let instanceCount = 0;
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() === 'INSTANCE_COMPONENT') instanceCount += 1;
+  }
+  if (instanceCount > 0) return { valid: true, errors: [] };
+  return {
+    valid: false,
+    errors: [
+      'CUSTOM_DS_INSTANCES_REQUIRED: DS CONTEXT INDEX lists file components but the action plan has zero INSTANCE_COMPONENT. The primary deliverable is real DS instances (buttons, fields, cards, typography components) using component_key (preferred) or component_node_id from that index. Replace placeholder rects/text with matching components where they exist.',
+    ],
+  };
+}
+
 const FIGMA_NODE_ID_RE = /^\d+:\d+$/;
 
 function normalizeFileVarRef(s) {

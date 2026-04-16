@@ -94,21 +94,69 @@ function applyNumericOrBound(
   node[field] = fallback;
 }
 
-function applyFillsToNode(node: GeometryMixin, fills: unknown, varMap: VarMap): void {
+/** Sfondo / forme: leggibile su bianco senza essere troppo invadente. */
+const DEFAULT_FILL_SURFACE: RGB = { r: 0.9, g: 0.92, b: 0.95 };
+/** Testo: default scuro; se il modello manda quasi-bianco, si corregge (evita “frame vuoto”). */
+const DEFAULT_FILL_TEXT: RGB = { r: 0.12, g: 0.12, b: 0.14 };
+
+function clampUnitChannel(x: number): number {
+  if (!Number.isFinite(x)) return 0;
+  if (x > 1 && x <= 255) return Math.max(0, Math.min(1, x / 255));
+  return Math.max(0, Math.min(1, x));
+}
+
+function parseRgbFromUnknown(c: unknown): RGB | null {
+  if (!isRecord(c)) return null;
+  if (c.r === undefined && c.g === undefined && c.b === undefined) return null;
+  return {
+    r: clampUnitChannel(Number(c.r)),
+    g: clampUnitChannel(Number(c.g)),
+    b: clampUnitChannel(Number(c.b)),
+  };
+}
+
+function solidLuminance(rgb: RGB): number {
+  return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+}
+
+function ensureTextFillReadable(rgb: RGB): RGB {
+  if (solidLuminance(rgb) > 0.92) return { ...DEFAULT_FILL_TEXT };
+  return rgb;
+}
+
+/** `text` = riempimenti tipografici (contrasto); `surface` = frame/rettangoli. */
+function applyFillsToNode(
+  node: GeometryMixin,
+  fills: unknown,
+  varMap: VarMap,
+  role: 'text' | 'surface' = 'surface',
+): void {
   const list = Array.isArray(fills) ? fills : [];
-  const defaultColor = { r: 0.97, g: 0.97, b: 0.97 };
+  const baseDefault: RGB = role === 'text' ? DEFAULT_FILL_TEXT : DEFAULT_FILL_SURFACE;
+
   if (list.length === 0) {
-    (node as GeometryMixin).fills = [{ type: 'SOLID', color: defaultColor }];
+    const c = role === 'text' ? ensureTextFillReadable(baseDefault) : baseDefault;
+    node.fills = [{ type: 'SOLID', color: c, opacity: 1 }];
     return;
   }
+
   const out: SolidPaint[] = [];
   for (const entry of list) {
     if (!isRecord(entry) || entry.type !== 'SOLID') continue;
-    const paint: SolidPaint = { type: 'SOLID', color: defaultColor, opacity: 1 };
-    out.push(paint);
+    const fromModel = parseRgbFromUnknown(entry.color);
+    const raw = fromModel ?? baseDefault;
+    const color = role === 'text' ? ensureTextFillReadable(raw) : raw;
+    const op = Number((entry as Record<string, unknown>).opacity);
+    const opacity = Number.isFinite(op) && op >= 0 && op <= 1 ? op : 1;
+    out.push({ type: 'SOLID', color, opacity });
   }
-  if (out.length === 0) out.push({ type: 'SOLID', color: defaultColor });
-  (node as GeometryMixin).fills = out;
+  if (out.length === 0) {
+    const c = role === 'text' ? ensureTextFillReadable(baseDefault) : baseDefault;
+    node.fills = [{ type: 'SOLID', color: c, opacity: 1 }];
+  } else {
+    node.fills = out;
+  }
+
   const first = list[0];
   if (isRecord(first) && typeof first.variable === 'string' && first.variable.trim()) {
     const v = lookupVariable(varMap, first.variable);
@@ -118,7 +166,7 @@ function applyFillsToNode(node: GeometryMixin, fills: unknown, varMap: VarMap): 
         const bound = figma.variables.setBoundVariableForPaint(fillsNow[0] as SolidPaint, 'color', v);
         node.fills = [bound];
       } catch {
-        /* lascia colore fallback */
+        /* lascia colori parsati sopra */
       }
     }
   }
@@ -140,7 +188,7 @@ function applyFrameGeometry(f: FrameNode, spec: Record<string, unknown>, varMap:
     applyNumericOrBound(f, 'paddingLeft', spec.paddingLeft, varMap, 16);
     applyNumericOrBound(f, 'itemSpacing', spec.itemSpacing, varMap, 8);
   }
-  applyFillsToNode(f, spec.fills, varMap);
+  applyFillsToNode(f, spec.fills, varMap, 'surface');
   if (typeof spec.name === 'string' && spec.name.trim()) f.name = spec.name.trim();
 }
 
@@ -455,7 +503,11 @@ function humanizeComponentKey(key: string): string {
 }
 
 /** Sostituisce “Component not found” con un blocco leggibile (stile wireframe), non solo testo tagliato. */
-async function appendMissingComponentWireframe(parent: ChildrenMixin, key: string): Promise<void> {
+async function appendMissingComponentWireframe(
+  parent: ChildrenMixin,
+  key: string,
+  varMap: VarMap,
+): Promise<void> {
   const label = humanizeComponentKey(key) || 'Control';
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }).catch(() => undefined);
 
@@ -495,6 +547,7 @@ async function appendMissingComponentWireframe(parent: ChildrenMixin, key: strin
   cap.opacity = 0.75;
   cap.layoutSizingHorizontal = 'FILL';
   ph.appendChild(cap);
+  applyFillsToNode(cap, [], varMap, 'text');
 }
 
 export type ExecuteActionPlanOptions = {
@@ -632,7 +685,7 @@ export async function executeActionPlanOnCanvas(
         t.characters = String(raw.characters || raw.text || 'Text');
         const fs = Number(raw.fontSize);
         if (Number.isFinite(fs) && fs > 0) t.fontSize = fs;
-        applyFillsToNode(t, raw.fills, varMap);
+        applyFillsToNode(t, raw.fills, varMap, 'text');
         if (typeof raw.name === 'string' && raw.name.trim()) t.name = raw.name.trim();
         if ('layoutMode' in parent && (parent as FrameNode).layoutMode !== 'NONE') {
           t.layoutSizingHorizontal = 'FILL';
@@ -651,7 +704,7 @@ export async function executeActionPlanOnCanvas(
       const rw = Number(raw.width) || 120;
       const rh = Number(raw.height) || 40;
       r.resize(rw, rh);
-      applyFillsToNode(r, raw.fills, varMap);
+      applyFillsToNode(r, raw.fills, varMap, 'surface');
       if (typeof raw.name === 'string' && raw.name.trim()) r.name = raw.name.trim();
       if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), r);
       continue;
@@ -683,11 +736,15 @@ export async function executeActionPlanOnCanvas(
           }
         }
         applyInstanceComponentProperties(inst, raw);
-        if (raw.fills !== undefined) applyFillsToNode(inst, raw.fills, varMap);
+        if (raw.fills !== undefined) applyFillsToNode(inst, raw.fills, varMap, 'surface');
         if (typeof raw.name === 'string' && raw.name.trim()) inst.name = raw.name.trim();
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);
       } else {
-        await appendMissingComponentWireframe(parent, componentKey || componentNodeId || componentName || 'unknown');
+        await appendMissingComponentWireframe(
+          parent,
+          componentKey || componentNodeId || componentName || 'unknown',
+          varMap,
+        );
       }
       continue;
     }
