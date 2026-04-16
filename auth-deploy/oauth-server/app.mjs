@@ -2060,7 +2060,6 @@ app.post('/api/agents/ds-audit', async (req, res) => {
 
 // --- Generate agent (Kimi): file_key + prompt → action plan JSON. A/B: 50% Direct (A), 50% ASCII first (B)
 const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
-const GENERATE_ASCII_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-ascii-system.md');
 
 function normalizeScreenshotFromBody(body) {
   const raw =
@@ -2162,6 +2161,43 @@ function ensureCreateModeHasCreateFrameAction(actionPlan, mode) {
   return plan;
 }
 
+function ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt) {
+  if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
+  const modeNorm = String(mode || '').toLowerCase();
+  if (modeNorm !== 'create' && modeNorm !== 'screenshot') return actionPlan;
+  if (!/\bdesktop\b/i.test(String(prompt || ''))) return actionPlan;
+  const plan = actionPlan;
+  if (!Array.isArray(plan.actions)) plan.actions = [];
+
+  const hasSubstantialRootFrame = plan.actions.some((a) => {
+    if (!a || typeof a !== 'object') return false;
+    if (String(a.type || '').toUpperCase() !== 'CREATE_FRAME') return false;
+    const rawParent = a.parentId ?? a.parent;
+    const parent = rawParent == null || String(rawParent).trim() === '' ? 'root' : String(rawParent).trim();
+    if (parent !== 'root') return false;
+    const w = Number(a.width);
+    const h = Number(a.height);
+    return Number.isFinite(w) && w >= 280 && Number.isFinite(h) && h >= 240;
+  });
+  if (hasSubstantialRootFrame) return plan;
+
+  plan.actions.unshift({
+    type: 'CREATE_FRAME',
+    ref: 'desktop_content',
+    parent: 'root',
+    name: 'Desktop Content',
+    layoutMode: 'VERTICAL',
+    width: 1200,
+    height: 760,
+    itemSpacing: 16,
+    paddingTop: 24,
+    paddingRight: 24,
+    paddingBottom: 24,
+    paddingLeft: 24,
+  });
+  return plan;
+}
+
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -2222,7 +2258,7 @@ app.post('/api/agents/generate', async (req, res) => {
   const useKimiDualSwarmPipeline =
     process.env.USE_KIMI_SWARM !== '0' && process.env.USE_KIMI_SWARM !== 'false';
 
-  let variant = Math.random() < 0.5 ? 'B' : 'A';
+  let variant = 'A';
   const startMs = Date.now();
   const phaseTimers = {
     started_at_ms: startMs,
@@ -2233,7 +2269,6 @@ app.post('/api/agents/generate', async (req, res) => {
   };
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
-  let asciiWireframe = null;
   let generationPipeline = 'legacy_ab';
   let dualPipelineSucceeded = false;
 
@@ -2274,10 +2309,17 @@ app.post('/api/agents/generate', async (req, res) => {
           maxVariables: Number(process.env.GENERATE_DS_SLIM_VARIABLES || 180),
         })
       : null;
+    const isCustomSourceForPrompt = isCustomDsSource(dsSource);
+    const promptTopKComponents = isCustomSourceForPrompt
+      ? Number(process.env.GENERATE_DS_PROMPT_COMPONENTS_CUSTOM || 18)
+      : Number(process.env.GENERATE_DS_PROMPT_COMPONENTS || 32);
+    const promptTopKVariables = isCustomSourceForPrompt
+      ? Number(process.env.GENERATE_DS_PROMPT_VARIABLES_CUSTOM || 26)
+      : Number(process.env.GENERATE_DS_PROMPT_VARIABLES || 48);
     const dsIndexForPrompt = dsIndexSlim
       ? buildPromptScopedDsIndex(dsIndexSlim, prompt, {
-          topKComponents: Number(process.env.GENERATE_DS_PROMPT_COMPONENTS || 32),
-          topKVariables: Number(process.env.GENERATE_DS_PROMPT_VARIABLES || 48),
+          topKComponents: promptTopKComponents,
+          topKVariables: promptTopKVariables,
         })
       : null;
     const dsIndexHashLine =
@@ -2336,7 +2378,6 @@ app.post('/api/agents/generate', async (req, res) => {
         if (dual.actionPlan && typeof dual.actionPlan === 'object') {
           actionPlan = dual.actionPlan;
           variant = 'S';
-          asciiWireframe = null;
           dualPipelineSucceeded = true;
           generationPipeline = 'kimi_dual_layout_mapper';
         } else {
@@ -2347,34 +2388,7 @@ app.post('/api/agents/generate', async (req, res) => {
       }
     }
 
-    if (!actionPlan && !forceDirectForVision && variant === 'B') {
-      let asciiPrompt;
-      try {
-        asciiPrompt = readFileSync(GENERATE_ASCII_PROMPT_PATH, 'utf8');
-        if (!asciiPrompt?.trim()) throw new Error('empty');
-      } catch (e) {
-        console.error('Generate B: ASCII prompt not found', e?.message);
-        asciiPrompt = 'Create an ASCII wireframe using +, -, |. Return only the wireframe, no other text.';
-      }
-      const asciiUserMsg = `User request: ${prompt}\n\nCreate the ASCII wireframe.`;
-      const { content: asciiContent, usage: asciiUsage } = await callKimi(
-        [{ role: 'system', content: asciiPrompt }, { role: 'user', content: asciiUserMsg }],
-        2048,
-      );
-      totalInputTokens += Math.max(0, Number(asciiUsage?.input_tokens ?? asciiUsage?.prompt_tokens ?? 0));
-      totalOutputTokens += Math.max(0, Number(asciiUsage?.output_tokens ?? asciiUsage?.completion_tokens ?? 0));
-      asciiWireframe = (asciiContent || '').trim();
-
-      const convertUserMsg = `ASCII wireframe:\n${asciiWireframe}\n\nOriginal prompt: ${prompt}\n\nContext: ${contextBlob}\n\nConvert this ASCII wireframe into the action plan JSON. Return only the JSON object, no other text.`;
-      const { content: jsonContent, usage: jsonUsage } = await callKimi(
-        [{ role: 'system', content: systemPrompt }, { role: 'user', content: convertUserMsg }],
-        8192,
-      );
-      totalInputTokens += Math.max(0, Number(jsonUsage?.input_tokens ?? jsonUsage?.prompt_tokens ?? 0));
-      totalOutputTokens += Math.max(0, Number(jsonUsage?.output_tokens ?? jsonUsage?.completion_tokens ?? 0));
-      actionPlan = extractJsonFromContent(jsonContent);
-      generationPipeline = 'legacy_ab';
-    } else if (!actionPlan) {
+    if (!actionPlan) {
       const userText = `User prompt:\n${prompt}\n\nContext: ${contextBlob}\n\nReturn only the action plan JSON object, no other text.`;
       const userMessage = screenshotDataUrl
         ? [
@@ -2389,7 +2403,7 @@ app.post('/api/agents/generate', async (req, res) => {
       totalInputTokens += Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
       totalOutputTokens += Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
       actionPlan = extractJsonFromContent(content);
-      if (!dualPipelineSucceeded) generationPipeline = 'legacy_ab';
+      if (!dualPipelineSucceeded) generationPipeline = 'legacy_direct_json';
     }
 
     if (!actionPlan || typeof actionPlan !== 'object') {
@@ -2400,6 +2414,7 @@ app.post('/api/agents/generate', async (req, res) => {
     phaseTimers.model_ms = afterModelMs - startMs - (phaseTimers.resolve_source_ms || 0);
 
     actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+    actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
     let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2420,33 +2435,44 @@ app.post('/api/agents/generate', async (req, res) => {
       !semanticFitValidation.valid ||
       !desktopStructureValidation.valid;
     if (mustRepair) {
-      const firstPassErrors = [
+      const structuralErrors = [
         ...schemaValidation.errors.map((e) => `schema: ${e}`),
-        ...dsValidation.errors.map((e) => `ds: ${e}`),
         ...visibleValidation.errors.map((e) => `visible: ${e}`),
+        ...desktopStructureValidation.errors.map((e) => `desktop_structure: ${e}`),
+      ];
+      const dsErrors = [
+        ...dsValidation.errors.map((e) => `ds: ${e}`),
         ...publicDsInstanceValidation.errors.map((e) => `public_ds: ${e}`),
         ...customDsInstanceValidation.errors.map((e) => `custom_ds_instances: ${e}`),
         ...semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`),
-        ...desktopStructureValidation.errors.map((e) => `desktop_structure: ${e}`),
       ];
-      const repair = await repairActionPlanWithKimi(systemPrompt, actionPlan, firstPassErrors, `User prompt: ${prompt}\n\n${contextBlob}`);
-      totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
-      totalOutputTokens += Math.max(0, Number(repair?.usage?.output_tokens ?? repair?.usage?.completion_tokens ?? 0));
-      const repaired = extractJsonFromContent(repair?.content);
-      if (repaired && typeof repaired === 'object') {
-        actionPlan = repaired;
-        actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
-        schemaValidation = validateActionPlanSchema(actionPlan);
-        dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
-        visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
-        publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
-        customDsInstanceValidation = validateCustomFileDsRequiresComponentInstances(
+      const repairPasses = [structuralErrors, dsErrors].filter((errs) => errs.length > 0);
+      for (let pass = 0; pass < repairPasses.length; pass++) {
+        const repair = await repairActionPlanWithKimi(
+          systemPrompt,
           actionPlan,
-          dsSource,
-          dsIndexForValidation,
+          repairPasses[pass],
+          `User prompt: ${prompt}\n\n${contextBlob}`,
         );
-        semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
-        desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
+        totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
+        totalOutputTokens += Math.max(0, Number(repair?.usage?.output_tokens ?? repair?.usage?.completion_tokens ?? 0));
+        const repaired = extractJsonFromContent(repair?.content);
+        if (repaired && typeof repaired === 'object') {
+          actionPlan = repaired;
+          actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+          actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
+          schemaValidation = validateActionPlanSchema(actionPlan);
+          dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
+          visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
+          publicDsInstanceValidation = validateActionPlanNoInstanceForPublicDs(actionPlan, dsSource);
+          customDsInstanceValidation = validateCustomFileDsRequiresComponentInstances(
+            actionPlan,
+            dsSource,
+            dsIndexForValidation,
+          );
+          semanticFitValidation = validateActionPlanComponentSemanticFit(actionPlan, dsIndexForValidation, prompt);
+          desktopStructureValidation = validateDesktopCreateStructure(actionPlan, prompt);
+        }
       }
     }
 
