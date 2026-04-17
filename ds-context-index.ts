@@ -19,6 +19,10 @@ export type DsComponentSummary = {
   id: string;
   /** Figma published component key (portable across files/libraries), when available. */
   componentKey?: string;
+  /** Source page in the Figma file where this component was indexed. */
+  pageName?: string;
+  /** 1-based page order (left-to-right in Pages panel). */
+  pageOrder?: number;
   name: string;
   type: 'COMPONENT' | 'COMPONENT_SET';
   variantAxes?: string[];
@@ -148,7 +152,10 @@ async function digestHex(s: string): Promise<string> {
   return 'djb2:' + (h >>> 0).toString(16);
 }
 
-function summarizeComponent(node: ComponentNode | ComponentSetNode): DsComponentSummary {
+function summarizeComponent(
+  node: ComponentNode | ComponentSetNode,
+  pageMeta?: { pageName?: string; pageOrder?: number },
+): DsComponentSummary {
   /** Only defined on component sets and non-variant components (never on variant `COMPONENT` children). */
   let propertyKeys: string[] = [];
   const slotHints: string[] = [];
@@ -177,6 +184,10 @@ function summarizeComponent(node: ComponentNode | ComponentSetNode): DsComponent
   const key = typeof node.key === 'string' && node.key.trim() ? node.key.trim() : undefined;
   const out: DsComponentSummary = { id: node.id, name, type: node.type };
   if (key) out.componentKey = key;
+  if (pageMeta?.pageName) out.pageName = pageMeta.pageName;
+  if (Number.isFinite(Number(pageMeta?.pageOrder)) && Number(pageMeta?.pageOrder) > 0) {
+    out.pageOrder = Number(pageMeta.pageOrder);
+  }
   if (variantAxes && variantAxes.length) out.variantAxes = variantAxes;
   if (propertyKeys.length) out.propertyKeys = propertyKeys;
   if (slotHints.length) out.slotHints = slotHints;
@@ -359,6 +370,8 @@ async function assembleFromParts(
       id: c.id,
       name: c.name,
       type: c.type,
+      pageName: c.pageName,
+      pageOrder: c.pageOrder,
       variantAxes: c.variantAxes,
       propertyKeys: c.propertyKeys,
       slotHints: c.slotHints,
@@ -405,9 +418,10 @@ async function assembleFromParts(
 
 async function collectAllLocalComponents(opts?: {
   onPageProgress?: (payload: { pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
-}): Promise<(ComponentNode | ComponentSetNode)[]> {
+}): Promise<{ nodes: (ComponentNode | ComponentSetNode)[]; pageMetaByNodeId: Map<string, { pageName: string; pageOrder: number }> }> {
   await ensureAllPagesLoaded();
   const out: (ComponentNode | ComponentSetNode)[] = [];
+  const pageMetaByNodeId = new Map<string, { pageName: string; pageOrder: number }>();
   const pages = figma.root.children.filter((n): n is PageNode => n.type === 'PAGE');
   let pageIdx = 0;
   for (const child of pages) {
@@ -423,9 +437,17 @@ async function collectAllLocalComponents(opts?: {
     for (const n of found) {
       if (n.type === 'COMPONENT_SET') {
         out.push(n);
+        pageMetaByNodeId.set(n.id, {
+          pageName: child.name || `Page ${pageIdx + 1}`,
+          pageOrder: pageIdx + 1,
+        });
       } else if (n.type === 'COMPONENT' && n.parent?.type !== 'COMPONENT_SET') {
         // Variant `COMPONENT` nodes cannot use `componentPropertyDefinitions`; keep the parent set only.
         out.push(n);
+        pageMetaByNodeId.set(n.id, {
+          pageName: child.name || `Page ${pageIdx + 1}`,
+          pageOrder: pageIdx + 1,
+        });
       }
     }
     opts?.onPageProgress?.({
@@ -438,27 +460,31 @@ async function collectAllLocalComponents(opts?: {
     // Cedi ad ogni pagina: evita blocchi lunghi su documenti DS estesi.
     await yieldToMain();
   }
-  return out;
+  return { nodes: out, pageMetaByNodeId };
 }
 
 function processComponentNodes(
   componentsRaw: (ComponentNode | ComponentSetNode)[],
+  pageMetaByNodeId?: Map<string, { pageName: string; pageOrder: number }>,
 ): { components: DsComponentSummary[]; totalInFile: number; truncated: boolean } {
   const totalInFile = componentsRaw.length;
   const sorted = componentsRaw.slice().sort((a, b) => a.id.localeCompare(b.id));
   const truncated = sorted.length > MAX_COMPONENTS_IN_INDEX;
   const componentsSlice = truncated ? sorted.slice(0, MAX_COMPONENTS_IN_INDEX) : sorted;
-  const components = componentsSlice.map(summarizeComponent);
+  const components = componentsSlice.map((n) => summarizeComponent(n, pageMetaByNodeId?.get(n.id)));
   return { components, totalInFile, truncated };
 }
 
 export async function buildDsContextIndex(): Promise<BuildResult> {
   return withFastTraversal(async () => {
-    const [componentsRaw, tokens] = await Promise.all([
+    const [componentsRawResult, tokens] = await Promise.all([
       collectAllLocalComponents(),
       collectTokensAndStylesSlice(),
     ]);
-    const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
+    const { components, totalInFile, truncated } = processComponentNodes(
+      componentsRawResult.nodes,
+      componentsRawResult.pageMetaByNodeId,
+    );
     return assembleFromParts(tokens, components, totalInFile, truncated);
   });
 }
@@ -495,12 +521,15 @@ export async function buildDsContextIndexComponentsMerge(opts?: {
   onPageProgress?: (payload: { pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
 }): Promise<BuildResult> {
   return withFastTraversal(async () => {
-    const [tokens, componentsRaw] = await Promise.all([
+    const [tokens, componentsRawResult] = await Promise.all([
       collectTokensAndStylesSlice(),
       collectAllLocalComponents({ onPageProgress: opts?.onPageProgress }),
     ]);
     lastWizardTokensSlice = tokens;
-    const { components, totalInFile, truncated } = processComponentNodes(componentsRaw);
+    const { components, totalInFile, truncated } = processComponentNodes(
+      componentsRawResult.nodes,
+      componentsRawResult.pageMetaByNodeId,
+    );
     const r = await assembleFromParts(tokens, components, totalInFile, truncated);
     cache = toCachedBuildResult(r);
     cacheBuiltAtEpoch = docEpoch;

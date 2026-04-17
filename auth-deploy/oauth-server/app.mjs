@@ -2323,7 +2323,21 @@ const SLOT_BLUEPRINTS = {
   ],
 };
 
-function componentScoreForSlot(name, slotHints, promptTokens, slotId) {
+function scorePageContextForSlot(pageName, slotHints, promptTokens) {
+  const p = String(pageName || '').toLowerCase();
+  if (!p) return 0;
+  let score = 0;
+  for (const h of slotHints || []) {
+    const hh = String(h || '').toLowerCase();
+    if (hh && p.includes(hh)) score += 2;
+  }
+  for (const t of promptTokens || []) {
+    if (t.length > 2 && p.includes(t)) score += 1;
+  }
+  return score;
+}
+
+function componentScoreForSlot(name, slotHints, promptTokens, slotId, pageName, pageOrder) {
   const n = String(name || '').toLowerCase();
   if (!n) return -999;
   let score = 0;
@@ -2340,6 +2354,11 @@ function componentScoreForSlot(name, slotHints, promptTokens, slotId) {
     !/\b(button|btn|cta|action)\b/i.test(n)
   ) {
     score -= 30;
+  }
+  score += scorePageContextForSlot(pageName, slotHints, promptTokens);
+  const po = Number(pageOrder);
+  if (Number.isFinite(po) && po > 0) {
+    score += Math.max(0, 8 - po) * 0.25;
   }
   return score;
 }
@@ -2360,7 +2379,14 @@ function buildSlotCandidatePack(dsIndexForValidation, archetype, prompt) {
     const ranked = components
       .map((c) => ({
         c,
-        score: componentScoreForSlot(c?.name, slot.hints || [], promptTokens, slot.id),
+        score: componentScoreForSlot(
+          c?.name,
+          slot.hints || [],
+          promptTokens,
+          slot.id,
+          c?.pageName,
+          c?.pageOrder,
+        ),
       }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -2369,6 +2395,8 @@ function buildSlotCandidatePack(dsIndexForValidation, archetype, prompt) {
         id: String(x.c?.id || ''),
         componentKey: String(x.c?.componentKey || x.c?.component_key || ''),
         name: String(x.c?.name || ''),
+        pageName: String(x.c?.pageName || ''),
+        pageOrder: Number(x.c?.pageOrder) || null,
       }));
     if (ranked.length > 0) {
       out.push({
@@ -2422,6 +2450,7 @@ function enforceSlotCandidateBinding(actionPlan, slotPack) {
     if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
     const slot = assignSlotToAction(a, slotPack);
     if (!slot || !Array.isArray(slot.candidates) || slot.candidates.length === 0) continue;
+    a.slot_id = slot.id;
     const currentId = String(a.component_node_id || a.componentNodeId || '').trim();
     const currentKey = String(a.component_key || a.componentKey || a.component_id || '').trim();
     const alreadyValid = slot.candidates.some(

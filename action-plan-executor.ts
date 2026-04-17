@@ -628,15 +628,82 @@ async function preflightActionPlanExecution(
   };
 }
 
-/** Applica `variantProperties` / `properties` / `componentProperties` (valori stringa o boolean) come da API `instance.setProperties`. */
-function applyInstanceComponentProperties(inst: InstanceNode, raw: Record<string, unknown>): void {
-  const vp = raw.variantProperties ?? raw.properties ?? raw.componentProperties;
-  if (!vp || typeof vp !== 'object' || Array.isArray(vp)) return;
+function normalizedPropertyName(k: string): string {
+  return String(k || '')
+    .split('#')[0]
+    .replace(/[_/-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function inferSlotIdForInstance(raw: Record<string, unknown>): string {
+  const explicit = String(raw.slot_id || raw.slotId || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  const name = String(raw.name || '').toLowerCase();
+  if (/\b(email)\b/.test(name)) return 'email_input';
+  if (/\b(password)\b/.test(name)) return 'password_input';
+  if (/\b(button|cta|submit|sign[\s-]?in|continue)\b/.test(name)) return 'primary_cta';
+  if (/\b(title|heading|headline|welcome)\b/.test(name)) return 'title_block';
+  if (/\b(description|subtitle|helper|body)\b/.test(name)) return 'description_block';
+  if (/\b(logo|brand|wordmark)\b/.test(name)) return 'brand_logo';
+  return '';
+}
+
+function smartDefaultTextBySlot(slotId: string, propName: string): string | null {
+  const p = normalizedPropertyName(propName);
+  if (!/\b(text|label|title|value|caption|description|helper|body|placeholder)\b/.test(p)) return null;
+  if (slotId === 'email_input') return /\b(password)\b/.test(p) ? null : 'Email';
+  if (slotId === 'password_input') return /\b(placeholder|value|text)\b/.test(p) ? 'Password' : null;
+  if (slotId === 'primary_cta') return 'Sign in';
+  if (slotId === 'title_block') return /\b(description|subtitle|helper|body)\b/.test(p) ? null : 'Sign in';
+  if (slotId === 'description_block') return 'Use your account credentials';
+  if (slotId === 'secondary_action') return 'Forgot password?';
+  return null;
+}
+
+/** Applica props esplicite + fallback intelligenti (text/boolean) per evitare placeholder inutili. */
+function applyInstanceComponentProperties(
+  inst: InstanceNode,
+  raw: Record<string, unknown>,
+  prompt?: string,
+): void {
   const out: { [prop: string]: string | boolean } = {};
-  for (const [k, v] of Object.entries(vp as Record<string, unknown>)) {
-    if (typeof v === 'string' && v.length > 0) out[k] = v;
-    else if (typeof v === 'boolean') out[k] = v;
+  const vp = raw.variantProperties ?? raw.properties ?? raw.componentProperties;
+  if (vp && typeof vp === 'object' && !Array.isArray(vp)) {
+    for (const [k, v] of Object.entries(vp as Record<string, unknown>)) {
+      if (typeof v === 'string' && v.length > 0) out[k] = v;
+      else if (typeof v === 'boolean') out[k] = v;
+    }
   }
+
+  const slotId = inferSlotIdForInstance(raw);
+  const promptText = String(prompt || '').toLowerCase();
+  const wantsIcon = /\b(icon|logo|brand)\b/i.test(promptText);
+
+  const cp = inst.componentProperties || {};
+  for (const [propKey, def] of Object.entries(cp)) {
+    if (Object.prototype.hasOwnProperty.call(out, propKey)) continue;
+    const propName = normalizedPropertyName(propKey);
+    if (!def || typeof def !== 'object') continue;
+    const type = String((def as { type?: string }).type || '').toUpperCase();
+    if (type === 'TEXT') {
+      const text = smartDefaultTextBySlot(slotId, propName);
+      if (text) out[propKey] = text;
+      continue;
+    }
+    if (type === 'BOOLEAN') {
+      if (
+        /\b(icon|leading|trailing|avatar|illustration|image)\b/.test(propName) &&
+        (slotId === 'title_block' || slotId === 'description_block' || slotId === 'primary_cta') &&
+        !wantsIcon
+      ) {
+        out[propKey] = false;
+      }
+      continue;
+    }
+  }
+
   if (Object.keys(out).length === 0) return;
   try {
     inst.setProperties(out);
@@ -1002,7 +1069,7 @@ export async function executeActionPlanOnCanvas(
             /* ignore */
           }
         }
-        applyInstanceComponentProperties(inst, raw);
+        applyInstanceComponentProperties(inst, raw, String(meta.prompt || ''));
         if (raw.fills !== undefined) applyFillsToNode(inst, raw.fills, varMap, 'surface');
         if (typeof raw.name === 'string' && raw.name.trim()) inst.name = raw.name.trim();
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);
