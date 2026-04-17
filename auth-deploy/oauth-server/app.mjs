@@ -2209,10 +2209,13 @@ function scoreNameMatch(name, hints) {
   return score;
 }
 
-function pickBestComponentCandidate(components, includeHints) {
+function pickBestComponentCandidate(components, includeHints, options) {
+  const skipCardAsSoloCta = options?.skipCardAsSoloCta === true;
   let best = null;
   let bestScore = -9999;
   for (const c of components || []) {
+    const nm = String(c?.name || '').toLowerCase();
+    if (skipCardAsSoloCta && /\bcard\b/i.test(nm) && !/\b(button|btn|cta)\b/i.test(nm)) continue;
     const s = scoreNameMatch(c?.name, includeHints);
     if (s > bestScore) {
       best = c;
@@ -2239,7 +2242,9 @@ function enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsCont
 
   const forbidden = /\b(step|progress|wizard|breadcrumb|timeline)\b/i;
   const inputCandidate = pickBestComponentCandidate(components, ['input', 'field', 'text field', 'textfield', 'email', 'password']);
-  const buttonCandidate = pickBestComponentCandidate(components, ['button', 'btn', 'cta', 'primary']);
+  const buttonCandidate = pickBestComponentCandidate(components, ['button', 'btn', 'cta', 'primary'], {
+    skipCardAsSoloCta: true,
+  });
 
   for (let i = 0; i < plan.actions.length; i++) {
     const a = plan.actions[i];
@@ -2296,6 +2301,9 @@ function validateCustomDsIndexReadiness(mode, dsSource, dsIndexForValidation) {
 
 const SLOT_BLUEPRINTS = {
   login: [
+    { id: 'brand_logo', required: false, hints: ['logo', 'brand', 'wordmark', 'logotype'] },
+    { id: 'title_block', required: false, hints: ['title', 'heading', 'headline', 'hero title', 'h1', 'welcome'] },
+    { id: 'description_block', required: false, hints: ['description', 'subtitle', 'subheading', 'helper', 'body'] },
     { id: 'email_input', required: true, hints: ['email', 'input', 'field', 'text field'] },
     { id: 'password_input', required: true, hints: ['password', 'input', 'field', 'text field'] },
     { id: 'primary_cta', required: true, hints: ['button', 'cta', 'primary', 'submit', 'sign in', 'continue'] },
@@ -2315,7 +2323,7 @@ const SLOT_BLUEPRINTS = {
   ],
 };
 
-function componentScoreForSlot(name, slotHints, promptTokens) {
+function componentScoreForSlot(name, slotHints, promptTokens, slotId) {
   const n = String(name || '').toLowerCase();
   if (!n) return -999;
   let score = 0;
@@ -2326,6 +2334,13 @@ function componentScoreForSlot(name, slotHints, promptTokens) {
     if (t.length > 2 && n.includes(t)) score += 1;
   }
   if (/\b(step|progress|wizard|breadcrumb|timeline)\b/i.test(n)) score -= 10;
+  if (
+    slotId === 'primary_cta' &&
+    /\bcard\b/i.test(n) &&
+    !/\b(button|btn|cta|action)\b/i.test(n)
+  ) {
+    score -= 30;
+  }
   return score;
 }
 
@@ -2345,7 +2360,7 @@ function buildSlotCandidatePack(dsIndexForValidation, archetype, prompt) {
     const ranked = components
       .map((c) => ({
         c,
-        score: componentScoreForSlot(c?.name, slot.hints || [], promptTokens),
+        score: componentScoreForSlot(c?.name, slot.hints || [], promptTokens, slot.id),
       }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -2418,6 +2433,81 @@ function enforceSlotCandidateBinding(actionPlan, slotPack) {
     if (chosen.id) a.component_node_id = chosen.id;
   }
   return plan;
+}
+
+/**
+ * Success-path: ogni INSTANCE_COMPONENT deve avere `component_node_id` se l’indice DS lo conosce,
+ * così il plugin risolve prima in-file (getNodeById) senza dipendere dall’import via key.
+ */
+function hydrateInstanceComponentRefsFromDsIndex(actionPlan, dsContextIndex) {
+  if (!actionPlan || typeof actionPlan !== 'object' || !Array.isArray(actionPlan.actions)) return actionPlan;
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') return actionPlan;
+  const components = Array.isArray(dsContextIndex.components) ? dsContextIndex.components : [];
+  if (!components.length) return actionPlan;
+  const byKey = new Map();
+  for (const c of components) {
+    const k = String(c?.componentKey || c?.component_key || '').trim();
+    if (k) byKey.set(k, c);
+  }
+  for (const a of actionPlan.actions) {
+    if (!a || typeof a !== 'object') continue;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') continue;
+    const key = String(a.component_key || a.componentKey || a.component_id || '').trim();
+    const existingId = String(a.component_node_id || a.componentNodeId || '').trim();
+    if (existingId && /^\d+:\d+$/.test(existingId)) continue;
+    if (!key) continue;
+    const row = byKey.get(key);
+    const id = row && String(row.id || '').trim();
+    if (id && /^\d+:\d+$/.test(id)) {
+      a.component_node_id = id;
+    }
+  }
+  return actionPlan;
+}
+
+/**
+ * Login fallback: if no explicit logo instance is present, try to place one logo/brand component
+ * near the top so screens with brand systems do not miss identity by default.
+ */
+function enforceLogoFallbackForLogin(actionPlan, prompt, dsContextIndex) {
+  if (!actionPlan || typeof actionPlan !== 'object' || !Array.isArray(actionPlan.actions)) return actionPlan;
+  if (!/\b(login|sign[\s-]?in|auth)\b/i.test(String(prompt || ''))) return actionPlan;
+  if (!dsContextIndex || typeof dsContextIndex !== 'object') return actionPlan;
+  const components = Array.isArray(dsContextIndex.components) ? dsContextIndex.components : [];
+  if (!components.length) return actionPlan;
+
+  const hasLogoInstance = actionPlan.actions.some((a) => {
+    if (!a || typeof a !== 'object') return false;
+    if (String(a.type || '').trim() !== 'INSTANCE_COMPONENT') return false;
+    const n = String(a.name || '').toLowerCase();
+    const key = String(a.component_key || a.componentKey || a.component_id || '').trim();
+    const id = String(a.component_node_id || a.componentNodeId || '').trim();
+    const fromIndex =
+      components.find((c) => String(c?.componentKey || '').trim() === key) ||
+      components.find((c) => String(c?.id || '').trim() === id) ||
+      null;
+    const inName = /\b(logo|brand|wordmark|logotype)\b/i.test(n);
+    const inComponent = /\b(logo|brand|wordmark|logotype)\b/i.test(String(fromIndex?.name || '').toLowerCase());
+    return inName || inComponent;
+  });
+  if (hasLogoInstance) return actionPlan;
+
+  const logoCandidate = components.find((c) =>
+    /\b(logo|brand|wordmark|logotype)\b/i.test(String(c?.name || '').toLowerCase()),
+  );
+  if (!logoCandidate) return actionPlan;
+
+  const parent =
+    actionPlan.actions.find((a) => a && typeof a === 'object' && String(a.type || '').toUpperCase() === 'CREATE_FRAME')
+      ?.ref || 'root';
+  actionPlan.actions.unshift({
+    type: 'INSTANCE_COMPONENT',
+    name: 'Brand Logo',
+    parentId: parent,
+    ...(logoCandidate.componentKey ? { component_key: String(logoCandidate.componentKey) } : {}),
+    ...(logoCandidate.id ? { component_node_id: String(logoCandidate.id) } : {}),
+  });
+  return actionPlan;
 }
 
 function validateSlotCoverage(actionPlan, slotPack) {
@@ -2889,6 +2979,8 @@ app.post('/api/agents/generate', async (req, res) => {
     actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
     actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
     actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
+    actionPlan = hydrateInstanceComponentRefsFromDsIndex(actionPlan, dsIndexForValidation);
+    actionPlan = enforceLogoFallbackForLogin(actionPlan, prompt, dsIndexForValidation);
     let schemaValidation = validateActionPlanSchema(actionPlan);
     let dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
     let visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -2952,6 +3044,8 @@ app.post('/api/agents/generate', async (req, res) => {
           actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
           actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
           actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
+          actionPlan = hydrateInstanceComponentRefsFromDsIndex(actionPlan, dsIndexForValidation);
+          actionPlan = enforceLogoFallbackForLogin(actionPlan, prompt, dsIndexForValidation);
           schemaValidation = validateActionPlanSchema(actionPlan);
           dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
           visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -3005,6 +3099,8 @@ app.post('/api/agents/generate', async (req, res) => {
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
         actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
+        actionPlan = hydrateInstanceComponentRefsFromDsIndex(actionPlan, dsIndexForValidation);
+        actionPlan = enforceLogoFallbackForLogin(actionPlan, prompt, dsIndexForValidation);
         schemaValidation = validateActionPlanSchema(actionPlan);
         dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
         visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);
@@ -3050,6 +3146,8 @@ app.post('/api/agents/generate', async (req, res) => {
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
         actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
+        actionPlan = hydrateInstanceComponentRefsFromDsIndex(actionPlan, dsIndexForValidation);
+        actionPlan = enforceLogoFallbackForLogin(actionPlan, prompt, dsIndexForValidation);
         schemaValidation = validateActionPlanSchema(actionPlan);
         dsValidation = validateActionPlanAgainstDs(actionPlan, dsPackage);
         visibleValidation = validateActionPlanVisiblePrimitives(actionPlan);

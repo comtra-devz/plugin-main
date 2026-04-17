@@ -26,6 +26,7 @@ type DsIndexSummary = {
   fileName?: string;
   total_tokens: number;
   token_categories: Record<string, number>;
+  variable_names?: string[];
   styles_summary?: { paintStyles: number; textStyles: number; effectStyles: number };
   components: unknown[];
   /** After heavy component scan: UI counts only (drops full `components[]` from React state to save memory). */
@@ -33,6 +34,9 @@ type DsIndexSummary = {
     inIndex: number;
     sets: number;
     singles: number;
+    logoLike: number;
+    titleLike: number;
+    descriptionLike: number;
   };
   components_truncated?: boolean;
   total_components_in_file?: number;
@@ -320,6 +324,22 @@ function ImportComponentsCatalogCard({
           <p className="mt-1 text-[10px] font-bold leading-snug text-gray-500">Components not in a set</p>
         </div>
       </div>
+      {catalogPreview && (
+        <div className="grid grid-cols-3 gap-0 border-b-2 border-black text-xs">
+          <div className="border-r-2 border-black bg-white p-2.5">
+            <p className="font-black uppercase text-[10px] text-gray-600">Logo-like</p>
+            <p className="mt-0.5 text-lg font-black tabular-nums leading-none">{catalogPreview.logoLike}</p>
+          </div>
+          <div className="border-r-2 border-black bg-white p-2.5">
+            <p className="font-black uppercase text-[10px] text-gray-600">Title-like</p>
+            <p className="mt-0.5 text-lg font-black tabular-nums leading-none">{catalogPreview.titleLike}</p>
+          </div>
+          <div className="bg-white p-2.5">
+            <p className="font-black uppercase text-[10px] text-gray-600">Description-like</p>
+            <p className="mt-0.5 text-lg font-black tabular-nums leading-none">{catalogPreview.descriptionLike}</p>
+          </div>
+        </div>
+      )}
       {truncated && fileTotal != null && (
         <div className="flex gap-2 border-t-2 border-amber-700 bg-amber-50 px-3 py-2.5 text-[11px] font-bold leading-snug text-amber-950">
           <span className="shrink-0 rounded-sm border border-amber-800 bg-amber-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-950">
@@ -332,6 +352,181 @@ function ImportComponentsCatalogCard({
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+type ImportWarningRow = {
+  key: string;
+  status: 'ok' | 'warning';
+  area: string;
+  what: string;
+  impact: string;
+  action: string;
+};
+
+function buildWizardWarningRows(summary: DsIndexSummary | null): ImportWarningRow[] {
+  if (!summary) return [];
+  const rows: ImportWarningRow[] = [];
+  const styles = summary.styles_summary;
+  const catalog = summary.catalogPreview;
+  const indexed = catalog?.inIndex ?? summary.components.length;
+  const textStyles = styles?.textStyles ?? 0;
+  const paintStyles = styles?.paintStyles ?? 0;
+  const hasTitleLike = (catalog?.titleLike ?? 0) > 0;
+  const hasDescLike = (catalog?.descriptionLike ?? 0) > 0;
+  const hasLogoLike = (catalog?.logoLike ?? 0) > 0;
+  const variableNames = Array.isArray(summary.variable_names) ? summary.variable_names : [];
+  const hasNumericVars = Number(summary.token_categories?.FLOAT || 0) > 0;
+  const hasSpacingVars = variableNames.some((n) =>
+    /\b(space|spacing|gap|margin|padding|inset|gutter)\b/i.test(String(n).toLowerCase()),
+  );
+
+  rows.push({
+    key: 'text-styles',
+    status: textStyles > 0 ? 'ok' : 'warning',
+    area: 'Text styles',
+    what: textStyles > 0 ? `${textStyles} local text style(s) found.` : 'No local text styles found.',
+    impact:
+      textStyles > 0
+        ? 'Titles and body text can follow your local styles.'
+        : 'Titles may look generic if styles come only from linked libraries.',
+    action:
+      textStyles > 0
+        ? 'No action needed.'
+        : 'Optional: create local aliases for key text styles, then re-import.',
+  });
+
+  rows.push({
+    key: 'paint-styles',
+    status: paintStyles > 0 ? 'ok' : 'warning',
+    area: 'Paint styles',
+    what: paintStyles > 0 ? `${paintStyles} local paint style(s) found.` : 'No local paint styles found.',
+    impact:
+      paintStyles > 0
+        ? 'Surface and accent colors can map more consistently.'
+        : 'Color mapping may fallback to variables/components only.',
+    action: paintStyles > 0 ? 'No action needed.' : 'Optional: expose key paint styles locally and re-import.',
+  });
+
+  rows.push({
+    key: 'title-components',
+    status: hasTitleLike ? 'ok' : 'warning',
+    area: 'Title components',
+    what: hasTitleLike ? 'Title/heading-like components found.' : 'No explicit title/heading components found.',
+    impact:
+      hasTitleLike
+        ? 'Generate can use title-oriented DS blocks when appropriate.'
+        : 'Generate may fallback to generic text titles.',
+    action:
+      hasTitleLike
+        ? 'No action needed.'
+        : 'Optional: add one heading/title component to your DS for stronger matching.',
+  });
+
+  rows.push({
+    key: 'description-components',
+    status: hasDescLike ? 'ok' : 'warning',
+    area: 'Description components',
+    what: hasDescLike ? 'Description/subtitle-like components found.' : 'No explicit description/subtitle components found.',
+    impact:
+      hasDescLike
+        ? 'Generate can pair title + description with DS components.'
+        : 'Description blocks may fallback to plain text.',
+    action:
+      hasDescLike
+        ? 'No action needed.'
+        : 'Optional: add one subtitle/description component and re-import.',
+  });
+
+  rows.push({
+    key: 'logo-components',
+    status: hasLogoLike ? 'ok' : 'warning',
+    area: 'Logo components',
+    what: hasLogoLike ? 'Logo/brand-like components found.' : 'No obvious logo/brand component found.',
+    impact:
+      hasLogoLike
+        ? 'Generate can attempt DS logo placement.'
+        : 'Logo can be missing unless a component is clearly named logo/brand.',
+    action:
+      hasLogoLike
+        ? 'No action needed.'
+        : 'Optional: publish a logo component named logo/brand mark and re-import.',
+  });
+
+  rows.push({
+    key: 'spacing-system',
+    status: hasNumericVars && hasSpacingVars ? 'ok' : 'warning',
+    area: 'Spacing variables',
+    what:
+      hasNumericVars && hasSpacingVars
+        ? 'Numeric spacing tokens found (gap/margin/padding-like).'
+        : 'No clear numeric spacing token system found for gap/margins.',
+    impact:
+      hasNumericVars && hasSpacingVars
+        ? 'Generate can map layout spacing directly from DS tokens.'
+        : 'Gap/margins may not map 1:1 from DS and can look inconsistent across screens.',
+    action:
+      hasNumericVars && hasSpacingVars
+        ? 'No action needed.'
+        : 'Comtra applies a best-practice fallback scale (4/8/12/16/24/32 based on 8pt rhythm). Add local spacing tokens and re-import for exact DS spacing.',
+  });
+
+  if ((textStyles === 0 || paintStyles === 0) && indexed > 0) {
+    rows.push({
+      key: 'linked-library-caveat',
+      status: 'warning',
+      area: 'Linked libraries',
+      what: 'Some styles may exist only in upstream linked libraries.',
+      impact: 'Wizard can read your components, but not always every linked style binding.',
+      action: 'If output style is off, enable libraries and create local aliases for key styles.',
+    });
+  }
+  return rows;
+}
+
+function WizardWarningsTable({ rows }: { rows: ImportWarningRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] overflow-hidden">
+      <div className="border-b-2 border-black bg-yellow-200 px-3 py-2">
+        <p className="text-[10px] font-black uppercase tracking-wide">Warnings check (simple)</p>
+        <p className="text-[11px] font-bold">What may be missing and what to do</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead className="bg-neutral-100 border-b-2 border-black">
+            <tr>
+              <th className="text-left p-2 border-r border-black">Status</th>
+              <th className="text-left p-2 border-r border-black">Area</th>
+              <th className="text-left p-2 border-r border-black">Detected</th>
+              <th className="text-left p-2 border-r border-black">Impact</th>
+              <th className="text-left p-2">Suggested action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-black/20 align-top">
+                <td className="p-2 border-r border-black">
+                  <span
+                    className={`inline-block px-1.5 py-0.5 border text-[9px] font-black uppercase ${
+                      r.status === 'ok'
+                        ? 'bg-green-100 border-green-800 text-green-900'
+                        : 'bg-amber-100 border-amber-800 text-amber-900'
+                    }`}
+                  >
+                    {r.status}
+                  </span>
+                </td>
+                <td className="p-2 border-r border-black font-black">{r.area}</td>
+                <td className="p-2 border-r border-black">{r.what}</td>
+                <td className="p-2 border-r border-black">{r.impact}</td>
+                <td className="p-2">{r.action}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -627,6 +822,11 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         idx.token_categories && typeof idx.token_categories === 'object' && !Array.isArray(idx.token_categories)
           ? (idx.token_categories as Record<string, number>)
           : {},
+      variable_names: Array.isArray(idx.variable_names)
+        ? idx.variable_names
+            .map((x) => String(x || '').trim())
+            .filter((x) => x.length > 0)
+        : [],
       styles_summary:
         idx.styles_summary &&
         typeof idx.styles_summary === 'object' &&
@@ -717,11 +917,26 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       const parsed = parseIndexToSummary(res.index as object);
       const parts = countIndexedCatalogParts(parsed.components);
       const inIndex = parsed.components.length;
+      const logoLike = parsed.components.filter((c) => {
+        if (!c || typeof c !== 'object') return false;
+        const n = String((c as { name?: unknown }).name || '').toLowerCase();
+        return /\b(logo|brand|wordmark|logotype)\b/i.test(n);
+      }).length;
+      const titleLike = parsed.components.filter((c) => {
+        if (!c || typeof c !== 'object') return false;
+        const n = String((c as { name?: unknown }).name || '').toLowerCase();
+        return /\b(title|heading|headline|hero title|h1|h2)\b/i.test(n);
+      }).length;
+      const descriptionLike = parsed.components.filter((c) => {
+        if (!c || typeof c !== 'object') return false;
+        const n = String((c as { name?: unknown }).name || '').toLowerCase();
+        return /\b(description|subtitle|subheading|helper|supporting text|body)\b/i.test(n);
+      }).length;
       // Drop full component rows from React state after scan — keeps step 4/5 responsive and lowers memory pressure.
       setIndexResult({
         ...parsed,
         components: [],
-        catalogPreview: { inIndex, sets: parts.sets, singles: parts.singles },
+        catalogPreview: { inIndex, sets: parts.sets, singles: parts.singles, logoLike, titleLike, descriptionLike },
       });
       const hash =
         (res.hash && String(res.hash).trim()) ||
@@ -1020,25 +1235,28 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               )}
 
               {wizardStep === 4 && indexResult && importFlowPhase === 'full' && (
-                <ul className="text-xs space-y-2 border-2 border-black p-3 bg-gray-50 shadow-[3px_3px_0_0_#000]">
-                  <li>
-                    <strong>File:</strong> {indexResult.fileName || fileName || '—'}
-                  </li>
-                  <li>
-                    <strong>Tokens:</strong> {indexResult.total_tokens}
-                  </li>
-                  {indexResult.styles_summary && (
+                <div className="space-y-3">
+                  <ul className="text-xs space-y-2 border-2 border-black p-3 bg-gray-50 shadow-[3px_3px_0_0_#000]">
                     <li>
-                      <strong>Styles:</strong> paint {indexResult.styles_summary.paintStyles}, text{' '}
-                      {indexResult.styles_summary.textStyles}, effects {indexResult.styles_summary.effectStyles}
+                      <strong>File:</strong> {indexResult.fileName || fileName || '—'}
                     </li>
-                  )}
-                  <li>
-                    <strong>Components in index:</strong>{' '}
-                    {indexResult.catalogPreview?.inIndex ?? indexResult.components.length}
-                    {indexResult.components_truncated ? ' (truncated)' : ''}
-                  </li>
-                </ul>
+                    <li>
+                      <strong>Tokens:</strong> {indexResult.total_tokens}
+                    </li>
+                    {indexResult.styles_summary && (
+                      <li>
+                        <strong>Styles:</strong> paint {indexResult.styles_summary.paintStyles}, text{' '}
+                        {indexResult.styles_summary.textStyles}, effects {indexResult.styles_summary.effectStyles}
+                      </li>
+                    )}
+                    <li>
+                      <strong>Components in index:</strong>{' '}
+                      {indexResult.catalogPreview?.inIndex ?? indexResult.components.length}
+                      {indexResult.components_truncated ? ' (truncated)' : ''}
+                    </li>
+                  </ul>
+                  <WizardWarningsTable rows={buildWizardWarningRows(indexResult)} />
+                </div>
               )}
 
               {step2GapHints.length > 0 && (

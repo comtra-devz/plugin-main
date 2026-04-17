@@ -4,7 +4,12 @@ import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
 import { GenerateDsImport, type RequestDsContextIndexFn } from './GenerateDsImport';
-import { clearSessionCatalogPrepared, setSessionCatalogPrepared } from '../lib/dsImportsStorage';
+import {
+  clearSessionCatalogPrepared,
+  hasImportForFileKey,
+  isSessionCatalogPreparedForFile,
+  setSessionCatalogPrepared,
+} from '../lib/dsImportsStorage';
 import {
   BrutalDropdown,
   brutalSelectOptionRowClass,
@@ -105,7 +110,7 @@ function humanizeCanvasError(raw: string): string {
   const msg = String(raw || '').trim();
   if (!msg) return 'Canvas apply failed.';
   if (msg.includes('CUSTOM_DS_INSTANCE_PREFLIGHT_FAILED')) {
-    return 'Generate blocked: no resolvable DS component instances were found for this file. Re-import DS / enable linked libraries, then retry.';
+    return 'Generate: i componenti del DS non sono risolvibili in questo file (chiavi pubblicate o librerie collegate). Abilita le librerie usate dal DS, riesegui l’import da questa schermata e riprova.';
   }
   if (msg.includes('INSTANCE_UNRESOLVED')) {
     return 'Some DS component instances are not resolvable in this file. Check DS import and linked libraries.';
@@ -138,6 +143,8 @@ export const Generate: React.FC<Props> = ({
 }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
+  /** Dove siamo nel flusso Generate (visibile durante loading). */
+  const [generateStep, setGenerateStep] = useState<'idle' | 'context' | 'ai' | 'canvas' | 'credits'>('idle');
   const [genError, setGenError] = useState<string | null>(null);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [lastVariant, setLastVariant] = useState<string | null>(null);
@@ -256,10 +263,17 @@ export const Generate: React.FC<Props> = ({
             : null;
       setGenFileCtxError(err);
       if (err || !r.fileKey) return;
-      const serverOk = await checkServerHasDsContext(r.fileKey);
+      const localListed = hasImportForFileKey(r.fileKey);
+      const sessionPrepared = isSessionCatalogPreparedForFile(r.fileKey);
+      let serverOk = false;
+      try {
+        serverOk = await checkServerHasDsContext(r.fileKey);
+      } catch {
+        serverOk = false;
+      }
       if (cancelled) return;
-      if (serverOk) {
-        setSessionCatalogPrepared(r.fileKey);
+      if (serverOk || localListed || sessionPrepared) {
+        if (serverOk || localListed) setSessionCatalogPrepared(r.fileKey);
         setCatalogReady(true);
       } else {
         setCatalogReady(false);
@@ -512,6 +526,7 @@ export const Generate: React.FC<Props> = ({
       return;
     }
     setLoading(true);
+    setGenerateStep('context');
     setShowReport(false);
     setGenError(null);
     setCanvasApplyResult(null);
@@ -520,12 +535,14 @@ export const Generate: React.FC<Props> = ({
     const rawText = inputRef.current?.innerText?.trim() || '';
     if (!rawText) {
       setLoading(false);
+      setGenerateStep('idle');
       return;
     }
 
     const { fileKey, error: ctxError } = await requestFileContext();
     if (ctxError || !fileKey) {
       setLoading(false);
+      setGenerateStep('idle');
       const opts = getSystemToastOptions('file_link_unavailable');
       setGenError(opts.description ?? opts.title);
       return;
@@ -534,6 +551,7 @@ export const Generate: React.FC<Props> = ({
     const mode = hasSelection ? 'modify' : screenshotAttachment ? 'screenshot' : 'create';
     const dsSource = usesFileDs ? 'custom' : selectedSystem;
 
+    setGenerateStep('ai');
     try {
       const data = await fetchGenerate({
         file_key: fileKey,
@@ -547,6 +565,7 @@ export const Generate: React.FC<Props> = ({
       if (!actionPlan || typeof actionPlan !== 'object') {
         setGenError('Invalid response from server.');
         setLoading(false);
+        setGenerateStep('idle');
         return;
       }
       lastActionPlanRef.current = actionPlan;
@@ -557,13 +576,16 @@ export const Generate: React.FC<Props> = ({
       setLastVariant(data?.variant ?? null);
       setFeedbackSent(false);
 
+      setGenerateStep('canvas');
       const canvasResult = await runCanvasApply(actionPlan, { modifyMode: isModify });
       if (!canvasResult.ok) {
         setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
         setLoading(false);
+        setGenerateStep('idle');
         return;
       }
 
+      setGenerateStep('credits');
       const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
       const creditsToConsume = meta?.estimated_credits ?? 3;
       const consumed = await consumeCredits({
@@ -574,6 +596,7 @@ export const Generate: React.FC<Props> = ({
       if (consumed?.error) {
         setGenError(consumed.error);
         setLoading(false);
+        setGenerateStep('idle');
         return;
       }
       setShowReport(true);
@@ -582,8 +605,20 @@ export const Generate: React.FC<Props> = ({
       setGenError(humanizeCanvasError(msg));
     } finally {
       setLoading(false);
+      setGenerateStep('idle');
     }
   };
+
+  const generateStepLabel =
+    generateStep === 'context'
+      ? 'Contesto file…'
+      : generateStep === 'ai'
+        ? 'Generazione layout (server)…'
+        : generateStep === 'canvas'
+          ? 'Creazione su Figma (può richiedere un minuto con molti componenti)…'
+          : generateStep === 'credits'
+            ? 'Aggiornamento crediti…'
+            : '';
 
   const handleViewFigma = async () => {
     const plan = lastActionPlanRef.current;
@@ -960,6 +995,11 @@ export const Generate: React.FC<Props> = ({
                 </>
               )}
             </Button>
+            {loading && generateStepLabel ? (
+              <p className="text-[9px] text-gray-600 mt-1.5 text-center font-mono" aria-live="polite">
+                {generateStepLabel}
+              </p>
+            ) : null}
 
             <div className="mt-2">
                 <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Prompt starters (context-aware):</p>

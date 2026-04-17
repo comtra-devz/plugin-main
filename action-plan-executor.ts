@@ -229,10 +229,23 @@ function applyFillsToNode(
   }
 }
 
-function applyFrameGeometry(f: FrameNode, spec: Record<string, unknown>, varMap: VarMap): void {
+function applyFrameGeometry(
+  f: FrameNode,
+  spec: Record<string, unknown>,
+  varMap: VarMap,
+  opts?: { skipResize?: boolean },
+): void {
   const w = Number(spec.width);
   const h = Number(spec.height);
-  if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) f.resize(w, h);
+  if (
+    !opts?.skipResize &&
+    Number.isFinite(w) &&
+    Number.isFinite(h) &&
+    w > 0 &&
+    h > 0
+  ) {
+    f.resize(w, h);
+  }
 
   const lm = parseLayoutMode(spec.layoutMode);
   f.layoutMode = lm;
@@ -260,6 +273,33 @@ function resolveParent(action: Record<string, unknown>, idMap: Map<string, Scene
   const node = idMap.get(pid);
   if (!node) return root;
   return asChildHost(node) ?? root;
+}
+
+function parentUsesAutoLayout(parent: ChildrenMixin): parent is FrameNode {
+  return parent.type === 'FRAME' && (parent as FrameNode).layoutMode !== 'NONE';
+}
+
+/** Dimensioni “a caso” dal modello (100×100 o quadretti piccoli) che rompono la lettura in autolayout. */
+function isModelSquarishJunkSize(w: unknown, h: unknown): boolean {
+  const nw = Number(w);
+  const nh = Number(h);
+  if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return false;
+  if (nw === 100 && nh === 100) return true;
+  if (nw <= 168 && nh <= 168 && Math.abs(nw - nh) <= 48) return true;
+  return false;
+}
+
+/** In autolayout: larghezza fill + altezza hug così istanze/testi non restano quadrati fissi. */
+function applyAutoLayoutChildSizing(node: SceneNode & LayoutMixin, parent: ChildrenMixin): void {
+  if (!parentUsesAutoLayout(parent)) return;
+  const pf = parent as FrameNode;
+  if (pf.layoutMode === 'VERTICAL') {
+    node.layoutSizingHorizontal = 'FILL';
+    node.layoutSizingVertical = 'HUG';
+  } else if (pf.layoutMode === 'HORIZONTAL') {
+    node.layoutSizingHorizontal = 'HUG';
+    node.layoutSizingVertical = 'FILL';
+  }
 }
 
 /** True se c’è testo, forme, istanze — non solo frame vuoti annidati. */
@@ -424,6 +464,35 @@ async function getComponentNodeByFigmaId(nodeId: string): Promise<ComponentNode 
   return null;
 }
 
+/**
+ * Quando `importComponentByKeyAsync` fallisce (componente già nel file, libreria non abilitata, ecc.)
+ * cerchiamo un COMPONENT / COMPONENT_SET nel documento con la stessa `key` pubblicata.
+ */
+async function findLocalComponentByPublishedKey(publishedKey: string): Promise<ComponentNode | null> {
+  const k = String(publishedKey || '').trim();
+  if (!k) return null;
+  try {
+    await figma.loadAllPagesAsync();
+  } catch {
+    /* best-effort */
+  }
+  for (const n of collectAllLocalComponents()) {
+    if (n.type === 'COMPONENT') {
+      const c = n as ComponentNode;
+      if (typeof c.key === 'string' && c.key.trim() === k) return c;
+    } else if (n.type === 'COMPONENT_SET') {
+      const set = n as ComponentSetNode;
+      if (typeof set.key === 'string' && set.key.trim() === k) return pickFromSet(set);
+      for (const ch of set.children) {
+        if (ch.type === 'COMPONENT' && typeof ch.key === 'string' && ch.key.trim() === k) {
+          return ch as ComponentNode;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function resolveComponentForInstance(hints: {
   nodeId?: string;
   componentKey?: string;
@@ -433,16 +502,20 @@ async function resolveComponentForInstance(hints: {
   const rawComponentKey = String(hints.componentKey || '').trim();
   const rawComponentName = String(hints.componentName || '').trim().toLowerCase();
 
-  if (rawComponentKey) {
-    try {
-      return await figma.importComponentByKeyAsync(rawComponentKey);
-    } catch {
-      /* key non importabile nel file corrente */
-    }
-  }
+  /** Percorso di successo in-file: id nodo prima della key (evita import libreria inutile). */
   if (rawNodeId) {
     const byId = await getComponentNodeByFigmaId(rawNodeId);
     if (byId) return byId;
+  }
+  if (rawComponentKey) {
+    try {
+      const imported = await figma.importComponentByKeyAsync(rawComponentKey);
+      if (imported) return imported;
+    } catch {
+      /* key non importabile via team library */
+    }
+    const localByKey = await findLocalComponentByPublishedKey(rawComponentKey);
+    if (localByKey) return localByKey;
   }
   if (rawComponentName) {
     const nodes = collectAllLocalComponents();
@@ -812,10 +885,30 @@ export async function executeActionPlanOnCanvas(
       const parent = resolveParent(raw, idMap, root);
       const f = figma.createFrame();
       parent.appendChild(f);
-      applyFrameGeometry(f, raw, varMap);
+      const junkChild =
+        parentUsesAutoLayout(parent) && isModelSquarishJunkSize(raw.width, raw.height);
+      applyFrameGeometry(f, raw, varMap, { skipResize: junkChild });
       await applyOptionalLayoutBindingsFromRaw(raw, f, varMap);
-      if (parent !== root && 'layoutMode' in parent && (parent as FrameNode).layoutMode !== 'NONE') {
-        f.layoutSizingHorizontal = 'FILL';
+      if (junkChild) {
+        applyAutoLayoutChildSizing(f, parent);
+        const pf = parent as FrameNode;
+        const pl = typeof pf.paddingLeft === 'number' ? pf.paddingLeft : 0;
+        const pr = typeof pf.paddingRight === 'number' ? pf.paddingRight : 0;
+        const inner = Math.max(200, pf.width - pl - pr);
+        try {
+          f.resize(inner, 48);
+        } catch {
+          /* ignore */
+        }
+        if (f.layoutMode !== 'NONE') {
+          try {
+            f.primaryAxisSizingMode = 'AUTO';
+          } catch {
+            /* ignore */
+          }
+        }
+      } else if (parentUsesAutoLayout(parent)) {
+        applyAutoLayoutChildSizing(f, parent);
       }
       const ref = typeof raw.ref === 'string' && raw.ref.trim() ? raw.ref.trim() : `auto_${i}`;
       idMap.set(ref, f);
@@ -837,8 +930,24 @@ export async function executeActionPlanOnCanvas(
         if (Number.isFinite(fs) && fs > 0) t.fontSize = fs;
         applyFillsToNode(t, raw.fills, varMap, 'text');
         if (typeof raw.name === 'string' && raw.name.trim()) t.name = raw.name.trim();
-        if ('layoutMode' in parent && (parent as FrameNode).layoutMode !== 'NONE') {
-          t.layoutSizingHorizontal = 'FILL';
+        if (parentUsesAutoLayout(parent)) {
+          applyAutoLayoutChildSizing(t, parent);
+        }
+        const nm = String(raw.name || raw.text || '').toLowerCase();
+        if (/\b(title|heading|headline|welcome|sign[\s-]?in)\b/i.test(nm)) {
+          const boldOk = await figma.loadFontAsync({ family: 'Inter', style: 'Bold' }).then(
+            () => true,
+            () => false,
+          );
+          if (boldOk) {
+            try {
+              t.fontName = { family: 'Inter', style: 'Bold' };
+            } catch {
+              /* ignore */
+            }
+          }
+          const fs = Number(raw.fontSize);
+          if (!Number.isFinite(fs) || fs <= 0) t.fontSize = 24;
         }
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), t);
       } catch {
@@ -878,12 +987,15 @@ export async function executeActionPlanOnCanvas(
       if (comp) {
         const inst = comp.createInstance();
         parent.appendChild(inst);
-        if ('layoutMode' in parent && (parent as FrameNode).layoutMode !== 'NONE') {
-          inst.layoutSizingHorizontal = 'FILL';
+        if (parentUsesAutoLayout(parent)) {
+          applyAutoLayoutChildSizing(inst, parent);
         }
         const iw = Number(raw.width);
         const ih = Number(raw.height);
-        if (Number.isFinite(iw) && iw > 0 && Number.isFinite(ih) && ih > 0) {
+        const skipResize =
+          isModelSquarishJunkSize(iw, ih) ||
+          (Number.isFinite(iw) && Number.isFinite(ih) && iw > 0 && ih > 0 && iw <= 168 && ih <= 168);
+        if (!skipResize && Number.isFinite(iw) && iw > 0 && Number.isFinite(ih) && ih > 0) {
           try {
             inst.resize(iw, ih);
           } catch {

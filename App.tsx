@@ -40,8 +40,9 @@ type CreditsFetchOutcome = { ok: boolean; retryable: boolean };
 const CREDITS_CACHE_KEY = 'comtra.credits.v1';
 const CREDITS_CACHE_TTL_MS = 15 * 60 * 1000;
 const CREDITS_GIFT_SEEN_KEY = 'comtra.creditGiftSeen.v1';
-const CREDITS_FETCH_TIMEOUT_LITE_MS = 18_000;
-const CREDITS_FETCH_TIMEOUT_FULL_MS = 28_000;
+/** Lite: saldo rapido; timeout corto così il profilo non resta “in attesa” su API lente. */
+const CREDITS_FETCH_TIMEOUT_LITE_MS = 8_000;
+const CREDITS_FETCH_TIMEOUT_FULL_MS = 22_000;
 
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -177,35 +178,6 @@ function SessionLoader() {
           50% { opacity: 1; transform: scale(1); }
         }
       `}</style>
-    </div>
-  );
-}
-
-/** Skeleton: solo rettangoli e forme con pulse, niente bordi né ombre scure. Durata minima 2s. */
-function CreditsLoader() {
-  return (
-    <div className="min-h-screen w-full bg-[#fdfdfd] flex flex-col" aria-live="polite" aria-busy="true">
-      <header className="bg-[#ff90e8] p-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="h-7 w-24 bg-white/40 animate-pulse" />
-          <div className="h-5 w-28 bg-white/40 animate-pulse" />
-        </div>
-        <div className="h-8 w-8 rounded-full bg-white/40 animate-pulse" />
-      </header>
-      <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-4">
-        <div className="h-32 w-full bg-gray-200/80 animate-pulse" />
-        <div className="h-10 w-full bg-gray-200/80 animate-pulse" />
-        <div className="space-y-2">
-          <div className="h-16 w-full bg-gray-100 animate-pulse" />
-          <div className="h-16 w-full bg-gray-100 animate-pulse" />
-          <div className="h-12 w-[75%] bg-gray-100 animate-pulse" />
-        </div>
-      </main>
-      <nav className="p-2 flex justify-around bg-gray-100 shrink-0">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-10 w-16 bg-gray-200/80 animate-pulse" />
-        ))}
-      </nav>
     </div>
   );
 }
@@ -446,26 +418,31 @@ export default function AppTest() {
           ) {
             const giftMarker = `${String(data.gift.created_at || 'unknown')}::${data.gift.credits_added}`;
             const alreadyShownInThisSession = readCreditGiftSeenMarker(user.id) === giftMarker;
-            try {
-              const rGift = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-              });
-              if (rGift.ok) {
-                writeCreditGiftSeenMarker(user.id, giftMarker);
-                if (!alreadyShownInThisSession) {
-                  setCreditGiftAmount(data.gift.credits_added);
-                  setShowCreditGiftModal(true);
+            const token = user.authToken;
+            const uid = user.id;
+            const added = data.gift.credits_added;
+            void (async () => {
+              try {
+                const rGift = await fetch(`${AUTH_BACKEND_URL}/api/credit-gift-seen`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                });
+                if (rGift.ok) {
+                  writeCreditGiftSeenMarker(uid, giftMarker);
+                  if (!alreadyShownInThisSession) {
+                    setCreditGiftAmount(added);
+                    setShowCreditGiftModal(true);
+                  }
+                } else if (shouldLogCreditsDebug()) {
+                  console.warn(`[CreditsDebug] POST /api/credit-gift-seen status=${rGift.status}`);
                 }
-              } else if (shouldLogCreditsDebug()) {
-                console.warn(`[CreditsDebug] POST /api/credit-gift-seen status=${rGift.status}`);
+              } catch (e) {
+                if (shouldLogCreditsDebug()) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  console.warn(`[CreditsDebug] POST /api/credit-gift-seen exception=${msg.slice(0, 200)}`);
+                }
               }
-            } catch (e) {
-              if (shouldLogCreditsDebug()) {
-                const msg = e instanceof Error ? e.message : String(e);
-                console.warn(`[CreditsDebug] POST /api/credit-gift-seen exception=${msg.slice(0, 200)}`);
-              }
-            }
+            })();
           }
           return { ok: true, retryable: false };
         } catch (e) {
@@ -501,13 +478,9 @@ export default function AppTest() {
 
   /** True after we gave up loading credits (all retries failed). Reset on logout. */
   const [creditsLoadGaveUp, setCreditsLoadGaveUp] = useState(false);
-  /** Skeleton mostrato almeno 2s per dare l’idea di caricamento; poi si passa all’app. */
-  const [creditsLoaderMinElapsed, setCreditsLoaderMinElapsed] = useState(false);
-  /** Timestamp del primo rendering dello skeleton crediti: evita reset continui del timer. */
-  const creditsSkeletonStartAtRef = useRef<number | null>(null);
 
-  const CREDITS_MAX_ATTEMPTS = 3;
-  const CREDITS_RETRY_DELAYS_MS = [800, 1600]; // tra tentativo 0→1 e 1→2
+  const CREDITS_MAX_ATTEMPTS = 2;
+  const CREDITS_RETRY_DELAYS_MS = [350, 700];
 
   useEffect(() => {
     if (!user?.authToken) {
@@ -577,30 +550,6 @@ export default function AppTest() {
     }, 400);
     return () => clearTimeout(tid);
   }, [view, user?.authToken, user?.id, fetchCreditsInternal]);
-
-  useEffect(() => {
-    if (!user) {
-      creditsSkeletonStartAtRef.current = null;
-      setCreditsLoaderMinElapsed(false);
-      return;
-    }
-
-    if (credits !== null || creditsLoadGaveUp) {
-      creditsSkeletonStartAtRef.current = null;
-      setCreditsLoaderMinElapsed(true);
-      return;
-    }
-
-    // credits ancora null e non abbiamo dato up: aspettiamo almeno 2s dal primo ingresso
-    if (!creditsLoaderMinElapsed) {
-      const startAt = creditsSkeletonStartAtRef.current ?? Date.now();
-      creditsSkeletonStartAtRef.current = startAt;
-      const elapsed = Date.now() - startAt;
-      const remaining = Math.max(0, 2000 - elapsed);
-      const t = window.setTimeout(() => setCreditsLoaderMinElapsed(true), remaining);
-      return () => clearTimeout(t);
-    }
-  }, [user, credits, creditsLoadGaveUp, creditsLoaderMinElapsed]);
 
   const fetchTrophies = React.useCallback(async () => {
     if (!user?.authToken) return;
@@ -728,6 +677,9 @@ export default function AppTest() {
           if (optimisticCredits) {
             setCredits(optimisticCredits);
             if (normalized.id) writeCreditsCache(normalized.id, optimisticCredits);
+          } else if (normalized.id) {
+            const cached = readCreditsCache(normalized.id);
+            if (cached) setCredits(cached);
           }
           setShowLogin(false);
         }
@@ -739,6 +691,9 @@ export default function AppTest() {
         if (optimisticCredits) {
           setCredits(optimisticCredits);
           if (normalized.id) writeCreditsCache(normalized.id, optimisticCredits);
+        } else if (normalized.id) {
+          const cached = readCreditsCache(normalized.id);
+          if (cached) setCredits(cached);
         }
         setShowLogin(false);
         setOauthInProgress(false);
@@ -879,7 +834,7 @@ export default function AppTest() {
   // Chiedi al controller la sessione salvata al mount; timeout per non bloccare se il messaggio non arriva
   useEffect(() => {
     window.parent.postMessage({ pluginMessage: { type: 'get-saved-user' } }, '*');
-    const t = setTimeout(() => setSessionRestoring(false), 800);
+    const t = setTimeout(() => setSessionRestoring(false), 400);
     return () => clearTimeout(t);
   }, []);
 
@@ -910,7 +865,8 @@ export default function AppTest() {
   useEffect(() => {
     if (!oauthReadKey || !oauthInProgress) return;
     const pollUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/poll?read_key=${encodeURIComponent(oauthReadKey)}`;
-    const interval = setInterval(async () => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const tick = async () => {
       try {
         const r = await fetch(pollUrl);
         if (r.status === 202) return;
@@ -918,14 +874,14 @@ export default function AppTest() {
         const data = await r.json();
         if (data?.error) {
           setOauthReadKey(null);
-          clearInterval(interval);
+          if (intervalId != null) clearInterval(intervalId);
           setOauthInProgress(false);
           setLoginError('Login didn\'t go through. Try again.');
           return;
         }
         if (data?.user) {
           setOauthReadKey(null);
-          clearInterval(interval);
+          if (intervalId != null) clearInterval(intervalId);
           setOauthInProgress(false);
           if (data.tokenSaved === false) {
             setLoginError('Login didn\'t go through. Try again.');
@@ -934,8 +890,12 @@ export default function AppTest() {
           window.parent.postMessage({ pluginMessage: { type: 'oauth-complete', user: data.user } }, '*');
         }
       } catch (_) {}
-    }, 2000);
-    return () => clearInterval(interval);
+    };
+    void tick();
+    intervalId = setInterval(() => void tick(), 650);
+    return () => {
+      if (intervalId != null) clearInterval(intervalId);
+    };
   }, [oauthInProgress, oauthReadKey]);
 
   const handleLogout = () => {
@@ -1717,12 +1677,6 @@ export default function AppTest() {
           onDismissToast={() => setLogoutToast(null)}
         />
       );
-  }
-
-  // Skeleton: max 2s per evitare flash sotto e non bloccare mai il plugin.
-  const showCreditsSkeleton = user && !creditsLoaderMinElapsed;
-  if (showCreditsSkeleton) {
-    return <CreditsLoader />;
   }
 
   return (
