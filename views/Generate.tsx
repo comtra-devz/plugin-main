@@ -36,6 +36,10 @@ interface Props {
     screenshot_base64?: string | null;
     ds_context_index?: object | null;
     ds_cache_hash?: string | null;
+    component_assignment_overrides?: Record<
+      string,
+      { component_key?: string | null; component_node_id?: string | null }
+    > | null;
   }) => Promise<{ action_plan: object; variant?: string; request_id?: string | null }>;
   requestFileContext: () => Promise<{
     fileKey: string | null;

@@ -1500,6 +1500,11 @@ export default function AppTest() {
       /** Se omesso, l’indice viene richiesto al plugin prima del POST. Passa `null` per saltare. */
       ds_context_index?: object | null;
       ds_cache_hash?: string | null;
+      /** Future conversational UX: user-confirmed slot->component overrides scoped to current DS/file. */
+      component_assignment_overrides?: Record<
+        string,
+        { component_key?: string | null; component_node_id?: string | null }
+      > | null;
     }) => {
       if (!user?.authToken) throw new Error('Unauthorized');
 
@@ -1546,6 +1551,13 @@ export default function AppTest() {
       };
       if (dsContextIndex != null) payload.ds_context_index = dsContextIndex;
       if (dsCacheHash != null && String(dsCacheHash).trim() !== '') payload.ds_cache_hash = String(dsCacheHash).trim();
+      if (
+        body.component_assignment_overrides &&
+        typeof body.component_assignment_overrides === 'object' &&
+        Object.keys(body.component_assignment_overrides).length > 0
+      ) {
+        payload.component_assignment_overrides = body.component_assignment_overrides;
+      }
       const sb = body.screenshot_base64;
       if (sb != null && String(sb).trim() !== '') payload.screenshot_base64 = String(sb).trim();
       const parseErrorMessage = async (res: Response): Promise<string> => {

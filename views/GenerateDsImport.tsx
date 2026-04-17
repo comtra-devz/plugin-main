@@ -89,6 +89,37 @@ function countIndexedCatalogParts(components: unknown[]): {
   return { sets, singles };
 }
 
+function hasSemanticSignal(
+  raw: unknown,
+  re: RegExp,
+  opts?: { includeSlotHints?: boolean },
+): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const row = raw as {
+    name?: unknown;
+    propertyKeys?: unknown;
+    variantAxes?: unknown;
+    slotHints?: unknown;
+  };
+  const name = String(row.name || '').toLowerCase();
+  if (re.test(name)) return true;
+  const propertyKeys = Array.isArray(row.propertyKeys) ? row.propertyKeys : [];
+  for (const k of propertyKeys) {
+    if (re.test(String(k || '').toLowerCase())) return true;
+  }
+  const variantAxes = Array.isArray(row.variantAxes) ? row.variantAxes : [];
+  for (const a of variantAxes) {
+    if (re.test(String(a || '').toLowerCase())) return true;
+  }
+  if (opts?.includeSlotHints) {
+    const slotHints = Array.isArray(row.slotHints) ? row.slotHints : [];
+    for (const s of slotHints) {
+      if (re.test(String(s || '').toLowerCase())) return true;
+    }
+  }
+  return false;
+}
+
 function readIntroSeen(): boolean {
   return safeLocalStorageGetItem(INTRO_SEEN_KEY) === '1';
 }
@@ -324,22 +355,7 @@ function ImportComponentsCatalogCard({
           <p className="mt-1 text-[10px] font-bold leading-snug text-gray-500">Components not in a set</p>
         </div>
       </div>
-      {catalogPreview && (
-        <div className="grid grid-cols-3 gap-0 border-b-2 border-black text-xs">
-          <div className="border-r-2 border-black bg-white p-2.5">
-            <p className="font-black uppercase text-[10px] text-gray-600">Logo-like</p>
-            <p className="mt-0.5 text-lg font-black tabular-nums leading-none">{catalogPreview.logoLike}</p>
-          </div>
-          <div className="border-r-2 border-black bg-white p-2.5">
-            <p className="font-black uppercase text-[10px] text-gray-600">Title-like</p>
-            <p className="mt-0.5 text-lg font-black tabular-nums leading-none">{catalogPreview.titleLike}</p>
-          </div>
-          <div className="bg-white p-2.5">
-            <p className="font-black uppercase text-[10px] text-gray-600">Description-like</p>
-            <p className="mt-0.5 text-lg font-black tabular-nums leading-none">{catalogPreview.descriptionLike}</p>
-          </div>
-        </div>
-      )}
+      {/* logo/title/description internal metrics intentionally hidden from user-facing recap */}
       {truncated && fileTotal != null && (
         <div className="flex gap-2 border-t-2 border-amber-700 bg-amber-50 px-3 py-2.5 text-[11px] font-bold leading-snug text-amber-950">
           <span className="shrink-0 rounded-sm border border-amber-800 bg-amber-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-950">
@@ -737,7 +753,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       wizardCapture.hash.trim() ||
       String((wizardCapture.fullIndex as { hash?: string }).hash || '').trim() ||
       '';
-    const topKeys = Object.keys(wizardCapture.fullIndex as object).length;
 
     onBusyChange(true);
     setWizardError(null);
@@ -784,12 +799,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         title: 'Metadati Figma non salvati',
         description: `${err} Lo snapshot è comunque sul server e verificato; il catalogo è sbloccato. Puoi ripetere l’import se vuoi riscrivere i metadati locali.`,
         variant: 'warning',
-        dismissible: true,
-      });
-    } else {
-      showToast({
-        title: 'Design system salvato',
-        description: `Snapshot verificato sul server (${topKeys} chiavi in cima al JSON). Elenco import aggiornato.`,
         dismissible: true,
       });
     }
@@ -917,21 +926,19 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       const parsed = parseIndexToSummary(res.index as object);
       const parts = countIndexedCatalogParts(parsed.components);
       const inIndex = parsed.components.length;
-      const logoLike = parsed.components.filter((c) => {
-        if (!c || typeof c !== 'object') return false;
-        const n = String((c as { name?: unknown }).name || '').toLowerCase();
-        return /\b(logo|brand|wordmark|logotype)\b/i.test(n);
-      }).length;
-      const titleLike = parsed.components.filter((c) => {
-        if (!c || typeof c !== 'object') return false;
-        const n = String((c as { name?: unknown }).name || '').toLowerCase();
-        return /\b(title|heading|headline|hero title|h1|h2)\b/i.test(n);
-      }).length;
-      const descriptionLike = parsed.components.filter((c) => {
-        if (!c || typeof c !== 'object') return false;
-        const n = String((c as { name?: unknown }).name || '').toLowerCase();
-        return /\b(description|subtitle|subheading|helper|supporting text|body)\b/i.test(n);
-      }).length;
+      const logoLike = parsed.components.filter((c) =>
+        hasSemanticSignal(c, /\b(logo|brand|wordmark|logotype)\b/i, { includeSlotHints: true }),
+      ).length;
+      const titleLike = parsed.components.filter((c) =>
+        hasSemanticSignal(c, /\b(title|heading|headline|hero title|h1|h2)\b/i, { includeSlotHints: true }),
+      ).length;
+      const descriptionLike = parsed.components.filter((c) =>
+        hasSemanticSignal(
+          c,
+          /\b(description|subtitle|subheading|helper|supporting text|body|caption|subtext)\b/i,
+          { includeSlotHints: true },
+        ),
+      ).length;
       // Drop full component rows from React state after scan — keeps step 4/5 responsive and lowers memory pressure.
       setIndexResult({
         ...parsed,

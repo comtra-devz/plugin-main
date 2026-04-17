@@ -325,3 +325,72 @@ Tables (draft):
    - `generate_chip_succeeded`
    - `generate_chip_failed`
 
+---
+
+## 14) Implementation trace (already done before full conversational UI)
+
+This section tracks groundwork already implemented so Phase 1/2 conversational UX can ship faster.
+
+### 14.1 Backend (generate core) groundwork done
+
+- **P0-P4 foundation active**:
+  - DS readiness gate for custom DS
+  - deterministic slot candidate binding
+  - layout quality contract gate
+  - diagnostics payload (`generation_diagnostics`)
+  - deterministic fallback before hard fail
+- **Slot metadata for downstream execution**:
+  - `slot_id` is now written on `INSTANCE_COMPONENT` actions after slot assignment.
+- **User-confirmed assignment override support (conversation-ready)**:
+  - `POST /api/agents/generate` accepts:
+    - `component_assignment_overrides`
+      - shape: `slot_id -> { component_key, component_node_id }`
+  - overrides are applied to slot candidates before binding.
+- **Ranking upgrade (global, not button-only)**:
+  - slot ranking uses:
+    - component name
+    - slot hints
+    - prompt token overlap
+    - page context (`pageName`)
+    - page order (`pageOrder`) tie-break
+- **Semantic hardening**:
+  - CTA slot penalizes card-like candidates when they are not explicit button/cta/action controls.
+
+### 14.2 DS context index groundwork done
+
+- Component summaries include:
+  - `pageName`
+  - `pageOrder`
+- This enables page-aware ranking and future explainability ("why this component was selected").
+
+### 14.3 Plugin executor groundwork done
+
+- **Resolution success path improved**:
+  - prefers resolvable node IDs in-file
+  - local fallback by published component key when import-by-key fails
+- **Auto-layout visibility fixes**:
+  - avoids harmful tiny fixed sizes (e.g., 100x100 artifacts)
+  - better FILL/HUG behavior in vertical/horizontal stacks
+- **Property engine v1**:
+  - supports explicit `variantProperties` / `properties`
+  - adds smart fallback for `TEXT` and selected `BOOLEAN` props
+  - uses `slot_id` and prompt signals to reduce placeholder-heavy outcomes
+
+### 14.4 DS import wizard groundwork done
+
+- Added user-facing warnings table in recap:
+  - text/paint style coverage
+  - spacing variable coverage
+  - title/description/logo detection
+  - linked-library caveat in simple language
+- Internal metrics are used for warnings logic without exposing debug counters in user recap.
+
+### 14.5 Conversational UX implications
+
+Because of the groundwork above, conversational Phase 1/2 can focus on UX instead of backend rewrites:
+
+- chip actions can target slot-level intent safely
+- user correction turns can send assignment overrides without schema changes
+- timeline explanations can reference diagnostics and slot decisions
+- future "teach the model for this DS" loop can be scoped by `file_key + ds_cache_hash`
+

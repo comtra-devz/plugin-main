@@ -2421,6 +2421,54 @@ function formatSlotCandidateBlock(pack) {
   ].join('\n');
 }
 
+function normalizeAssignmentOverrides(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = {};
+  for (const [slotId, v] of Object.entries(raw)) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    const componentKey = String(v.component_key || v.componentKey || '').trim();
+    const componentNodeId = String(v.component_node_id || v.componentNodeId || '').trim();
+    if (!componentKey && !componentNodeId) continue;
+    out[String(slotId)] = {
+      component_key: componentKey || null,
+      component_node_id: componentNodeId || null,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function applyAssignmentOverridesToSlotPack(slotPack, overrides) {
+  if (!slotPack || !Array.isArray(slotPack.slots) || slotPack.slots.length === 0) return slotPack;
+  if (!overrides || typeof overrides !== 'object') return slotPack;
+  const next = {
+    ...slotPack,
+    slots: slotPack.slots.map((slot) => {
+      const ov = overrides[slot.id];
+      if (!ov) return slot;
+      const candidates = Array.isArray(slot.candidates) ? [...slot.candidates] : [];
+      const pref = {
+        id: String(ov.component_node_id || '').trim(),
+        componentKey: String(ov.component_key || '').trim(),
+        name: 'User-confirmed component',
+      };
+      const already = candidates.find(
+        (c) =>
+          (pref.id && String(c?.id || '').trim() === pref.id) ||
+          (pref.componentKey && String(c?.componentKey || '').trim() === pref.componentKey),
+      );
+      if (already) {
+        const rest = candidates.filter((c) => c !== already);
+        return { ...slot, candidates: [already, ...rest] };
+      }
+      if (pref.id || pref.componentKey) {
+        return { ...slot, candidates: [pref, ...candidates] };
+      }
+      return slot;
+    }),
+  };
+  return next;
+}
+
 function assignSlotToAction(action, slotPack) {
   const n = String(action?.name || '').toLowerCase();
   if (!n || !slotPack?.slots?.length) return null;
@@ -2772,6 +2820,9 @@ app.post('/api/agents/generate', async (req, res) => {
   const dsSource = body.ds_source || body.dsSource || 'custom';
   const dsContextIndex = body.ds_context_index;
   const dsCacheHashFromBody = String(body.ds_cache_hash || body.dsCacheHash || '').trim();
+  const assignmentOverrides = normalizeAssignmentOverrides(
+    body.component_assignment_overrides || body.componentAssignmentOverrides,
+  );
   const contextProfile = resolveContextProfile(body.context_profile || body.contextProfile || { input_mode: mode });
   const resolvedDsId = mapDsSourceToId(dsSource);
   let dsPackageRaw = loadDsPackage(dsSource);
@@ -2915,7 +2966,8 @@ app.post('/api/agents/generate', async (req, res) => {
         ].join('\n')
       : '';
     const inferredScreenArchetype = inferFocusedScreenType(prompt);
-    const slotCandidatePack = buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
+    const slotCandidatePackBase = buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
+    const slotCandidatePack = applyAssignmentOverridesToSlotPack(slotCandidatePackBase, assignmentOverrides);
     const slotCandidateBlock = formatSlotCandidateBlock(slotCandidatePack);
     const qualityContractLine =
       mode === 'create' || mode === 'screenshot'
@@ -3284,6 +3336,9 @@ app.post('/api/agents/generate', async (req, res) => {
     if (dsIndexForPrompt?.components_retrieval) actionPlan.metadata.ds_components_retrieval = dsIndexForPrompt.components_retrieval;
     if (dsIndexForPrompt?.variable_names_retrieval) actionPlan.metadata.ds_variables_retrieval = dsIndexForPrompt.variable_names_retrieval;
     actionPlan.metadata.context_profile = contextProfile;
+    actionPlan.metadata.assignment_overrides_applied = assignmentOverrides
+      ? Object.keys(assignmentOverrides).length
+      : 0;
     actionPlan.metadata.ds_validation = {
       valid: dsValidation.valid,
       warnings: [
