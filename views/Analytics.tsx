@@ -219,6 +219,7 @@ const ACTION_LABELS: Record<string, string> = {
   proto_audit: 'Prototype Audit',
   proto_scan: 'Proto Scan',
   generate: 'Generate (AI)',
+  enhance_plus: 'Enhance Plus (prompt)',
   wireframe_gen: 'Wireframe generation',
   wireframe_modified: 'Wireframe modified',
   code_gen_free: 'Code export (free)',

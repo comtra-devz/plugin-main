@@ -65,6 +65,20 @@ interface Props {
     ds_context_index: object;
   }) => Promise<void>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
+  /** Kimi mini-agent: structured prompt (billed; PRO free on server). */
+  fetchEnhancePlus?: (body: {
+    prompt: string;
+    mode: string;
+    ds_source: string;
+    has_screenshot?: boolean;
+    selection_label?: string | null;
+  }) => Promise<{
+    enhanced_prompt: string;
+    credits_consumed?: number;
+    credits_remaining?: number;
+    credits_total?: number;
+    credits_used?: number;
+  }>;
   /** Telemetria / learning loop (DI v2): eventi post-generazione lato plugin. */
   fetchGenerationPluginEvent?: (body: {
     event_type: string;
@@ -153,6 +167,7 @@ export const Generate: React.FC<Props> = ({
   checkServerHasDsContext,
   persistDsImportToServer,
   fetchGenerateFeedback,
+  fetchEnhancePlus,
   fetchGenerationPluginEvent,
   selectedNode,
   applyActionPlanToCanvas,
@@ -198,6 +213,23 @@ export const Generate: React.FC<Props> = ({
   useEffect(() => {
     enhanceLockedRef.current = enhanceLocked;
   }, [enhanceLocked]);
+
+  const [enhancePlusBusy, setEnhancePlusBusy] = useState(false);
+  const [enhancePlusCost, setEnhancePlusCost] = useState(1);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { estimated_credits } = await estimateCredits({ action_type: 'enhance_plus' });
+        if (!cancelled) setEnhancePlusCost(Math.max(0, Number(estimated_credits) || 1));
+      } catch {
+        if (!cancelled) setEnhancePlusCost(1);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [estimateCredits]);
 
   // New State for Report Flow
   const [showReport, setShowReport] = useState(false);
@@ -387,24 +419,18 @@ export const Generate: React.FC<Props> = ({
   const buildEnhancedPrompt = useCallback(
     (base: string) => {
       const context = hasSelection
-        ? `Target: ${selectedLayerName} (${selectedNode?.type}).`
+        ? `Context: modify selection — ${selectedLayerName} (${selectedNode?.type}).`
         : screenshotAttachment
-          ? 'Context: screenshot reference uploaded.'
-          : 'Context: create from scratch.';
-      const dsContext = `Design System: ${selectedSystem}.`;
-      const strictness =
-        userTier === 'PRO'
-          ? 'Push for a polished, production-ready composition.'
-          : 'Stay concise and practical.';
+          ? 'Context: screenshot reference (layout inspiration).'
+          : 'Context: create from scratch on the current page.';
       return [
         `Goal: ${base}`,
         context,
-        dsContext,
-        'Constraints: keep hierarchy clear, spacing consistent, and accessibility in mind.',
-        `Quality bar: one coherent screen that follows the design system above. ${strictness}`,
+        `DS: ${selectedSystem} (Comtra applies the catalog during Generate — add only screen-specific detail here).`,
+        'Add if missing: viewport, must-have sections/components, copy tone, edge states (empty/error). Skip generic “use DS / WCAG / spacing” advice.',
       ].join('\n');
     },
-    [hasSelection, selectedLayerName, selectedNode?.type, screenshotAttachment, selectedSystem, userTier]
+    [hasSelection, selectedLayerName, selectedNode?.type, screenshotAttachment, selectedSystem]
   );
 
   /** After Enhance, if DS/context changes, rewrite the terminal without mixing versions. */
@@ -532,6 +558,69 @@ export const Generate: React.FC<Props> = ({
     setEnhancedGoalSnapshot(base);
     setEnhanceLocked(true);
   };
+
+  const handleEnhancePlusPrompt = useCallback(async () => {
+    if (!inputRef.current || !fetchEnhancePlus || enhancePlusBusy) return;
+    const raw = getPlainTerminalText(inputRef.current);
+    if (!raw.trim()) return;
+    const base = extractBaseForEnhance(raw) || raw.trim();
+    const isProLocal = plan === 'PRO';
+    const infiniteForTest = !!useInfiniteCreditsForTest;
+    if (!isProLocal && !infiniteForTest) {
+      const { estimated_credits } = await estimateCredits({ action_type: 'enhance_plus' });
+      const cost = Math.max(0, Number(estimated_credits) || 1);
+      const rem = creditsRemaining === null ? Infinity : creditsRemaining;
+      if (rem < cost) {
+        onUnlockRequest();
+        return;
+      }
+    }
+    const mode = hasSelection ? 'modify' : screenshotAttachment ? 'screenshot' : 'create';
+    const dsSource = usesFileDs ? 'custom' : selectedSystem;
+    const selectionLabel =
+      hasSelection && selectedNode
+        ? `${selectedNode.name || 'Selection'} (${selectedNode.type || 'LAYER'})`
+        : null;
+    setEnhancePlusBusy(true);
+    setGenError(null);
+    try {
+      const data = await fetchEnhancePlus({
+        prompt: raw.slice(0, 8000),
+        mode,
+        ds_source: dsSource,
+        has_screenshot: Boolean(screenshotAttachment),
+        selection_label: selectionLabel,
+      });
+      const next = String(data.enhanced_prompt || '').trim();
+      if (!next) {
+        setGenError('Enhance Plus returned empty text.');
+        return;
+      }
+      lastEnhancedBodyRef.current = next;
+      inputRef.current.innerText = next;
+      setPromptText(next);
+      setHasContent(true);
+      setEnhancedGoalSnapshot(extractBaseForEnhance(next) || base);
+      setEnhanceLocked(true);
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEnhancePlusBusy(false);
+    }
+  }, [
+    fetchEnhancePlus,
+    enhancePlusBusy,
+    hasSelection,
+    screenshotAttachment,
+    usesFileDs,
+    selectedSystem,
+    plan,
+    useInfiniteCreditsForTest,
+    estimateCredits,
+    creditsRemaining,
+    onUnlockRequest,
+    selectedNode,
+  ]);
 
   const handleGen = async () => {
     if (!canGenerate) {
@@ -949,21 +1038,36 @@ export const Generate: React.FC<Props> = ({
             <div className="flex flex-col gap-0 relative z-[1]">
                 <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">
                   <span>AI Terminal</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     <button
                       type="button"
-                  onClick={handleEnhancePrompt}
-                  disabled={!hasContent || loading || enhanceLocked || dsGateBlocked}
+                      onClick={handleEnhancePrompt}
+                      disabled={!hasContent || loading || enhancePlusBusy || enhanceLocked || dsGateBlocked}
                       title={
                         enhanceLocked
                           ? 'Edit the terminal text to unlock Enhance again.'
-                          : undefined
+                          : 'Free: structured template (no AI).'
                       }
-                      className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${!hasContent || loading || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
+                      className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
                     >
-                      Enhance Prompt
+                      Enhance
                     </button>
-                    <span className="opacity-70 font-mono">v1.1</span>
+                    {fetchEnhancePlus ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleEnhancePlusPrompt()}
+                        disabled={!hasContent || loading || enhancePlusBusy || dsGateBlocked}
+                        title={
+                          plan === 'PRO'
+                            ? 'Kimi: richer prompt (no credit charge on PRO).'
+                            : `Uses Kimi — ${enhancePlusCost} credit(s). Charged only after a successful response.`
+                        }
+                        className={`text-[9px] border border-amber-200/80 px-2 py-0.5 uppercase text-amber-100 ${!hasContent || loading || enhancePlusBusy ? 'opacity-40 cursor-not-allowed' : 'hover:bg-amber-100 hover:text-black'}`}
+                      >
+                        {enhancePlusBusy ? '…' : plan === 'PRO' ? 'Enhance+' : `Enhance+ ${enhancePlusCost}cr`}
+                      </button>
+                    ) : null}
+                    <span className="opacity-70 font-mono">v1.2</span>
                   </div>
                 </div>
 

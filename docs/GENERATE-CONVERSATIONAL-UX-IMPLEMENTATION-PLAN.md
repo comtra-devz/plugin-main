@@ -283,10 +283,21 @@ Tables (draft):
 - New layout with timeline + composer + context strip.
 - Existing generate logic wired unchanged.
 
+### Phase 1.5 — Transparency + expectability (Generate)
+
+- Phase strip / labels aligned to `generateStep` and server timings where available.
+- Conservative “how long this can take” messaging for the full pipeline (see §15).
+- DS import wizard: same expectability pattern for long index builds (cross-link §15.3).
+
 ### Phase 2 — Reasoning summary + chips
 
 - Assistant summaries and first chip set.
 - Credit estimate per chip.
+
+### Phase 2.5 — Pre-flight clarifier (Questions light)
+
+- Archetype-aware chips / compact clarifier before final generate when triggers fire (§15.2).
+- Merge answers into prompt or overrides; telemetry on dismiss vs complete (§15.4–§15.5).
 
 ### Phase 3 — Thread persistence
 
@@ -393,4 +404,67 @@ Because of the groundwork above, conversational Phase 1/2 can focus on UX instea
 - user correction turns can send assignment overrides without schema changes
 - timeline explanations can reference diagnostics and slot decisions
 - future "teach the model for this DS" loop can be scoped by `file_key + ds_cache_hash`
+
+---
+
+## 15) Benchmark synthesis (Apr 2026) — folded into conversational Generate
+
+External tools (e.g. guided DS onboarding + structured “Questions” before build) reinforce patterns that **do not replace** Enhance: they strengthen **Generate** itself by reducing ambiguity **before** the expensive path (Kimi → validate → credits → canvas).
+
+### 15.1 Three UX pillars to merge with §5–§11
+
+| Pillar | Borrowed idea | Comtra mapping |
+|--------|----------------|----------------|
+| **Expectability** | Explicit max duration for long operations | Generate: conservative “finché…” copy for AI + validation + apply; tie to `generation_diagnostics.phase_timers` where useful |
+| **Progress truth** | Checklist / substeps visible (read → list → render…) | Conversation timeline + optional **phase strip**: contesto → modello → validazione → canvas → crediti (already loosely in `generateStep`; surface as numbered steps, not one spinner) |
+| **Structured intent** | Questions tab before build (chips), not prose only | **Pre-flight strip** inside Generate chat: archetype-aware chips when triggers fire (below); confirm summary **before** final POST |
+
+### 15.2 Pre-flight “Questions light” (Generate, not Enhance)
+
+Purpose: prevent collapse to a single `component_node_id` / thin slot pack when the user prompt is underspecified.
+
+**Triggers (any → open clarifier):**
+
+- inferred archetype confidence below threshold (see pack `[CONV_UX]` / `disambiguation_protocol`)
+- OR prompt length / entropy below threshold (heuristic)
+- OR slot pack for inferred archetype has **too few distinct slots** or **too few candidates per slot** (e.g. dashboard with only `stat_card`)
+- OR internal signal “repeat risk”: same slot reused for semantically different regions (detector on draft plan optional in later phase)
+
+**Output:** structured answers merge into:
+
+- appended **Goal / Constraints** block for the model (server), and/or
+- `component_assignment_overrides` preview for power users (already supported server-side)
+
+**UX:** Claude-style separation is mimicked minimally: **chat bubble** proposes “Ho bisogno di 2 dettagli” → **inline chip row or compact modal** (same thread, no new product). This is the conversational plan’s **orchestration layer**, not a second pipeline.
+
+### 15.3 DS import parity (wizard) vs Generate
+
+Import wizard already has recap/warnings; align **tone**:
+
+- Same pattern as §15.1 for **expectability** when index build is slow (max time messaging + phase list).
+- Optional “what you get at the end” one-liner (aligned with named deliverables in benchmark flows): e.g. “Catalogo componenti + hash per Generate”.
+
+### 15.4 Revised rollout additions (increment to §11)
+
+Insert **between current Phase 1 and Phase 2** (or as **Phase 1.5**):
+
+| Sub-phase | Deliverable |
+|-----------|-------------|
+| **1.5a** | Phase strip / timeline labels wired to existing `generateStep` + server phases from metadata where available |
+| **1.5b** | Copy: upper bound time hint for full Generate run (non-binding disclaimer, product-legal reviewed) |
+| **2.5** | Pre-flight clarifier MVP: one archetype first (e.g. `dashboard` + `login`), triggers from §15.2, merge answers into prompt body before `POST /api/agents/generate` |
+| **2.6** | Pack-driven questions: read `disambiguation_protocol` / `[CONV_UX]` from Design Intelligence pack when pack v2 present |
+
+Phase 3+ (threads, web hub) unchanged in intent; pre-flight feeds **same** thread as user messages (“User answered: KPI + chart + table”).
+
+### 15.5 Acceptance add-ons (extend §12)
+
+- User sees **step list** during Generate (at least 4 phases) without exposing raw chain-of-thought.
+- If clarifier opens, user completes or dismisses explicitly; dismissal logs telemetry and proceeds with degraded risk acceptance.
+- No duplicate credit charge for clarifier-only turns (LLM optional: rule-based chips first).
+
+### 15.6 Non-goals (for this merge)
+
+- Full reproduction of external “Design Files / SKILL.md export” inside Figma plugin.
+- Replacing DS import wizard with a chat-only import (keep wizard; only align **expectability** patterns).
 

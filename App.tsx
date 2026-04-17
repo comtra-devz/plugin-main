@@ -1275,6 +1275,66 @@ export default function AppTest() {
     }
   }, [user?.authToken]);
 
+  const fetchEnhancePlus = useCallback(
+    async (body: {
+      prompt: string;
+      mode: string;
+      ds_source: string;
+      has_screenshot?: boolean;
+      selection_label?: string | null;
+    }) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/enhance-plus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (r.status === 402) {
+        const d = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error || 'Insufficient credits');
+      }
+      if (!r.ok) {
+        const text = await r.text();
+        let msg = text;
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          msg = (j.error || text).trim() || text;
+        } catch {
+          // keep text
+        }
+        throw new Error(msg || `Enhance Plus failed (${r.status})`);
+      }
+      const data = (await r.json()) as {
+        enhanced_prompt: string;
+        credits_consumed?: number;
+        credits_remaining?: number;
+        credits_total?: number;
+        credits_used?: number;
+      };
+      if (typeof data.credits_remaining === 'number' && user.id) {
+        setCredits((prev) => {
+          const next: CreditsState = {
+            remaining: data.credits_remaining!,
+            total:
+              typeof data.credits_total === 'number'
+                ? data.credits_total
+                : prev?.total ??
+                  data.credits_remaining! + (typeof data.credits_used === 'number' ? data.credits_used : 0),
+            used: typeof data.credits_used === 'number' ? data.credits_used : prev?.used ?? 0,
+          };
+          writeCreditsCache(user.id, next);
+          return next;
+        });
+      }
+      return data;
+    },
+    [user?.authToken, user?.id, AUTH_BACKEND_URL, handle503],
+  );
+
   const fetchGenerationPluginEvent = useCallback(
     async (body: {
       event_type: string;
@@ -1803,6 +1863,7 @@ export default function AppTest() {
             checkServerHasDsContext={checkServerHasDsContext}
             persistDsImportToServer={persistDsImportToServer}
             fetchGenerateFeedback={fetchGenerateFeedback}
+            fetchEnhancePlus={fetchEnhancePlus}
             fetchGenerationPluginEvent={fetchGenerationPluginEvent}
             selectedNode={selectedNode}
             applyActionPlanToCanvas={requestActionPlanExecution}

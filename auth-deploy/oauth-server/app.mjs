@@ -655,6 +655,7 @@ const XP_BY_ACTION = {
   scan: 50,
   wireframe_gen: 30,
   generate: 30,
+  enhance_plus: 8,
   wireframe_modified: 20,
   proto_scan: 40,
   a11y_check: 35,
@@ -703,6 +704,11 @@ function estimateCreditsByAction(actionType, nodeCount, options = {}) {
   if (actionType === 'sync_fix' || actionType === 'sync_storybook' || actionType === 'comp_sync') return 5;
   if (actionType === 'code_gen') return 0;
   if (actionType === 'code_gen_ai') return 40;
+  /** Kimi mini-agent: structured prompt assist (cost tunable via env). */
+  if (actionType === 'enhance_plus') {
+    const n = Number(process.env.ENHANCE_PLUS_CREDITS);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 1;
+  }
   return 5;
 }
 
@@ -2834,6 +2840,139 @@ function buildDeterministicFallbackPlan({
     },
   };
 }
+
+const ENHANCE_PLUS_SYSTEM = `You are Enhance Plus for Comtra Generate (Figma). The product already enforces design system usage, layout quality, and accessibility server-side — do NOT lecture the user about those.
+
+Read the user's draft and output ONLY markdown they can paste as their terminal prompt (no preamble, no "Here is…").
+
+Use this structure (omit empty sections):
+## Goal
+(One tight paragraph: what screen, who it's for, primary job-to-be-done.)
+
+## Context
+(One line: viewport, create vs modify selection, language if clear.)
+
+## Must include
+(3–8 bullets: concrete sections, components, copy hints, states.)
+
+## Avoid / risks
+(0–4 bullets: real conflicts or ambiguities only.)
+
+## Open questions
+(0–2 bullets only if something important is unknowable; otherwise omit the section.)
+
+Rules:
+- Match the user's language (Italian/English) when obvious.
+- Prefer specifics over generic UX advice.
+- Keep under ~320 words.`;
+
+app.post('/api/agents/enhance-plus', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+  const body = req.body || {};
+  const rawPrompt = String(body.prompt ?? body.goal ?? '').trim();
+  if (!rawPrompt) return res.status(400).json({ error: 'prompt required' });
+  if (rawPrompt.length > 8000) return res.status(400).json({ error: 'prompt too long (max 8000 chars)' });
+  const mode = String(body.mode || 'create').toLowerCase();
+  const dsSource = String(body.ds_source || body.dsSource || 'custom').trim() || 'custom';
+  const hasScreenshot = Boolean(body.has_screenshot ?? body.hasScreenshot);
+  const selectionLabel =
+    typeof body.selection_label === 'string'
+      ? body.selection_label.trim().slice(0, 400)
+      : typeof body.selection_summary === 'string'
+        ? body.selection_summary.trim().slice(0, 400)
+        : '';
+
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+
+  let cost = estimateCreditsByAction('enhance_plus');
+  try {
+    const uRow = await dbSql`SELECT credits_total, credits_used, plan FROM users WHERE id = ${userId} LIMIT 1`;
+    if (!uRow.rows.length) return res.status(404).json({ error: 'User not found' });
+    const row0 = uRow.rows[0];
+    const userPlan = String(row0.plan || 'FREE').toUpperCase();
+    if (userPlan === 'PRO') cost = 0;
+    const total = Number(row0.credits_total) || 0;
+    const used = Number(row0.credits_used) || 0;
+    const remaining = Math.max(0, total - used);
+    if (cost > 0 && remaining < cost) {
+      return res.status(402).json({ error: 'Insufficient credits', credits_remaining: remaining });
+    }
+  } catch (e) {
+    console.error('enhance-plus balance', e);
+    return res.status(500).json({ error: 'Server error' });
+  }
+
+  const userBlock = [
+    `Mode: ${mode}.`,
+    `DS source: ${dsSource}.`,
+    hasScreenshot ? 'User attached a screenshot reference.' : '',
+    selectionLabel ? `Selection / modify target: ${selectionLabel}` : '',
+    `Current prompt:\n${rawPrompt}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  let inputTok = 0;
+  let outTok = 0;
+  let enhanced = '';
+  try {
+    const { content, usage } = await callKimi(
+      [{ role: 'system', content: ENHANCE_PLUS_SYSTEM }, { role: 'user', content: userBlock }],
+      2048,
+    );
+    enhanced = String(content || '').trim();
+    inputTok = Math.max(0, Number(usage?.prompt_tokens ?? usage?.input_tokens ?? 0));
+    outTok = Math.max(0, Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0));
+  } catch (e) {
+    console.error('enhance-plus kimi', e?.message || e);
+    return res.status(502).json({ error: 'AI enhance failed' });
+  }
+  if (!enhanced) return res.status(502).json({ error: 'Empty response from AI' });
+  const clipped = enhanced.length > 12000 ? `${enhanced.slice(0, 12000)}\n…(truncated)` : enhanced;
+
+  let credits_remaining;
+  let credits_total;
+  let credits_used;
+  try {
+    if (cost > 0) {
+      await dbSql`UPDATE users SET credits_used = credits_used + ${cost}, updated_at = NOW() WHERE id = ${userId}`;
+      await dbSql`INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id) VALUES (${userId}, ${'enhance_plus'}, ${cost}, ${null})`;
+    }
+    const xpEarned = XP_BY_ACTION.enhance_plus ?? 0;
+    if (xpEarned > 0) {
+      const ux = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${userId} LIMIT 1`;
+      if (ux.rows.length) {
+        const oldXp = Math.max(0, Number(ux.rows[0].total_xp) || 0);
+        const totalXp = oldXp + xpEarned;
+        const info = getLevelInfo(totalXp);
+        const currentLevel = info.level;
+        await dbSql`UPDATE users SET total_xp = ${totalXp}, current_level = ${currentLevel}, updated_at = NOW() WHERE id = ${userId}`;
+        await dbSql`INSERT INTO xp_transactions (user_id, action_type, xp_earned) VALUES (${userId}, ${'enhance_plus'}, ${xpEarned})`;
+      }
+    }
+    const r2 = await dbSql`SELECT credits_total, credits_used FROM users WHERE id = ${userId} LIMIT 1`;
+    credits_total = Number(r2.rows[0].credits_total) || 0;
+    credits_used = Number(r2.rows[0].credits_used) || 0;
+    credits_remaining = Math.max(0, credits_total - credits_used);
+    dbSql`
+      INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+      VALUES (${'enhance_plus'}, ${inputTok}, ${outTok}, null, ${KIMI_MODEL})
+    `.catch((err) => console.error('Kimi usage log enhance_plus failed', err?.message || err));
+  } catch (e) {
+    console.error('enhance-plus post', e);
+    return res.status(500).json({ error: 'Server error' });
+  }
+
+  res.json({
+    enhanced_prompt: clipped,
+    credits_consumed: cost,
+    credits_remaining,
+    credits_total,
+    credits_used,
+  });
+});
 
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
