@@ -151,6 +151,39 @@ function humanizeCanvasError(raw: string): string {
   return msg;
 }
 
+type ConversationTurn = {
+  id: string;
+  role: 'user' | 'assistant';
+  body: string;
+  createdAt: number;
+};
+
+const MAX_CONVERSATION_MESSAGES = 32;
+
+function buildAssistantSummaryFromPlan(
+  plan: object,
+  opts: { rootId?: string | null },
+): string {
+  const rec = plan as {
+    metadata?: Record<string, unknown>;
+    actions?: unknown[];
+  };
+  const meta = rec.metadata && typeof rec.metadata === 'object' ? rec.metadata : {};
+  const actions = Array.isArray(rec.actions) ? rec.actions : [];
+  const archetype =
+    meta.inferred_screen_archetype != null ? String(meta.inferred_screen_archetype).trim() : '';
+  const pipeline =
+    meta.generation_pipeline != null ? String(meta.generation_pipeline).trim() : '';
+  const lines: string[] = [];
+  lines.push('Run completata. Piano applicato sulla canvas.');
+  lines.push('');
+  lines.push(`- Azioni nel piano: ${actions.length}`);
+  if (archetype) lines.push(`- Archetipo schermo: ${archetype}`);
+  if (pipeline) lines.push(`- Pipeline: ${pipeline}`);
+  if (opts.rootId) lines.push('- Frame creato sulla pagina corrente (controlla il canvas).');
+  return lines.join('\n');
+}
+
 export const Generate: React.FC<Props> = ({
   plan,
   userTier,
@@ -233,6 +266,8 @@ export const Generate: React.FC<Props> = ({
 
   // New State for Report Flow
   const [showReport, setShowReport] = useState(false);
+  /** Timeline conversazione (Phase 1): una coppia user/assistant per ogni click Generate rilevante. */
+  const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const lastActionPlanRef = useRef<object | null>(null);
   /** For “View in Figma” / re-apply: same modify vs create as the last run. */
   const lastApplyWasModifyRef = useRef(false);
@@ -255,6 +290,21 @@ export const Generate: React.FC<Props> = ({
     },
     [applyActionPlanToCanvas]
   );
+
+  const appendGenerateTurn = useCallback((userPrompt: string, assistantMarkdown: string) => {
+    const t = Date.now();
+    const u = userPrompt.slice(0, 1200);
+    setConversationTurns((prev) => {
+      const next: ConversationTurn[] = [
+        ...prev,
+        { id: `u-${t}`, role: 'user', body: u, createdAt: t },
+        { id: `a-${t}`, role: 'assistant', body: assistantMarkdown, createdAt: t },
+      ];
+      return next.length > MAX_CONVERSATION_MESSAGES
+        ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
+        : next;
+    });
+  }, []);
 
   // Set initial prompt if provided
   useEffect(() => {
@@ -669,6 +719,10 @@ export const Generate: React.FC<Props> = ({
       });
       const actionPlan = data?.action_plan;
       if (!actionPlan || typeof actionPlan !== 'object') {
+        appendGenerateTurn(
+          rawText,
+          'Errore: risposta dal server non valida (action plan mancante o malformato).',
+        );
         setGenError('Invalid response from server.');
         setLoading(false);
         setGenerateStep('idle');
@@ -690,6 +744,10 @@ export const Generate: React.FC<Props> = ({
         qualityWatch: Boolean(data?.request_id),
       });
       if (!canvasResult.ok) {
+        appendGenerateTurn(
+          rawText,
+          `Canvas: ${humanizeCanvasError(canvasResult.error || 'Canvas apply failed.')}`,
+        );
         setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
         setLoading(false);
         setGenerateStep('idle');
@@ -712,14 +770,20 @@ export const Generate: React.FC<Props> = ({
         file_id: fileKey,
       });
       if (consumed?.error) {
+        appendGenerateTurn(
+          rawText,
+          `Crediti: ${consumed.error}\n\nIl frame era già stato creato sulla canvas; controlla il saldo e riprova.`,
+        );
         setGenError(consumed.error);
         setLoading(false);
         setGenerateStep('idle');
         return;
       }
+      appendGenerateTurn(rawText, buildAssistantSummaryFromPlan(actionPlan, { rootId: canvasResult.rootId ?? null }));
       setShowReport(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      appendGenerateTurn(rawText, `Errore: ${humanizeCanvasError(msg)}`);
       setGenError(humanizeCanvasError(msg));
     } finally {
       setLoading(false);
@@ -827,6 +891,24 @@ export const Generate: React.FC<Props> = ({
         ? 'bg-amber-50 text-amber-900'
         : 'bg-yellow-50 text-yellow-900'
     : 'bg-sky-50 text-sky-900';
+
+  const generateContextSummary = hasSelection
+    ? `Modifica · ${selectedLayerName ?? 'layer'}`
+    : screenshotAttachment
+      ? `Screenshot · ${screenshotAttachment.name}`
+      : 'Creazione wireframe';
+  const generatePhaseActiveIndex =
+    generateStep === 'context'
+      ? 0
+      : generateStep === 'ai'
+        ? 1
+        : generateStep === 'canvas'
+          ? 2
+          : generateStep === 'credits'
+            ? 3
+            : -1;
+  const generatePhaseLabels = ['Contesto', 'Server AI', 'Canvas', 'Crediti'] as const;
+
   const dsCardHeaderRight =
     usesFileDs && genFileName ? (
       <span
@@ -1035,6 +1117,69 @@ export const Generate: React.FC<Props> = ({
 
       {showGenerateComposer && !showReport ? (
         <>
+            <div
+              data-component="Generate: Run transparency + timeline"
+              className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] p-2 space-y-2 mb-2"
+            >
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono leading-tight">
+                <span>
+                  <span className="font-black uppercase text-gray-500">DS </span>
+                  {selectedSystem}
+                </span>
+                <span>
+                  <span className="font-black uppercase text-gray-500">Contesto </span>
+                  {generateContextSummary}
+                </span>
+                {usesFileDs && genFileName ? (
+                  <span className="truncate max-w-full">
+                    <span className="font-black uppercase text-gray-500">File </span>
+                    {genFileName}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {generatePhaseLabels.map((label, i) => {
+                  const active = loading && generatePhaseActiveIndex === i;
+                  const done = loading && generatePhaseActiveIndex > i;
+                  return (
+                    <span
+                      key={label}
+                      className={`text-[9px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
+                        active ? 'bg-[#ffc900]' : done ? 'bg-emerald-100' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+              <p className="text-[9px] text-gray-600 leading-snug">
+                Una run completa può richiedere fino a ~2 minuti (canvas con molti componenti è di solito il passo più lungo).
+              </p>
+              <div className="max-h-[220px] overflow-y-auto custom-scrollbar border-2 border-black bg-gray-50 p-2 space-y-2">
+                {conversationTurns.length === 0 ? (
+                  <p className="text-[10px] text-gray-500 italic leading-snug">
+                    Nessun messaggio ancora: dopo Generate vedrai qui il prompt e una sintesi della run (successo o errore).
+                  </p>
+                ) : (
+                  conversationTurns.map((turn) => (
+                    <div
+                      key={turn.id}
+                      className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] shadow-[2px_2px_0_0_#000] whitespace-pre-wrap leading-snug ${
+                          turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
+                        }`}
+                      >
+                        {turn.body}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-col gap-0 relative z-[1]">
                 <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">
                   <span>AI Terminal</span>
