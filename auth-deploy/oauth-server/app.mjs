@@ -40,7 +40,11 @@ import {
   isCustomDsSource,
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
-import { formatDesignIntelligenceForPrompt, inferFocusedScreenType } from './design-intelligence.mjs';
+import {
+  formatDesignIntelligenceForPrompt,
+  inferFocusedScreenTypeWithPack,
+  loadPatternsPayload,
+} from './design-intelligence.mjs';
 import { buildDsSlimIndex, buildPromptScopedDsIndex } from './ds-context-retrieval.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -2965,7 +2969,11 @@ app.post('/api/agents/generate', async (req, res) => {
           `ds_cache_hash: ${dsIndexHashLine}`,
         ].join('\n')
       : '';
-    const inferredScreenArchetype = inferFocusedScreenType(prompt);
+    const patternsPayload = loadPatternsPayload();
+    const { legacyScreenKey: inferredScreenArchetype, packV2ArchetypeId } = inferFocusedScreenTypeWithPack(
+      prompt,
+      patternsPayload,
+    );
     const slotCandidatePackBase = buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
     const slotCandidatePack = applyAssignmentOverridesToSlotPack(slotCandidatePackBase, assignmentOverrides);
     const slotCandidateBlock = formatSlotCandidateBlock(slotCandidatePack);
@@ -2975,19 +2983,33 @@ app.post('/api/agents/generate', async (req, res) => {
         : null;
     const designIntelBlock = formatDesignIntelligenceForPrompt(docContextKey, {
       focusScreenType: inferredScreenArchetype,
+      userPrompt: prompt,
+      patternsPayload,
+      packV2ArchetypeId,
     });
     const primaryCustomDsSuccessLine =
       isCustomDsSource(dsSource) && (mode === 'create' || mode === 'screenshot')
         ? 'PRIMARY SUCCESS (custom/file DS): Ship the screen with INSTANCE_COMPONENT for real components from [DS CONTEXT INDEX] (buttons, inputs, cards, headers, etc.). Prefer components[].componentKey when present, else components[].id. If the index lists components, a primitives-only plan (frames + rects + plain text only) is a failed generation — not an acceptable fallback.'
         : null;
+    const packV2AuthArchetypes = new Set([
+      'login',
+      'register',
+      'forgot_password',
+      'email_verification',
+      'pin_biometric',
+      'onboarding_step',
+    ]);
     const semanticGuardrailLine =
-      inferredScreenArchetype === 'login'
+      inferredScreenArchetype === 'login' ||
+      (packV2ArchetypeId && packV2AuthArchetypes.has(packV2ArchetypeId))
         ? 'SEMANTIC SAFETY (login/auth): never use step/progress/wizard/breadcrumb/timeline components for fields/buttons/CTA. If no suitable component exists, replace that slot with CREATE_RECT + CREATE_TEXT.'
         : null;
     const contextBlob = [
       `Mode: ${mode}.`,
       inferredScreenArchetype
-        ? `Inferred screen archetype: ${inferredScreenArchetype} (layout and checklist prioritize this type).`
+        ? `Inferred screen archetype: ${inferredScreenArchetype}${
+            packV2ArchetypeId ? ` (pack v2 archetype: ${packV2ArchetypeId})` : ''
+          } (layout and checklist prioritize this type).`
         : 'Inferred screen archetype: none — full pattern library in DESIGN INTELLIGENCE block.',
       `DS source: ${dsSource}.`,
       `Resolved DS id: ${resolvedDsId || 'none'}.`,
@@ -3329,6 +3351,7 @@ app.post('/api/agents/generate', async (req, res) => {
     if (!actionPlan.metadata || typeof actionPlan.metadata !== 'object') actionPlan.metadata = {};
     if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
     actionPlan.metadata.inferred_screen_archetype = inferredScreenArchetype ?? null;
+    actionPlan.metadata.inferred_pack_v2_archetype = packV2ArchetypeId ?? null;
     actionPlan.metadata.generation_pipeline = generationPipeline;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;

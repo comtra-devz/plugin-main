@@ -46,16 +46,46 @@
       }
     },
     "correction_vocabulary": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["feedback_phrases", "translation", "corrective_action"],
-        "properties": {
-          "feedback_phrases": { "type": "array", "items": { "type": "string" } },
-          "translation": { "type": "string" },
-          "corrective_action": { "type": "string" }
+      "description": "Schema 7.1: mappa chiave → feedback. Pack v2: array di { user_term, ambiguities, resolution }.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["feedback_phrases", "translation", "corrective_action"],
+            "properties": {
+              "feedback_phrases": { "type": "array", "items": { "type": "string" } },
+              "translation": { "type": "string" },
+              "corrective_action": { "type": "string" }
+            }
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "user_term": { "type": "string" },
+              "ambiguities": { "type": "array", "items": { "type": "string" } },
+              "resolution": { "type": "string" }
+            }
+          }
         }
-      }
-    }
+      ]
+    },
+    "meta": { "type": "object" },
+    "archetype_registry": { "type": "object" },
+    "archetype_inference_rules": { "type": "object" },
+    "disambiguation_protocol": { "type": "object" },
+    "spacing_rhythm": { "type": "object" },
+    "viewport_rules": { "type": "object" },
+    "layout_patterns": { "type": "array" },
+    "slot_definitions": { "type": "object" },
+    "component_property_playbook": { "type": "array" },
+    "content_defaults": { "type": "object" },
+    "wizard_integration": { "type": "object" },
+    "learning_loop": { "type": "object" },
+    "hierarchy_rules": { "type": "array" },
+    "test_prompts": { "type": "object" }
   }
 }
