@@ -1564,6 +1564,26 @@ function postSelectionToUi(): void {
   figma.ui.postMessage({ type: 'selection-changed', nodes });
 }
 
+function collectSubtreeTextMetrics(node: SceneNode): { textNodes: number; charCount: number } {
+  if (!node || node.removed) return { textNodes: 0, charCount: 0 };
+  try {
+    const host = node as { findAll?: (filter: (n: SceneNode) => boolean) => SceneNode[] };
+    if (typeof host.findAll !== 'function') return { textNodes: 0, charCount: 0 };
+    const texts = host.findAll((n): n is TextNode => n.type === 'TEXT');
+    let charCount = 0;
+    for (const t of texts) {
+      try {
+        charCount += t.characters.length;
+      } catch {
+        /* mixed font / bound */
+      }
+    }
+    return { textNodes: texts.length, charCount };
+  } catch {
+    return { textNodes: 0, charCount: 0 };
+  }
+}
+
 figma.ui.onmessage = async (raw: any) => {
   const msg = raw?.pluginMessage ?? raw;
   if (msg.type === 'resize-window') {
@@ -1637,6 +1657,9 @@ figma.ui.onmessage = async (raw: any) => {
     const requestId = msg.requestId;
     const actionPlan = msg.actionPlan;
     const modifyMode = msg.modifyMode === true;
+    const serverRequestId = typeof msg.serverRequestId === 'string' ? msg.serverRequestId.trim() : '';
+    const figmaFileKeyForQuality = typeof msg.figmaFileKey === 'string' ? msg.figmaFileKey.trim() : '';
+    const qualityWatch = msg.qualityWatch === true && Boolean(serverRequestId);
     (async () => {
       setDsContextIndexRefreshSuspended(true);
       try {
@@ -1653,6 +1676,65 @@ figma.ui.onmessage = async (raw: any) => {
           },
         });
         figma.ui.postMessage({ type: 'action-plan-executed', requestId, rootId });
+        if (qualityWatch && rootId) {
+          try {
+            const rootNode = await figma.getNodeByIdAsync(rootId);
+            if (rootNode && 'findAll' in rootNode) {
+              const baseline = collectSubtreeTextMetrics(rootNode as SceneNode);
+              let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+              let fired = false;
+              const handler = () => {
+                if (fired) return;
+                if (debounceTimer) clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(async () => {
+                  debounceTimer = null;
+                  try {
+                    const n = await figma.getNodeByIdAsync(rootId);
+                    if (!n || !('findAll' in n) || ('removed' in n && n.removed)) {
+                      fired = true;
+                      figma.off('documentchange', handler);
+                      figma.ui.postMessage({
+                        type: 'generation-quality-signal',
+                        requestId,
+                        serverRequestId,
+                        figmaFileKey: figmaFileKeyForQuality,
+                        payload: { root_id: rootId, reason: 'root_removed_or_missing' },
+                      });
+                      return;
+                    }
+                    const after = collectSubtreeTextMetrics(n as SceneNode);
+                    if (after.textNodes !== baseline.textNodes || after.charCount !== baseline.charCount) {
+                      fired = true;
+                      figma.off('documentchange', handler);
+                      figma.ui.postMessage({
+                        type: 'generation-quality-signal',
+                        requestId,
+                        serverRequestId,
+                        figmaFileKey: figmaFileKeyForQuality,
+                        payload: {
+                          root_id: rootId,
+                          reason: 'subtree_text_metrics_changed',
+                          before: baseline,
+                          after,
+                        },
+                      });
+                    }
+                  } catch {
+                    /* ignore */
+                  }
+                }, 1200);
+              };
+              figma.on('documentchange', handler);
+              setTimeout(() => {
+                if (fired) return;
+                figma.off('documentchange', handler);
+                fired = true;
+              }, 10 * 60 * 1000);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
         figma.notify(
           modifyMode
             ? 'Comtra: copia modificata sulla pagina (originale invariata).'

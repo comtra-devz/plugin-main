@@ -199,11 +199,17 @@ CREATE INDEX IF NOT EXISTS idx_user_throttle_discounts_issued_at ON user_throttl
 CREATE TABLE IF NOT EXISTS generate_ab_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
-  variant TEXT NOT NULL CHECK (variant IN ('A', 'B')),
+  variant TEXT NOT NULL CHECK (variant IN ('A', 'B', 'S')),
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   credits_consumed INTEGER NOT NULL DEFAULT 0,
   latency_ms INTEGER,
+  figma_file_key TEXT,
+  ds_source TEXT,
+  inferred_screen_archetype TEXT,
+  inferred_pack_v2_archetype TEXT,
+  kimi_enrichment_used BOOLEAN NOT NULL DEFAULT false,
+  learning_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_variant ON generate_ab_requests(variant);
@@ -212,13 +218,27 @@ CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_created_at ON generate_ab_re
 CREATE TABLE IF NOT EXISTS generate_ab_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id UUID NOT NULL REFERENCES generate_ab_requests(id) ON DELETE CASCADE,
-  variant TEXT NOT NULL CHECK (variant IN ('A', 'B')),
+  variant TEXT NOT NULL CHECK (variant IN ('A', 'B', 'S')),
   thumbs TEXT NOT NULL CHECK (thumbs IN ('up', 'down')),
   comment TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_generate_ab_feedback_request_id ON generate_ab_feedback(request_id);
 CREATE INDEX IF NOT EXISTS idx_generate_ab_feedback_variant ON generate_ab_feedback(variant);
+
+CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_file ON generate_ab_requests (figma_file_key);
+
+CREATE TABLE IF NOT EXISTS generation_plugin_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  request_id UUID REFERENCES generate_ab_requests (id) ON DELETE SET NULL,
+  figma_file_key TEXT,
+  event_type TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_generation_plugin_events_user_created ON generation_plugin_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generation_plugin_events_type ON generation_plugin_events (event_type);
 
 -- Funnel touchpoint: Landing, Plugin, LinkedIn, Instagram, TikTok (ingressi e conversioni)
 CREATE TABLE IF NOT EXISTS touchpoint_events (

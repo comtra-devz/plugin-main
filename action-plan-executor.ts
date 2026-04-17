@@ -662,7 +662,80 @@ function smartDefaultTextBySlot(slotId: string, propName: string): string | null
   return null;
 }
 
-/** Applica props esplicite + fallback intelligenti (text/boolean) per evitare placeholder inutili. */
+/** Testo tipico dei master DS non ancora configurati (Figma non espone come component property). */
+function looksLikePlaceholderCharacters(s: string): boolean {
+  const t = String(s || '').trim();
+  if (!t) return true;
+  if (/^value$/i.test(t)) return true;
+  if (/^placeholder$/i.test(t)) return true;
+  if (/^your text here$/i.test(t)) return true;
+  if (/^change me$/i.test(t)) return true;
+  if (/^edit me$/i.test(t)) return true;
+  if (/^lorem(\s|$)/i.test(t)) return true;
+  if (t === '…' || t === '...') return true;
+  if (/^#+$/.test(t)) return true;
+  return false;
+}
+
+/** Heuristica sul nome del layer testo + slot per sostituire placeholder annidati. */
+function nestedPlaceholderReplacement(slotId: string, layerName: string): string | null {
+  const ln = String(layerName || '').toLowerCase();
+  if (/\bemail\b/.test(ln)) return 'Email';
+  if (/\bpassword\b/.test(ln) || /\bpw\b/.test(ln)) return 'Password';
+  if (/\b(cta|button|action)\b/.test(ln) && slotId === 'primary_cta') return 'Sign in';
+  if (/\b(title|heading|headline|welcome)\b/.test(ln)) return 'Sign in';
+  if (/\b(subtitle|description|body|caption|helper|supporting)\b/.test(ln)) return 'Use your account credentials';
+  return smartDefaultTextBySlot(slotId, `${layerName} text`);
+}
+
+async function loadFontForTextNodeBestEffort(txt: TextNode): Promise<void> {
+  const fn = txt.fontName;
+  if (fn !== figma.mixed) {
+    try {
+      await figma.loadFontAsync(fn as FontName);
+      return;
+    } catch {
+      /* fall through */
+    }
+  }
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' }).catch(() => undefined);
+}
+
+/**
+ * Livello 2 (allineato a Design Intelligence / Figma): testo interno non esposto come TEXT property
+ * resta spesso "VALUE" / vuoto sui master; dopo setProperties proviamo a ripulire solo pattern sicuri.
+ */
+async function sanitizeInstanceDescendantPlaceholders(
+  inst: InstanceNode,
+  slotId: string,
+  prompt?: string,
+): Promise<void> {
+  let texts: TextNode[];
+  try {
+    texts = inst.findAll((n) => n.type === 'TEXT') as TextNode[];
+  } catch {
+    return;
+  }
+  const wantsIcon = /\b(icon|logo|brand|illustration)\b/i.test(String(prompt || ''));
+  for (const txt of texts) {
+    if (!looksLikePlaceholderCharacters(txt.characters)) continue;
+    if (!wantsIcon && /\b(icon|glyph|avatar)\b/i.test(txt.name)) continue;
+    const rep = nestedPlaceholderReplacement(slotId, txt.name);
+    if (!rep) continue;
+    await loadFontForTextNodeBestEffort(txt);
+    try {
+      txt.characters = rep;
+    } catch {
+      /* testo vincolato / variabile / mixed font */
+    }
+  }
+}
+
+/**
+ * Applica props dal piano + default sensati.
+ * Rif. Figma Plugin API `InstanceNode#setProperties`: suffisso `#id` per TEXT / BOOLEAN / INSTANCE_SWAP;
+ * assi VARIANT vanno passati nel piano (`variantProperties`); non sovrascrivere qui le varianti già fissate dal master scelto.
+ */
 function applyInstanceComponentProperties(
   inst: InstanceNode,
   raw: Record<string, unknown>,
@@ -684,15 +757,20 @@ function applyInstanceComponentProperties(
   const cp = inst.componentProperties || {};
   for (const [propKey, def] of Object.entries(cp)) {
     if (Object.prototype.hasOwnProperty.call(out, propKey)) continue;
-    const propName = normalizedPropertyName(propKey);
     if (!def || typeof def !== 'object') continue;
     const type = String((def as { type?: string }).type || '').toUpperCase();
+    const propVal = (def as { value?: string | boolean }).value;
     if (type === 'TEXT') {
-      const text = smartDefaultTextBySlot(slotId, propName);
-      if (text) out[propKey] = text;
+      const propName = normalizedPropertyName(propKey);
+      const cur = typeof propVal === 'string' ? propVal : '';
+      if (looksLikePlaceholderCharacters(cur) || !cur.trim()) {
+        const text = smartDefaultTextBySlot(slotId, propName);
+        if (text) out[propKey] = text;
+      }
       continue;
     }
     if (type === 'BOOLEAN') {
+      const propName = normalizedPropertyName(propKey);
       if (
         /\b(icon|leading|trailing|avatar|illustration|image)\b/.test(propName) &&
         (slotId === 'title_block' || slotId === 'description_block' || slotId === 'primary_cta') &&
@@ -709,6 +787,82 @@ function applyInstanceComponentProperties(
     inst.setProperties(out);
   } catch {
     /* combinazione non valida per questo componente */
+  }
+}
+
+/** Pack v2 `design_intelligence_executor`: spacing sul frame root (auto-layout). */
+function applyDesignIntelligenceSpacingFromMeta(root: FrameNode, meta: Record<string, unknown>): void {
+  const di = meta.design_intelligence_executor;
+  if (!isRecord(di)) return;
+  const sp = di.spacing;
+  if (!isRecord(sp)) return;
+  if (root.layoutMode === 'NONE') return;
+  const pad = Number(sp.root_horizontal_padding_px);
+  const gap = Number(sp.vertical_item_spacing_default);
+  if (Number.isFinite(pad) && pad >= 0) {
+    root.paddingLeft = pad;
+    root.paddingRight = pad;
+  }
+  if (Number.isFinite(gap) && gap >= 0) {
+    root.itemSpacing = gap;
+  }
+}
+
+/** Pack v2 `component_property_playbook` filtrato lato server → second pass su `setProperties`. */
+function applyPlaybookHintsFromMeta(inst: InstanceNode, raw: Record<string, unknown>, meta: Record<string, unknown>): void {
+  const di = meta.design_intelligence_executor;
+  if (!isRecord(di)) return;
+  const playbook = di.playbook;
+  if (!Array.isArray(playbook) || playbook.length === 0) return;
+  const slotId = inferSlotIdForInstance(raw);
+  const compName = String(raw.name || inst.name || '');
+  const cp = inst.componentProperties || {};
+  const out: { [prop: string]: string | boolean } = {};
+  for (const entry of playbook) {
+    if (!isRecord(entry)) continue;
+    const match = isRecord(entry.match) ? entry.match : {};
+    const slotNeed = typeof match.slot === 'string' && match.slot.trim() ? match.slot.trim() : '';
+    if (slotNeed && slotNeed !== slotId) continue;
+    const cre = typeof match.component_name_regex === 'string' ? match.component_name_regex.trim() : '';
+    if (cre) {
+      try {
+        if (!new RegExp(cre).test(compName)) continue;
+      } catch {
+        continue;
+      }
+    }
+    const props = Array.isArray(entry.properties) ? entry.properties : [];
+    for (const prop of props) {
+      if (!isRecord(prop)) continue;
+      const typ = String(prop.type || '').toUpperCase();
+      const pre = String(prop.property_name_regex || '').trim();
+      if (!pre) continue;
+      let re: RegExp;
+      try {
+        re = new RegExp(pre);
+      } catch {
+        continue;
+      }
+      for (const [propKey, def] of Object.entries(cp)) {
+        if (Object.prototype.hasOwnProperty.call(out, propKey)) continue;
+        if (!def || typeof def !== 'object') continue;
+        const defType = String((def as { type?: string }).type || '').toUpperCase();
+        const hash = propKey.indexOf('#');
+        const baseName = hash !== -1 ? propKey.slice(0, hash) : propKey;
+        if (!re.test(propKey) && !re.test(baseName)) continue;
+        if (typ === 'BOOLEAN' && defType === 'BOOLEAN' && typeof prop.value === 'boolean') {
+          out[propKey] = prop.value;
+        } else if (typ === 'TEXT' && defType === 'TEXT' && typeof prop.value === 'string' && prop.value.trim()) {
+          out[propKey] = prop.value.trim();
+        }
+      }
+    }
+  }
+  if (Object.keys(out).length === 0) return;
+  try {
+    inst.setProperties(out);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -936,6 +1090,7 @@ export async function executeActionPlanOnCanvas(
   root.y = rootPos.y;
   applyFrameGeometry(root, frameSpec, varMap);
   await applyOptionalLayoutBindingsFromRaw(frameSpec, root, varMap);
+  applyDesignIntelligenceSpacingFromMeta(root, meta);
   appendParent.appendChild(root);
 
   const idMap = new Map<string, SceneNode>();
@@ -1070,6 +1225,8 @@ export async function executeActionPlanOnCanvas(
           }
         }
         applyInstanceComponentProperties(inst, raw, String(meta.prompt || ''));
+        applyPlaybookHintsFromMeta(inst, raw, meta);
+        await sanitizeInstanceDescendantPlaceholders(inst, inferSlotIdForInstance(raw), String(meta.prompt || ''));
         if (raw.fills !== undefined) applyFillsToNode(inst, raw.fills, varMap, 'surface');
         if (typeof raw.name === 'string' && raw.name.trim()) inst.name = raw.name.trim();
         if (typeof raw.ref === 'string' && raw.ref.trim()) idMap.set(raw.ref.trim(), inst);

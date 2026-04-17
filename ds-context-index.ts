@@ -51,6 +51,14 @@ export type DsContextIndexPayload = {
     rules: string[];
     guidance: string[];
   };
+  /**
+   * Optional: raccolta wizard (DI v2) — merge lato UI prima del PUT su `user_ds_imports`.
+   * Il backend Generate legge `tone_of_voice` / `brand_voice_keywords` per arricchimento Kimi sui content_defaults.
+   */
+  wizard_signals?: {
+    tone_of_voice?: string;
+    brand_voice_keywords?: string[];
+  };
 };
 
 type BuildResult = { index: DsContextIndexPayload; canonicalJson: string };

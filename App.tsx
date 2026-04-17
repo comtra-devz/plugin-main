@@ -620,9 +620,16 @@ export default function AppTest() {
     >
   >(new Map());
   const dsImportMetaSetWaitersRef = useRef<Map<string, (r: { ok: boolean; error?: string }) => void>>(new Map());
+  type GenerationPluginEventBody = {
+    event_type: string;
+    request_id?: string | null;
+    figma_file_key?: string;
+    payload?: Record<string, unknown>;
+  };
+  const fetchGenerationPluginEventRef = useRef<(b: GenerationPluginEventBody) => Promise<void>>(async () => {});
 
   const requestActionPlanExecution = React.useCallback(
-    (plan: object, opts?: { modifyMode?: boolean }) => {
+    (plan: object, opts?: { modifyMode?: boolean; serverRequestId?: string | null; figmaFileKey?: string | null; qualityWatch?: boolean }) => {
       return new Promise<{ ok: boolean; error?: string; rootId?: string }>((resolve) => {
         const requestId = `apx-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
         const clearExecTimeout = () => {
@@ -654,6 +661,9 @@ export default function AppTest() {
               actionPlan: plan,
               requestId,
               modifyMode: opts?.modifyMode === true,
+              serverRequestId: opts?.serverRequestId && String(opts.serverRequestId).trim() ? String(opts.serverRequestId).trim() : '',
+              figmaFileKey: opts?.figmaFileKey && String(opts.figmaFileKey).trim() ? String(opts.figmaFileKey).trim() : '',
+              qualityWatch: opts?.qualityWatch === true,
             },
           },
           '*'
@@ -737,6 +747,21 @@ export default function AppTest() {
           }
           fn({ ok: true, rootId: msg.rootId ? String(msg.rootId) : undefined });
         }
+      }
+      if (msg.type === 'generation-quality-signal') {
+        const sid = typeof msg.serverRequestId === 'string' && msg.serverRequestId.trim() ? msg.serverRequestId.trim() : '';
+        if (!sid) return;
+        void fetchGenerationPluginEventRef.current({
+          event_type: 'generation_post_apply_edit',
+          request_id: sid,
+          figma_file_key: typeof msg.figmaFileKey === 'string' && msg.figmaFileKey.trim() ? msg.figmaFileKey.trim() : undefined,
+          payload: {
+            ...(msg.payload && typeof msg.payload === 'object' && !Array.isArray(msg.payload)
+              ? (msg.payload as Record<string, unknown>)
+              : {}),
+            plugin_request_id: typeof msg.requestId === 'string' ? msg.requestId : undefined,
+          },
+        });
       }
       if (msg.type === 'action-plan-execute-error') {
         const rid = String(msg.requestId || '');
@@ -1250,6 +1275,28 @@ export default function AppTest() {
     }
   }, [user?.authToken]);
 
+  const fetchGenerationPluginEvent = useCallback(
+    async (body: {
+      event_type: string;
+      request_id?: string | null;
+      figma_file_key?: string;
+      payload?: Record<string, unknown>;
+    }) => {
+      if (!user?.authToken) return;
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/generation/plugin-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        console.warn('generation plugin-event', data.error || r.status);
+      }
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+  fetchGenerationPluginEventRef.current = fetchGenerationPluginEvent;
+
   const fetchDesignSystems = useCallback(async () => {
     try {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/design-systems`, { cache: 'no-store' });
@@ -1756,6 +1803,7 @@ export default function AppTest() {
             checkServerHasDsContext={checkServerHasDsContext}
             persistDsImportToServer={persistDsImportToServer}
             fetchGenerateFeedback={fetchGenerateFeedback}
+            fetchGenerationPluginEvent={fetchGenerationPluginEvent}
             selectedNode={selectedNode}
             applyActionPlanToCanvas={requestActionPlanExecution}
             designSystems={designSystems}

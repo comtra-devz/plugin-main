@@ -79,6 +79,18 @@ export default function handler(req, res) {
     return app(req, res);
   }
 
+  if (service === 'generation' && sub === 'plugin-event') {
+    if (req.method !== 'POST') return res.status(405).end();
+    req.url = '/api/generation/plugin-event';
+    return app(req, res);
+  }
+
+  if (service === 'admin' && sub === 'generation-learning-summary') {
+    if (req.method !== 'GET') return res.status(405).end();
+    req.url = '/api/admin/generation-learning-summary' + qs;
+    return app(req, res);
+  }
+
   if (service === 'support' && sub === 'ticket') {
     if (req.method !== 'POST') return res.status(405).end();
     req.url = '/api/support/ticket';
@@ -108,5 +120,8 @@ export default function handler(req, res) {
     return res.status(405).end();
   }
 
-  return res.status(400).json({ error: 'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|feedback|support|ds-catalog|user-ds-imports' });
+  return res.status(400).json({
+    error:
+      'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|feedback|generation|admin|support|ds-catalog|user-ds-imports',
+  });
 }

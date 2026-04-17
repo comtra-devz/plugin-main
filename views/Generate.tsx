@@ -65,11 +65,23 @@ interface Props {
     ds_context_index: object;
   }) => Promise<void>;
   fetchGenerateFeedback: (body: { request_id: string; thumbs: 'up' | 'down'; comment?: string }) => Promise<void>;
+  /** Telemetria / learning loop (DI v2): eventi post-generazione lato plugin. */
+  fetchGenerationPluginEvent?: (body: {
+    event_type: string;
+    request_id?: string | null;
+    figma_file_key?: string;
+    payload?: Record<string, unknown>;
+  }) => Promise<void>;
   selectedNode: { id: string; name: string; type: string } | null;
   /** Runs the action plan on the Figma main thread (frame + actions on the current page). */
   applyActionPlanToCanvas: (
     plan: object,
-    opts?: { modifyMode?: boolean },
+    opts?: {
+      modifyMode?: boolean;
+      serverRequestId?: string | null;
+      figmaFileKey?: string | null;
+      qualityWatch?: boolean;
+    },
   ) => Promise<{ ok: boolean; error?: string; rootId?: string }>;
   designSystems?: string[];
 }
@@ -141,6 +153,7 @@ export const Generate: React.FC<Props> = ({
   checkServerHasDsContext,
   persistDsImportToServer,
   fetchGenerateFeedback,
+  fetchGenerationPluginEvent,
   selectedNode,
   applyActionPlanToCanvas,
   designSystems,
@@ -581,13 +594,25 @@ export const Generate: React.FC<Props> = ({
       setFeedbackSent(false);
 
       setGenerateStep('canvas');
-      const canvasResult = await runCanvasApply(actionPlan, { modifyMode: isModify });
+      const canvasResult = await runCanvasApply(actionPlan, {
+        modifyMode: isModify,
+        serverRequestId: data?.request_id ?? null,
+        figmaFileKey: fileKey,
+        qualityWatch: Boolean(data?.request_id),
+      });
       if (!canvasResult.ok) {
         setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
         setLoading(false);
         setGenerateStep('idle');
         return;
       }
+
+      void fetchGenerationPluginEvent?.({
+        event_type: 'generation_applied',
+        request_id: data?.request_id ?? null,
+        figma_file_key: fileKey,
+        payload: { mode, success: true, root_id: canvasResult.rootId ?? null },
+      });
 
       setGenerateStep('credits');
       const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;

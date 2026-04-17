@@ -606,6 +606,9 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   const [indexResult, setIndexResult] = useState<DsIndexSummary | null>(null);
   /** Full snapshot + hash for backend PUT (same payload as from the plugin). */
   const [wizardCapture, setWizardCapture] = useState<{ fullIndex: object; hash: string } | null>(null);
+  /** DI v2 / wizard_integration: salvate nello snapshot come `wizard_signals` (tone + keywords). */
+  const [wizardToneOfVoice, setWizardToneOfVoice] = useState('');
+  const [wizardBrandKeywords, setWizardBrandKeywords] = useState('');
   const [wizardError, setWizardError] = useState<string | null>(null);
   const [rulesSummary, setRulesSummary] = useState<DsIndexSummary['rules_summary'] | null>(null);
   /** Tokens loaded vs full index with components (for split Figma reads). */
@@ -754,6 +757,19 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       String((wizardCapture.fullIndex as { hash?: string }).hash || '').trim() ||
       '';
 
+    const toneTrim = wizardToneOfVoice.trim();
+    const kwList = wizardBrandKeywords
+      .split(/[,;\n]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const wizardSignals: Record<string, unknown> = {};
+    if (toneTrim) wizardSignals.tone_of_voice = toneTrim;
+    if (kwList.length) wizardSignals.brand_voice_keywords = kwList;
+    const indexToSave =
+      Object.keys(wizardSignals).length > 0
+        ? { ...(wizardCapture.fullIndex as Record<string, unknown>), wizard_signals: wizardSignals }
+        : wizardCapture.fullIndex;
+
     onBusyChange(true);
     setWizardError(null);
     try {
@@ -762,7 +778,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         display_name: label,
         figma_file_name: fileName || '',
         ds_cache_hash: h,
-        ds_context_index: wizardCapture.fullIndex,
+        ds_context_index: indexToSave,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -820,6 +836,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     writeDsImportMeta,
     isPro,
     onUnlockRequest,
+    wizardToneOfVoice,
+    wizardBrandKeywords,
   ]);
 
   const parseIndexToSummary = useCallback((raw: object): DsIndexSummary => {
@@ -1243,6 +1261,31 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
 
               {wizardStep === 4 && indexResult && importFlowPhase === 'full' && (
                 <div className="space-y-3">
+                  <div className="space-y-2 border-2 border-black p-3 bg-white shadow-[2px_2px_0_0_#000]">
+                    <p className="text-[10px] font-black uppercase tracking-tight">Brand voice (optional)</p>
+                    <p className="text-[10px] text-gray-600 leading-snug">
+                      Used for Design Intelligence v2: Kimi enriches on-screen copy to match your tone. Stored in this
+                      file&apos;s DS snapshot as <code className="font-mono text-[9px]">wizard_signals</code>.
+                    </p>
+                    <label className="block text-[10px] font-bold uppercase text-gray-700">Tone of voice</label>
+                    <textarea
+                      className="w-full min-h-[72px] border-2 border-black p-2 text-xs font-medium"
+                      value={wizardToneOfVoice}
+                      onChange={(e) => setWizardToneOfVoice(e.target.value)}
+                      placeholder="e.g. Confident, minimal, first-person plural"
+                      maxLength={800}
+                    />
+                    <label className="block text-[10px] font-bold uppercase text-gray-700 mt-2">
+                      Keywords (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border-2 border-black p-2 text-xs font-medium"
+                      value={wizardBrandKeywords}
+                      onChange={(e) => setWizardBrandKeywords(e.target.value)}
+                      placeholder="playful, direct, empowering"
+                    />
+                  </div>
                   <ul className="text-xs space-y-2 border-2 border-black p-3 bg-gray-50 shadow-[3px_3px_0_0_#000]">
                     <li>
                       <strong>File:</strong> {indexResult.fileName || fileName || '—'}

@@ -46,8 +46,29 @@ import {
   loadPatternsPayload,
 } from './design-intelligence.mjs';
 import { buildDsSlimIndex, buildPromptScopedDsIndex } from './ds-context-retrieval.mjs';
+import { runKimiContentDefaultsEnrichment } from './kimi-content-enrichment.mjs';
+import { buildDesignIntelligenceExecutorHints } from './design-intelligence-executor-hints.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function formatWizardSignalsBlock(wizardSignals) {
+  if (!wizardSignals || typeof wizardSignals !== 'object' || Array.isArray(wizardSignals)) return '';
+  const tone = typeof wizardSignals.tone_of_voice === 'string' ? wizardSignals.tone_of_voice.trim() : '';
+  const kw = Array.isArray(wizardSignals.brand_voice_keywords)
+    ? wizardSignals.brand_voice_keywords.map((x) => String(x || '').trim()).filter(Boolean)
+    : [];
+  if (!tone && !kw.length) return '';
+  const slim = {
+    ...(tone ? { tone_of_voice: tone } : {}),
+    ...(kw.length ? { brand_voice_keywords: kw } : {}),
+  };
+  return [
+    '',
+    '[WIZARD_SIGNALS — DI v2; overrides generic pack defaults when present]',
+    JSON.stringify(slim),
+    '[END WIZARD_SIGNALS]',
+  ].join('\n');
+}
 
 const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
@@ -2987,6 +3008,57 @@ app.post('/api/agents/generate', async (req, res) => {
       patternsPayload,
       packV2ArchetypeId,
     });
+    const wizardSignals =
+      dsIndexForValidation &&
+      typeof dsIndexForValidation.wizard_signals === 'object' &&
+      !Array.isArray(dsIndexForValidation.wizard_signals)
+        ? dsIndexForValidation.wizard_signals
+        : null;
+    const wizardSignalsBlock = formatWizardSignalsBlock(wizardSignals);
+    let kimiEnrichmentBlock = '';
+    let kimiEnrichmentUsed = false;
+    let kimiEnrichmentCacheHit = false;
+    const cdRoot =
+      patternsPayload && typeof patternsPayload.content_defaults === 'object' && !Array.isArray(patternsPayload.content_defaults)
+        ? patternsPayload.content_defaults
+        : null;
+    const cdEntry =
+      packV2ArchetypeId && cdRoot && typeof cdRoot[packV2ArchetypeId] === 'object' && !Array.isArray(cdRoot[packV2ArchetypeId])
+        ? cdRoot[packV2ArchetypeId]
+        : null;
+    const toneW = wizardSignals && typeof wizardSignals.tone_of_voice === 'string' ? wizardSignals.tone_of_voice.trim() : '';
+    const kwW =
+      wizardSignals && Array.isArray(wizardSignals.brand_voice_keywords)
+        ? wizardSignals.brand_voice_keywords.map((x) => String(x || '').trim()).filter(Boolean)
+        : [];
+    if (cdEntry && (toneW || kwW.length)) {
+      try {
+        const tovRule = patternsPayload?.wizard_integration?.override_rules?.tov_enrichment_trigger;
+        const charLimits =
+          tovRule && typeof tovRule === 'object' && tovRule.char_limits && typeof tovRule.char_limits === 'object'
+            ? tovRule.char_limits
+            : undefined;
+        const enrich = await runKimiContentDefaultsEnrichment({
+          callKimi,
+          archetypeId: packV2ArchetypeId,
+          contentDefaultsEntry: cdEntry,
+          kimiEnrichableFields: cdEntry.kimi_enrichable_fields,
+          toneOfVoice: toneW || null,
+          brandVoiceKeywords: kwW.length ? kwW : null,
+          charLimits,
+          cacheUserId: userId,
+        });
+        if (enrich.used) {
+          kimiEnrichmentBlock = enrich.block;
+          kimiEnrichmentUsed = true;
+          if (enrich.cacheHit) kimiEnrichmentCacheHit = true;
+          totalInputTokens += enrich.usage.input;
+          totalOutputTokens += enrich.usage.output;
+        }
+      } catch (enrErr) {
+        console.error('Kimi content enrichment failed', enrErr?.message || enrErr);
+      }
+    }
     const primaryCustomDsSuccessLine =
       isCustomDsSource(dsSource) && (mode === 'create' || mode === 'screenshot')
         ? 'PRIMARY SUCCESS (custom/file DS): Ship the screen with INSTANCE_COMPONENT for real components from [DS CONTEXT INDEX] (buttons, inputs, cards, headers, etc.). Prefer components[].componentKey when present, else components[].id. If the index lists components, a primitives-only plan (frames + rects + plain text only) is a failed generation — not an acceptable fallback.'
@@ -3023,6 +3095,8 @@ app.post('/api/agents/generate', async (req, res) => {
       dsIndexBlock,
       slotCandidateBlock,
       designIntelBlock,
+      wizardSignalsBlock,
+      kimiEnrichmentBlock,
     ].join('\n');
 
     let actionPlan = null;
@@ -3352,6 +3426,13 @@ app.post('/api/agents/generate', async (req, res) => {
     if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
     actionPlan.metadata.inferred_screen_archetype = inferredScreenArchetype ?? null;
     actionPlan.metadata.inferred_pack_v2_archetype = packV2ArchetypeId ?? null;
+    actionPlan.metadata.kimi_content_enrichment_used = Boolean(kimiEnrichmentUsed);
+    actionPlan.metadata.kimi_content_enrichment_cache_hit = Boolean(kimiEnrichmentCacheHit);
+    const executorHints = buildDesignIntelligenceExecutorHints(patternsPayload, {
+      packV2ArchetypeId,
+      inferredScreenArchetype,
+    });
+    if (executorHints) actionPlan.metadata.design_intelligence_executor = executorHints;
     actionPlan.metadata.generation_pipeline = generationPipeline;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
@@ -3433,9 +3514,17 @@ app.post('/api/agents/generate', async (req, res) => {
         VALUES ('generate', ${totalInputTokens}, ${totalOutputTokens}, null, ${KIMI_MODEL})
       `.catch((err) => console.error('Kimi usage log generate failed', err.message));
 
+      const learningSnapshot = JSON.stringify({
+        wizard_signals: wizardSignals
+          ? { has_tone: Boolean(toneW), keyword_count: kwW.length }
+          : null,
+        pack_meta: patternsPayload?.meta && typeof patternsPayload.meta === 'object' ? patternsPayload.meta : null,
+        inferred_screen_archetype: inferredScreenArchetype ?? null,
+        inferred_pack_v2_archetype: packV2ArchetypeId ?? null,
+      });
       const ins = await dbSql`
-        INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms)
-        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs})
+        INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms, figma_file_key, ds_source, inferred_screen_archetype, inferred_pack_v2_archetype, kimi_enrichment_used, learning_snapshot)
+        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs}, ${legacyFileKey || null}, ${String(dsSource)}, ${inferredScreenArchetype || null}, ${packV2ArchetypeId || null}, ${kimiEnrichmentUsed}, ${learningSnapshot}::jsonb)
         RETURNING id
       `.catch(() => ({ rows: [] }));
       const requestId = ins?.rows?.[0]?.id ?? null;
@@ -3510,9 +3599,81 @@ app.post('/api/feedback/generate', async (req, res) => {
       INSERT INTO generate_ab_feedback (request_id, variant, thumbs, comment)
       VALUES (${requestId}, ${reqRow.variant}, ${thumbs}, ${comment || null})
     `;
+    void dbSql`
+      INSERT INTO generation_plugin_events (user_id, request_id, figma_file_key, event_type, payload)
+      VALUES (
+        ${userId},
+        ${requestId},
+        null,
+        'user_thumbs_feedback',
+        ${JSON.stringify({ thumbs, has_comment: Boolean(comment) })}::jsonb
+      )
+    `.catch((e) => console.error('generation_plugin_events thumbs', e?.message));
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/feedback/generate', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/** Learning loop / telemetria plugin (DI v2): eventi post-generazione (undo, applicato, ecc.). */
+app.post('/api/generation/plugin-event', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const eventType = String(body.event_type || body.eventType || '')
+    .trim()
+    .slice(0, 96);
+  if (!eventType) return res.status(400).json({ error: 'event_type required' });
+  const requestId = body.request_id || body.requestId || null;
+  const figmaFileKey = String(body.figma_file_key || body.file_key || body.fileKey || '')
+    .trim()
+    .slice(0, 256);
+  const payload =
+    body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload) ? body.payload : {};
+  try {
+    await dbSql`
+      INSERT INTO generation_plugin_events (user_id, request_id, figma_file_key, event_type, payload)
+      VALUES (
+        ${userId},
+        ${requestId},
+        ${figmaFileKey || null},
+        ${eventType},
+        ${JSON.stringify(payload)}::jsonb
+      )
+    `;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/generation/plugin-event', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/** Admin: aggregazione live su `generation_plugin_events` (nessuna tabella rollup separata). */
+app.get('/api/admin/generation-learning-summary', async (req, res) => {
+  if (!isAdminApiRequest(req)) return res.status(403).json({ error: 'Forbidden' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  try {
+    const totals30d = await dbSql`
+      SELECT event_type, COUNT(*)::int AS cnt
+      FROM generation_plugin_events
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY event_type
+      ORDER BY cnt DESC
+    `;
+    const recent = await dbSql`
+      SELECT id, created_at, event_type, request_id, figma_file_key, payload
+      FROM generation_plugin_events
+      ORDER BY created_at DESC
+      LIMIT 50
+    `;
+    res.json({
+      totals_30d: totals30d.rows || [],
+      recent: recent.rows || [],
+    });
+  } catch (err) {
+    console.error('GET /api/admin/generation-learning-summary', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

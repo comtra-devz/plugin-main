@@ -321,11 +321,12 @@ Convenzioni v2 documentate nel pack: **`[WIZARD_OVERRIDE]`** (il wizard vince su
 4. **Prompt generate:** `formatDesignIntelligenceForPrompt` concatena blocco **7.1** (se presente) e blocco **pack v2** (se shape v2), con sottoinsiemi per token (pattern/slot/contenuti pertinenti all’archetype inferito).
 5. **Metadata piano:** `inferred_pack_v2_archetype` oltre a `inferred_screen_archetype` in `auth-deploy/oauth-server/app.mjs`.
 6. **Guardrail auth:** stesso avviso anti step/progress/wizard per archetype v2 auth (`login`, `register`, `forgot_password`, …).
-7. Roadmap (non tutto implementato in executor): spacing per segmento, content defaults su props, playbook `setProperties`, telemetria `learning_loop`, merge wizard come in §10 del pack v2.
+7. **Implementato (plugin + server):** wizard salva `wizard_signals` nello snapshot (`tone_of_voice`, `brand_voice_keywords`); Generate inietta `[WIZARD_SIGNALS]` nel context; se il pack JSON ha `content_defaults` per l’archetype v2 inferito e ci sono segnali wizard, **una chiamata Kimi** produce `[KIMI_CONTENT_ENRICHMENT]`; `metadata.kimi_content_enrichment_used` sul piano; `generate_ab_requests` esteso con `learning_snapshot`, `kimi_enrichment_used`, archetypes, `figma_file_key`; tabella `generation_plugin_events` + `POST /api/generation/plugin-event` (rewrite Vercel → `credits-trophies`); evento `generation_applied` dopo apply su canvas; thumbs duplicati come `user_thumbs_feedback` sugli eventi (best-effort).
+9. **Roadmap executor:** spacing per segmento dal pack, `component_property_playbook` strutturato in `action-plan-executor`, merge token spacing da indice variabili, dashboard admin sulle query `generation_plugin_events` / snapshot.
 
 ---
 
-## 9) Checklist per chi riceve il pack dall’altra IA
+## 10) Checklist per chi riceve il pack dall’altra IA
 
 - [ ] `meta.pack_version` presente (1.x o 2.x)
 - [ ] Pack 1.x: `spacing_rhythm` con scala + almeno 3 `rules` (se usate)

@@ -14,6 +14,14 @@
     { "source": "/api/user/ds-imports", "destination": "/api/credits-trophies?service=user-ds-imports" },
     { "source": "/api/user/ds-imports/context", "destination": "/api/credits-trophies?service=user-ds-imports&sub=context" },
     { "source": "/api/feedback/generate", "destination": "/api/credits-trophies?service=feedback&sub=generate" },
+    {
+      "source": "/api/generation/plugin-event",
+      "destination": "/api/credits-trophies?service=generation&sub=plugin-event"
+    },
+    {
+      "source": "/api/admin/generation-learning-summary",
+      "destination": "/api/credits-trophies?service=admin&sub=generation-learning-summary"
+    },
     { "source": "/api/support/ticket", "destination": "/api/credits-trophies?service=support&sub=ticket" },
     { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },
