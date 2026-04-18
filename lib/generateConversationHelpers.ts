@@ -115,6 +115,16 @@ export function tierCreditHint(tier: 1 | 2 | 3): number {
   return 3;
 }
 
+/**
+ * §6 — Maps UI tier to `POST /api/credits/estimate` action_type (plugin preview).
+ * Final billing follows server action plan after a successful run.
+ */
+export function refinementEstimateActionType(tier: 1 | 2 | 3): string {
+  if (tier <= 1) return 'generate_refinement_light';
+  if (tier === 2) return 'generate_refinement_medium';
+  return 'generate_refinement_heavy';
+}
+
 /** Safe bullets from metadata only (no chain-of-thought). */
 export function reasoningSummaryLinesFromPlan(plan: object): string[] {
   const rec = plan as { metadata?: Record<string, unknown> };

@@ -468,3 +468,17 @@ Phase 3+ (threads, web hub) unchanged in intent; pre-flight feeds **same** threa
 - Full reproduction of external “Design Files / SKILL.md export” inside Figma plugin.
 - Replacing DS import wizard with a chat-only import (keep wizard; only align **expectability** patterns).
 
+---
+
+## 16) Implementation coverage vs sections 5–10 (snapshot)
+
+| Section | Topic | Status |
+|--------|--------|--------|
+| **§5** | Blueprint layout (strip, timeline, composer, chips) | Fatto nel plugin (`Generate.tsx`). |
+| **§6** | Tier crediti chip post-output | Policy lato API `generate_refinement_light|medium|heavy`; UI chiama `estimateCredits` per chip; **consumo finale** sempre da `metadata.estimated_credits` dopo run ok. |
+| **§7** | Thread `file_key + ds_cache_hash`, lista, nuova, persistenza locale + server | Tabelle + API + UI; tab dedicata opzionale (usiamo pannello inline). |
+| **§8** | Split plugin vs web | Cockpit nel plugin; web = admin `GET /api/admin/generate-threads`, hub prodotto futuro. |
+| **§9–10** | API + modello dati | `generate_threads` / `generate_messages`; optional `actions/:chipId` = stesso generate (non route separata). |
+
+**Gap noti (post-fase corrente):** Phase 5 ToV iterativo; hub web completo (search full-text, playbooks); trigger §15.2 avanzati (slot pack thin, dual-archetype conflict) se servono in produzione.
+

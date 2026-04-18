@@ -710,6 +710,17 @@ function estimateCreditsByAction(actionType, nodeCount, options = {}) {
     const n = Number(process.env.ENHANCE_PLUS_CREDITS);
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 1;
   }
+  /**
+   * §6 Conversational UX — post-first-generate refinement chips (preview only).
+   * Actual charge remains action_plan.metadata.estimated_credits after successful generate.
+   */
+  if (actionType === 'generate_refinement_light') return 1;
+  if (actionType === 'generate_refinement_medium') return 2;
+  if (actionType === 'generate_refinement_heavy') return 3;
+  if (actionType === 'generate_refinement_xl') {
+    const n = Number(process.env.GENERATE_REFINEMENT_XL_CREDITS);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 4;
+  }
   return 5;
 }
 

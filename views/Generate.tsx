@@ -24,6 +24,7 @@ import {
   evaluatePreflightClarifier,
   localConversationStorageKey,
   reasoningSummaryLinesFromPlan,
+  refinementEstimateActionType,
   tierCreditHint,
 } from '../lib/generateConversationHelpers';
 import {
@@ -31,6 +32,8 @@ import {
   safeLocalStorageRemoveItem,
   safeLocalStorageSetItem,
 } from '../lib/safeWebStorage';
+
+/** Hybrid UX §8 — cockpit plugin (questa view); archivio/ricerca/analytics via web/API admin. */
 
 interface Props { 
   plan: UserPlan; 
@@ -351,6 +354,8 @@ export const Generate: React.FC<Props> = ({
   const [preflightPick, setPreflightPick] = useState<Record<string, boolean>>({});
   /** After a successful canvas run: show refinement chips (§5–6). */
   const [showRefinementChips, setShowRefinementChips] = useState(false);
+  /** §6 — per-chip estimates from POST /api/credits/estimate (preview). */
+  const [refinementEstimates, setRefinementEstimates] = useState<Record<string, number>>({});
   const [lastDiagLine, setLastDiagLine] = useState<string | null>(null);
   const pendingPreflightPromptRef = useRef<string | null>(null);
   const skippedPreflightHashRef = useRef<string | null>(null);
@@ -627,6 +632,35 @@ export const Generate: React.FC<Props> = ({
       cancelled = true;
     };
   }, [hasSelection, screenshotAttachment, estimateCredits]);
+
+  /** §6 — Stima crediti per chip affinamento (preview API; addebito finale dal piano server). */
+  useEffect(() => {
+    if (!showRefinementChips) {
+      setRefinementEstimates({});
+      return;
+    }
+    let cancelled = false;
+    const hasShot = Boolean(screenshotAttachment) && !hasSelection;
+    void (async () => {
+      const pairs = await Promise.all(
+        REFINEMENT_CHIPS.map(async (chip) => {
+          try {
+            const { estimated_credits } = await estimateCredits({
+              action_type: refinementEstimateActionType(chip.tier),
+              has_screenshot: hasShot,
+            });
+            return [chip.id, Math.max(0, Number(estimated_credits) || 0)] as const;
+          } catch {
+            return [chip.id, tierCreditHint(chip.tier)] as const;
+          }
+        }),
+      );
+      if (!cancelled) setRefinementEstimates(Object.fromEntries(pairs));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showRefinementChips, hasSelection, screenshotAttachment, estimateCredits]);
 
   const promptPlaceholder = hasSelection
     ? `> Modify "${selectedLayerName}": keep layout, improve hierarchy and spacing.`
@@ -1538,9 +1572,10 @@ export const Generate: React.FC<Props> = ({
             {userId && generateConversationApi && genFileKey && dsScopeHash ? (
               <div
                 data-component="Generate: Thread scope"
-                className="flex flex-wrap items-center gap-2 text-[10px] mb-2 border-2 border-black px-2 py-1.5 bg-gray-50 shadow-[2px_2px_0_0_#000]"
+                className="flex flex-col gap-1 text-[10px] mb-2 border-2 border-black px-2 py-1.5 bg-gray-50 shadow-[2px_2px_0_0_#000]"
               >
-                <span className="font-black uppercase">Conversazione</span>
+                <div className="flex flex-wrap items-center gap-2">
+                <span className="font-black uppercase">Conversazioni</span>
                 <button
                   type="button"
                   className="font-bold underline hover:text-[#ff90e8]"
@@ -1568,6 +1603,10 @@ export const Generate: React.FC<Props> = ({
                     </select>
                   </label>
                 ) : null}
+                </div>
+                <p className="text-[9px] text-gray-600 leading-snug font-medium">
+                  Scope thread: stesso file + hash DS — evita confusione tra snapshot diversi (§7).
+                </p>
               </div>
             ) : null}
 
@@ -1705,7 +1744,11 @@ export const Generate: React.FC<Props> = ({
                 className="border-2 border-black bg-white p-2 mb-2 shadow-[3px_3px_0_0_#000]"
               >
                 <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">
-                  Affina output (stessi gate e crediti del Generate)
+                  Affina output (stessi gate del Generate)
+                </p>
+                <p className="text-[8px] text-gray-600 leading-snug mb-1.5">
+                  Stima da policy §6 (light/medium/heavy). Addebito finale = crediti nel piano dopo successo su canvas,
+                  come una nuova run.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {REFINEMENT_CHIPS.map((chip) => (
@@ -1714,9 +1757,11 @@ export const Generate: React.FC<Props> = ({
                       type="button"
                       disabled={loading || dsGateBlocked}
                       onClick={() => void applyRefinementChip(chip)}
+                      title={`Stima: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} crediti (preview)`}
                       className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
                     >
-                      {chip.label} (~{tierCreditHint(chip.tier)} cr)
+                      {chip.label} (~
+                      {refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
                     </button>
                   ))}
                 </div>
