@@ -22,6 +22,14 @@
       "source": "/api/admin/generation-learning-summary",
       "destination": "/api/credits-trophies?service=admin&sub=generation-learning-summary"
     },
+    {
+      "source": "/api/generate/threads",
+      "destination": "/api/credits-trophies?service=generate-chat&sub=threads"
+    },
+    {
+      "source": "/api/generate/thread-messages",
+      "destination": "/api/credits-trophies?service=generate-chat&sub=thread-messages"
+    },
     { "source": "/api/support/ticket", "destination": "/api/credits-trophies?service=support&sub=ticket" },
     { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },

@@ -18,6 +18,19 @@ import {
 import { UserPlan } from '../types';
 import { getSystemToastOptions } from '../lib/errorCopy';
 import { Confetti } from '../components/Confetti.tsx';
+import {
+  REFINEMENT_CHIPS,
+  activeThreadStorageKey,
+  evaluatePreflightClarifier,
+  localConversationStorageKey,
+  reasoningSummaryLinesFromPlan,
+  tierCreditHint,
+} from '../lib/generateConversationHelpers';
+import {
+  safeLocalStorageGetItem,
+  safeLocalStorageRemoveItem,
+  safeLocalStorageSetItem,
+} from '../lib/safeWebStorage';
 
 interface Props { 
   plan: UserPlan; 
@@ -86,6 +99,35 @@ interface Props {
     figma_file_key?: string;
     payload?: Record<string, unknown>;
   }) => Promise<void>;
+  /** Scope user id for thread persistence (§7). */
+  userId?: string | null;
+  /** Resolve DS hash for thread key (Custom Current). */
+  fetchDsImportContextSnapshot?: (
+    fileKey: string,
+  ) => Promise<{ ds_context_index: object; ds_cache_hash: string | null } | null>;
+  /** Backend sync for generate_threads / generate_messages (§9–10). */
+  generateConversationApi?: {
+    listThreads: (q: {
+      file_key: string;
+      ds_cache_hash: string;
+    }) => Promise<{ threads: Array<{ id: string; title: string | null; updated_at_ms?: number }> }>;
+    createThread: (body: {
+      file_key: string;
+      ds_cache_hash: string;
+      title?: string;
+    }) => Promise<{ id: string }>;
+    fetchMessages: (threadId: string) => Promise<{
+      messages: Array<{ id: string; role: string; content_json?: { text?: string } }>;
+    }>;
+    appendMessages: (
+      threadId: string,
+      messages: Array<{
+        role: 'user' | 'assistant' | 'system';
+        content_json: Record<string, unknown>;
+        message_type?: string;
+      }>,
+    ) => Promise<void>;
+  };
   selectedNode: { id: string; name: string; type: string } | null;
   /** Runs the action plan on the Figma main thread (frame + actions on the current page). */
   applyActionPlanToCanvas: (
@@ -160,6 +202,11 @@ type ConversationTurn = {
 
 const MAX_CONVERSATION_MESSAGES = 32;
 
+function promptGateKey(raw: string): string {
+  const t = raw.trim();
+  return `${t.length}:${t.slice(0, 96)}`;
+}
+
 function buildAssistantSummaryFromPlan(
   plan: object,
   opts: { rootId?: string | null },
@@ -175,12 +222,20 @@ function buildAssistantSummaryFromPlan(
   const pipeline =
     meta.generation_pipeline != null ? String(meta.generation_pipeline).trim() : '';
   const lines: string[] = [];
-  lines.push('Run completata. Piano applicato sulla canvas.');
+  lines.push('Ok — ho capito: layout pronto sul file, allineato al DS.');
   lines.push('');
-  lines.push(`- Azioni nel piano: ${actions.length}`);
-  if (archetype) lines.push(`- Archetipo schermo: ${archetype}`);
-  if (pipeline) lines.push(`- Pipeline: ${pipeline}`);
-  if (opts.rootId) lines.push('- Frame creato sulla pagina corrente (controlla il canvas).');
+  const reasoning = reasoningSummaryLinesFromPlan(plan);
+  if (reasoning.length) {
+    lines.push('Sintesi (sicura, senza catena di pensiero):');
+    for (const r of reasoning) lines.push(`• ${r}`);
+    lines.push('');
+  }
+  lines.push(`Azioni nel piano: ${actions.length}`);
+  if (archetype) lines.push(`Archetipo schermo: ${archetype}`);
+  if (pipeline) lines.push(`Pipeline: ${pipeline}`);
+  if (opts.rootId) lines.push('Frame creato sulla pagina corrente — controlla il canvas.');
+  lines.push('');
+  lines.push('Prossimo passo: affina con i chip sotto o scrivi una modifica nel terminale.');
   return lines.join('\n');
 }
 
@@ -202,6 +257,9 @@ export const Generate: React.FC<Props> = ({
   fetchGenerateFeedback,
   fetchEnhancePlus,
   fetchGenerationPluginEvent,
+  userId,
+  fetchDsImportContextSnapshot,
+  generateConversationApi,
   selectedNode,
   applyActionPlanToCanvas,
   designSystems,
@@ -268,6 +326,21 @@ export const Generate: React.FC<Props> = ({
   const [showReport, setShowReport] = useState(false);
   /** Timeline conversazione (Phase 1): una coppia user/assistant per ogni click Generate rilevante. */
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
+  const [dsScopeHash, setDsScopeHash] = useState<string>('');
+  const [serverThreadId, setServerThreadId] = useState<string | null>(null);
+  const [threadList, setThreadList] = useState<Array<{ id: string; title: string | null }>>([]);
+  const [showPreflight, setShowPreflight] = useState(false);
+  const [preflightPromptSnapshot, setPreflightPromptSnapshot] = useState('');
+  const [preflightPick, setPreflightPick] = useState<Record<string, boolean>>({});
+  /** After a successful canvas run: show refinement chips (§5–6). */
+  const [showRefinementChips, setShowRefinementChips] = useState(false);
+  const [lastDiagLine, setLastDiagLine] = useState<string | null>(null);
+  const pendingPreflightPromptRef = useRef<string | null>(null);
+  const skippedPreflightHashRef = useRef<string | null>(null);
+  const serverThreadIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    serverThreadIdRef.current = serverThreadId;
+  }, [serverThreadId]);
   const lastActionPlanRef = useRef<object | null>(null);
   /** For “View in Figma” / re-apply: same modify vs create as the last run. */
   const lastApplyWasModifyRef = useRef(false);
@@ -291,20 +364,142 @@ export const Generate: React.FC<Props> = ({
     [applyActionPlanToCanvas]
   );
 
-  const appendGenerateTurn = useCallback((userPrompt: string, assistantMarkdown: string) => {
-    const t = Date.now();
-    const u = userPrompt.slice(0, 1200);
-    setConversationTurns((prev) => {
-      const next: ConversationTurn[] = [
-        ...prev,
-        { id: `u-${t}`, role: 'user', body: u, createdAt: t },
-        { id: `a-${t}`, role: 'assistant', body: assistantMarkdown, createdAt: t },
+  const persistTurnsLocal = useCallback(
+    (turns: ConversationTurn[]) => {
+      if (!userId || !genFileKey) return;
+      const h =
+        dsScopeHash ||
+        (usesFileDs ? '' : `preset:${selectedSystem.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`);
+      const key = localConversationStorageKey(userId, genFileKey, h);
+      try {
+        safeLocalStorageSetItem(key, JSON.stringify(turns.slice(-MAX_CONVERSATION_MESSAGES)));
+      } catch {
+        /* ignore */
+      }
+    },
+    [userId, genFileKey, dsScopeHash, usesFileDs, selectedSystem],
+  );
+
+  const appendGenerateTurn = useCallback(
+    (userPrompt: string, assistantMarkdown: string) => {
+      const t = Date.now();
+      const u = userPrompt.slice(0, 1200);
+      const pair = [
+        { id: `u-${t}`, role: 'user' as const, body: u, createdAt: t },
+        { id: `a-${t}`, role: 'assistant' as const, body: assistantMarkdown, createdAt: t },
       ];
-      return next.length > MAX_CONVERSATION_MESSAGES
-        ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
-        : next;
+      setConversationTurns((prev) => {
+        const next: ConversationTurn[] = [...prev, ...pair];
+        const trimmed =
+          next.length > MAX_CONVERSATION_MESSAGES
+            ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
+            : next;
+        persistTurnsLocal(trimmed);
+        return trimmed;
+      });
+      const api = generateConversationApi;
+      const fk = genFileKey;
+      const dh =
+        dsScopeHash ||
+        (usesFileDs ? '' : `preset:${selectedSystem.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`);
+      if (api && userId && fk && dh !== undefined) {
+        void (async () => {
+          try {
+            let tid = serverThreadIdRef.current;
+            if (!tid) {
+              const created = await api.createThread({
+                file_key: fk,
+                ds_cache_hash: dh || '',
+                title: u.slice(0, 80),
+              });
+              tid = created.id;
+              setServerThreadId(tid);
+              safeLocalStorageSetItem(activeThreadStorageKey(userId, fk, dh || ''), tid);
+            }
+            if (tid) {
+              await api.appendMessages(tid, [
+                { role: 'user', content_json: { text: u }, message_type: 'chat' },
+                { role: 'assistant', content_json: { text: assistantMarkdown }, message_type: 'reasoning_summary' },
+              ]);
+            }
+          } catch {
+            /* offline — local timeline remains */
+          }
+        })();
+      }
+    },
+    [
+      generateConversationApi,
+      userId,
+      genFileKey,
+      dsScopeHash,
+      usesFileDs,
+      selectedSystem,
+      persistTurnsLocal,
+    ],
+  );
+
+  /** DS scope hash for thread persistence (file + snapshot or preset slug). */
+  useEffect(() => {
+    let cancelled = false;
+    if (!usesFileDs) {
+      const slug = selectedSystem.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      setDsScopeHash(`preset:${slug}`);
+      return;
+    }
+    if (!genFileKey || !catalogReady || !fetchDsImportContextSnapshot) {
+      setDsScopeHash('');
+      return;
+    }
+    void fetchDsImportContextSnapshot(genFileKey).then((snap) => {
+      if (cancelled) return;
+      setDsScopeHash(snap?.ds_cache_hash ? String(snap.ds_cache_hash).trim() : '');
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [usesFileDs, selectedSystem, genFileKey, catalogReady, fetchDsImportContextSnapshot]);
+
+  useEffect(() => {
+    if (!userId || !genFileKey || !dsScopeHash) return;
+    const tid = safeLocalStorageGetItem(activeThreadStorageKey(userId, genFileKey, dsScopeHash));
+    setServerThreadId(tid || null);
+  }, [userId, genFileKey, dsScopeHash]);
+
+  useEffect(() => {
+    if (!generateConversationApi || !userId || !genFileKey || !dsScopeHash) return;
+    let cancelled = false;
+    void generateConversationApi
+      .listThreads({ file_key: genFileKey, ds_cache_hash: dsScopeHash })
+      .then((r) => {
+        if (cancelled) return;
+        setThreadList((r.threads || []).map((t) => ({ id: t.id, title: t.title ?? null })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [generateConversationApi, userId, genFileKey, dsScopeHash]);
+
+  useEffect(() => {
+    if (!userId || !genFileKey || !dsScopeHash) return;
+    const raw = safeLocalStorageGetItem(localConversationStorageKey(userId, genFileKey, dsScopeHash));
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return;
+      const turns = parsed.filter(
+        (x): x is ConversationTurn =>
+          !!x &&
+          typeof x === 'object' &&
+          (x as ConversationTurn).role !== undefined &&
+          typeof (x as ConversationTurn).body === 'string',
+      );
+      if (turns.length > 0) setConversationTurns(turns.slice(-MAX_CONVERSATION_MESSAGES));
+    } catch {
+      /* ignore */
+    }
+  }, [userId, genFileKey, dsScopeHash]);
 
   // Set initial prompt if provided
   useEffect(() => {
@@ -501,6 +696,7 @@ export const Generate: React.FC<Props> = ({
     const text = normalizeTerminalText(clone.innerText);
     setHasContent(text.length > 0);
     setPromptText(text);
+    skippedPreflightHashRef.current = null;
     if (enhanceLockedRef.current && lastEnhancedBodyRef.current !== null) {
       if (text !== normalizeTerminalText(lastEnhancedBodyRef.current)) {
         setEnhanceLocked(false);
@@ -590,7 +786,8 @@ export const Generate: React.FC<Props> = ({
   const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (!loading && hasContent && !dsGateBlocked) handleGen();
+      if (showPreflight) return;
+      if (!loading && hasContent && !dsGateBlocked) void handleGen();
     }
   };
 
@@ -672,6 +869,221 @@ export const Generate: React.FC<Props> = ({
     selectedNode,
   ]);
 
+  const runGeneratePipeline = useCallback(
+    async (finalPrompt: string, opts?: { chipId?: string }) => {
+      if (!canGenerate) {
+        onUnlockRequest();
+        return;
+      }
+      if (usesFileDs && !catalogReady) {
+        setGenError('Finish the design system import above before generating.');
+        return;
+      }
+      setLoading(true);
+      setGenerateStep('context');
+      setShowReport(false);
+      setGenError(null);
+      setCanvasApplyResult(null);
+      lastActionPlanRef.current = null;
+      setShowRefinementChips(false);
+      setLastDiagLine(null);
+
+      void fetchGenerationPluginEvent?.({
+        event_type: 'generate_chat_turn_started',
+        payload: { prompt_len: finalPrompt.trim().length },
+      });
+
+      const trimmed = finalPrompt.trim();
+      if (!trimmed) {
+        setLoading(false);
+        setGenerateStep('idle');
+        return;
+      }
+
+      const { fileKey, error: ctxError } = await requestFileContext();
+      if (ctxError || !fileKey) {
+        setLoading(false);
+        setGenerateStep('idle');
+        const opts = getSystemToastOptions('file_link_unavailable');
+        setGenError(opts.description ?? opts.title);
+        return;
+      }
+
+      const mode = hasSelection ? 'modify' : screenshotAttachment ? 'screenshot' : 'create';
+      const dsSource = usesFileDs ? 'custom' : selectedSystem;
+
+      setGenerateStep('ai');
+      try {
+        const data = await fetchGenerate({
+          file_key: fileKey,
+          prompt: trimmed,
+          mode,
+          ds_source: dsSource,
+          screenshot_base64:
+            !hasSelection && screenshotAttachment ? screenshotAttachment.dataUrl : null,
+        });
+        const actionPlan = data?.action_plan;
+        if (!actionPlan || typeof actionPlan !== 'object') {
+          appendGenerateTurn(
+            trimmed,
+            'Errore: risposta dal server non valida (action plan mancante o malformato).',
+          );
+          setGenError('Invalid response from server.');
+          setLoading(false);
+          setGenerateStep('idle');
+          return;
+        }
+        const metaDiag = (actionPlan as { metadata?: { generation_diagnostics?: { phase_timers?: { total_ms?: number } } } })
+          .metadata?.generation_diagnostics;
+        const totalMs = metaDiag?.phase_timers?.total_ms;
+        if (typeof totalMs === 'number' && Number.isFinite(totalMs)) {
+          setLastDiagLine(`Ultimo round-trip server ~${Math.round(totalMs / 1000)}s`);
+        }
+
+        lastActionPlanRef.current = actionPlan;
+        const isModify = mode === 'modify';
+        lastApplyWasModifyRef.current = isModify;
+        setRes(JSON.stringify(actionPlan, null, 2));
+        setLastRequestId(data?.request_id ?? null);
+        setLastVariant(data?.variant ?? null);
+        setFeedbackSent(false);
+
+        setGenerateStep('canvas');
+        const canvasResult = await runCanvasApply(actionPlan, {
+          modifyMode: isModify,
+          serverRequestId: data?.request_id ?? null,
+          figmaFileKey: fileKey,
+          qualityWatch: Boolean(data?.request_id),
+        });
+        if (!canvasResult.ok) {
+          appendGenerateTurn(
+            trimmed,
+            `Canvas: ${humanizeCanvasError(canvasResult.error || 'Canvas apply failed.')}`,
+          );
+          void fetchGenerationPluginEvent?.({
+            event_type: 'generate_canvas_apply_failed',
+            figma_file_key: fileKey,
+            payload: { error: canvasResult.error, chip_id: opts?.chipId },
+          });
+          setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
+          setLoading(false);
+          setGenerateStep('idle');
+          return;
+        }
+
+        void fetchGenerationPluginEvent?.({
+          event_type: 'generation_applied',
+          request_id: data?.request_id ?? null,
+          figma_file_key: fileKey,
+          payload: { mode, success: true, root_id: canvasResult.rootId ?? null },
+        });
+
+        setGenerateStep('credits');
+        const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
+        const creditsToConsume = meta?.estimated_credits ?? 3;
+        const consumed = await consumeCredits({
+          action_type: mode === 'modify' ? 'wireframe_modified' : 'generate',
+          credits_consumed: creditsToConsume,
+          file_id: fileKey,
+        });
+        if (consumed?.error) {
+          appendGenerateTurn(
+            trimmed,
+            `Crediti: ${consumed.error}\n\nIl frame era già stato creato sulla canvas; controlla il saldo e riprova.`,
+          );
+          setGenError(consumed.error);
+          setLoading(false);
+          setGenerateStep('idle');
+          return;
+        }
+        appendGenerateTurn(
+          trimmed,
+          buildAssistantSummaryFromPlan(actionPlan, { rootId: canvasResult.rootId ?? null }),
+        );
+        setShowReport(true);
+        setShowRefinementChips(true);
+        void fetchGenerationPluginEvent?.({
+          event_type: 'generate_chat_turn_succeeded',
+          request_id: data?.request_id ?? null,
+          figma_file_key: fileKey,
+        });
+        if (opts?.chipId) {
+          void fetchGenerationPluginEvent?.({
+            event_type: 'generate_chip_succeeded',
+            payload: { chip_id: opts.chipId },
+            figma_file_key: fileKey,
+          });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendGenerateTurn(trimmed, `Errore: ${humanizeCanvasError(msg)}`);
+        void fetchGenerationPluginEvent?.({
+          event_type: 'generate_chat_turn_failed',
+          figma_file_key: fileKey,
+          payload: { message: msg, chip_id: opts?.chipId },
+        });
+        if (opts?.chipId) {
+          void fetchGenerationPluginEvent?.({
+            event_type: 'generate_chip_failed',
+            payload: { chip_id: opts.chipId },
+            figma_file_key: fileKey,
+          });
+        }
+        setGenError(humanizeCanvasError(msg));
+      } finally {
+        setLoading(false);
+        setGenerateStep('idle');
+      }
+    },
+    [
+      canGenerate,
+      onUnlockRequest,
+      usesFileDs,
+      catalogReady,
+      requestFileContext,
+      hasSelection,
+      screenshotAttachment,
+      fetchGenerate,
+      selectedSystem,
+      runCanvasApply,
+      appendGenerateTurn,
+      consumeCredits,
+      fetchGenerationPluginEvent,
+      humanizeCanvasError,
+    ],
+  );
+
+  const handlePreflightDismissRun = useCallback(async () => {
+    const raw = pendingPreflightPromptRef.current || preflightPromptSnapshot || getPlainTerminalText(inputRef.current);
+    if (!raw.trim()) {
+      setShowPreflight(false);
+      return;
+    }
+    skippedPreflightHashRef.current = promptGateKey(raw);
+    setShowPreflight(false);
+    void fetchGenerationPluginEvent?.({
+      event_type: 'generate_preflight_dismissed',
+      payload: { prompt_len: raw.trim().length },
+    });
+    await runGeneratePipeline(raw);
+  }, [preflightPromptSnapshot, runGeneratePipeline, fetchGenerationPluginEvent]);
+
+  const handlePreflightConfirm = useCallback(async () => {
+    const raw = pendingPreflightPromptRef.current || preflightPromptSnapshot || '';
+    const ev = evaluatePreflightClarifier(raw);
+    const labels = ev.chips.filter((c) => preflightPick[c.id]).map((c) => c.label);
+    const merged =
+      labels.length > 0
+        ? `${raw.trim()}\n\n[Vincoli da chiarimento]\n${labels.map((l) => `- ${l}`).join('\n')}`
+        : raw.trim();
+    setShowPreflight(false);
+    void fetchGenerationPluginEvent?.({
+      event_type: 'generate_preflight_completed',
+      payload: { variant: ev.variant, picks: labels.length },
+    });
+    await runGeneratePipeline(merged);
+  }, [preflightPick, preflightPromptSnapshot, runGeneratePipeline, fetchGenerationPluginEvent]);
+
   const handleGen = async () => {
     if (!canGenerate) {
       onUnlockRequest();
@@ -681,115 +1093,89 @@ export const Generate: React.FC<Props> = ({
       setGenError('Finish the design system import above before generating.');
       return;
     }
-    setLoading(true);
-    setGenerateStep('context');
-    setShowReport(false);
-    setGenError(null);
-    setCanvasApplyResult(null);
-    lastActionPlanRef.current = null;
+    const rawText = getPlainTerminalText(inputRef.current);
+    if (!rawText.trim()) return;
 
-    const rawText = inputRef.current?.innerText?.trim() || '';
-    if (!rawText) {
-      setLoading(false);
-      setGenerateStep('idle');
-      return;
-    }
-
-    const { fileKey, error: ctxError } = await requestFileContext();
-    if (ctxError || !fileKey) {
-      setLoading(false);
-      setGenerateStep('idle');
-      const opts = getSystemToastOptions('file_link_unavailable');
-      setGenError(opts.description ?? opts.title);
-      return;
-    }
-
-    const mode = hasSelection ? 'modify' : screenshotAttachment ? 'screenshot' : 'create';
-    const dsSource = usesFileDs ? 'custom' : selectedSystem;
-
-    setGenerateStep('ai');
-    try {
-      const data = await fetchGenerate({
-        file_key: fileKey,
-        prompt: rawText,
-        mode,
-        ds_source: dsSource,
-        screenshot_base64:
-          !hasSelection && screenshotAttachment ? screenshotAttachment.dataUrl : null,
-      });
-      const actionPlan = data?.action_plan;
-      if (!actionPlan || typeof actionPlan !== 'object') {
-        appendGenerateTurn(
-          rawText,
-          'Errore: risposta dal server non valida (action plan mancante o malformato).',
-        );
-        setGenError('Invalid response from server.');
-        setLoading(false);
-        setGenerateStep('idle');
-        return;
-      }
-      lastActionPlanRef.current = actionPlan;
-      const isModify = mode === 'modify';
-      lastApplyWasModifyRef.current = isModify;
-      setRes(JSON.stringify(actionPlan, null, 2));
-      setLastRequestId(data?.request_id ?? null);
-      setLastVariant(data?.variant ?? null);
-      setFeedbackSent(false);
-
-      setGenerateStep('canvas');
-      const canvasResult = await runCanvasApply(actionPlan, {
-        modifyMode: isModify,
-        serverRequestId: data?.request_id ?? null,
-        figmaFileKey: fileKey,
-        qualityWatch: Boolean(data?.request_id),
-      });
-      if (!canvasResult.ok) {
-        appendGenerateTurn(
-          rawText,
-          `Canvas: ${humanizeCanvasError(canvasResult.error || 'Canvas apply failed.')}`,
-        );
-        setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
-        setLoading(false);
-        setGenerateStep('idle');
-        return;
-      }
-
+    const ev = evaluatePreflightClarifier(rawText);
+    const gate = promptGateKey(rawText);
+    if (ev.show && skippedPreflightHashRef.current !== gate) {
+      pendingPreflightPromptRef.current = rawText;
+      setPreflightPromptSnapshot(rawText);
+      setPreflightPick({});
+      setShowPreflight(true);
       void fetchGenerationPluginEvent?.({
-        event_type: 'generation_applied',
-        request_id: data?.request_id ?? null,
-        figma_file_key: fileKey,
-        payload: { mode, success: true, root_id: canvasResult.rootId ?? null },
+        event_type: 'generate_preflight_opened',
+        payload: { variant: ev.variant },
       });
-
-      setGenerateStep('credits');
-      const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
-      const creditsToConsume = meta?.estimated_credits ?? 3;
-      const consumed = await consumeCredits({
-        action_type: mode === 'modify' ? 'wireframe_modified' : 'generate',
-        credits_consumed: creditsToConsume,
-        file_id: fileKey,
-      });
-      if (consumed?.error) {
-        appendGenerateTurn(
-          rawText,
-          `Crediti: ${consumed.error}\n\nIl frame era già stato creato sulla canvas; controlla il saldo e riprova.`,
-        );
-        setGenError(consumed.error);
-        setLoading(false);
-        setGenerateStep('idle');
-        return;
-      }
-      appendGenerateTurn(rawText, buildAssistantSummaryFromPlan(actionPlan, { rootId: canvasResult.rootId ?? null }));
-      setShowReport(true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      appendGenerateTurn(rawText, `Errore: ${humanizeCanvasError(msg)}`);
-      setGenError(humanizeCanvasError(msg));
-    } finally {
-      setLoading(false);
-      setGenerateStep('idle');
+      return;
     }
+
+    await runGeneratePipeline(rawText);
   };
+
+  const handleNewConversation = useCallback(() => {
+    setConversationTurns([]);
+    setServerThreadId(null);
+    serverThreadIdRef.current = null;
+    setShowRefinementChips(false);
+    setShowPreflight(false);
+    skippedPreflightHashRef.current = null;
+    if (userId && genFileKey && dsScopeHash) {
+      safeLocalStorageRemoveItem(localConversationStorageKey(userId, genFileKey, dsScopeHash));
+      safeLocalStorageRemoveItem(activeThreadStorageKey(userId, genFileKey, dsScopeHash));
+    }
+    void fetchGenerationPluginEvent?.({ event_type: 'generate_thread_new', payload: {} });
+  }, [userId, genFileKey, dsScopeHash, fetchGenerationPluginEvent]);
+
+  const handleSelectThread = useCallback(
+    async (threadId: string) => {
+      if (!generateConversationApi || !threadId) return;
+      try {
+        const { messages } = await generateConversationApi.fetchMessages(threadId);
+        const turns: ConversationTurn[] = [];
+        for (const m of messages) {
+          const txt =
+            m.content_json && typeof m.content_json === 'object' && m.content_json.text != null
+              ? String(m.content_json.text)
+              : '';
+          const role = m.role === 'assistant' ? 'assistant' : 'user';
+          turns.push({
+            id: m.id,
+            role,
+            body: txt.slice(0, 1200),
+            createdAt: Date.now(),
+          });
+        }
+        setConversationTurns(turns.slice(-MAX_CONVERSATION_MESSAGES));
+        setServerThreadId(threadId);
+        serverThreadIdRef.current = threadId;
+        if (userId && genFileKey && dsScopeHash) {
+          safeLocalStorageSetItem(activeThreadStorageKey(userId, genFileKey, dsScopeHash), threadId);
+          persistTurnsLocal(turns.slice(-MAX_CONVERSATION_MESSAGES));
+        }
+      } catch {
+        setGenError('Impossibile caricare la conversazione.');
+      }
+    },
+    [generateConversationApi, userId, genFileKey, dsScopeHash, persistTurnsLocal],
+  );
+
+  const applyRefinementChip = useCallback(
+    async (chip: (typeof REFINEMENT_CHIPS)[number]) => {
+      if (!inputRef.current || loading) return;
+      void fetchGenerationPluginEvent?.({
+        event_type: 'generate_chip_clicked',
+        payload: { chip_id: chip.id, tier: chip.tier },
+      });
+      const base = getPlainTerminalText(inputRef.current);
+      const next = `${base}${chip.append}`.trim();
+      inputRef.current.innerText = next;
+      setPromptText(next);
+      setHasContent(true);
+      await runGeneratePipeline(next, { chipId: chip.id });
+    },
+    [loading, runGeneratePipeline, fetchGenerationPluginEvent],
+  );
 
   const generateStepLabel =
     generateStep === 'context'
@@ -1117,6 +1503,92 @@ export const Generate: React.FC<Props> = ({
 
       {showGenerateComposer && !showReport ? (
         <>
+            {userId && generateConversationApi && genFileKey && dsScopeHash ? (
+              <div
+                data-component="Generate: Thread scope"
+                className="flex flex-wrap items-center gap-2 text-[10px] mb-2 border-2 border-black px-2 py-1.5 bg-gray-50 shadow-[2px_2px_0_0_#000]"
+              >
+                <span className="font-black uppercase">Conversazione</span>
+                <button
+                  type="button"
+                  className="font-bold underline hover:text-[#ff90e8]"
+                  onClick={handleNewConversation}
+                >
+                  Nuova
+                </button>
+                {threadList.length > 0 ? (
+                  <label className="flex items-center gap-1">
+                    <span className="text-[9px] text-gray-600">Server</span>
+                    <select
+                      className="border-2 border-black text-[9px] px-1 py-0.5 bg-white max-w-[168px]"
+                      value={serverThreadId || ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) void handleSelectThread(v);
+                      }}
+                    >
+                      <option value="">— In uso (locale) —</option>
+                      {threadList.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {(t.title || t.id).slice(0, 40)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+
+            {showPreflight ? (
+              <div
+                data-component="Generate: Preflight clarifier"
+                className="border-2 border-amber-500 bg-amber-50 p-2 mb-2 space-y-2 shadow-[3px_3px_0_0_#000]"
+              >
+                <p className="text-[10px] font-black uppercase">Chiarimenti leggeri (opzionale)</p>
+                <p className="text-[9px] text-gray-700 leading-snug">
+                  Zero crediti: completa o salta. I vincoli scelti vengono aggiunti al prompt per lo stesso{' '}
+                  <code className="font-mono text-[8px]">POST /api/agents/generate</code>.
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {evaluatePreflightClarifier(preflightPromptSnapshot).chips.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() =>
+                        setPreflightPick((p) => ({
+                          ...p,
+                          [c.id]: !p[c.id],
+                        }))
+                      }
+                      className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
+                        preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    className="text-[10px]"
+                    type="button"
+                    onClick={() => void handlePreflightDismissRun()}
+                  >
+                    Continua senza
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="text-[10px]"
+                    type="button"
+                    onClick={() => void handlePreflightConfirm()}
+                  >
+                    Genera
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             <div
               data-component="Generate: Run transparency + timeline"
               className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] p-2 space-y-2 mb-2"
@@ -1156,6 +1628,11 @@ export const Generate: React.FC<Props> = ({
               <p className="text-[9px] text-gray-600 leading-snug">
                 Una run completa può richiedere fino a ~2 minuti (canvas con molti componenti è di solito il passo più lungo).
               </p>
+              {lastDiagLine ? (
+                <p className="text-[9px] text-emerald-900 font-mono leading-snug" aria-live="polite">
+                  {lastDiagLine}
+                </p>
+              ) : null}
               <div className="max-h-[220px] overflow-y-auto custom-scrollbar border-2 border-black bg-gray-50 p-2 space-y-2">
                 {conversationTurns.length === 0 ? (
                   <p className="text-[10px] text-gray-500 italic leading-snug">
@@ -1179,6 +1656,30 @@ export const Generate: React.FC<Props> = ({
                 )}
               </div>
             </div>
+
+            {showRefinementChips ? (
+              <div
+                data-component="Generate: Refinement chips"
+                className="border-2 border-black bg-white p-2 mb-2 shadow-[3px_3px_0_0_#000]"
+              >
+                <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">
+                  Affina output (stessi gate e crediti del Generate)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {REFINEMENT_CHIPS.map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      disabled={loading || dsGateBlocked}
+                      onClick={() => void applyRefinementChip(chip)}
+                      className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
+                    >
+                      {chip.label} (~{tierCreditHint(chip.tier)} cr)
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex flex-col gap-0 relative z-[1]">
                 <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">

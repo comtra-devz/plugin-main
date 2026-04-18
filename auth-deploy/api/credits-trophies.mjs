@@ -120,8 +120,35 @@ export default function handler(req, res) {
     return res.status(405).end();
   }
 
+  /** Generate conversational UX: thread list/create + message sync */
+  if (service === 'generate-chat') {
+    if (sub === 'threads') {
+      if (req.method === 'GET') {
+        req.url = '/api/generate/threads' + qs;
+        return app(req, res);
+      }
+      if (req.method === 'POST') {
+        req.url = '/api/generate/threads' + qs;
+        return app(req, res);
+      }
+      return res.status(405).end();
+    }
+    if (sub === 'thread-messages') {
+      if (req.method === 'GET') {
+        req.url = '/api/generate/thread-messages' + qs;
+        return app(req, res);
+      }
+      if (req.method === 'POST') {
+        req.url = '/api/generate/thread-messages' + qs;
+        return app(req, res);
+      }
+      return res.status(405).end();
+    }
+    return res.status(400).json({ error: 'Invalid sub for generate-chat (threads|thread-messages)' });
+  }
+
   return res.status(400).json({
     error:
-      'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|feedback|generation|admin|support|ds-catalog|user-ds-imports',
+      'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|feedback|generation|admin|support|ds-catalog|user-ds-imports|generate-chat',
   });
 }

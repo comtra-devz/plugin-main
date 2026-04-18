@@ -1222,6 +1222,10 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               {wizardStep === 3 && dsImportBusy && importFlowPhase === 'tokens' && !wizardError && (
                 <div className="space-y-2">
                   <p className="text-xs font-black uppercase animate-pulse">Scanning components and variant sets…</p>
+                  <p className="text-[9px] text-gray-600 leading-snug">
+                    File grandi: contare fino a ~1–2 minuti; in coda c’è l’indice per il catalogo e l’hash usato da
+                    Generate.
+                  </p>
                   {componentsScanProgress && componentsScanProgress.pageTotal > 0 && (
                     <div className="border-2 border-black bg-white p-2 shadow-[2px_2px_0_0_#000]">
                       <p className="text-[10px] font-black uppercase">

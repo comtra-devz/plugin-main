@@ -534,7 +534,7 @@ function getUserAuthContext(req) {
       const decoded = jwt.verify(token, secret);
       const userId = decoded?.sub ? String(decoded.sub) : '';
       if (userId) return { userId, reason: null };
-    } catch {
+  } catch {
       // keep trying next secret
     }
   }
@@ -771,7 +771,7 @@ app.get('/api/credits', async (req, res) => {
     const total = Number(row.credits_total) || 0;
     const used = Number(row.credits_used) || 0;
     const remaining = Math.max(0, total - used);
-    const totalXp = Math.max(0, Number(row.total_xp) || 0);
+      const totalXp = Math.max(0, Number(row.total_xp) || 0);
     const info = getLevelInfo(totalXp);
     /** lite=1: solo saldo/plan/XP/regalo/tags — niente aggregazioni su credit_transactions (costose; evita timeout con più tab plugin). */
     let stats = null;
@@ -1922,16 +1922,16 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
     throw err;
   }
 
-  let accessToken = await getFigmaAccessToken(dbSql, userId);
-  if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-  if (!accessToken) {
+      let accessToken = await getFigmaAccessToken(dbSql, userId);
+      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
+      if (!accessToken) {
     const err = new Error('Figma non connesso. Clicca "Riconnetti Figma" nel plugin.');
     err.status = 403;
     err.code = 'FIGMA_RECONNECT';
     throw err;
   }
 
-  let fetchErr = null;
+      let fetchErr = null;
   let fileJson = null;
   try {
     fileJson = await fetchFigmaFileForAudit(
@@ -1942,13 +1942,13 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
       providerParams.nodeIds,
       providerParams.pageIds,
     );
-  } catch (err) {
-    fetchErr = err;
-  }
-  if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
-    const newToken = await forceRefreshFigmaToken(userId);
-    if (newToken) {
-      try {
+      } catch (err) {
+        fetchErr = err;
+      }
+      if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
+        const newToken = await forceRefreshFigmaToken(userId);
+        if (newToken) {
+          try {
         fileJson = await fetchFigmaFileForAudit(
           newToken,
           fileKey,
@@ -1957,14 +1957,14 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
           providerParams.nodeIds,
           providerParams.pageIds,
         );
-        fetchErr = null;
-      } catch (e) {
-        fetchErr = e;
+            fetchErr = null;
+          } catch (e) {
+            fetchErr = e;
+          }
+        }
       }
-    }
-  }
   if (fetchErr || !fileJson) {
-    const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
     const err = new Error(msg);
     if (msg.includes('re-login')) {
       err.status = 403;
@@ -2960,7 +2960,7 @@ app.post('/api/agents/enhance-plus', async (req, res) => {
       INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
       VALUES (${'enhance_plus'}, ${inputTok}, ${outTok}, null, ${KIMI_MODEL})
     `.catch((err) => console.error('Kimi usage log enhance_plus failed', err?.message || err));
-  } catch (e) {
+          } catch (e) {
     console.error('enhance-plus post', e);
     return res.status(500).json({ error: 'Server error' });
   }
@@ -3258,7 +3258,7 @@ app.post('/api/agents/generate', async (req, res) => {
           variant = 'S';
           dualPipelineSucceeded = true;
           generationPipeline = 'kimi_dual_layout_mapper';
-        } else {
+    } else {
           console.error('Generate dual pipeline failed:', dual.stage);
         }
       } catch (dualErr) {
@@ -4012,6 +4012,146 @@ app.put('/api/user/ds-imports', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('PUT /api/user/ds-imports', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// --- Generate conversational UX: threads + messages (plugin sync)
+app.get('/api/generate/threads', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const fileKey = String(req.query.file_key || req.query.fileKey || '').trim();
+  const dsHash = String(req.query.ds_cache_hash || req.query.dsCacheHash || '').trim().slice(0, 128);
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  try {
+    const sel = await dbSql`
+      SELECT id::text, title, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms,
+             EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_at_ms
+      FROM generate_threads
+      WHERE user_id = ${userId} AND file_key = ${fileKey} AND ds_cache_hash = ${dsHash}
+      ORDER BY updated_at DESC
+      LIMIT 40
+    `;
+    res.json({ threads: sel.rows || [] });
+  } catch (err) {
+    console.error('GET /api/generate/threads', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/generate/threads', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const fileKey = String(body.file_key || body.fileKey || '').trim();
+  const dsHash = String(body.ds_cache_hash ?? body.dsCacheHash ?? '').trim().slice(0, 128);
+  const title =
+    body.title != null && String(body.title).trim() !== ''
+      ? String(body.title).trim().slice(0, 240)
+      : null;
+  if (!fileKey) return res.status(400).json({ error: 'file_key required' });
+  try {
+    const ins = await dbSql`
+      INSERT INTO generate_threads (user_id, file_key, ds_cache_hash, title)
+      VALUES (${userId}, ${fileKey}, ${dsHash}, ${title})
+      RETURNING id::text
+    `;
+    const id = ins?.rows?.[0]?.id;
+    if (!id) return res.status(500).json({ error: 'Create failed' });
+    res.json({ id });
+  } catch (err) {
+    console.error('POST /api/generate/threads', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/generate/thread-messages', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const threadId = String(req.query.thread_id || req.query.threadId || '').trim();
+  if (!threadId) return res.status(400).json({ error: 'thread_id required' });
+  try {
+    const own = await dbSql`
+      SELECT 1 FROM generate_threads WHERE id = ${threadId}::uuid AND user_id = ${userId} LIMIT 1
+    `;
+    if (!own?.rows?.length) return res.status(404).json({ error: 'Not found' });
+    const sel = await dbSql`
+      SELECT id::text, role, message_type, content_json,
+             credit_estimate, credit_consumed,
+             EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
+      FROM generate_messages
+      WHERE thread_id = ${threadId}::uuid
+      ORDER BY created_at ASC
+      LIMIT 500
+    `;
+    res.json({ messages: sel.rows || [] });
+  } catch (err) {
+    console.error('GET /api/generate/thread-messages', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/generate/thread-messages', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const threadId = String(body.thread_id || body.threadId || '').trim();
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  if (!threadId) return res.status(400).json({ error: 'thread_id required' });
+  if (messages.length === 0) return res.status(400).json({ error: 'messages required' });
+  if (messages.length > 50) return res.status(400).json({ error: 'too many messages' });
+  try {
+    const own = await dbSql`
+      SELECT id FROM generate_threads WHERE id = ${threadId}::uuid AND user_id = ${userId} LIMIT 1
+    `;
+    if (!own?.rows?.length) return res.status(404).json({ error: 'Not found' });
+    for (const m of messages) {
+      const role = String(m?.role || '').toLowerCase();
+      if (!['user', 'assistant', 'system'].includes(role)) continue;
+      const messageType = String(m?.message_type || m?.messageType || 'chat').toLowerCase();
+      const mt = ['chat', 'reasoning_summary', 'action_result', 'error'].includes(messageType) ? messageType : 'chat';
+      const contentJson =
+        m?.content_json && typeof m.content_json === 'object'
+          ? m.content_json
+          : m?.contentJson && typeof m.contentJson === 'object'
+            ? m.contentJson
+            : { text: String(m?.text || '') };
+      const credEst =
+        typeof m?.credit_estimate === 'number'
+          ? m.credit_estimate
+          : typeof m?.creditEstimate === 'number'
+            ? m.creditEstimate
+            : null;
+      const credCons =
+        typeof m?.credit_consumed === 'number'
+          ? m.credit_consumed
+          : typeof m?.creditConsumed === 'number'
+            ? m.creditConsumed
+            : null;
+      await dbSql`
+        INSERT INTO generate_messages (thread_id, role, message_type, content_json, credit_estimate, credit_consumed)
+        VALUES (
+          ${threadId}::uuid,
+          ${role},
+          ${mt},
+          ${JSON.stringify(contentJson)}::jsonb,
+          ${credEst},
+          ${credCons}
+        )
+      `;
+    }
+    await dbSql`UPDATE generate_threads SET updated_at = NOW() WHERE id = ${threadId}::uuid`;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /api/generate/thread-messages', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

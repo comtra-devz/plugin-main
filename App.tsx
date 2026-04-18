@@ -1357,6 +1357,97 @@ export default function AppTest() {
   );
   fetchGenerationPluginEventRef.current = fetchGenerationPluginEvent;
 
+  const listGenerateThreads = useCallback(
+    async (q: { file_key: string; ds_cache_hash: string }) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const u = new URL(`${AUTH_BACKEND_URL}/api/generate/threads`);
+      u.searchParams.set('file_key', q.file_key);
+      u.searchParams.set('ds_cache_hash', q.ds_cache_hash);
+      const r = await fetch(u.toString(), {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+        cache: 'no-store',
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(t || `threads ${r.status}`);
+      }
+      return r.json() as Promise<{
+        threads: Array<{ id: string; title: string | null; updated_at_ms?: number }>;
+      }>;
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
+  const createGenerateThread = useCallback(
+    async (body: { file_key: string; ds_cache_hash: string; title?: string }) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/generate/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(t || `create thread ${r.status}`);
+      }
+      return r.json() as Promise<{ id: string }>;
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
+  const fetchGenerateThreadMessages = useCallback(
+    async (threadId: string) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const u = new URL(`${AUTH_BACKEND_URL}/api/generate/thread-messages`);
+      u.searchParams.set('thread_id', threadId);
+      const r = await fetch(u.toString(), {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+        cache: 'no-store',
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) throw new Error('Could not load messages');
+      return r.json() as Promise<{
+        messages: Array<{ id: string; role: string; content_json?: { text?: string } }>;
+      }>;
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
+  const appendGenerateThreadMessages = useCallback(
+    async (
+      threadId: string,
+      messages: Array<{
+        role: 'user' | 'assistant' | 'system';
+        content_json: Record<string, unknown>;
+        message_type?: string;
+      }>,
+    ) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/generate/thread-messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({ thread_id: threadId, messages }),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) throw new Error('Could not save messages');
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
   const fetchDesignSystems = useCallback(async () => {
     try {
       const r = await fetch(`${AUTH_BACKEND_URL}/api/design-systems`, { cache: 'no-store' });
@@ -1865,6 +1956,14 @@ export default function AppTest() {
             fetchGenerateFeedback={fetchGenerateFeedback}
             fetchEnhancePlus={fetchEnhancePlus}
             fetchGenerationPluginEvent={fetchGenerationPluginEvent}
+            userId={user?.id ?? null}
+            fetchDsImportContextSnapshot={fetchDsImportContextSnapshot}
+            generateConversationApi={{
+              listThreads: listGenerateThreads,
+              createThread: createGenerateThread,
+              fetchMessages: fetchGenerateThreadMessages,
+              appendMessages: appendGenerateThreadMessages,
+            }}
             selectedNode={selectedNode}
             applyActionPlanToCanvas={requestActionPlanExecution}
             designSystems={designSystems}

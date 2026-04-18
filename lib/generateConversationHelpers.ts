@@ -1,0 +1,155 @@
+/** Helpers for docs/GENERATE-CONVERSATIONAL-UX (preflight §15.2, refinement chips §5–6). */
+
+export type PreflightVariant = 'dashboard' | 'login' | 'generic';
+
+export type PreflightChip = { id: string; label: string };
+
+export type PreflightEvaluation = {
+  show: boolean;
+  variant: PreflightVariant | null;
+  chips: PreflightChip[];
+};
+
+/** Rule-based MVP (pack-driven `[CONV_UX]` can extend server-side later §15.6). */
+export function evaluatePreflightClarifier(prompt: string): PreflightEvaluation {
+  const p = prompt.trim();
+  const len = p.length;
+  const lower = p.toLowerCase();
+
+  if (len >= 160) return { show: false, variant: null, chips: [] };
+
+  if (
+    /\bdashboard\b|\banalytics\b|\bkpi\b|\bmetriche\b|\badmin panel\b|\bbackoffice\b/i.test(lower) &&
+    len < 170
+  ) {
+    return {
+      show: true,
+      variant: 'dashboard',
+      chips: [
+        { id: 'kpi', label: 'Metriche KPI in alto' },
+        { id: 'charts', label: 'Focus grafici / trend' },
+        { id: 'table', label: 'Tabella dati principale' },
+        { id: 'filters', label: 'Filtri o periodo in header' },
+      ],
+    };
+  }
+
+  if (
+    /\blogin\b|\bsign\s*-?\s*in\b|\baccedi\b|\baccesso\b|\bauthenticate\b/i.test(lower) &&
+    len < 140
+  ) {
+    return {
+      show: true,
+      variant: 'login',
+      chips: [
+        { id: 'sso', label: 'SSO / social login' },
+        { id: '2fa', label: '2FA opzionale' },
+        { id: 'reset', label: 'Self-serve password reset' },
+      ],
+    };
+  }
+
+  if (len < 44) {
+    return {
+      show: true,
+      variant: 'generic',
+      chips: [
+        { id: 'desktop', label: 'Desktop layout' },
+        { id: 'mobile', label: 'Mobile-first' },
+        { id: 'density', label: 'UI compatta (density alta)' },
+      ],
+    };
+  }
+
+  return { show: false, variant: null, chips: [] };
+}
+
+export type RefinementChipDef = {
+  id: string;
+  label: string;
+  /** Appended before POST; keeps DS + validation path unchanged. */
+  append: string;
+  /** Display tier for credit hint (§6): 1 = light … 3 = heavy */
+  tier: 1 | 2 | 3;
+};
+
+export const REFINEMENT_CHIPS: RefinementChipDef[] = [
+  {
+    id: 'tighten_spacing',
+    label: 'Stringi spaziatura',
+    append:
+      '\n\nRefinement: tighten vertical rhythm and spacing between sections; keep existing hierarchy.',
+    tier: 1,
+  },
+  {
+    id: 'hierarchy',
+    label: 'Più gerarchia visiva',
+    append:
+      '\n\nRefinement: strengthen visual hierarchy (typography scale, section separation, focal points).',
+    tier: 1,
+  },
+  {
+    id: 'cta',
+    label: 'CTA più evidente',
+    append: '\n\nRefinement: make primary call-to-action stronger (contrast, size, placement).',
+    tier: 2,
+  },
+  {
+    id: 'mobile',
+    label: 'Adatta al mobile',
+    append: '\n\nRefinement: adapt layout for narrow viewport; prioritize vertical flow and thumb reach.',
+    tier: 2,
+  },
+  {
+    id: 'density',
+    label: 'Density più pulita',
+    append:
+      '\n\nRefinement: reduce visual density; simplify secondary elements while preserving content.',
+    tier: 3,
+  },
+];
+
+export function tierCreditHint(tier: 1 | 2 | 3): number {
+  if (tier <= 1) return 1;
+  if (tier === 2) return 2;
+  return 3;
+}
+
+/** Safe bullets from metadata only (no chain-of-thought). */
+export function reasoningSummaryLinesFromPlan(plan: object): string[] {
+  const rec = plan as { metadata?: Record<string, unknown> };
+  const meta = rec.metadata && typeof rec.metadata === 'object' ? rec.metadata : {};
+  const diag = meta.generation_diagnostics as Record<string, unknown> | undefined;
+  const lines: string[] = [];
+  if (!diag || typeof diag !== 'object') return lines;
+
+  const pipe = diag.pipeline != null ? String(diag.pipeline).trim() : '';
+  if (pipe) lines.push(`Pipeline server: ${pipe}`);
+
+  const timers = diag.phase_timers as Record<string, unknown> | undefined;
+  if (timers && typeof timers === 'object') {
+    const total = timers.total_ms;
+    const val = timers.validation_ms;
+    if (typeof total === 'number' && Number.isFinite(total)) {
+      lines.push(`Tempo round-trip server ~${Math.round(total / 1000)}s (rete + modello + validazione).`);
+    } else if (typeof val === 'number' && Number.isFinite(val)) {
+      lines.push(`Validazione interna ~${Math.round(val / 1000)}s.`);
+    }
+  }
+
+  const shape = diag.action_plan_shape as Record<string, unknown> | undefined;
+  if (shape && typeof shape === 'object') {
+    const ac = shape.action_count;
+    if (typeof ac === 'number' && ac > 0) lines.push(`Shape: ${ac} azioni pianificate dopo i gate qualità.`);
+  }
+
+  return lines.slice(0, 4);
+}
+
+export function localConversationStorageKey(userId: string, fileKey: string, dsHash: string): string {
+  return `comtra-gen-conv:${userId}:${fileKey}:${dsHash}`;
+}
+
+export function activeThreadStorageKey(userId: string, fileKey: string, dsHash: string): string {
+  return `comtra-gen-thread-id:${userId}:${fileKey}:${dsHash}`;
+}

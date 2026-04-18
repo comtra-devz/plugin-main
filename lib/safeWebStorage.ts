@@ -21,6 +21,15 @@ export function safeLocalStorageSetItem(key: string, value: string): void {
   }
 }
 
+export function safeLocalStorageRemoveItem(key: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(key);
+  } catch {
+    /* */
+  }
+}
+
 export function safeSessionStorageGetItem(key: string): string | null {
   try {
     if (typeof sessionStorage === 'undefined') return null;
