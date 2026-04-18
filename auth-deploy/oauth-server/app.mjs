@@ -41,6 +41,7 @@ import {
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
 import {
+  buildPreflightFromPack,
   formatDesignIntelligenceForPrompt,
   inferFocusedScreenTypeWithPack,
   loadPatternsPayload,
@@ -3785,6 +3786,64 @@ app.post('/api/generation/plugin-event', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('POST /api/generation/plugin-event', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/** Pack-driven preflight hints for Generate UI (§15.6) — no credits, inference only. */
+app.get('/api/generate/conversation-hints', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  if (!authCtx.userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  const prompt = String(req.query.prompt || '').trim();
+  if (!prompt) return res.status(400).json({ error: 'prompt query param required' });
+  if (prompt.length > 16000) return res.status(400).json({ error: 'prompt too long' });
+  try {
+    const patternsPayload = loadPatternsPayload();
+    const { legacyScreenKey, packV2ArchetypeId } = inferFocusedScreenTypeWithPack(prompt, patternsPayload);
+    const packPreflight = buildPreflightFromPack(patternsPayload, {
+      legacyScreenKey,
+      packV2ArchetypeId,
+    });
+    res.json({
+      legacy_screen_key: legacyScreenKey,
+      pack_v2_archetype_id: packV2ArchetypeId,
+      preflight: packPreflight,
+      pack_shape: patternsPayload ? 'loaded' : 'missing',
+    });
+  } catch (err) {
+    console.error('GET /api/generate/conversation-hints', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/** Admin: thread overview for Phase 4 hub / ops (search by title). */
+app.get('/api/admin/generate-threads', async (req, res) => {
+  if (!isAdminApiRequest(req)) return res.status(403).json({ error: 'Forbidden' });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const q = String(req.query.q || '').trim().slice(0, 200);
+  const lim = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
+  try {
+    const rows = q
+      ? await dbSql`
+          SELECT gt.id::text AS id, gt.user_id, gt.file_key, gt.ds_cache_hash, gt.title,
+                 EXTRACT(EPOCH FROM gt.updated_at) * 1000 AS updated_at_ms,
+                 (SELECT COUNT(*)::int FROM generate_messages gm WHERE gm.thread_id = gt.id) AS message_count
+          FROM generate_threads gt
+          WHERE gt.title ILIKE ${'%' + q + '%'}
+          ORDER BY gt.updated_at DESC
+          LIMIT ${lim}
+        `
+      : await dbSql`
+          SELECT gt.id::text AS id, gt.user_id, gt.file_key, gt.ds_cache_hash, gt.title,
+                 EXTRACT(EPOCH FROM gt.updated_at) * 1000 AS updated_at_ms,
+                 (SELECT COUNT(*)::int FROM generate_messages gm WHERE gm.thread_id = gt.id) AS message_count
+          FROM generate_threads gt
+          ORDER BY gt.updated_at DESC
+          LIMIT ${lim}
+        `;
+    res.json({ threads: rows.rows || [] });
+  } catch (err) {
+    console.error('GET /api/admin/generate-threads', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

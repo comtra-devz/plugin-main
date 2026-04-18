@@ -1424,6 +1424,33 @@ export default function AppTest() {
     [user?.authToken, AUTH_BACKEND_URL, handle503],
   );
 
+  const fetchConversationHints = useCallback(
+    async (prompt: string) => {
+      if (!user?.authToken) return null;
+      const u = new URL(`${AUTH_BACKEND_URL}/api/generate/conversation-hints`);
+      u.searchParams.set('prompt', prompt.slice(0, 16000));
+      const r = await fetch(u.toString(), {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+        cache: 'no-store',
+      });
+      if (r.status === 503) {
+        handle503();
+        return null;
+      }
+      if (!r.ok) return null;
+      return r.json() as Promise<{
+        legacy_screen_key?: string | null;
+        pack_v2_archetype_id?: string | null;
+        preflight: {
+          title?: string;
+          chips: Array<{ id: string; label: string }>;
+          source: string;
+        } | null;
+      }>;
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
   const appendGenerateThreadMessages = useCallback(
     async (
       threadId: string,
@@ -1958,6 +1985,7 @@ export default function AppTest() {
             fetchGenerationPluginEvent={fetchGenerationPluginEvent}
             userId={user?.id ?? null}
             fetchDsImportContextSnapshot={fetchDsImportContextSnapshot}
+            fetchConversationHints={fetchConversationHints}
             generateConversationApi={{
               listThreads: listGenerateThreads,
               createThread: createGenerateThread,

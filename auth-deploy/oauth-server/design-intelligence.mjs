@@ -515,3 +515,55 @@ export function formatDesignIntelligenceForPrompt(fileKey, options = {}) {
 
   return parts.filter(Boolean).join('\n');
 }
+
+/**
+ * [CONV_UX] Phase 2.6 — chips for preflight from pack (`disambiguation_protocol` or `screen_checklists`).
+ * Returns null if pack has nothing usable (client keeps rule-based fallback).
+ */
+export function buildPreflightFromPack(patternsPayload, { legacyScreenKey, packV2ArchetypeId }) {
+  const p = patternsPayload;
+  if (!p || typeof p !== 'object') return null;
+
+  let legacy =
+    legacyScreenKey && SCREEN_ARCHETYPE_KEYS.has(String(legacyScreenKey))
+      ? String(legacyScreenKey)
+      : null;
+  if (!legacy) {
+    const mapped = mapPackV2ArchetypeToLegacyScreenKey(packV2ArchetypeId || null);
+    legacy = mapped && SCREEN_ARCHETYPE_KEYS.has(mapped) ? mapped : null;
+  }
+
+  const dp = p.disambiguation_protocol;
+  if (dp && typeof dp === 'object') {
+    const gen = dp.low_confidence_generic;
+    if (gen && typeof gen === 'object' && Array.isArray(gen.options) && gen.options.length > 0) {
+      return {
+        title:
+          typeof gen.question === 'string' && gen.question.trim()
+            ? gen.question.trim().slice(0, 240)
+            : 'Dettaglio rapido prima di generare',
+        chips: gen.options.slice(0, 10).map((o, i) => ({
+          id: `pack-dp-${i}`,
+          label: String(o).slice(0, 200),
+        })),
+        source: 'pack_disambiguation',
+      };
+    }
+  }
+
+  if (legacy && p.screen_checklists?.[legacy]?.must_have) {
+    const mh = p.screen_checklists[legacy].must_have;
+    if (Array.isArray(mh) && mh.length > 0) {
+      return {
+        title: `Elementi tipici (${legacy}, dal pack)`,
+        chips: mh.slice(0, 8).map((t, i) => ({
+          id: `pack-cl-${legacy}-${i}`,
+          label: String(t).slice(0, 200),
+        })),
+        source: 'pack_checklist',
+      };
+    }
+  }
+
+  return null;
+}

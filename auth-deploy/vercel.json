@@ -30,6 +30,14 @@
       "source": "/api/generate/thread-messages",
       "destination": "/api/credits-trophies?service=generate-chat&sub=thread-messages"
     },
+    {
+      "source": "/api/generate/conversation-hints",
+      "destination": "/api/credits-trophies?service=generate-chat&sub=conversation-hints"
+    },
+    {
+      "source": "/api/admin/generate-threads",
+      "destination": "/api/credits-trophies?service=admin&sub=generate-threads"
+    },
     { "source": "/api/support/ticket", "destination": "/api/credits-trophies?service=support&sub=ticket" },
     { "source": "/auth/figma/init", "destination": "/api/figma-oauth/init" },
     { "source": "/auth/figma/plugin", "destination": "/api/figma-oauth/plugin" },

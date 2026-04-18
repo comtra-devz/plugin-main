@@ -90,6 +90,11 @@ export default function handler(req, res) {
     req.url = '/api/admin/generation-learning-summary' + qs;
     return app(req, res);
   }
+  if (service === 'admin' && sub === 'generate-threads') {
+    if (req.method !== 'GET') return res.status(405).end();
+    req.url = '/api/admin/generate-threads' + qs;
+    return app(req, res);
+  }
 
   if (service === 'support' && sub === 'ticket') {
     if (req.method !== 'POST') return res.status(405).end();
@@ -144,7 +149,14 @@ export default function handler(req, res) {
       }
       return res.status(405).end();
     }
-    return res.status(400).json({ error: 'Invalid sub for generate-chat (threads|thread-messages)' });
+    if (sub === 'conversation-hints') {
+      if (req.method !== 'GET') return res.status(405).end();
+      req.url = '/api/generate/conversation-hints' + qs;
+      return app(req, res);
+    }
+    return res
+      .status(400)
+      .json({ error: 'Invalid sub for generate-chat (threads|thread-messages|conversation-hints)' });
   }
 
   return res.status(400).json({

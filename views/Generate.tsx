@@ -106,6 +106,16 @@ interface Props {
     fileKey: string,
   ) => Promise<{ ds_context_index: object; ds_cache_hash: string | null } | null>;
   /** Backend sync for generate_threads / generate_messages (§9–10). */
+  /** Pack-driven preflight (§2.6): inference-only, zero credits. */
+  fetchConversationHints?: (prompt: string) => Promise<{
+    legacy_screen_key?: string | null;
+    pack_v2_archetype_id?: string | null;
+    preflight: {
+      title?: string;
+      chips: Array<{ id: string; label: string }>;
+      source: string;
+    } | null;
+  } | null>;
   generateConversationApi?: {
     listThreads: (q: {
       file_key: string;
@@ -259,6 +269,7 @@ export const Generate: React.FC<Props> = ({
   fetchGenerationPluginEvent,
   userId,
   fetchDsImportContextSnapshot,
+  fetchConversationHints,
   generateConversationApi,
   selectedNode,
   applyActionPlanToCanvas,
@@ -331,6 +342,12 @@ export const Generate: React.FC<Props> = ({
   const [threadList, setThreadList] = useState<Array<{ id: string; title: string | null }>>([]);
   const [showPreflight, setShowPreflight] = useState(false);
   const [preflightPromptSnapshot, setPreflightPromptSnapshot] = useState('');
+  /** Server pack chips override rule-based when present (Phase 2.6). */
+  const [preflightRemote, setPreflightRemote] = useState<{
+    title?: string;
+    chips: Array<{ id: string; label: string }>;
+    source: string;
+  } | null>(null);
   const [preflightPick, setPreflightPick] = useState<Record<string, boolean>>({});
   /** After a successful canvas run: show refinement chips (§5–6). */
   const [showRefinementChips, setShowRefinementChips] = useState(false);
@@ -1071,7 +1088,9 @@ export const Generate: React.FC<Props> = ({
   const handlePreflightConfirm = useCallback(async () => {
     const raw = pendingPreflightPromptRef.current || preflightPromptSnapshot || '';
     const ev = evaluatePreflightClarifier(raw);
-    const labels = ev.chips.filter((c) => preflightPick[c.id]).map((c) => c.label);
+    const chipList =
+      preflightRemote?.chips?.length ? preflightRemote.chips : ev.chips;
+    const labels = chipList.filter((c) => preflightPick[c.id]).map((c) => c.label);
     const merged =
       labels.length > 0
         ? `${raw.trim()}\n\n[Vincoli da chiarimento]\n${labels.map((l) => `- ${l}`).join('\n')}`
@@ -1082,7 +1101,13 @@ export const Generate: React.FC<Props> = ({
       payload: { variant: ev.variant, picks: labels.length },
     });
     await runGeneratePipeline(merged);
-  }, [preflightPick, preflightPromptSnapshot, runGeneratePipeline, fetchGenerationPluginEvent]);
+  }, [
+    preflightPick,
+    preflightPromptSnapshot,
+    preflightRemote,
+    runGeneratePipeline,
+    fetchGenerationPluginEvent,
+  ]);
 
   const handleGen = async () => {
     if (!canGenerate) {
@@ -1102,11 +1127,17 @@ export const Generate: React.FC<Props> = ({
       pendingPreflightPromptRef.current = rawText;
       setPreflightPromptSnapshot(rawText);
       setPreflightPick({});
+      setPreflightRemote(null);
       setShowPreflight(true);
       void fetchGenerationPluginEvent?.({
         event_type: 'generate_preflight_opened',
         payload: { variant: ev.variant },
       });
+      if (fetchConversationHints) {
+        void fetchConversationHints(rawText).then((h) => {
+          if (h?.preflight?.chips?.length) setPreflightRemote(h.preflight);
+        });
+      }
       return;
     }
 
@@ -1119,6 +1150,7 @@ export const Generate: React.FC<Props> = ({
     serverThreadIdRef.current = null;
     setShowRefinementChips(false);
     setShowPreflight(false);
+    setPreflightRemote(null);
     skippedPreflightHashRef.current = null;
     if (userId && genFileKey && dsScopeHash) {
       safeLocalStorageRemoveItem(localConversationStorageKey(userId, genFileKey, dsScopeHash));
@@ -1544,13 +1576,23 @@ export const Generate: React.FC<Props> = ({
                 data-component="Generate: Preflight clarifier"
                 className="border-2 border-amber-500 bg-amber-50 p-2 mb-2 space-y-2 shadow-[3px_3px_0_0_#000]"
               >
-                <p className="text-[10px] font-black uppercase">Chiarimenti leggeri (opzionale)</p>
+                <p className="text-[10px] font-black uppercase">
+                  {preflightRemote?.title || 'Chiarimenti leggeri (opzionale)'}
+                </p>
                 <p className="text-[9px] text-gray-700 leading-snug">
                   Zero crediti: completa o salta. I vincoli scelti vengono aggiunti al prompt per lo stesso{' '}
                   <code className="font-mono text-[8px]">POST /api/agents/generate</code>.
+                  {preflightRemote?.source ? (
+                    <span className="block mt-1 text-[8px] text-gray-500">
+                      Suggerimenti: pack ({preflightRemote.source})
+                    </span>
+                  ) : null}
                 </p>
                 <div className="flex flex-wrap gap-1">
-                  {evaluatePreflightClarifier(preflightPromptSnapshot).chips.map((c) => (
+                  {(preflightRemote?.chips?.length
+                    ? preflightRemote.chips
+                    : evaluatePreflightClarifier(preflightPromptSnapshot).chips
+                  ).map((c) => (
                     <button
                       key={c.id}
                       type="button"
