@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect, useCallback, startTransition } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
-import { SectionCard } from '../components/ui/SectionCard';
 import { GenerateDsImport, type RequestDsContextIndexFn } from './GenerateDsImport';
 import {
   clearSessionCatalogPrepared,
@@ -96,6 +95,12 @@ interface Props {
     credits_total?: number;
     credits_used?: number;
   }>;
+  /** Kimi: short playful import-wizard copy (0 credits; see /api/agents/import-narration). */
+  fetchImportNarration?: (body: {
+    kind: 'welcome' | 'session_locked' | 'tokens_done' | 'components_done';
+    file_name?: string | null;
+    hint?: string | null;
+  }) => Promise<{ text: string }>;
   /** Telemetria / learning loop (DI v2): eventi post-generazione lato plugin. */
   fetchGenerationPluginEvent?: (body: {
     event_type: string;
@@ -270,6 +275,7 @@ export const Generate: React.FC<Props> = ({
   persistDsImportToServer,
   fetchGenerateFeedback,
   fetchEnhancePlus,
+  fetchImportNarration,
   fetchGenerationPluginEvent,
   userId,
   fetchDsImportContextSnapshot,
@@ -381,6 +387,16 @@ export const Generate: React.FC<Props> = ({
   const [genFileCtxError, setGenFileCtxError] = useState<string | null>(null);
   const [catalogReady, setCatalogReady] = useState(false);
   const [dsImportBusy, setDsImportBusy] = useState(false);
+
+  /** Must run before hooks that list `usesFileDs` in deps (avoid TDZ / "Cannot access before initialization"). */
+  const isPro = plan === 'PRO';
+  const infiniteForTest = !!useInfiniteCreditsForTest;
+  const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
+  const canGenerate = isPro || remaining > 0;
+  const usesFileDs = selectedSystem === availableSystems[0];
+  const dsGateBlocked = usesFileDs && (!catalogReady || dsImportBusy);
+  /** Custom (Current): hide the full composer until the step-by-step DS import is done. */
+  const showGenerateComposer = !usesFileDs || catalogReady;
 
   const runCanvasApply = useCallback(
     async (actionPlan: object, opts?: { modifyMode?: boolean }) => {
@@ -568,15 +584,6 @@ export const Generate: React.FC<Props> = ({
       setPromptText(initialPrompt);
     }
   }, [initialPrompt]);
-
-  const isPro = plan === 'PRO';
-  const infiniteForTest = !!useInfiniteCreditsForTest;
-  const remaining = infiniteForTest || isPro ? Infinity : (creditsRemaining === null ? Infinity : creditsRemaining);
-  const canGenerate = isPro || remaining > 0;
-  const usesFileDs = selectedSystem === availableSystems[0];
-  const dsGateBlocked = usesFileDs && (!catalogReady || dsImportBusy);
-  /** Custom (Current): hide the full composer until the step-by-step DS import is done. */
-  const showGenerateComposer = !usesFileDs || catalogReady;
 
   useEffect(() => {
     if (!availableSystems.length) return;
@@ -1428,13 +1435,34 @@ export const Generate: React.FC<Props> = ({
   const showChatComposerShell = !threadScopeReady || generateComposerTab === 'chat';
 
   return (
-    <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-28 min-h-full relative">
-      
-      {/* Credit Banner */}
-      <div className="flex justify-center mb-2">
-          <div data-component="Generate: Credit Banner" className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-            Credits: {creditsDisplay}
-          </div>
+    <div
+      data-component="Generate: View Container"
+      className="relative flex min-h-full flex-col gap-3 p-3 pb-28 sm:gap-4 sm:p-4"
+    >
+      {/* Top bar: credits + quick links (conversational shell header) */}
+      <div
+        data-component="Generate: Top bar"
+        className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-neutral-200/90 pb-2"
+      >
+        <div
+          data-component="Generate: Credit Banner"
+          className={`rounded-lg border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide shadow-sm ${
+            knownZeroCredits
+              ? 'border-red-300 bg-red-50 text-red-700'
+              : 'border-black/20 bg-[#ffc900]/95 text-black'
+          }`}
+        >
+          Credits · {creditsDisplay}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase">
+          <button
+            type="button"
+            onClick={() => setShowReadFirstModal(true)}
+            className="text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-[#ff90e8]"
+          >
+            Read first
+          </button>
+        </div>
       </div>
 
       {/* Error from generation or file context */}
@@ -1461,88 +1489,86 @@ export const Generate: React.FC<Props> = ({
           onBusyChange={setDsImportBusy}
           isPro={isPro || !!useInfiniteCreditsForTest}
           onUnlockRequest={onUnlockRequest}
+          fetchImportNarration={fetchImportNarration}
         />
       )}
 
-      {usesFileDs && catalogReady && !showReport && (
-        <div data-component="Generate: DS Re-import" className="flex justify-end -mt-1">
-          <button
-            type="button"
-            onClick={handleInvalidateCatalog}
-            className="text-[10px] font-black uppercase underline text-gray-600 hover:text-[#ff90e8]"
-          >
-            Re-import design system (new server snapshot)
-          </button>
-        </div>
-      )}
-
       {showGenerateComposer && !showReport && (
-        <>
-          <div className="flex justify-end -mt-1">
-            <button
-              type="button"
-              onClick={() => setShowReadFirstModal(true)}
-              className="text-[10px] font-black uppercase underline hover:text-[#ff90e8]"
-            >
-              Read First
-            </button>
-          </div>
-
-          {/* Context Layer + Design System: stessa tipologia (`SectionCard`), header opzionale a destra */}
-          <SectionCard
-            dataComponent="Generate: Context Card"
-            title="Context Layer"
-            titleDataComponent="Generate: Context Label"
-            headerRight={hasSelection ? selectedNode?.type : 'No selection'}
-            className="z-[5]"
-          >
-            {hasSelection ? (
-              <>
-                <span data-component="Generate: Selection Value" className="font-mono text-xs text-blue-600 bg-blue-50 p-1 border border-blue-200 block truncate">
-                  Target: {selectedLayerName}
-                </span>
-                <span className="text-[10px] text-gray-500">
-                  Selection from canvas is active. Screenshot context is disabled until you deselect in Figma.
-                </span>
-              </>
-            ) : screenshotAttachment ? (
-              <div data-component="Generate: Uploaded File" className="flex justify-between items-center bg-gray-100 p-2 border border-black">
-                <span className="text-[10px] font-bold truncate">📄 {screenshotAttachment.name}</span>
-                <button type="button" onClick={handleDeleteUpload} className="text-red-500 font-bold hover:text-red-700 px-1">✕</button>
-              </div>
-            ) : (
-              <>
-                <span data-component="Generate: Selection Empty" className="text-[10px] text-gray-500 italic">
-                  No layer selected. Upload a screenshot if you want to start from an existing product reference.
-                </span>
-                <input
-                  ref={screenshotFileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  aria-hidden
-                  onChange={handleScreenshotFileChange}
-                />
-                <button
-                  type="button"
-                  data-component="Generate: Upload Button"
-                  onClick={handleUploadClick}
-                  className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-500"
+        <details
+          data-component="Generate: Context & DS (compact)"
+          className="group shrink-0 rounded-xl border border-neutral-200 bg-white px-3 py-2 shadow-sm open:bg-[#faf9f6]"
+        >
+          <summary className="cursor-pointer list-none text-[11px] font-bold leading-snug text-neutral-900 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex w-full items-center justify-between gap-2">
+              <span className="min-w-0 truncate">
+                <span className="font-black uppercase text-[9px] text-neutral-500">Target &amp; DS ·</span>{' '}
+                {generateContextSummary}
+                <span className="text-neutral-400"> · </span>
+                <span className="text-neutral-800">{selectedSystem}</span>
+              </span>
+              <span className="shrink-0 text-[9px] font-black text-neutral-500 group-open:hidden">▼</span>
+              <span className="hidden shrink-0 text-[9px] font-black text-neutral-500 group-open:inline">▲</span>
+            </span>
+          </summary>
+          <div className="mt-3 space-y-3 border-t border-neutral-200/80 pt-3">
+            <div>
+              <p className="mb-1.5 text-[9px] font-black uppercase text-neutral-500">Canvas context</p>
+              {hasSelection ? (
+                <>
+                  <span
+                    data-component="Generate: Selection Value"
+                    className="block truncate rounded-lg border border-blue-200 bg-blue-50/90 p-2 font-mono text-xs text-blue-800"
+                  >
+                    Target: {selectedLayerName}
+                  </span>
+                  <p className="mt-1 text-[10px] text-neutral-600">
+                    Selection is active. Screenshot context is disabled until you deselect in Figma.
+                  </p>
+                </>
+              ) : screenshotAttachment ? (
+                <div
+                  data-component="Generate: Uploaded File"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2"
                 >
-                  Upload Image
-                </button>
-              </>
-            )}
-          </SectionCard>
-
-          <SectionCard
-            dataComponent="Generate: DS Card"
-            title="Design System"
-            headerRight={dsCardHeaderRight}
-            className="z-[4]"
-          >
-            <div className="flex flex-col gap-2.5">
-              <div className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] overflow-hidden">
+                  <span className="truncate text-[10px] font-bold">📄 {screenshotAttachment.name}</span>
+                  <button
+                    type="button"
+                    onClick={handleDeleteUpload}
+                    className="shrink-0 font-bold text-red-600 hover:text-red-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p data-component="Generate: Selection Empty" className="text-[10px] italic text-neutral-600">
+                    No layer selected. Add a screenshot to start from a product reference.
+                  </p>
+                  <input
+                    ref={screenshotFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    aria-hidden
+                    onChange={handleScreenshotFileChange}
+                  />
+                  <button
+                    type="button"
+                    data-component="Generate: Upload Button"
+                    onClick={handleUploadClick}
+                    className="mt-2 w-full rounded-lg border border-dashed border-neutral-300 py-2 text-[10px] font-bold uppercase text-neutral-600 hover:bg-neutral-50"
+                  >
+                    Upload image
+                  </button>
+                </>
+              )}
+            </div>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="text-[9px] font-black uppercase text-neutral-500">Design system</p>
+                <div className="max-w-[58%] min-w-0 shrink-0 text-right">{dsCardHeaderRight}</div>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
                 <BrutalDropdown
                   open={isSystemOpen}
                   onOpenChange={setIsSystemOpen}
@@ -1553,36 +1579,47 @@ export const Generate: React.FC<Props> = ({
                       type="button"
                       data-component="Generate: DS Selector"
                       onClick={() => setIsSystemOpen(!isSystemOpen)}
-                      className="w-full border-b-2 border-black p-2 flex justify-between items-center cursor-pointer hover:bg-gray-50 text-xs font-bold bg-white text-left"
+                      className="flex w-full cursor-pointer items-center justify-between border-b border-neutral-200 bg-white p-2 text-left text-xs font-bold hover:bg-neutral-50"
                     >
-                      <span className="truncate min-w-0">{selectedSystem}</span>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <span className="min-w-0 truncate">{selectedSystem}</span>
+                      <div className="flex shrink-0 items-center gap-2">
                         {selectedSystem !== availableSystems[0] && (
                           <span
                             role="button"
                             tabIndex={0}
-                            onClick={(e) => { e.stopPropagation(); setSelectedSystem(availableSystems[0]); }}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelectedSystem(availableSystems[0]); } }}
-                            className="hover:bg-red-100 text-red-600 px-1.5 rounded-full font-black text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSystem(availableSystems[0]);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedSystem(availableSystems[0]);
+                              }
+                            }}
+                            className="rounded-full px-1.5 text-xs font-black text-red-600 hover:bg-red-50"
                           >
                             ✕
                           </span>
                         )}
-                        <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
+                        <span aria-hidden className="text-neutral-500">
+                          {isSystemOpen ? '▲' : '▼'}
+                        </span>
                       </div>
                     </button>
                   }
                 >
                   <input
                     type="text"
-                    placeholder="Search System..."
+                    placeholder="Search system…"
                     autoFocus
                     value={systemSearch}
                     onChange={(e) => setSystemSearch(e.target.value)}
-                    className="w-full p-2 text-xs border-b border-black outline-none font-mono bg-yellow-50 shrink-0"
+                    className="w-full shrink-0 border-b border-neutral-200 bg-amber-50/50 p-2 font-mono text-xs outline-none"
                     onClick={(e) => e.stopPropagation()}
                   />
-                  <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+                  <div className="max-h-[240px] min-h-0 flex-1 overflow-y-auto custom-scrollbar">
                     {filteredSystems.map((sys) => (
                       <div
                         key={sys}
@@ -1598,34 +1635,49 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ))}
                     {filteredSystems.length === 0 && (
-                      <div className="p-2 text-[10px] text-gray-500 italic">No system found</div>
+                      <div className="p-2 text-[10px] italic text-neutral-500">No system found</div>
                     )}
                   </div>
                 </BrutalDropdown>
               </div>
               <div
                 data-component="Generate: DS Connection Status"
-                className={`border-2 border-black px-2.5 py-2 text-[10px] leading-snug font-bold shadow-[3px_3px_0_0_#000] ${dsConnectionTone}`}
+                className={`mt-2 rounded-lg border border-black/10 px-2.5 py-2 text-[10px] font-bold leading-snug ${dsConnectionTone}`}
               >
                 {dsConnectionText}
               </div>
+              {usesFileDs && catalogReady ? (
+                <button
+                  type="button"
+                  data-component="Generate: DS Re-import"
+                  onClick={handleInvalidateCatalog}
+                  className="mt-2 w-full text-left text-[10px] font-black uppercase text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-[#ff90e8]"
+                >
+                  Re-import design system (new server snapshot)
+                </button>
+              ) : null}
             </div>
-          </SectionCard>
-        </>
+          </div>
+        </details>
       )}
 
       {showGenerateComposer && !showReport ? (
-        <>
+        <div
+          data-component="Generate: Conversational column"
+          className="flex min-h-[min(52vh,480px)] flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-[#faf9f6] shadow-sm"
+        >
             {userId && generateConversationApi && genFileKey && dsScopeHash ? (
-              <>
+              <div className="shrink-0 border-b border-neutral-200/90 bg-white/90 px-2 py-2">
                 <div
-                  className="flex flex-wrap gap-0 mb-2 border-2 border-black w-fit max-w-full shadow-[2px_2px_0_0_#000]"
+                  className="inline-flex max-w-full flex-wrap gap-1 rounded-full border border-neutral-200 bg-neutral-50 p-0.5"
                   data-component="Generate: Chat / Conversazioni tabs"
                 >
                   <button
                     type="button"
-                    className={`text-[10px] font-black uppercase px-2.5 py-1 border-r-2 border-black ${
-                      generateComposerTab === 'chat' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
+                    className={`rounded-full px-3 py-1 text-[10px] font-black uppercase transition-colors ${
+                      generateComposerTab === 'chat'
+                        ? 'bg-[#ffc900] text-black shadow-sm'
+                        : 'text-neutral-600 hover:bg-white'
                     }`}
                     onClick={() => setGenerateComposerTab('chat')}
                   >
@@ -1633,19 +1685,21 @@ export const Generate: React.FC<Props> = ({
                   </button>
                   <button
                     type="button"
-                    className={`text-[10px] font-black uppercase px-2.5 py-1 ${
-                      generateComposerTab === 'threads' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
+                    className={`rounded-full px-3 py-1 text-[10px] font-black uppercase transition-colors ${
+                      generateComposerTab === 'threads'
+                        ? 'bg-[#ffc900] text-black shadow-sm'
+                        : 'text-neutral-600 hover:bg-white'
                     }`}
                     onClick={() => setGenerateComposerTab('threads')}
                   >
-                    Conversazioni
+                    Threads
                   </button>
                 </div>
 
                 {generateComposerTab === 'threads' ? (
                   <div
                     data-component="Generate: Thread scope"
-                    className="flex flex-col gap-1 text-[10px] mb-2 border-2 border-black px-2 py-1.5 bg-gray-50 shadow-[2px_2px_0_0_#000]"
+                    className="mt-2 flex flex-col gap-1 rounded-lg border border-neutral-200 bg-neutral-50/90 px-2 py-1.5 text-[10px]"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <button
@@ -1726,7 +1780,7 @@ export const Generate: React.FC<Props> = ({
                 ) : (
                   <div
                     data-component="Generate: Thread strip (compact)"
-                    className="flex flex-wrap items-center gap-2 text-[10px] mb-2 border-2 border-black px-2 py-1 bg-gray-50 shadow-[2px_2px_0_0_#000]"
+                    className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50/90 px-2 py-1 text-[10px]"
                   >
                     <span className="font-black uppercase">Thread</span>
                     <button
@@ -1765,15 +1819,17 @@ export const Generate: React.FC<Props> = ({
                     </button>
                   </div>
                 )}
-              </>
+              </div>
             ) : null}
 
             {showChatComposerShell ? (
               <>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-2 custom-scrollbar">
             {showPreflight ? (
               <div
                 data-component="Generate: Preflight clarifier"
-                className="border-2 border-amber-500 bg-amber-50 p-2 mb-2 space-y-2 shadow-[3px_3px_0_0_#000]"
+                className="space-y-2 rounded-xl border border-amber-300/80 bg-amber-50/90 p-2 shadow-sm"
               >
                 <p className="text-[10px] font-black uppercase">
                   {preflightRemote?.title || 'Chiarimenti leggeri (opzionale)'}
@@ -1832,7 +1888,7 @@ export const Generate: React.FC<Props> = ({
 
             <div
               data-component="Generate: Run transparency + timeline"
-              className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] p-2 space-y-2 mb-2"
+              className="space-y-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-sm"
             >
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono leading-tight">
                 <span>
@@ -1857,8 +1913,12 @@ export const Generate: React.FC<Props> = ({
                   return (
                     <span
                       key={label}
-                      className={`text-[9px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
-                        active ? 'bg-[#ffc900]' : done ? 'bg-emerald-100' : 'bg-gray-100 text-gray-500'
+                      className={`text-[9px] font-black uppercase px-2 py-0.5 ${
+                        active
+                          ? 'rounded-full bg-[#ffc900] text-black shadow-sm'
+                          : done
+                            ? 'rounded-full bg-emerald-100 text-emerald-900'
+                            : 'rounded-full bg-neutral-100 text-neutral-500'
                       }`}
                     >
                       {label}
@@ -1879,10 +1939,11 @@ export const Generate: React.FC<Props> = ({
                   </p>
                 </details>
               ) : null}
-              <div className="max-h-[220px] overflow-y-auto custom-scrollbar border-2 border-black bg-gray-50 p-2 space-y-2">
+              <div className="max-h-[min(38vh,280px)] space-y-2 overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-50/80 p-2 custom-scrollbar">
                 {conversationTurns.length === 0 ? (
-                  <p className="text-[10px] text-gray-500 italic leading-snug">
-                    Nessun messaggio ancora: dopo Generate vedrai qui il prompt e una sintesi della run (successo o errore).
+                  <p className="text-[10px] italic leading-snug text-neutral-500">
+                    Nessun messaggio ancora: dopo Generate vedrai qui il prompt e una sintesi della run (successo o
+                    errore).
                   </p>
                 ) : (
                   conversationTurns.map((turn) => (
@@ -1891,8 +1952,10 @@ export const Generate: React.FC<Props> = ({
                       className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] shadow-[2px_2px_0_0_#000] whitespace-pre-wrap leading-snug ${
-                          turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
+                        className={`max-w-[95%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[11px] leading-snug shadow-sm ${
+                          turn.role === 'user'
+                            ? 'border border-amber-200/80 bg-[#ffc900]/85 font-mono text-black'
+                            : 'border border-neutral-200 bg-white text-neutral-900'
                         }`}
                       >
                         {turn.body}
@@ -1906,7 +1969,7 @@ export const Generate: React.FC<Props> = ({
             {showRefinementChips ? (
               <div
                 data-component="Generate: Refinement chips"
-                className="border-2 border-black bg-white p-2 mb-2 shadow-[3px_3px_0_0_#000]"
+                className="rounded-xl border border-neutral-200 bg-white p-2 shadow-sm"
               >
                 <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">
                   Affina output (stessi gate del Generate)
@@ -1923,7 +1986,7 @@ export const Generate: React.FC<Props> = ({
                       disabled={loading || dsGateBlocked}
                       onClick={() => void applyRefinementChip(chip)}
                       title={`Stima: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} crediti (preview)`}
-                      className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
+                      className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-1 text-[9px] font-bold hover:border-black/30 hover:bg-[#ffc900]/40 disabled:opacity-40"
                     >
                       {chip.label} (~
                       {refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
@@ -1932,9 +1995,13 @@ export const Generate: React.FC<Props> = ({
                 </div>
               </div>
             ) : null}
-
-            <div className="flex flex-col gap-0 relative z-[1]">
-                <div data-component="Generate: Terminal Header" className="bg-black text-white p-2 text-xs font-bold uppercase flex justify-between items-center border-2 border-black border-b-0">
+            </div>
+            <div
+              data-component="Generate: Composer dock"
+              className="relative z-[1] shrink-0 border-t border-neutral-200 bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.06)]"
+            >
+            <div className="relative z-[1] flex flex-col gap-0">
+                <div data-component="Generate: Terminal Header" className="flex items-center justify-between border-2 border-b-0 border-black bg-black p-2 text-xs font-bold uppercase text-white">
                   <span>AI Terminal</span>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     <button
@@ -1982,8 +2049,7 @@ export const Generate: React.FC<Props> = ({
                   style={{ whiteSpace: 'pre-wrap' }}
                   data-placeholder={promptPlaceholder}
                 />
-            </div>
-            <p className="text-[10px] text-gray-500 -mt-1">
+            <p className="-mt-1 text-[10px] text-gray-500">
               {dsGateBlocked ? (
                 <span className="text-amber-800 font-bold">
                   Complete the design system import above to unlock the prompt and generation.
@@ -2048,10 +2114,13 @@ export const Generate: React.FC<Props> = ({
                 ))}
                 </div>
             </div>
+            </div>
+            </div>
+            </div>
               </>
             ) : (
               <div
-                className="mb-2 border-2 border-dashed border-black/50 bg-gray-50 px-2 py-2 text-[9px] text-gray-700 shadow-[2px_2px_0_0_#000]"
+                className="mb-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-2 py-2 text-[9px] text-neutral-700"
                 data-component="Generate: Threads-only placeholder"
               >
                 <span className="font-black uppercase text-gray-500">Solo conversazioni</span>
@@ -2067,7 +2136,7 @@ export const Generate: React.FC<Props> = ({
                 </button>
               </div>
             )}
-        </>
+        </div>
       ) : showReport ? (
         <div data-component="Generate: Report Container" className="animate-in slide-in-from-bottom-2 fade-in duration-300">
             {/* AI Report Card */}

@@ -76,9 +76,12 @@ export default function GenerateGovernance() {
     <>
       <PageHeader title="Generate — governance" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem', maxWidth: 760 }}>
-        §8.2 — Libreria prompt riusabili (playbook) e override ToV/policy in JSON (consumati dal backend quando
-        collegherete la lettura lato agente). Dopo deploy eseguire migrazione{' '}
-        <code className="mono">015_generate_playbooks_and_tov.sql</code> sul DB della dashboard.
+        §8.2 — Playbook (archivio) e ToV in JSON. Il motore <code className="mono">POST /api/agents/generate</code>{' '}
+        legge <code className="mono">generate_tov_config</code> sul DB <strong>dell&apos;auth</strong>{' '}
+        (<code className="mono">POSTGRES_URL</code> progetto auth-deploy): dev&apos;essere lo stesso Postgres che usa
+        questa dashboard, oppure va copiato/syncato il record. Preferisci chiavi brevi nel JSON:{' '}
+        <code className="mono">assistant_style_notes</code>, <code className="mono">instructions</code>. Migrazione:{' '}
+        <code className="mono">015_generate_playbooks_and_tov.sql</code>.
       </p>
 
       {loading && <p className="loading">Caricamento…</p>}

@@ -1335,6 +1335,39 @@ export default function AppTest() {
     [user?.authToken, user?.id, AUTH_BACKEND_URL, handle503],
   );
 
+  const fetchImportNarration = useCallback(
+    async (body: {
+      kind: 'welcome' | 'session_locked' | 'tokens_done' | 'components_done';
+      file_name?: string | null;
+      hint?: string | null;
+    }) => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/import-narration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      if (!r.ok) {
+        const text = await r.text();
+        let msg = text;
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          msg = (j.error || text).trim() || text;
+        } catch {
+          // keep text
+        }
+        throw new Error(msg || `Import narration failed (${r.status})`);
+      }
+      const data = (await r.json()) as { text?: string };
+      return { text: String(data.text || '').trim() };
+    },
+    [user?.authToken, AUTH_BACKEND_URL, handle503],
+  );
+
   const fetchGenerationPluginEvent = useCallback(
     async (body: {
       event_type: string;
@@ -1982,6 +2015,7 @@ export default function AppTest() {
             persistDsImportToServer={persistDsImportToServer}
             fetchGenerateFeedback={fetchGenerateFeedback}
             fetchEnhancePlus={fetchEnhancePlus}
+            fetchImportNarration={fetchImportNarration}
             fetchGenerationPluginEvent={fetchGenerationPluginEvent}
             userId={user?.id ?? null}
             fetchDsImportContextSnapshot={fetchDsImportContextSnapshot}

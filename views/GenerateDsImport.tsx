@@ -11,6 +11,8 @@ import {
 } from '../lib/dsImportsStorage';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../lib/safeWebStorage';
 import { useToast } from '../contexts/ToastContext';
+import { ImportConversationalPanel, type ImportFeedItem } from '../components/generate/ImportConversationalPanel';
+import { fallbackImportNarration } from '../lib/dsImportFallbackNarration';
 
 const INTRO_SEEN_KEY = 'comtra-generate-ds-intro-seen';
 
@@ -577,6 +579,12 @@ export type GenerateDsImportProps = {
     tokenCount: number;
     name: string;
   }) => Promise<{ ok: boolean; error?: string }>;
+  /** Optional Kimi lines for import wizard (0 credits). */
+  fetchImportNarration?: (body: {
+    kind: 'welcome' | 'session_locked' | 'tokens_done' | 'components_done';
+    file_name?: string | null;
+    hint?: string | null;
+  }) => Promise<{ text: string }>;
 };
 
 export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
@@ -594,8 +602,17 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   onUnlockRequest,
   persistDsImportToServer,
   writeDsImportMeta,
+  fetchImportNarration,
 }) => {
   const { showToast } = useToast();
+  const feedIdRef = useRef(0);
+  const nextFeedId = () => {
+    feedIdRef.current += 1;
+    return `imp-feed-${feedIdRef.current}`;
+  };
+  const progressLogIdRef = useRef<string | null>(null);
+  const [importSessionConfirmed, setImportSessionConfirmed] = useState(false);
+  const [importFeedItems, setImportFeedItems] = useState<ImportFeedItem[]>([]);
   const [introSeen, setIntroSeen] = useState(readIntroSeen);
   const [imports, setImports] = useState<StoredDsImport[]>(() => loadDsImports());
   const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
@@ -616,6 +633,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   /** Minimum dwell on intro steps (Rules + Guidance) with CTA progress bar. */
   const [introStepLoading, setIntroStepLoading] = useState<IntroStepLoading>(null);
   const importFlowCancelledRef = useRef(false);
+  const rulesDigestDoneRef = useRef(false);
   const [componentsScanProgress, setComponentsScanProgress] = useState<{
     pageName: string;
     pageIndex: number;
@@ -657,6 +675,37 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     [imports, selectedImportId],
   );
 
+  const acknowledgeImportSession = useCallback(() => {
+    setImportSessionConfirmed(true);
+    setImportFeedItems((prev) => [
+      ...prev,
+      {
+        id: nextFeedId(),
+        role: 'assistant',
+        text: fallbackImportNarration('session_locked'),
+      },
+      {
+        id: nextFeedId(),
+        role: 'action_log',
+        title: 'Reading Figma file · DS rules (live session)',
+        lines: [
+          'requestDsContextIndex · phase: rules',
+          fileName ? `Open file: ${fileName}` : 'Open file: this document',
+        ],
+      },
+    ]);
+    if (fetchImportNarration) {
+      void fetchImportNarration({ kind: 'session_locked', file_name: fileName }).then(({ text }) => {
+        const t = String(text || '').trim();
+        if (!t) return;
+        setImportFeedItems((prev) => [
+          ...prev,
+          { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+        ]);
+      });
+    }
+  }, [fetchImportNarration, fileName]);
+
   const openWizard = useCallback(() => {
     if (fileKey && !canFreeTierUseFileForDsImport(fileKey, isPro).ok) {
       onUnlockRequest();
@@ -672,8 +721,22 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setIntroStepLoading(null);
     blurActiveElement();
     importFlowCancelledRef.current = false;
+    progressLogIdRef.current = null;
+    rulesDigestDoneRef.current = false;
+    setImportSessionConfirmed(false);
+    setImportFeedItems([{ id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('welcome') }]);
+    if (fetchImportNarration) {
+      void fetchImportNarration({ kind: 'welcome', file_name: fileName }).then(({ text }) => {
+        const t = String(text || '').trim();
+        if (!t) return;
+        setImportFeedItems((prev) => [
+          ...prev,
+          { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+        ]);
+      });
+    }
     setWizardOpen(true);
-  }, [fileKey, isPro, onUnlockRequest]);
+  }, [fileKey, isPro, onUnlockRequest, fetchImportNarration, fileName]);
 
   /** Discard wizard state and exit full-screen flow (after user confirms). */
   const abortImportFlow = useCallback(() => {
@@ -687,6 +750,10 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setImportFlowPhase('none');
     setRulesSummary(null);
     setIntroStepLoading(null);
+    setImportSessionConfirmed(false);
+    setImportFeedItems([]);
+    progressLogIdRef.current = null;
+    rulesDigestDoneRef.current = false;
     onBusyChange(false);
   }, [onBusyChange]);
 
@@ -877,7 +944,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
 
   // Step 0: read explicit DS rules/guidance from file metadata or documentation pages.
   useEffect(() => {
-    if (!wizardOpen || wizardStep !== 0 || rulesSummary || wizardError) return;
+    if (!wizardOpen || !importSessionConfirmed || wizardStep !== 0 || rulesSummary || wizardError) return;
     let cancelled = false;
     (async () => {
       const res = await requestDsContextIndex({ reuseCached: false, timeoutMs: 60000, phase: 'rules' });
@@ -885,11 +952,32 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       if (res.error || !res.index || typeof res.index !== 'object') return;
       const parsed = parseIndexToSummary(res.index as object);
       if (parsed.rules_summary) setRulesSummary(parsed.rules_summary);
+      else setRulesSummary({ source: 'none', rules: [], guidance: [] });
     })();
     return () => {
       cancelled = true;
     };
-  }, [wizardOpen, wizardStep, rulesSummary, wizardError, requestDsContextIndex, parseIndexToSummary]);
+  }, [
+    wizardOpen,
+    importSessionConfirmed,
+    wizardStep,
+    rulesSummary,
+    wizardError,
+    requestDsContextIndex,
+    parseIndexToSummary,
+  ]);
+
+  useEffect(() => {
+    if (!wizardOpen || !importSessionConfirmed || !rulesSummary || rulesDigestDoneRef.current) return;
+    rulesDigestDoneRef.current = true;
+    const rCount = rulesSummary.rules?.length ?? 0;
+    const gCount = rulesSummary.guidance?.length ?? 0;
+    const digest =
+      rCount + gCount > 0
+        ? `Rules pass: pulled ${rCount} global rule line(s) and ${gCount} guidance snippet(s) from this file — I'll treat them as hard context for Generate.`
+        : `No explicit rules doc surfaced — I'll lean harder on tokens, components, and naming in the next passes.`;
+    setImportFeedItems((prev) => [...prev, { id: nextFeedId(), role: 'assistant', text: digest }]);
+  }, [wizardOpen, importSessionConfirmed, rulesSummary]);
 
   // Step 2: variables + styles only (no component scan)
   useEffect(() => {
@@ -904,15 +992,53 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         onBusyChange(false);
         return;
       }
-      setIndexResult(parseIndexToSummary(res.index as object));
+      const parsed = parseIndexToSummary(res.index as object);
+      setIndexResult(parsed);
       setImportFlowPhase('tokens');
+      setImportFeedItems((prev) => [
+        ...prev,
+        {
+          id: nextFeedId(),
+          role: 'action_log',
+          title: 'Reading variables & local styles',
+          lines: [
+            'requestDsContextIndex · phase: tokens',
+            `total_tokens: ${parsed.total_tokens}`,
+            parsed.styles_summary
+              ? `styles — paint ${parsed.styles_summary.paintStyles}, text ${parsed.styles_summary.textStyles}, effects ${parsed.styles_summary.effectStyles}`
+              : 'styles: (none reported)',
+          ],
+        },
+        { id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('tokens_done') },
+      ]);
+      if (fetchImportNarration) {
+        const hint = `total_tokens=${parsed.total_tokens}; paint=${parsed.styles_summary?.paintStyles ?? 0}; text=${parsed.styles_summary?.textStyles ?? 0}`;
+        void fetchImportNarration({ kind: 'tokens_done', file_name: fileName, hint }).then(({ text }) => {
+          const t = String(text || '').trim();
+          if (!t) return;
+          setImportFeedItems((prev) => [
+            ...prev,
+            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+          ]);
+        });
+      }
       onBusyChange(false);
     })();
     return () => {
       cancelled = true;
       onBusyChange(false);
     };
-  }, [wizardOpen, wizardStep, importFlowPhase, wizardError, requestDsContextIndex, onBusyChange, parseIndexToSummary]);
+  }, [
+    wizardOpen,
+    wizardStep,
+    importFlowPhase,
+    wizardError,
+    requestDsContextIndex,
+    onBusyChange,
+    parseIndexToSummary,
+    fetchImportNarration,
+    fileName,
+  ]);
 
   // Step 3: component scan + merge (final hash for persist)
   useEffect(() => {
@@ -920,6 +1046,19 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     let cancelled = false;
     onBusyChange(true);
     setComponentsScanProgress(null);
+    progressLogIdRef.current = null;
+    setImportFeedItems((prev) => [
+      ...prev,
+      {
+        id: nextFeedId(),
+        role: 'action_log',
+        title: 'Listing Figma file · component catalog',
+        lines: [
+          'requestDsContextIndex · phase: components',
+          'Walking pages for COMPONENT / COMPONENT_SET instances',
+        ],
+      },
+    ]);
     (async () => {
       const res = await requestDsContextIndex({
         reuseCached: false,
@@ -932,6 +1071,19 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             pageIndex: p.pageIndex,
             pageTotal: p.pageTotal,
             scanned: p.scanned,
+          });
+          const title = `Scanning components · page ${p.pageIndex}/${p.pageTotal}`;
+          const lines = [`${p.pageName || 'Unnamed page'}`, `Indexed so far: ${p.scanned}`];
+          setImportFeedItems((prev) => {
+            const pid = progressLogIdRef.current;
+            if (pid) {
+              return prev.map((x) =>
+                x.id === pid && x.role === 'action_log' ? { ...x, title, lines } : x,
+              );
+            }
+            const nid = nextFeedId();
+            progressLogIdRef.current = nid;
+            return [...prev, { id: nid, role: 'action_log', title, lines }];
           });
         },
       });
@@ -969,6 +1121,22 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         '';
       setWizardCapture({ fullIndex: res.index as object, hash });
       setImportFlowPhase('full');
+      progressLogIdRef.current = null;
+      setImportFeedItems((prev) => [
+        ...prev,
+        { id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('components_done') },
+      ]);
+      if (fetchImportNarration) {
+        const hint = `indexed=${inIndex}; sets=${parts.sets}; singles=${parts.singles}; logoLike=${logoLike}; titleLike=${titleLike}`;
+        void fetchImportNarration({ kind: 'components_done', file_name: fileName, hint }).then(({ text }) => {
+          const t = String(text || '').trim();
+          if (!t) return;
+          setImportFeedItems((prev) => [
+            ...prev,
+            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+          ]);
+        });
+      }
       onBusyChange(false);
     })();
     return () => {
@@ -976,7 +1144,17 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       setComponentsScanProgress(null);
       onBusyChange(false);
     };
-  }, [wizardOpen, wizardStep, importFlowPhase, wizardError, requestDsContextIndex, onBusyChange, parseIndexToSummary]);
+  }, [
+    wizardOpen,
+    wizardStep,
+    importFlowPhase,
+    wizardError,
+    requestDsContextIndex,
+    onBusyChange,
+    parseIndexToSummary,
+    fetchImportNarration,
+    fileName,
+  ]);
 
   const dismissIntro = () => {
     writeIntroSeen();
@@ -1120,7 +1298,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
           `}</style>
           <header className="shrink-0 border-b-2 border-black bg-white shadow-[0_2px_0_0_#000] flex items-center justify-between gap-2 px-3 py-3">
             <h2 id="import-flow-title" className="text-xs font-black uppercase tracking-wide truncate pr-2">
-              Import design system
+              {importSessionConfirmed ? 'Import design system' : 'Connect to this file'}
             </h2>
             <button
               type="button"
@@ -1132,12 +1310,28 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             </button>
           </header>
 
-          <div className="shrink-0 border-b-2 border-black bg-neutral-100 pt-4 pb-0">
-            <ImportFlowStepper currentStep={wizardStep} />
-          </div>
+          {importSessionConfirmed ? (
+            <div className="shrink-0 border-b-2 border-black bg-neutral-100 pt-4 pb-0">
+              <ImportFlowStepper currentStep={wizardStep} />
+            </div>
+          ) : null}
 
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-5">
             <div className="flex w-full flex-col gap-4">
+              {!importSessionConfirmed ? (
+                <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
+                  <p className="text-center text-2xl font-normal leading-snug text-neutral-900" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                    Set up from this Figma file
+                  </p>
+                  <p className="text-center text-sm leading-relaxed text-neutral-700">
+                    Comtra reads your design system from the <strong>live session</strong> you already have open — no
+                    .fig upload circus. Confirm below, then we walk tokens, styles, and components together.
+                  </p>
+                  <ImportConversationalPanel items={importFeedItems} />
+                </div>
+              ) : (
+                <>
+                  <ImportConversationalPanel items={importFeedItems} />
               <div className="flex flex-col gap-1.5">
                 <h3 className="font-black uppercase text-base leading-tight">
                   {WIZARD_TEXT[wizardStep]?.title}
@@ -1326,12 +1520,23 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                   ariaLabel="Components catalog notes"
                 />
               )}
+                </>
+              )}
             </div>
           </div>
 
           <footer className="shrink-0 border-t-2 border-black bg-white px-3 py-4 shadow-[0_-4px_0_0_rgba(0,0,0,0.06)]">
             <div className="flex w-full gap-2 items-stretch">
-              {wizardStep === 0 ? (
+              {!importSessionConfirmed ? (
+                <Button
+                  variant="primary"
+                  fullWidth
+                  className="min-h-[48px] text-xs font-black uppercase py-3 shadow-[3px_3px_0_0_#000]"
+                  onClick={acknowledgeImportSession}
+                >
+                  Use this Figma session — start import
+                </Button>
+              ) : wizardStep === 0 ? (
                 <Button
                   variant="primary"
                   fullWidth

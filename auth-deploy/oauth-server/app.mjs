@@ -71,6 +71,51 @@ function formatWizardSignalsBlock(wizardSignals) {
   ].join('\n');
 }
 
+/** Estrae testo dalle override admin (JSON dashboard / `generate_tov_config`). */
+function formatPromptOverridesForTovContext(po) {
+  if (!po || typeof po !== 'object' || Array.isArray(po)) return '';
+  const preferKeys = [
+    'assistant_style_notes',
+    'instructions',
+    'tone_notes',
+    'notes',
+    'comtra_tov',
+  ];
+  for (const k of preferKeys) {
+    if (typeof po[k] === 'string' && po[k].trim()) return po[k].trim();
+  }
+  try {
+    const s = JSON.stringify(po);
+    return s.length > 4000 ? `${s.slice(0, 4000)}…` : s;
+  } catch {
+    return '';
+  }
+}
+
+const NEUTRAL_TOV_FALLBACK = [
+  '',
+  '[COMTRA_TOV — default neutral; no DS wizard tone and no admin dashboard overrides]',
+  'Voice: professional, concise, product- and UI-first. Avoid hype and filler. Prefer clear visual hierarchy, legible defaults, and accessibility-aware layout decisions. Do not invent a brand voice beyond the design system and user prompt.',
+  '[END COMTRA_TOV]',
+].join('\n');
+
+/**
+ * Priorità: (1) segnali DS import (WIZARD_SIGNALS), (2) `generate_tov_config.prompt_overrides`, (3) fallback neutro.
+ */
+function resolveComtraTovResolution(wizardSignalsBlock, adminPromptOverrides) {
+  if (wizardSignalsBlock && String(wizardSignalsBlock).trim()) {
+    return { block: '', source: 'wizard_ds' };
+  }
+  const adminText = formatPromptOverridesForTovContext(adminPromptOverrides);
+  if (adminText) {
+    return {
+      block: ['', '[COMTRA_TOV — admin/dashboard]', adminText, '[END COMTRA_TOV]'].join('\n'),
+      source: 'admin',
+    };
+  }
+  return { block: NEUTRAL_TOV_FALLBACK, source: 'neutral' };
+}
+
 const FIGMA_CLIENT_ID = process.env.FIGMA_CLIENT_ID;
 const FIGMA_CLIENT_SECRET = process.env.FIGMA_CLIENT_SECRET;
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:3456').replace(/\/$/, '');
@@ -721,6 +766,8 @@ function estimateCreditsByAction(actionType, nodeCount, options = {}) {
     const n = Number(process.env.GENERATE_REFINEMENT_XL_CREDITS);
     return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 4;
   }
+  /** DS import wizard: Kimi flavor text only — no credits (see /api/agents/import-narration). */
+  if (actionType === 'import_narration') return 0;
   return 5;
 }
 
@@ -2986,6 +3033,72 @@ app.post('/api/agents/enhance-plus', async (req, res) => {
   });
 });
 
+function sanitizeImportNarrationText(raw) {
+  let t = String(raw || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[#*_`[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (t.length > 420) t = `${t.slice(0, 417)}…`;
+  return t;
+}
+
+const IMPORT_NARRATION_SYSTEM = {
+  welcome: `You write microcopy for Comtra (Figma plugin). Output ONLY one or two short sentences (max 44 words total). English. Playful, confident, design-tool native — never stiff corporate. The designer is starting a guided import: Comtra will read tokens, styles, and components from the **Figma file they already have open** (live session) — not from an uploaded .fig. If a file name is given, you may mention it once. No quotation marks. No markdown. No bullets.`,
+  session_locked: `Output ONLY one punchy sentence (max 34 words). English. The user just confirmed: Comtra may sponge design-system context from their **live Figma session** (the open file). Tone: cheeky, warm, irreverent senior-designer energy — confident, not rude. No quotes. No markdown.`,
+  tokens_done: `Output ONLY one or two short sentences (max 40 words). English. Playful. The import wizard finished reading variables (tokens) and local styles from their file; give a tiny "nice, foundations in view" vibe. Use the counts in the user message if useful. No markdown.`,
+  components_done: `Output ONLY one or two short sentences (max 44 words). English. Playful. The heavy component / variant scan for the catalog just finished — they're almost ready to generate. Acknowledge the win without sounding like a loading spinner. No markdown.`,
+};
+
+app.post('/api/agents/import-narration', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+  const body = req.body || {};
+  const kind = String(body.kind || '').toLowerCase();
+  const allowed = new Set(['welcome', 'session_locked', 'tokens_done', 'components_done']);
+  if (!allowed.has(kind)) return res.status(400).json({ error: 'invalid kind' });
+  const system = IMPORT_NARRATION_SYSTEM[kind];
+  if (!system) return res.status(400).json({ error: 'invalid kind' });
+
+  const fileName = typeof body.file_name === 'string' ? body.file_name.trim().slice(0, 200) : '';
+  const hint = typeof body.hint === 'string' ? body.hint.trim().slice(0, 600) : '';
+
+  const userBlock = [
+    `Narration kind: ${kind}.`,
+    fileName ? `Open Figma file name: ${fileName}` : 'Open Figma file name: (unknown)',
+    hint ? `Context:\n${hint}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  let inputTok = 0;
+  let outTok = 0;
+  let text = '';
+  try {
+    const { content, usage } = await callKimi(
+      [{ role: 'system', content: system }, { role: 'user', content: userBlock }],
+      220,
+    );
+    text = sanitizeImportNarrationText(content);
+    inputTok = Math.max(0, Number(usage?.prompt_tokens ?? usage?.input_tokens ?? 0));
+    outTok = Math.max(0, Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0));
+  } catch (e) {
+    console.error('import-narration kimi', e?.message || e);
+    return res.status(502).json({ error: 'AI narration failed' });
+  }
+  if (!text) return res.status(502).json({ error: 'Empty narration' });
+
+  if (dbSql) {
+    dbSql`
+      INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
+      VALUES (${'import_narration'}, ${inputTok}, ${outTok}, null, ${KIMI_MODEL})
+    `.catch((err) => console.error('Kimi usage log import_narration failed', err?.message || err));
+  }
+
+  res.json({ text });
+});
+
 app.post('/api/agents/generate', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -3166,6 +3279,26 @@ app.post('/api/agents/generate', async (req, res) => {
         ? dsIndexForValidation.wizard_signals
         : null;
     const wizardSignalsBlock = formatWizardSignalsBlock(wizardSignals);
+
+    let adminPromptOverrides = null;
+    if (dbSql) {
+      try {
+        const tovRow = await dbSql`
+          SELECT prompt_overrides FROM generate_tov_config WHERE singleton = 'default' LIMIT 1
+        `;
+        const po = tovRow.rows?.[0]?.prompt_overrides;
+        if (po && typeof po === 'object' && !Array.isArray(po)) adminPromptOverrides = po;
+      } catch (tovErr) {
+        const msg = String(tovErr?.message || '');
+        if (!/does not exist|relation|no such table/i.test(msg)) {
+          console.error('generate_tov_config read', msg);
+        }
+      }
+    }
+    const comtraTovRes = resolveComtraTovResolution(wizardSignalsBlock, adminPromptOverrides);
+    const comtraTovBlock = comtraTovRes.block;
+    const comtraTovSource = comtraTovRes.source;
+
     let kimiEnrichmentBlock = '';
     let kimiEnrichmentUsed = false;
     let kimiEnrichmentCacheHit = false;
@@ -3248,6 +3381,7 @@ app.post('/api/agents/generate', async (req, res) => {
       designIntelBlock,
       wizardSignalsBlock,
       kimiEnrichmentBlock,
+      comtraTovBlock,
     ].join('\n');
 
     let actionPlan = null;
@@ -3636,6 +3770,7 @@ app.post('/api/agents/generate', async (req, res) => {
         input_tokens: totalInputTokens,
         output_tokens: totalOutputTokens,
       },
+      comtra_tov: { source: comtraTovSource },
     };
 
     if (screenshotDataUrl) {
