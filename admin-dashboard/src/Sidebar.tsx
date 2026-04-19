@@ -54,6 +54,12 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/design-systems/external" className={({ isActive }) => (isActive ? 'active' : '')}>
           DS esterni
         </NavLink>
+        <NavLink to="/generate-conversations" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Generate · conversazioni
+        </NavLink>
+        <NavLink to="/generate-governance" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Generate · governance
+        </NavLink>
         <span className="sidebar-group" aria-hidden="true">Altro</span>
         <NavLink to="/brand-awareness" className={({ isActive }) => (isActive ? 'active' : '')}>
           Brand awareness

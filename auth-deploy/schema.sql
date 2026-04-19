@@ -329,6 +329,22 @@ CREATE TABLE IF NOT EXISTS external_design_systems (
 CREATE INDEX IF NOT EXISTS idx_external_design_systems_status_updated
   ON external_design_systems(status, updated_at DESC);
 
+-- Generate: playbooks (riuso prompt) + config ToV lato server (admin, §8.2)
+CREATE TABLE IF NOT EXISTS generate_playbooks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_generate_playbooks_updated ON generate_playbooks (updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS generate_tov_config (
+  singleton TEXT PRIMARY KEY CHECK (singleton = 'default'),
+  prompt_overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Migrazione: se la tabella users esiste già senza colonne XP, esegui (PostgreSQL 9.5+):
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp INTEGER NOT NULL DEFAULT 0;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;

@@ -476,9 +476,39 @@ Phase 3+ (threads, web hub) unchanged in intent; pre-flight feeds **same** threa
 |--------|--------|--------|
 | **§5** | Blueprint layout (strip, timeline, composer, chips) | Fatto nel plugin (`Generate.tsx`). |
 | **§6** | Tier crediti chip post-output | Policy lato API `generate_refinement_light|medium|heavy`; UI chiama `estimateCredits` per chip; **consumo finale** sempre da `metadata.estimated_credits` dopo run ok. |
-| **§7** | Thread `file_key + ds_cache_hash`, lista, nuova, persistenza locale + server | Tabelle + API + UI; tab dedicata opzionale (usiamo pannello inline). |
-| **§8** | Split plugin vs web | Cockpit nel plugin; web = admin `GET /api/admin/generate-threads`, hub prodotto futuro. |
+| **§7** | Thread `file_key + ds_cache_hash`, lista, nuova, persistenza locale + server | Tabelle + API + pannello inline con **Recenti** (titolo + tempo) + select server; sync lista dopo append. |
+| **§8** | Split plugin vs web | Cockpit + tab Chat/Conversazioni nel plugin; admin: **conversazioni** (ricerca anche nei messaggi + analytics plugin), **governance** (playbook + JSON ToV), §17 per azioni deploy/agent. |
 | **§9–10** | API + modello dati | `generate_threads` / `generate_messages`; optional `actions/:chipId` = stesso generate (non route separata). |
 
 **Gap noti (post-fase corrente):** Phase 5 ToV iterativo; hub web completo (search full-text, playbooks); trigger §15.2 avanzati (slot pack thin, dual-archetype conflict) se servono in produzione.
+
+---
+
+## 17) Stato “completo piano” + azioni solo umane
+
+Questa sezione aggiorna il gap dopo implementazione nel repo (plugin + admin dashboard + migrazioni).
+
+### Coperto in codice (check)
+
+| Voce piano | Implementazione |
+|-------------|-----------------|
+| §5.3 Diagnostica collassabile | `<details>` su blocco diagnostica timeline (`Generate.tsx`). |
+| §6 Consume refinement | `consumeCredits.action_type` = `generate_refinement_*` da tier chip quando `chipId` è una refinement chip. Importo ancora da `metadata.estimated_credits` del piano server. |
+| §8 Ricerca archivio | Admin: ricerca thread anche su **contenuto** `generate_messages.content_json` (ILIKE). |
+| §8 Analytics | Admin: `route=generate-plugin-analytics` (eventi `generation_plugin_events` + conteggi thread/messaggi nel periodo). UI riassunto in **Generate · conversazioni**. |
+| §8 Playbook + ToV storage | Tabella `generate_playbooks`, `generate_tov_config`; API `POST/GET /api/generate-governance`; pagina **Generate · governance**. |
+| §13 Telemetria elenco | Eventi `generate_chat_turn_*`, `generate_chip_*`, `generate_preflight_*` già inviati dal plugin (verificare dashboard/event DB in produzione). |
+
+### Da fare da te (non automatizzabile dal solo codice)
+
+1. **Migrazione DB**: eseguire `auth-deploy/migrations/015_generate_playbooks_and_tov.sql` sul **Postgres usato dalla dashboard admin** (stesso `POSTGRES_URL` dei thread Generate). Senza questo, governance resta 503 / messaggio migrazione.
+2. **Deploy**: pubblicare dashboard (nuove route API + pagine) e plugin (consume + UI diagnostica).
+3. **Agente Generate (server)**: leggere `generate_tov_config.prompt_overrides` e playbook in `POST /api/agents/generate` / hint layer — oggi sono **persistenza + audit**, non ancora injection automatica nel modello (richiede patch `auth-deploy` agents).
+4. **§15.2 avanzati / 2.6 pack**: logica aggiuntiva su slot pack, confidence da pack, ecc. — molti segnali vivono nel motore generate; va pianificato commit per commit nel server agent.
+5. **Phase 5 qualità ToV**: revisione copy e prompt con dati reali dopo telemetria in produzione.
+6. **§2 gate stabilità**: smoke test manuale ricorrente su Figma (plugin + file importati).
+
+### “TUTTO” letterale del documento
+
+Il piano include intenti **prodotto/legal** (copy upper-bound tempo, review team, analytics conversione avanzate). Restano **processo e prodotti** oltre il repository; il codice qui copre **storage, API, UI admin, plugin behavior** allineati alle sezioni §5–§11 e §8.2 operative.
 

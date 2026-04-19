@@ -1,6 +1,6 @@
 /**
  * API admin sul progetto Vercel della dashboard (non su auth-deploy).
- * GET /api/admin?route=stats|credits-timeline|users|affiliates
+ * GET /api/admin?route=stats|credits-timeline|users|affiliates|generate-threads|generate-thread-messages|generate-plugin-analytics
  * Header: Authorization: Bearer <ADMIN_SECRET> or X-Admin-Key: <ADMIN_SECRET>
  * Env (stesso progetto dashboard): POSTGRES_URL, ADMIN_SECRET
  */
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
   if (!route) {
     return res.status(400).json({
       error:
-        'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs|brand-awareness|touchpoint-funnel|notifications',
+        'Missing query: route=stats|credits-timeline|users|affiliates|token-usage|weekly-updates|health|function-executions|executions-users|users-countries|throttle-events|discounts-stats|discounts-level|discounts-throttle|generate-ab-stats|support-feedback|plugin-logs|brand-awareness|touchpoint-funnel|notifications|generate-threads|generate-thread-messages|generate-plugin-analytics',
     });
   }
 
@@ -115,6 +115,9 @@ export default async function handler(req, res) {
     if (route === 'plugin-logs') return await handlePluginLogs(req, res);
     if (route === 'brand-awareness') return await handleBrandAwareness(req, res);
     if (route === 'touchpoint-funnel') return await handleTouchpointFunnel(req, res);
+    if (route === 'generate-threads') return await handleGenerateThreads(req, res);
+    if (route === 'generate-thread-messages') return await handleGenerateThreadMessages(req, res);
+    if (route === 'generate-plugin-analytics') return await handleGeneratePluginAnalytics(req, res);
     return res.status(400).json({ error: 'Unknown route' });
   } catch (err) {
     console.error('GET /api/admin', route, err);
@@ -1616,5 +1619,103 @@ async function pingFigmaOAuthLive(authBaseUrl, id) {
     return { id, status: 'up', latencyMs: Date.now() - start, message: null };
   } catch (e) {
     return { id, status: 'down', latencyMs: Date.now() - start, message: (e && e.message) || 'Timeout o errore' };
+  }
+}
+
+/** Generate conversational UX — thread list (Phase 4 hub, stesso schema auth-deploy). */
+async function handleGenerateThreads(req, res) {
+  const q = String(req.query.q || '').trim().slice(0, 200);
+  const lim = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
+  const pattern = `%${q}%`;
+  try {
+    const rows = q
+      ? await sql`
+          SELECT gt.id::text AS id, gt.user_id, gt.file_key, gt.ds_cache_hash, gt.title,
+                 EXTRACT(EPOCH FROM gt.updated_at) * 1000 AS updated_at_ms,
+                 (SELECT COUNT(*)::int FROM generate_messages gm WHERE gm.thread_id = gt.id) AS message_count
+          FROM generate_threads gt
+          WHERE gt.title ILIKE ${pattern}
+             OR gt.file_key ILIKE ${pattern}
+             OR gt.user_id::text ILIKE ${pattern}
+             OR gt.ds_cache_hash ILIKE ${pattern}
+             OR EXISTS (
+               SELECT 1 FROM generate_messages gm
+               WHERE gm.thread_id = gt.id
+               AND gm.content_json::text ILIKE ${pattern}
+             )
+          ORDER BY gt.updated_at DESC
+          LIMIT ${lim}
+        `
+      : await sql`
+          SELECT gt.id::text AS id, gt.user_id, gt.file_key, gt.ds_cache_hash, gt.title,
+                 EXTRACT(EPOCH FROM gt.updated_at) * 1000 AS updated_at_ms,
+                 (SELECT COUNT(*)::int FROM generate_messages gm WHERE gm.thread_id = gt.id) AS message_count
+          FROM generate_threads gt
+          ORDER BY gt.updated_at DESC
+          LIMIT ${lim}
+        `;
+    return res.status(200).json({ threads: rows.rows || [] });
+  } catch (err) {
+    if (isMissingTableError(err)) return res.status(200).json({ threads: [] });
+    throw err;
+  }
+}
+
+async function handleGenerateThreadMessages(req, res) {
+  const threadId = String(req.query.thread_id || req.query.threadId || '').trim();
+  if (!threadId) return res.status(400).json({ error: 'thread_id required' });
+  try {
+    const sel = await sql`
+      SELECT id::text, role, message_type, content_json,
+             credit_estimate, credit_consumed,
+             EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
+      FROM generate_messages
+      WHERE thread_id = ${threadId}::uuid
+      ORDER BY created_at ASC
+      LIMIT 500
+    `;
+    return res.status(200).json({ messages: sel.rows || [] });
+  } catch (err) {
+    if (isMissingTableError(err)) return res.status(200).json({ messages: [] });
+    throw err;
+  }
+}
+
+/** Aggregazione ultimi N giorni: eventi plugin Generate + volumi thread/messaggi (§8 analytics). */
+async function handleGeneratePluginAnalytics(req, res) {
+  const days = Math.min(90, Math.max(7, Math.floor(Number(req.query.days) || 30)));
+  const intervalLiteral = `${days} days`;
+  try {
+    const totals = await sql`
+      SELECT event_type, COUNT(*)::int AS cnt
+      FROM generation_plugin_events
+      WHERE created_at >= NOW() - ${intervalLiteral}::interval
+      GROUP BY event_type
+      ORDER BY cnt DESC NULLS LAST
+    `;
+    const threadCnt = await sql`
+      SELECT COUNT(*)::int AS c FROM generate_threads
+      WHERE updated_at >= NOW() - ${intervalLiteral}::interval
+    `;
+    const msgCnt = await sql`
+      SELECT COUNT(*)::int AS c FROM generate_messages
+      WHERE created_at >= NOW() - ${intervalLiteral}::interval
+    `;
+    return res.status(200).json({
+      period_days: days,
+      generation_plugin_events: totals.rows || [],
+      threads_touched: threadCnt.rows?.[0]?.c ?? 0,
+      messages_created: msgCnt.rows?.[0]?.c ?? 0,
+    });
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      return res.status(200).json({
+        period_days: days,
+        generation_plugin_events: [],
+        threads_touched: 0,
+        messages_created: 0,
+      });
+    }
+    throw err;
   }
 }

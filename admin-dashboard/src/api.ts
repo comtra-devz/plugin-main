@@ -939,3 +939,92 @@ export async function upsertExternalDesignSystem(body: {
   }
   return data as { ok: boolean; slug: string; status: ExternalDesignSystemStatus };
 }
+
+// --- Generate conversational threads (same DB as plugin; Phase 4 hub §8)
+export interface AdminGenerateThreadRow {
+  id: string;
+  user_id: string;
+  file_key: string;
+  ds_cache_hash: string;
+  title: string | null;
+  updated_at_ms: number;
+  message_count: number;
+}
+
+export async function fetchAdminGenerateThreads(options?: {
+  q?: string;
+  limit?: number;
+}): Promise<{ threads: AdminGenerateThreadRow[] }> {
+  const params: Record<string, string | number> = { limit: options?.limit ?? 80 };
+  if (options?.q?.trim()) params.q = options.q.trim().slice(0, 200);
+  const r = await fetchWithRetry(apiUrl('generate-threads', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export interface AdminGenerateThreadMessageRow {
+  id: string;
+  role: string;
+  message_type: string | null;
+  content_json: Record<string, unknown> | null;
+  credit_estimate: number | null;
+  credit_consumed: number | null;
+  created_at_ms: number;
+}
+
+export async function fetchAdminGenerateThreadMessages(
+  threadId: string
+): Promise<{ messages: AdminGenerateThreadMessageRow[] }> {
+  const r = await fetchWithRetry(
+    apiUrl('generate-thread-messages', { thread_id: threadId }),
+    { headers: headers() }
+  );
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function fetchAdminGeneratePluginAnalytics(days?: number): Promise<{
+  period_days: number;
+  generation_plugin_events: Array<{ event_type: string; cnt: number }>;
+  threads_touched: number;
+  messages_created: number;
+}> {
+  const params: Record<string, string | number> = {};
+  if (days != null && Number.isFinite(days)) params.days = Math.floor(days);
+  const r = await fetchWithRetry(apiUrl('generate-plugin-analytics', params), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export interface GeneratePlaybookRow {
+  id: string;
+  title: string;
+  body: string;
+  updated_at_ms?: number;
+}
+
+export async function fetchGenerateGovernance(): Promise<{
+  playbooks: GeneratePlaybookRow[];
+  tov: { prompt_overrides: Record<string, unknown> };
+}> {
+  const r = await fetchWithRetry(`${BASE}/api/generate-governance`, { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function postGenerateGovernance(body: {
+  action: 'create_playbook' | 'delete_playbook' | 'save_tov';
+  title?: string;
+  body?: string;
+  id?: string;
+  prompt_overrides?: Record<string, unknown>;
+}): Promise<{ ok?: boolean; id?: string; error?: string }> {
+  const r = await fetch(`${BASE}/api/generate-governance`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  return data as { ok: boolean; id?: string };
+}

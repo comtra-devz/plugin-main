@@ -26,6 +26,7 @@ import {
   reasoningSummaryLinesFromPlan,
   refinementEstimateActionType,
   tierCreditHint,
+  formatShortRelativeTime,
 } from '../lib/generateConversationHelpers';
 import {
   safeLocalStorageGetItem,
@@ -342,7 +343,11 @@ export const Generate: React.FC<Props> = ({
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const [dsScopeHash, setDsScopeHash] = useState<string>('');
   const [serverThreadId, setServerThreadId] = useState<string | null>(null);
-  const [threadList, setThreadList] = useState<Array<{ id: string; title: string | null }>>([]);
+  const [threadList, setThreadList] = useState<
+    Array<{ id: string; title: string | null; updated_at_ms?: number }>
+  >([]);
+  /** §7.2 — Chat vs dedicated Conversazioni panel (Phase 3). */
+  const [generateComposerTab, setGenerateComposerTab] = useState<'chat' | 'threads'>('chat');
   const [showPreflight, setShowPreflight] = useState(false);
   const [preflightPromptSnapshot, setPreflightPromptSnapshot] = useState('');
   /** Server pack chips override rule-based when present (Phase 2.6). */
@@ -402,6 +407,27 @@ export const Generate: React.FC<Props> = ({
     [userId, genFileKey, dsScopeHash, usesFileDs, selectedSystem],
   );
 
+  const refreshThreadList = useCallback(async () => {
+    const fk = genFileKey;
+    const dh = dsScopeHash;
+    if (!generateConversationApi || !fk || !dh) return;
+    try {
+      const r = await generateConversationApi.listThreads({
+        file_key: fk,
+        ds_cache_hash: dh,
+      });
+      setThreadList(
+        (r.threads || []).map((t) => ({
+          id: t.id,
+          title: t.title ?? null,
+          updated_at_ms: typeof t.updated_at_ms === 'number' ? t.updated_at_ms : undefined,
+        })),
+      );
+    } catch {
+      /* offline */
+    }
+  }, [generateConversationApi, genFileKey, dsScopeHash]);
+
   const appendGenerateTurn = useCallback(
     (userPrompt: string, assistantMarkdown: string) => {
       const t = Date.now();
@@ -443,6 +469,7 @@ export const Generate: React.FC<Props> = ({
                 { role: 'user', content_json: { text: u }, message_type: 'chat' },
                 { role: 'assistant', content_json: { text: assistantMarkdown }, message_type: 'reasoning_summary' },
               ]);
+              await refreshThreadList();
             }
           } catch {
             /* offline — local timeline remains */
@@ -458,6 +485,7 @@ export const Generate: React.FC<Props> = ({
       usesFileDs,
       selectedSystem,
       persistTurnsLocal,
+      refreshThreadList,
     ],
   );
 
@@ -495,7 +523,13 @@ export const Generate: React.FC<Props> = ({
       .listThreads({ file_key: genFileKey, ds_cache_hash: dsScopeHash })
       .then((r) => {
         if (cancelled) return;
-        setThreadList((r.threads || []).map((t) => ({ id: t.id, title: t.title ?? null })));
+        setThreadList(
+          (r.threads || []).map((t) => ({
+            id: t.id,
+            title: t.title ?? null,
+            updated_at_ms: typeof t.updated_at_ms === 'number' ? t.updated_at_ms : undefined,
+          })),
+        );
       })
       .catch(() => {});
     return () => {
@@ -1032,8 +1066,13 @@ export const Generate: React.FC<Props> = ({
         setGenerateStep('credits');
         const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
         const creditsToConsume = meta?.estimated_credits ?? 3;
+        let consumeActionType: string = mode === 'modify' ? 'wireframe_modified' : 'generate';
+        if (opts?.chipId) {
+          const chipDef = REFINEMENT_CHIPS.find((c) => c.id === opts.chipId);
+          if (chipDef) consumeActionType = refinementEstimateActionType(chipDef.tier);
+        }
         const consumed = await consumeCredits({
-          action_type: mode === 'modify' ? 'wireframe_modified' : 'generate',
+          action_type: consumeActionType,
           credits_consumed: creditsToConsume,
           file_id: fileKey,
         });
@@ -1380,6 +1419,14 @@ export const Generate: React.FC<Props> = ({
       </span>
     ) : undefined;
 
+  const threadScopeReady = !!(
+    userId &&
+    generateConversationApi &&
+    genFileKey &&
+    dsScopeHash
+  );
+  const showChatComposerShell = !threadScopeReady || generateComposerTab === 'chat';
+
   return (
     <div data-component="Generate: View Container" className="p-4 flex flex-col gap-4 pb-28 min-h-full relative">
       
@@ -1570,46 +1617,159 @@ export const Generate: React.FC<Props> = ({
       {showGenerateComposer && !showReport ? (
         <>
             {userId && generateConversationApi && genFileKey && dsScopeHash ? (
-              <div
-                data-component="Generate: Thread scope"
-                className="flex flex-col gap-1 text-[10px] mb-2 border-2 border-black px-2 py-1.5 bg-gray-50 shadow-[2px_2px_0_0_#000]"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                <span className="font-black uppercase">Conversazioni</span>
-                <button
-                  type="button"
-                  className="font-bold underline hover:text-[#ff90e8]"
-                  onClick={handleNewConversation}
+              <>
+                <div
+                  className="flex flex-wrap gap-0 mb-2 border-2 border-black w-fit max-w-full shadow-[2px_2px_0_0_#000]"
+                  data-component="Generate: Chat / Conversazioni tabs"
                 >
-                  Nuova
-                </button>
-                {threadList.length > 0 ? (
-                  <label className="flex items-center gap-1">
-                    <span className="text-[9px] text-gray-600">Server</span>
-                    <select
-                      className="border-2 border-black text-[9px] px-1 py-0.5 bg-white max-w-[168px]"
-                      value={serverThreadId || ''}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v) void handleSelectThread(v);
-                      }}
-                    >
-                      <option value="">— In uso (locale) —</option>
-                      {threadList.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {(t.title || t.id).slice(0, 40)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
+                  <button
+                    type="button"
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 border-r-2 border-black ${
+                      generateComposerTab === 'chat' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
+                    }`}
+                    onClick={() => setGenerateComposerTab('chat')}
+                  >
+                    Chat
+                  </button>
+                  <button
+                    type="button"
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 ${
+                      generateComposerTab === 'threads' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
+                    }`}
+                    onClick={() => setGenerateComposerTab('threads')}
+                  >
+                    Conversazioni
+                  </button>
                 </div>
-                <p className="text-[9px] text-gray-600 leading-snug font-medium">
-                  Scope thread: stesso file + hash DS — evita confusione tra snapshot diversi (§7).
-                </p>
-              </div>
+
+                {generateComposerTab === 'threads' ? (
+                  <div
+                    data-component="Generate: Thread scope"
+                    className="flex flex-col gap-1 text-[10px] mb-2 border-2 border-black px-2 py-1.5 bg-gray-50 shadow-[2px_2px_0_0_#000]"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-[9px] font-bold underline hover:text-[#ff90e8]"
+                        onClick={() => setGenerateComposerTab('chat')}
+                      >
+                        ← Chat
+                      </button>
+                      <span className="font-black uppercase">Conversazioni</span>
+                      <button
+                        type="button"
+                        className="font-bold underline hover:text-[#ff90e8]"
+                        onClick={handleNewConversation}
+                      >
+                        Nuova
+                      </button>
+                      {threadList.length > 0 ? (
+                        <label className="flex items-center gap-1">
+                          <span className="text-[9px] text-gray-600">Server</span>
+                          <select
+                            className="border-2 border-black text-[9px] px-1 py-0.5 bg-white max-w-[168px]"
+                            value={serverThreadId || ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v) void handleSelectThread(v);
+                            }}
+                          >
+                            <option value="">— In uso (locale) —</option>
+                            {threadList.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {(t.title || t.id).slice(0, 40)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                    {threadList.length > 0 ? (
+                      <div
+                        className="mt-1 pt-1 border-t border-black/15 space-y-0.5"
+                        data-component="Generate: Recent threads"
+                      >
+                        <div className="text-[9px] font-bold uppercase text-gray-600">Recenti</div>
+                        <div className="max-h-[220px] overflow-y-auto flex flex-col gap-0.5 pr-0.5">
+                          {threadList.slice(0, 12).map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => void handleSelectThread(t.id)}
+                              className={`text-left flex justify-between items-baseline gap-2 px-1 py-0.5 text-[9px] border shadow-[1px_1px_0_0_#000] hover:bg-[#ffc900]/30 ${
+                                serverThreadId === t.id
+                                  ? 'bg-amber-100 border-black'
+                                  : 'border-black/20 bg-white'
+                              }`}
+                            >
+                              <span className="truncate font-medium min-w-0">
+                                {(t.title || 'Senza titolo').slice(0, 44)}
+                              </span>
+                              <span className="shrink-0 text-gray-500 tabular-nums">
+                                {t.updated_at_ms != null
+                                  ? formatShortRelativeTime(t.updated_at_ms)
+                                  : '—'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <p className="text-[9px] text-gray-600 leading-snug font-medium">
+                      Scope thread: stesso file + hash DS — evita confusione tra snapshot diversi (§7).
+                    </p>
+                    <p className="text-[9px] text-gray-600 leading-snug font-medium">
+                      §8 — Cockpit nel plugin; ricerca archivio, playbook riusabili e analytics team restano sul portale web
+                      / admin.
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    data-component="Generate: Thread strip (compact)"
+                    className="flex flex-wrap items-center gap-2 text-[10px] mb-2 border-2 border-black px-2 py-1 bg-gray-50 shadow-[2px_2px_0_0_#000]"
+                  >
+                    <span className="font-black uppercase">Thread</span>
+                    <button
+                      type="button"
+                      className="font-bold underline hover:text-[#ff90e8]"
+                      onClick={handleNewConversation}
+                    >
+                      Nuova
+                    </button>
+                    {threadList.length > 0 ? (
+                      <label className="flex items-center gap-1">
+                        <span className="text-[9px] text-gray-600">Server</span>
+                        <select
+                          className="border-2 border-black text-[9px] px-1 py-0.5 bg-white max-w-[168px]"
+                          value={serverThreadId || ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v) void handleSelectThread(v);
+                          }}
+                        >
+                          <option value="">— In uso (locale) —</option>
+                          {threadList.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {(t.title || t.id).slice(0, 40)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="text-[9px] font-bold underline ml-auto shrink-0"
+                      onClick={() => setGenerateComposerTab('threads')}
+                    >
+                      Elenco completo
+                    </button>
+                  </div>
+                )}
+              </>
             ) : null}
 
+            {showChatComposerShell ? (
+              <>
             {showPreflight ? (
               <div
                 data-component="Generate: Preflight clarifier"
@@ -1710,9 +1870,14 @@ export const Generate: React.FC<Props> = ({
                 Una run completa può richiedere fino a ~2 minuti (canvas con molti componenti è di solito il passo più lungo).
               </p>
               {lastDiagLine ? (
-                <p className="text-[9px] text-emerald-900 font-mono leading-snug" aria-live="polite">
-                  {lastDiagLine}
-                </p>
+                <details className="text-[9px] text-emerald-900 font-mono leading-snug">
+                  <summary className="cursor-pointer font-black uppercase text-gray-600 list-inside">
+                    Diagnostica (opzionale) — §5.3
+                  </summary>
+                  <p className="mt-1 pl-1" aria-live="polite">
+                    {lastDiagLine}
+                  </p>
+                </details>
               ) : null}
               <div className="max-h-[220px] overflow-y-auto custom-scrollbar border-2 border-black bg-gray-50 p-2 space-y-2">
                 {conversationTurns.length === 0 ? (
@@ -1883,6 +2048,25 @@ export const Generate: React.FC<Props> = ({
                 ))}
                 </div>
             </div>
+              </>
+            ) : (
+              <div
+                className="mb-2 border-2 border-dashed border-black/50 bg-gray-50 px-2 py-2 text-[9px] text-gray-700 shadow-[2px_2px_0_0_#000]"
+                data-component="Generate: Threads-only placeholder"
+              >
+                <span className="font-black uppercase text-gray-500">Solo conversazioni</span>
+                <p className="mt-1 leading-snug">
+                  Torna a <strong>Chat</strong> per terminale, chiarimenti e Generate.
+                </p>
+                <button
+                  type="button"
+                  className="mt-1 text-[9px] font-black uppercase underline"
+                  onClick={() => setGenerateComposerTab('chat')}
+                >
+                  Apri Chat
+                </button>
+              </div>
+            )}
         </>
       ) : showReport ? (
         <div data-component="Generate: Report Container" className="animate-in slide-in-from-bottom-2 fade-in duration-300">

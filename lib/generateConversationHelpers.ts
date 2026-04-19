@@ -163,3 +163,19 @@ export function localConversationStorageKey(userId: string, fileKey: string, dsH
 export function activeThreadStorageKey(userId: string, fileKey: string, dsHash: string): string {
   return `comtra-gen-thread-id:${userId}:${fileKey}:${dsHash}`;
 }
+
+/** Short Italian relative time for thread lists (§7). */
+export function formatShortRelativeTime(updatedAtMs: number): string {
+  const n = Number(updatedAtMs);
+  if (!Number.isFinite(n)) return '';
+  const diff = Date.now() - n;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 45) return 'ora';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min fa`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h fa`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} g fa`;
+  return new Date(n).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+}
