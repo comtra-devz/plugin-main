@@ -1,6 +1,6 @@
 # Generation Engine — Ruleset
 
-Ruleset per il **Comtra Generation Engine**: generazione di wireframe/layout in Figma governata dal design system. Estratta da *COMTRA_Generation_Engine_Ruleset_v1* (March 2026). Uso: (1) implementazione backend (Kimi/Claude), (2) esecuzione plugin (Figma API), (3) UI/crediti e (4) validazione action plan.
+Ruleset per il **Comtra Generation Engine**: generazione di wireframe/layout in Figma governata dal design system. Estratta da *COMTRA_Generation_Engine_Ruleset_v1* (March 2026). Uso: (1) implementazione backend (modello primario/fallback), (2) esecuzione plugin (Figma API), (3) UI/crediti e (4) validazione action plan.
 
 **Principio:** “Refine, Don’t Redraw.” Comtra non inventa, assembla. Ogni elemento generato risale a componenti/token del DS del designer o a un design system open selezionato.
 
@@ -32,7 +32,7 @@ Ruleset per il **Comtra Generation Engine**: generazione di wireframe/layout in 
 ### 2.2 LLM e fallback
 
 - **Primario:** Kimi K2.5 (multimodale, agentico, costo favorevole). Output MUST essere JSON-only con `max_tokens` limitati.
-- **Fallback:** se Kimi fallisce (JSON malformato, componenti allucinati, timeout > 8 s): retry fino a 2 volte (totale 3 tentativi). Nessun fallback su Claude nella v1 (costi 6–11× superiori); vedi `docs/GENERATION-ENGINE-FEASIBILITY.md`.
+- **Fallback:** se il modello primario fallisce (JSON malformato, componenti allucinati, timeout > 8 s): retry fino a 2 volte (totale 3 tentativi). Nessun fallback premium nella v1 (costi superiori); vedi `docs/GENERATION-ENGINE-FEASIBILITY.md`.
 
 ### 2.3 Performance (non negoziabili)
 
@@ -288,7 +288,7 @@ Il tier è determinato **prima** della generazione; il plugin stima i componenti
 
 ---
 
-## 12. Note implementative (Antigravity)
+## 12. Note implementative (team interno)
 
 - **Open DS:** manifest JSON pre-indicizzati (component inventory, token map, doc, reference index <4K token); caricati lato server al cambio DS; plugin scarica e mette in cache a sessione.
 - **Prompt Kimi:** (1) system prompt con regole da questo ruleset, (2) DS component reference index, (3) DS documentation context, (4) variability_seed, (5) prompt designer, (6) contesto mode (selection, screenshot base64, o struttura da link).

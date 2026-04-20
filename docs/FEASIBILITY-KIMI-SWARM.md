@@ -91,7 +91,7 @@
 | **Linting/formatting post-generazione** | ✅ | Tool o step separato (es. ESLint/Prettier via MCP o backend). |
 | **Sync Storybook** | ⚠️ Da implementare | UI e contatori già pronti; manca integrazione reale (API Storybook o repo). MCP o backend possono inviare storie generate. |
 | **Semantic HTML** | ✅ | Da includere in prompt/skill del Code Agent. |
-| **Costo 10x inferiore / margini** | ✅ da validare | API Kimi ~$0.60/M token; confronto con Claude/GPT va fatto su volumi reali (token per file, numero di scan). |
+| **Costo 10x inferiore / margini** | ✅ da validare | API Kimi ~$0.60/M token; confronto con modelli premium alternativi va fatto su volumi reali (token per file, numero di scan). |
 
 **Rischio:** qualità e stabilità del codice generato (variabile per framework). **Mitigazione:** iniziare con un target (es. React + Tailwind) e lint obbligatorio prima del sync.
 
@@ -163,8 +163,8 @@ La tabella del piano si regge su documentazione verificata:
 - **Skills (punto 8):** una skill per agente (DS, A11Y, UX, Prototype, Code, Generate) — formato SKILL.md supportato.
 - **Tool (punto 9):** tool custom per Figma (e Storybook/GitHub) — realizzabili con MCP o function calling verso backend Comtra.
 - **MCP (punto 10):** servizi esterni — supportato (HTTP/stdio).
-- **Kimi in Claude Code (punto 11):** fallback/ibrido — possibile a livello di architettura (altro orchestratore o step complessi).
-- **Costi/benchmark (punto 13):** validazione — da fare con numeri reali (token per scan, prezzo Kimi vs Claude/GPT).
+- **Kimi in tool CLI esterni (punto 11):** fallback/ibrido — possibile a livello di architettura (altro orchestratore o step complessi).
+- **Costi/benchmark (punto 13):** validazione — da fare con numeri reali (token per scan, prezzo Kimi vs modelli alternativi).
 
 ---
 

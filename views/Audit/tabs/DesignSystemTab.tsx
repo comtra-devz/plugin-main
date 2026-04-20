@@ -96,6 +96,9 @@ export const DesignSystemTab: React.FC<Props> = ({
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
   const hasIssues = (displayIssues?.length ?? 0) > 0;
+  const agentReadabilityIssues = (displayIssues ?? []).filter((i) => /^AR-\d{3}$/i.test(String(i.rule_id || '').trim()));
+  const agentReadabilityHigh = agentReadabilityIssues.filter((i) => i.severity === 'HIGH').length;
+  const topAgentReadability = agentReadabilityIssues.slice(0, 4);
 
   const handleScanClick = () => {
     onStartScan();
@@ -353,6 +356,50 @@ export const DesignSystemTab: React.FC<Props> = ({
       ) : (
         <>
           {/* Categories */}
+          {agentReadabilityIssues.length > 0 && (
+            <div className={`${BRUTAL.card} bg-sky-50 border-2 border-sky-400 p-3`}>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="font-black uppercase text-xs text-sky-950">Agent Readability</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
+                    {agentReadabilityIssues.length} {agentReadabilityIssues.length === 1 ? 'Issue' : 'Issues'}
+                  </span>
+                  {agentReadabilityHigh > 0 && (
+                    <span className="text-[10px] font-bold bg-[#ffc900] text-black px-1.5 py-0.5 rounded-sm border border-black">
+                      {agentReadabilityHigh} High
+                    </span>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-sky-900 font-medium mb-2">
+                These DS findings reduce semantic clarity and API-like component readability. Fixing them improves system quality and AI reliability.
+              </p>
+              <div className="flex flex-col gap-1">
+                {topAgentReadability.map((issue) => (
+                  <div key={issue.id} className="flex items-start justify-between gap-2 text-[10px] bg-white border border-sky-200 px-2 py-1.5">
+                    <div className="min-w-0">
+                      <p className="font-bold truncate">{issue.msg}</p>
+                      <p className="text-gray-600 truncate">{issue.fix}</p>
+                    </div>
+                    <span className={`shrink-0 px-1.5 py-0.5 border border-black font-bold ${
+                      issue.severity === 'HIGH'
+                        ? 'bg-red-200 text-red-900'
+                        : issue.severity === 'MED'
+                          ? 'bg-yellow-200 text-yellow-900'
+                          : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {issue.severity}
+                    </span>
+                  </div>
+                ))}
+                {agentReadabilityIssues.length > topAgentReadability.length && (
+                  <p className="text-[10px] text-sky-900 font-medium">
+                    +{agentReadabilityIssues.length - topAgentReadability.length} more Agent Readability issue(s) in the full list below.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
           <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
             <div className="border-b-2 border-black bg-gray-50 flex justify-between items-center px-2 py-1.5">
               <h3 className="font-bold uppercase text-xs">Categories</h3>

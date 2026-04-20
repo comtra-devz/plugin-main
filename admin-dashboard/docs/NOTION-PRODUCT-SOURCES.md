@@ -22,7 +22,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 |------|-------------|
 | **LinkedIn / Apify** | **Niente commenti** sui post LinkedIn. L’actor Apify configurato va bene: ci interessano **post (testo) + link outbound** presenti nel dataset, non i commenti. |
 | **Output “documento”** | Il report non è solo per DB o copia manuale: deve essere **leggibile e utile anche su Discord** (struttura, titoli, messaggio che si capisce in channel). Oggi Discord riceve un **embed con anteprima troncata**; il testo completo è in `product_sources_cron_runs.report_markdown` — migliorare l’esperienza Discord resta in backlog se serve più che anteprima. |
-| **Limitazioni (scope)** | Solo **link** estratti da Notion (blocchi + proprietà URL/testo con link). **Ignorare** blocchi/testo che contengono **Antigravity**. Niente “suggerimenti di codice” non ancorati a URL. Non espandere lo scope oltre quanto richiesto. |
+| **Limitazioni (scope)** | Solo **link** estratti da Notion (blocchi + proprietà URL/testo con link). **Ignorare** blocchi/testo che contengono token interni esclusi. Niente “suggerimenti di codice” non ancorati a URL. Non espandere lo scope oltre quanto richiesto. |
 
 ### Indicazioni da rispettare (obiettivo funzionale)
 
@@ -36,7 +36,7 @@ Questa sezione fissa **cosa deve fare la pipeline** (indipendentemente da thread
 
 | Requisito | Stato approssimativo |
 |-----------|----------------------|
-| Link da Notion + filtri Antigravity / solo URL | **Fatto** (estrazione + report). |
+| Link da Notion + filtri token esclusi / solo URL | **Fatto** (estrazione + report). |
 | Dedup URL **tra run** (“già esaminati”) | **Fatto** (tabella `product_sources_seen_urls` + Apify solo su LinkedIn **nuovi**). |
 | LinkedIn post + outbound, **no commenti** | **Allineato** con actor attuale + mapping dataset. |
 | Fetch di ogni link non-LinkedIn | **Parziale** (opt-in: cron `PRODUCT_SOURCES_FETCH_WEB` + manuale `fetchWeb`; strategia tipo URL Fase 2 in `product-source-fetch-strategy.mjs`). |
@@ -181,7 +181,7 @@ Il cron e la scansione manuale appendono al report la sezione **«Sintesi propos
 #### MCP + Kimi (zero inferenza su Vercel)
 
 - Imposta `PRODUCT_SOURCES_LLM_SYNTHESIS=1` e **`PRODUCT_SOURCES_LLM_EXECUTION=mcp`**: su Vercel **non** serve `KIMI_API_KEY`; il Markdown conterrà istruzioni + JSON bundle.
-- In **Cursor**, aggiungi il server MCP in `mcp/product-sources-synthesis/` (vedi **README** in quella cartella): lì configuri `KIMI_API_KEY` e invochi il tool **`kimi_synthesize_product_sources`** quando vuoi la sintesi (token Moonshot solo in quel momento, dalla tua macchina).
+- Nel tuo client MCP locale, aggiungi il server in `mcp/product-sources-synthesis/` (vedi **README** in quella cartella): lì configuri `KIMI_API_KEY` e invochi il tool **`kimi_synthesize_product_sources`** quando vuoi la sintesi (token Moonshot solo in quel momento, dalla tua macchina).
 
 ### 3f) Run leggera senza URL nuovi (Fase 6)
 
@@ -398,7 +398,7 @@ Per chiamare `POST /api/notion-product-sources` dal browser serve la sessione ad
 
 Body: `{ "pageId": "..." }` o `{ "databaseId": "..." }` oppure rely su env come prima.
 
-`Antigravity` è sempre filtrato a livello di blocco (nessun link estratto da quel blocco).
+Il token escluso predefinito è sempre filtrato a livello di blocco (nessun link estratto da quel blocco).
 
 ---
 

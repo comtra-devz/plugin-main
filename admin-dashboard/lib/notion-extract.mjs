@@ -1,6 +1,6 @@
 /**
  * Estrae URL dal contenuto Notion (blocchi + proprietà database).
- * Filtri: ignora blocchi/proprietà il cui testo contiene token da escludere (es. Antigravity).
+ * Filtri: ignora blocchi/proprietà il cui testo contiene token da escludere.
  */
 
 const NOTION_VERSION = '2022-06-28';

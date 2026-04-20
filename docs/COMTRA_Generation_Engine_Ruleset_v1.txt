@@ -7,7 +7,7 @@ Governed Interface Generation from Design System Context
 v1.0 — March 2026
 
 COMTRA by Ben & Cordiska
-Development: Antigravity Team
+Development: Internal Team
 CONFIDENTIAL — INTERNAL USE ONLY
 
 1. Executive Summary
@@ -27,7 +27,7 @@ Prompt-to-prototype with optional DS library import
 Partial — requires npm-published React DS
 Figma Make environment
 Requires production React codebase on npm; style import unreliable
-Claude Code to Figma
+Code agent to Figma
 Code-to-canvas via MCP two-way sync
 None — generates from code, not DS
 Figma Design (editable layers)
@@ -103,8 +103,8 @@ Kimi K2.5 is the primary LLM for the Generation Engine. This is not merely a cos
 
 Capability
 Kimi K2.5
-Claude Sonnet 4.5
-Claude Opus 4.5
+Premium Fallback Model (tier 1)
+Premium Fallback Model (tier 2)
 Why It Matters
 Visual Understanding (MMMU Pro)
 78.5%
@@ -125,7 +125,7 @@ Input Cost / 1M tokens
 $0.45
 $3.00
 $5.00
-6.7–11x cheaper than Claude
+6.7–11x cheaper than premium fallback models
 Output Cost / 1M tokens
 $2.50
 $15.00
@@ -147,10 +147,10 @@ $0.30/M input
 $0.50/M input
 Massive savings on repeated DS context
 
-VERBOSITY WARNING: Kimi K2.5 can use 2–3x more tokens than Claude for equivalent tasks. The backend MUST enforce strict JSON-only output schema and max_tokens limits. Real-world cost advantage is approximately 3–5x (not the theoretical 9–11x from raw pricing). Test and benchmark on actual generation payloads.
+VERBOSITY WARNING: Kimi K2.5 can use 2–3x more tokens than other models for equivalent tasks. The backend MUST enforce strict JSON-only output schema and max_tokens limits. Real-world cost advantage is approximately 3–5x (not the theoretical 9–11x from raw pricing). Test and benchmark on actual generation payloads.
 
 Fallback Chain
-If Kimi K2.5 fails validation (malformed JSON, hallucinated components, timeout > 8 seconds): retry once with Kimi → fall back to Claude Sonnet 4.5 → Claude Opus reserved for enterprise-tier multi-page requests only.
+If Kimi K2.5 fails validation (malformed JSON, hallucinated components, timeout > 8 seconds): retry once with Kimi → optional premium fallback tier 1 → premium tier 2 reserved for enterprise multi-page requests only.
 
 2.3 Performance Requirements
 NON-NEGOTIABLE: The Generation Engine MUST NOT be slower than competitors. Figma Make generates prototypes in 5–15 seconds. v0 generates components in under 30 seconds. Comtra’s target: wireframe visible on canvas within 8 seconds for standard complexity.
@@ -748,7 +748,7 @@ Validation
 No raw color/spacing/font values in actions
 Critical
 
-12. Implementation Notes for Antigravity
+12. Implementation Notes for Internal Team
 12.1 Open DS Library Architecture
 Each open design system (Material Design 3, iOS HIG, Ant Design, Carbon, Bootstrap 5, Salesforce Lightning, Uber Base Web) is stored as a pre-indexed JSON manifest containing: component inventory with variant axes and slot definitions, token map with all variables and their values across modes, documentation extracts (component descriptions, usage guidelines), and a compact reference index optimized for LLM context (under 4K tokens per DS).
 These manifests are stored server-side and loaded on DS selection change. They are NOT bundled with the plugin. The plugin downloads the relevant manifest on first use and caches it locally for the duration of the session.
@@ -760,7 +760,7 @@ The generation prompt sent to Kimi MUST include: (1) the system prompt with gene
 The plugin executes the action plan using standard Figma Plugin API calls. Key methods: figma.createFrame() for frame creation, figma.getNodeById() for component lookup, component.createInstance() for instancing, instance.setProperties() for variant selection, node.setBoundVariable() for token binding, and the new slot APIs for native slot population. All operations are wrapped in a single figma.commitUndo() block so the entire generation can be undone with Cmd+Z.
 
 12.4 Error Handling
-	•	LLM Timeout: If Kimi doesn’t respond within 8 seconds, retry once. If retry fails, fall back to Claude Sonnet 4.5.
+	•	LLM Timeout: If Kimi doesn’t respond within 8 seconds, retry once. If retry fails, use configured fallback tier 1.
 	•	Validation Failure: If the action plan fails validation (hallucinated components, invalid tokens), re-request with a tighter prompt that explicitly lists available components.
 	•	Partial Execution: If the plugin encounters an error mid-execution (e.g., a component instance fails), it MUST roll back the entire generation (undo all created nodes) and display the error. No partial output is shown.
 	•	Credit Protection: Credits are deducted ONLY after successful canvas render. Failed generations cost the user nothing.

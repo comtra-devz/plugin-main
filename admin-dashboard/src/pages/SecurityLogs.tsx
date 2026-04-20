@@ -21,7 +21,7 @@ export default function SecurityLogs() {
     <>
       <PageHeader title="Sicurezza e log" />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-        Problematiche rilevate dal plugin (limite richieste, errori, ecc.). La colonna Fix indica l’azione consigliata (in Cursor o in generale). Risolto: sì se non si è ripetuto nei 7 giorni successivi.
+        Problematiche rilevate dal plugin (limite richieste, errori, ecc.). La colonna Fix indica l’azione consigliata. Risolto: sì se non si è ripetuto nei 7 giorni successivi.
       </p>
 
       {loading && <p className="loading">Caricamento…</p>}

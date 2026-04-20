@@ -4,6 +4,12 @@ COMTRA by Ben & Cordiska — Aprile 2026
 
 ---
 
+Companion design spec:
+
+- See `docs/GENERATE-DESIGN.md` for the living visual/interaction rules that map this plan into concrete UI decisions.
+
+---
+
 ## 1) Scope and principle
 
 Primary goal:
@@ -50,6 +56,11 @@ Before UX refactor starts, all checks below must pass.
 
 - `GET /api/user/ds-imports/context` accepted whether `ds_context_index` arrives as object or JSON string.
 - Client and server both normalize safely.
+
+### 2.5 DS Audit readability precondition
+
+- DS Audit must include Agent Readability rules (`AR-001`…`AR-010`) in the same issue contract.
+- At least top AR findings are visible in DS Audit UI before advanced conversational refinements are enabled by default.
 
 ---
 
@@ -152,6 +163,11 @@ Initial chip set (example):
 
 Each chip shows estimated credit cost before execution.
 
+### 5.5 DS preflight signal (from DS Audit)
+
+- Conversation shell should surface DS quality hints from DS Audit, including Agent Readability highlights.
+- This remains advisory in UX; it does not bypass existing Generate validation logic.
+
 ---
 
 ## 6) Credits model for post-first-generate chips
@@ -241,6 +257,11 @@ Suggested additions:
 - `POST /api/generate/threads/:id/messages`
 - `POST /api/generate/threads/:id/actions/:chipId`
 
+DS Audit alignment additions:
+
+- Keep `rule_id` pass-through for DS findings, including `AR-*` namespace.
+- Reuse DS Audit findings as optional preflight context for conversational turns (no separate blocking API required).
+
 Compatibility:
 
 - Existing `POST /api/agents/generate` stays unchanged initially.
@@ -321,6 +342,8 @@ Tables (draft):
 - At least 3 contextual chips are available post-first-output with visible credit estimate.
 - Thread persists and reloads for same `file_key + ds_cache_hash`.
 - No regression in DS recognition, validation, or apply-to-canvas flow.
+- DS Audit exposes Agent Readability findings in UI (when present) with actionable fixes.
+- Conversational flow can reference DS preflight findings without introducing hidden credit consumption.
 
 ---
 
@@ -435,7 +458,7 @@ Purpose: prevent collapse to a single `component_node_id` / thin slot pack when 
 - appended **Goal / Constraints** block for the model (server), and/or
 - `component_assignment_overrides` preview for power users (already supported server-side)
 
-**UX:** Claude-style separation is mimicked minimally: **chat bubble** proposes “Ho bisogno di 2 dettagli” → **inline chip row or compact modal** (same thread, no new product). This is the conversational plan’s **orchestration layer**, not a second pipeline.
+**UX:** Assistant-style separation is mimicked minimally: **chat bubble** proposes “Ho bisogno di 2 dettagli” → **inline chip row or compact modal** (same thread, no new product). This is the conversational plan’s **orchestration layer**, not a second pipeline.
 
 ### 15.3 DS import parity (wizard) vs Generate
 
@@ -479,6 +502,7 @@ Phase 3+ (threads, web hub) unchanged in intent; pre-flight feeds **same** threa
 | **§7** | Thread `file_key + ds_cache_hash`, lista, nuova, persistenza locale + server | Tabelle + API + pannello inline con **Recenti** (titolo + tempo) + select server; sync lista dopo append. |
 | **§8** | Split plugin vs web | Cockpit + tab Chat/Conversazioni nel plugin; admin: conversazioni + governance; **ToV risolto nel motore generate** (DS wizard → admin JSON → neutro), vedi §17. |
 | **§9–10** | API + modello dati | `generate_threads` / `generate_messages`; optional `actions/:chipId` = stesso generate (non route separata). |
+| **§2.5 / §5.5** | DS Audit Agent Readability preflight signal | DS ruleset added (`AR-*`), prompt/schema aligned, DS tab shows dedicated Agent Readability block from DS issues. |
 
 **Miglioramenti opzionali (non bloccanti per “chiusura” tecnica):** Phase 5 affinamento ToV con dati reali; trigger §15.2 più profondi sul motore quando servono in produzione; playbook iniettati dal plugin solo quando scegliamo **selezione playbook** in UI (storage già pronto).
 

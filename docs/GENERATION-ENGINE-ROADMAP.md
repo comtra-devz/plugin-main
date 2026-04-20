@@ -1,6 +1,6 @@
 # Generation Engine — Roadmap operativa (Problem 1 + orchestrazione)
 
-Documento di lavoro unico per Cursor e team. Integra il **piano v2.0** (PDF *COMTRA Generation Engine – Implementation Plan*), le **migliorie già in corso** nel repo, e la scelta architetturale **Orchestrator + subagenti via Kimi Agent Swarm** (solo per la parte LLM), con **validazione ed esecuzione sempre deterministiche** lato Comtra.
+Documento di lavoro unico per team e tooling interno. Integra il **piano v2.0** (PDF *COMTRA Generation Engine – Implementation Plan*), le **migliorie già in corso** nel repo, e la scelta architetturale **Orchestrator + subagenti via Kimi Agent Swarm** (solo per la parte LLM), con **validazione ed esecuzione sempre deterministiche** lato Comtra.
 
 ---
 

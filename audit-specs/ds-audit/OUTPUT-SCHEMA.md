@@ -87,6 +87,7 @@ Ogni elemento di `issues` deve rispettare questo schema:
 5. **categoryId**: solo i valori ammessi nella tabella; nessun valore custom.
 6. **fix**: sempre in inglese (o lingua concordata); frase chiara e actionable.
 7. Ordinamento: opzionale per severity (HIGH prima) o per categoryId; non obbligatorio.
+8. Per regole Agent Readability usare namespace `AR-xxx` (es. `AR-001`, `AR-006`, `AR-010`).
 
 ---
 

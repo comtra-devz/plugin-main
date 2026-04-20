@@ -1,6 +1,6 @@
-# Generation Engine — Fattibilità tecnica e costi (Kimi, senza Claude)
+# Generation Engine — Fattibilità tecnica e costi (Kimi, senza provider premium esterni)
 
-Verifica della fattibilità del piano tecnico per la sezione **Generate**, con **Kimi come unico LLM** e valutazione dell’opportunità di introdurre Claude (sconsigliata per costi).
+Verifica della fattibilità del piano tecnico per la sezione **Generate**, con **Kimi come unico LLM** e valutazione dell’opportunità di introdurre fallback premium esterni (sconsigliati per costi).
 
 ---
 
@@ -9,7 +9,7 @@ Verifica della fattibilità del piano tecnico per la sezione **Generate**, con *
 | Aspetto | Esito |
 |--------|--------|
 | **Kimi come unico motore** | Fattibile e consigliato. Vision (screenshot), contesto lungo, streaming e output strutturato sono supportati. |
-| **Implementare Claude come fallback** | Sconsigliato: costo 6–11× superiore; margini Generation si erodono. |
+| **Implementare fallback premium esterno** | Sconsigliato: costo 6–11× superiore; margini Generation si erodono. |
 | **Strategia fallback** | Retry Kimi (1–2 volte) + messaggio chiaro all’utente in caso di fallimento. Opzionale: fallback su modello economico (es. stesso provider, altro tier) solo se serve SLA enterprise. |
 | **Stack già presente** | Backend già chiama Moonshot (DS Audit); pipeline file_key → Figma JSON → Kimi collaudata. Manca solo endpoint Generate + prompt + esecuzione action plan nel plugin. |
 
@@ -24,7 +24,7 @@ Verifica della fattibilità del piano tecnico per la sezione **Generate**, con *
 - **Plugin:** UI Generate (placeholder), crediti estimate/consume, Design System selector. Manca: chiamata a nuovo endpoint, invio contesto DS + prompt, ricezione action plan JSON, esecuzione Figma Plugin API.
 - **Ruleset:** `docs/GENERATION-ENGINE-RULESET.md` (modi, governance, schema azioni, validazione, crediti).
 
-Nessun uso di Claude/Anthropic nel repo; è citato solo nella ruleset come fallback.
+Nessun uso di provider premium esterni nel repo; è citato solo come fallback teorico.
 
 ---
 
@@ -42,25 +42,25 @@ Modello da usare: confermare in documentazione Moonshot se per **vision** serve 
 
 ---
 
-## 4. Confronto costi: Kimi vs Claude
+## 4. Confronto costi: Kimi vs fallback premium
 
 *(Prezzi indicativi per 1M token; verificare sempre su provider.)*
 
 | Provider | Input / 1M | Output / 1M | Note |
 |----------|------------|-------------|------|
 | **Kimi K2.5** | ~$0.45 | ~$2.20–2.50 | Già in uso; vision, 262K context. |
-| **Claude Sonnet 4.5** | ~$3.00 | ~$15.00 | 6–7× input, 6× output vs Kimi. |
-| **Claude Opus 4.5** | ~$5.00 | ~$25.00 | 11× input, 10× output vs Kimi. |
+| **Fallback premium tier 1** | ~$3.00 | ~$15.00 | 6–7× input, 6× output vs Kimi. |
+| **Fallback premium tier 2** | ~$5.00 | ~$25.00 | 11× input, 10× output vs Kimi. |
 
 Per una generazione “standard” (es. ~20K input + 3K output):
 
 - **Kimi:** ~$0.009 + ~$0.0066 ≈ **~$0.016** per richiesta.
-- **Claude Sonnet:** ~$0.06 + ~$0.045 ≈ **~$0.105** per richiesta (~6.5×).
-- **Claude Opus:** ~$0.10 + ~$0.075 ≈ **~$0.175** per richiesta (~11×).
+- **Fallback premium tier 1:** ~$0.06 + ~$0.045 ≈ **~$0.105** per richiesta (~6.5×).
+- **Fallback premium tier 2:** ~$0.10 + ~$0.075 ≈ **~$0.175** per richiesta (~11×).
 
-Introducendo Claude come fallback automatico, ogni fallback Kimi moltiplicherebbe il costo di quella richiesta di 6–11×. Con margini Generation già tarati su Kimi (ruleset §9), il fallback Claude eroderebbe il margine e andrebbe usato solo in casi eccezionali (es. enterprise con SLA).
+Introducendo un fallback premium automatico, ogni fallback Kimi moltiplicherebbe il costo di quella richiesta di 6–11×. Con margini Generation già tarati su Kimi (ruleset §9), il fallback premium eroderebbe il margine e andrebbe usato solo in casi eccezionali (es. enterprise con SLA).
 
-**Raccomandazione:** non implementare Claude nella prima versione. Preferire **solo Kimi**, con retry in caso di timeout/errore, e messaggio chiaro (“Generazione non disponibile, riprova tra poco”) se tutti i retry falliscono.
+**Raccomandazione:** non implementare fallback premium esterni nella prima versione. Preferire **solo Kimi**, con retry in caso di timeout/errore, e messaggio chiaro (“Generazione non disponibile, riprova tra poco”) se tutti i retry falliscono.
 
 ---
 
@@ -79,12 +79,12 @@ In sintesi: **fallisce** quando (1) non arriva una risposta valida da Kimi, (2) 
 
 ---
 
-## 6. Strategia fallback senza Claude
+## 6. Strategia fallback senza provider premium esterni
 
 1. **Retry Kimi:** in caso di timeout (>8 s), JSON malformato o errore 5xx: ritentare la stessa chiamata fino a **2 volte** (totale 3 tentativi) con backoff breve (es. 1–2 s).
 2. **Validazione lato backend:** prima di restituire l’action plan al plugin, validare contro regole V-GEN-01…06 (componentKey, variableId, variant, slot, no raw values). Se la validazione fallisce, **non** passare a un altro modello: restituire errore e opzionalmente ri-chiedere a Kimi con prompt più stretto (“usa solo questi componenti: …”).
 3. **UX:** se dopo retry la generazione fallisce ancora, mostrare messaggio unico (“La generazione non è andata a buon fine. Riprova tra qualche minuto.”) e **non addebitare crediti** (come da ruleset).
-4. **Opzionale (fase successiva):** se si vuole un fallback per disponibilità (es. Moonshot down), valutare un **secondo modello economico** sullo stesso provider o via OpenRouter (modello a basso costo, stesso schema JSON) invece di Claude. Da decidere solo in base a metriche di uptime e SLA.
+4. **Opzionale (fase successiva):** se si vuole un fallback per disponibilità (es. Moonshot down), valutare un **secondo modello economico** sullo stesso provider o via OpenRouter (modello a basso costo, stesso schema JSON). Da decidere solo in base a metriche di uptime e SLA.
 
 ---
 
@@ -98,7 +98,7 @@ In sintesi: **fallisce** quando (1) non arriva una risposta valida da Kimi, (2) 
 | **Contesto DS (Open)** | Media | Manifest pre-indicizzati lato server (ruleset §12.1); endpoint o storage da definire; plugin/backend carica manifest su DS selection. Non bloccante per MVP: si può partire solo con Custom. |
 | **Mode 3 (screenshot)** | Alta | Upload immagine nel plugin → base64 (o URL) nel body → messaggio multimodale a Kimi. Verificare formato content type (image_url) su doc Moonshot. |
 | **Mode 4 (link Figma)** | Media | Backend risolve link con Figma REST (o plugin passa nodeId/file_key già risolto); struttura del frame come contesto. Richiede permessi view sul file linkato. |
-| **Plugin: esecuzione action plan** | Alta | Loop su `actions[]`: CREATE_FRAME, INSTANCE_COMPONENT, POPULATE_SLOT, SET_TEXT, SET_VARIABLE, SET_LAYOUT, NEST tramite Figma Plugin API; tutto in `figma.commitUndo()`. Lavoro di implementazione ma nessuna dipendenza da Claude. |
+| **Plugin: esecuzione action plan** | Alta | Loop su `actions[]`: CREATE_FRAME, INSTANCE_COMPONENT, POPULATE_SLOT, SET_TEXT, SET_VARIABLE, SET_LAYOUT, NEST tramite Figma Plugin API; tutto in `figma.commitUndo()`. Lavoro di implementazione senza dipendenze da provider premium esterni. |
 | **Crediti** | Alta | Stima prima (complexity_tier da prompt o da primo giro LLM); ScanReceiptModal; detrazione solo dopo canvas render riuscito. Già previsto in ruleset e in UI. |
 
 ---
@@ -107,7 +107,7 @@ In sintesi: **fallisce** quando (1) non arriva una risposta valida da Kimi, (2) 
 
 | Rischio | Mitigazione |
 |--------|-------------|
-| Kimi K2.5 “verboso” (2–3× token vs Claude) | System prompt stringente: “Rispondi SOLO con un JSON valido, nessun markdown né testo.”; `max_tokens` limitato (es. 8K–16K per action plan). |
+| Kimi K2.5 “verboso” (2–3× token vs altri modelli) | System prompt stringente: “Rispondi SOLO con un JSON valido, nessun markdown né testo.”; `max_tokens` limitato (es. 8K–16K per action plan). |
 | Modello vision non esposto con nome attuale | Verificare su Moonshot quali model id supportano immagini; eventualmente usare `kimi-k2.5` o equivalente per Mode 3 e tenere `kimi-k2-0905-preview` per Mode 1/2/4. |
 | Timeout >8 s | Retry 2 volte; se fallisce, errore utente senza addebito. Opzionale: streaming per mostrare “generazione in corso” e ridurre percezione attesa. |
 | Action plan malformato o con riferimenti inventati | Validazione V-GEN-01…06 in backend; rifiuto e messaggio “Generazione non riuscita” senza chiamare il plugin con dati invalidi. |
@@ -115,13 +115,13 @@ In sintesi: **fallisce** quando (1) non arriva una risposta valida da Kimi, (2) 
 
 ---
 
-## 9. Piano implementativo sintetico (senza Claude)
+## 9. Piano implementativo sintetico (senza fallback premium esterni)
 
 1. **Backend:** nuovo endpoint `POST /api/agents/generate` (o sotto `api/agents/[...slug]` per non consumare slot Vercel). Input: `file_key`, `prompt`, `mode`, `ds_source`, opzionale `screenshot_base64` o `figma_link`. Logica: recupero contesto DS (file o manifest), build system prompt da ruleset, chiamata Moonshot, estrazione e validazione JSON, return action plan.
 2. **Prompt:** creare `auth-deploy/prompts/generate-system.md` con regole estratte da GENERATION-ENGINE-RULESET.md e schema azioni (version, metadata, frame, actions).
 3. **Plugin:** da `views/Generate.tsx` chiamare l’endpoint con JWT; inviare `file_key`, prompt, mode (da selection/upload/link), ds_choice; ricevere JSON; eseguire azioni con Figma API in un solo `commitUndo`; gestire errori e crediti (stima prima, consume solo su successo).
 4. **Modello Moonshot:** usare `KIMI_MODEL` esistente per Mode 1/2/4; per Mode 3 (screenshot) verificare e, se necessario, introdurre variabile `KIMI_VISION_MODEL` e usarla solo quando è presente `screenshot_base64`.
-5. **Niente Claude:** nessuna chiave Anthropic, nessun branch di fallback verso Claude. Documentare in GENERATION-ENGINE-RULESET.md che il fallback è “retry Kimi” e, in futuro, eventuale secondo modello economico (non Claude) se richiesto da SLA.
+5. **Niente fallback premium esterni:** nessuna chiave/provider premium aggiuntivo, nessun branch di fallback dedicato. Documentare in GENERATION-ENGINE-RULESET.md che il fallback è “retry Kimi” e, in futuro, eventuale secondo modello economico se richiesto da SLA.
 
 ---
 
@@ -136,4 +136,4 @@ In sintesi: **fallisce** quando (1) non arriva una risposta valida da Kimi, (2) 
 
 ---
 
-*Documento di fattibilità tecnica; nessuna implementazione Claude consigliata per contenere i costi.*
+*Documento di fattibilità tecnica; nessuna implementazione di fallback premium esterni consigliata per contenere i costi.*

@@ -19,7 +19,7 @@ const { runProductSourcesSynthesisWithConfig, getProductSourcesLlmConfig } = awa
 function missingApiKeyMessage(cfg) {
   const p = cfg.provider;
   if (p === 'gemini') {
-    return 'Imposta GEMINI_API_KEY o GOOGLE_AI_API_KEY nel env del server MCP (Cursor → MCP).';
+    return 'Imposta GEMINI_API_KEY o GOOGLE_AI_API_KEY nel env del server MCP (client locale → MCP).';
   }
   if (p === 'groq') {
     return 'Imposta GROQ_API_KEY nel env MCP (console.groq.com).';

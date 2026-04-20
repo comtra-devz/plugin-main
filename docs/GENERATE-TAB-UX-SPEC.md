@@ -1,12 +1,12 @@
 # Generate tab — specifica UX e allineamento prodotto
 
-Documento di lavoro: moduli della main tab Generate, dipendenze con l’A/B test, bar di qualità (Claude × Figma), gap tecnici nel plugin.
+Documento di lavoro: moduli della main tab Generate, dipendenze con l’A/B test, bar di qualità (agent loop × Figma), gap tecnici nel plugin.
 
 ---
 
-## 1. Bar di riferimento: Claude × Figma (senza MCP)
+## 1. Bar di riferimento: Agent loop × Figma (senza MCP)
 
-**Sil Bormüller** ha reso popolare l’integrazione **Claude Code ↔ Figma Desktop** tramite **figma-cli** ([`silships/figma-cli`](https://github.com/silships/figma-cli)): accesso read/write al documento via canale locale (DevTools / desktop), niente MCP obbligatorio, ciclo “agente ↔ canvas” molto stretto.
+Un pattern diffuso di integrazione **agent CLI ↔ Figma Desktop** usa bridge locale read/write al documento (DevTools / desktop), senza MCP obbligatorio, con ciclo “agente ↔ canvas” molto stretto.
 
 **Cosa rende quel flusso “forte” percepito**
 
@@ -106,9 +106,8 @@ La UI Generate deve ricevere questi dati (probabilmente via `App.tsx` → props 
 
 ## 5. Riferimenti esterni (lettura)
 
-- Sil Bormüller — Figma × Claude Code CLI (LinkedIn / community).
-- Repository: `github.com/silships/figma-cli`.
-- Tutorial “Claude Code designs for me in Figma” (Into Design Systems / Substack) — utile per narrativa UX, non per stack identico a Comtra.
+- Pattern generici di integrazione agent CLI ↔ Figma Desktop.
+- Repository e tutorial esterni usati solo come benchmark concettuale.
 
 ---
 

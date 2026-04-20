@@ -147,7 +147,7 @@ Dal backend (`app.mjs`), 400 tipici:
 
 ### 9.1 Cos’è
 
-- Plugin/metodologia per **agenti di coding** (Claude Code, Pi, OpenCode, OpenClaw, Codex, Copilot CLI, ecc.).
+- Plugin/metodologia per **agenti di coding** (tooling agentico in generale).
 - **Pipeline in 7 fasi:** analisi sorgente → design CLI → implementazione **Click** (Python) → test → documentazione → pubblicazione; output **`--json`**, REPL, **`SKILL.md`** auto-generato per scoperta da parte di altri agenti.
 - **CLI-Hub:** catalogo di CLI installabili (`pip`), più **meta-skill** per far scegliere all’agente quale CLI usare.
 
@@ -160,7 +160,7 @@ Dal backend (`app.mjs`), 400 tipici:
 | Aspetto | Rilevanza |
 |--------|-----------|
 | Plugin Figma (Comtra) | **Integrazione diretta bassa:** CLI-Anything mira a **repo/sorgente** e invocazione da shell; il plugin è **sandbox JS** + API Plugin/REST. |
-| Idee “agent-native” | **Alta:** output strutturato, skill scopribili — stessa famiglia di MCP e skill Cursor. |
+| Idee “agent-native” | **Alta:** output strutturato, skill scopribili — stessa famiglia di MCP e skill IDE-agent. |
 | Tooling interno | **Media:** incapsulare script deploy/migrazioni/health check con **`--json`** e doc tipo skill. |
 | Design tooling | Nel repo esiste harness **Sketch**; Figma **chiuso** non è un target naturale di `/cli-anything ./figma`. |
 | Servizi generici | Harness per **Ollama**, **ComfyUI**, **Dify**, **Exa**, ecc. — riusabili lato **server/worker** se Comtra orchestrasse pipeline oltre al plugin. |
@@ -180,9 +180,9 @@ Dal backend (`app.mjs`), 400 tipici:
 - Spesso servono **run iterativi** `/refine`.
 - **Licenza:** verificare il file `LICENSE` nel repo (in alcune viste GitHub/README compaiono indicazioni diverse; controllare prima di fork/redistribuzione).
 
-### 9.6 Nota roadmap loro
+### 9.6 Nota roadmap
 
-- Supporto **Cursor** indicato come “coming soon” nel README; il pattern **opencode-commands** è citato come riferimento per altre piattaforme.
+- Supporto IDE agent indicato come “coming soon” nel README; il pattern `opencode-commands` è citato come riferimento cross-platform.
 
 ---
 
@@ -198,7 +198,7 @@ Dal backend (`app.mjs`), 400 tipici:
 | Figma overview | Ramo `all` senza `page_ids` su file enormi |
 | Rate limit Figma | 429 con concorrenza pagine |
 | Utenti | Opzionale: testo che spiega rumore console Figma vs Comtra |
-| Stitch / art direction | Vedere §12 — valutare API, costi GCP, privacy; MCP solo lato dev/agent o backend |
+| Art direction provider esterno | Valutare API, costi, privacy; integrazione solo lato tooling interno o backend |
 
 ---
 
@@ -209,63 +209,12 @@ Dal backend (`app.mjs`), 400 tipici:
 
 ---
 
-## 12. Google Stitch (MCP) — art direction più mirata in Generate
+## 12. External provider strategy (generic)
 
-**Riferimento ufficiale setup MCP:** [stitch.withgoogle.com/docs/mcp/setup](https://stitch.withgoogle.com/docs/mcp/setup). Contesto prodotto Google (“Design with AI”, integrazione con agenti tramite Model Context Protocol). Materiale correlato Google: es. codelab [Design-to-Code with Antigravity and Stitch MCP](https://codelabs.developers.google.com/design-to-code-with-antigravity-stitch).
-
-### 12.1 Cosa offre (in sintesi)
-
-- **Stitch** genera output di design / UI da prompt (ecosistema Google Cloud / progetto Stitch).
-- Il **server MCP** espone agli agenti (Cursor, Claude Code, Gemini CLI, ecc.) **strumenti** invocabili da chat — in letteratura community compaiono nomi tipo generazione schermate da testo, estrazione contesto design, lista progetti/schermate, recupero codice associato a uno screen. L’installazione tipica passa da `npx` / proxy con autenticazione (**API key** da impostazioni Stitch o **OAuth/gcloud** a progetto con billing).
-
-### 12.2 Vincolo architetturale per Comtra
-
-- Il **plugin Figma** (iframe, sandbox) **non** può montare un server MCP come fa Cursor: **MCP ≠ runtime plugin**.
-- Quindi “usare Stitch dentro Generate” non significa incollare MCP nell’UI Figma, ma una di queste strade:
-
-| Approccio | Dove vive Stitch | Ruolo per Generate |
-|-----------|-------------------|-------------------|
-| **A — Solo team / sviluppo** | Cursor o altro client MCP | Prototipare **prompt di art direction**, estrarre **design context** o reference, alimentare manualmente doc e template che poi il backend Comtra usa come system prompt o few-shot. |
-| **B — Backend Comtra** | Chiamate alle **API Google/Stitch** (se esposte oltre MCP; da verificare su documentazione e ToS), non necessariamente tramite MCP | Prima della pipeline Kimi, un passo opzionale “**direction enrichment**”: testo/struttura derivata da Stitch → sezione fissa nel prompt (`art_direction`, palette, layout intent). Richiede **chiavi**, **billing**, **GDPR/consenso**, costi per richiesta. |
-| **C — Input utente nel plugin** | Nessuna integrazione live Stitch | Campo **“Art direction (incolla)”** o allegato JSON/markdown esportato da Stitch a mano: zero dipendenza runtime da Google nel plugin; il backend inietta quel blocco nel prompt. |
-
-### 12.3 Allineamento con Generation Engine
-
-- La [`GENERATION-ENGINE-ROADMAP.md`](./GENERATION-ENGINE-ROADMAP.md) impone **vincoli DS nel file** (Problem 1): Stitch non deve **sostituire** il design system Figma dell’utente, ma può **orientare** mood, gerarchia visiva, copy di esempio, spaziatura “feel”, accessibilità dichiarata — sempre **filtrato** dalla validazione deterministic su indice DS / executor.
-- Rischio da gestire: Stitch propone componenti o token **non presenti** nel file → va **esplicitato nel prompt** che l’output finale deve mappare solo su ciò che l’indice DS consente.
-
-### 12.4 Prossimi passi se si vuole seriare
-
-1. Leggere ToS e limiti d’uso API / MCP per **uso commerciale** in un prodotto che genera su Figma.
-2. Verificare se esiste **endpoint REST stabile** adatto al backend (MCP spesso è un adapter per agenti, non l’unica interfaccia).
-3. Prototipo **A** (zero rischio prodotto): MCP in Cursor sul repo Comtra per migliorare i prompt in `prompts/` e le variabili “direction”.
-4. Se **B**: spike tecnico su Vercel (timeout, cold start) + stima costo per generazione; feature flag e opt-in utente.
-
-### 12.5 MCP vs CLI per Stitch — “meglio”?
-
-**In parole povere**
-
-- **MCP** e **CLI** sono due modi di **chiedere a Google/Stitch la stessa cosa** (come due citofoni diversi per lo stesso ufficio). Non è che uno sia “più intelligente” dell’altro di default.
-- **Nel plugin Figma** non puoi installare né MCP né CLI: il plugin gira in un ambiente chiuso. Stitch si usa **fuori** dal plugin (sul tuo computer, su Cursor, o su un **server** che parla con Google).
-- **Per gli utenti finali**, il modo più pulito è: il **server Comtra** chiama Google con una **normale richiesta web** (API), quando esiste. Lanciare un **programma a riga di comando** a ogni click “Genera” sul server è spesso **lento** e **complicato da mantenere**.
-- **Per te che sviluppi**: in Cursor va bene **MCP** (comodo per l’AI). Per script automatici a volte va meglio la **CLI**. Sono scelte da **sviluppatore**, non “la versione migliore del prodotto”.
+- Keep external-provider references vendor-neutral in internal docs.
+- Prefer stable backend API integrations over runtime tool host dependencies in the plugin.
+- Treat external integrations as optional enrichment layers behind feature flags.
 
 ---
 
-**Versione tecnica (breve):** spesso MCP e CLI (es. `npx … stitch-mcp proxy` o altri entrypoint documentati) sono **due facce** dello stesso servizio Google: sotto c’è autenticazione + **API** (o RPC interno). Cambia solo **chi** orchestra la chiamata (host MCP vs shell vs codice che fa `spawn`).
-
-| Criterio | MCP | CLI |
-|----------|-----|-----|
-| **Uso in Cursor / agenti IDE** | Ottimo: tool con schema, parametri tipizzati, meno parsing ad hoc | Va bene: l’agente esegue comandi in shell; serve output **stabile** (`--json` se esiste) |
-| **CI / script / Docker** | Serve un client MCP o è scomodo | Spesso **più naturale**: job che lanciano un binario |
-| **Backend Comtra in produzione** | Di solito **sconsigliato** avviare un server MCP per richiesta | **CLI via `spawn`/`npx`** su ogni `POST /generate`: pesante (cold start, bundle, sandbox), fragile, timeout Vercel; **preferire HTTP diretto** verso API ufficiali Stitch se documentate |
-| **Manutenzione** | Config nel JSON MCP per sviluppatore | Version pinning del pacchetto npm, secrets in env |
-
-**Sintesi pratica per Comtra**
-
-- **Sviluppo interno:** MCP *oppure* CLI — scegli in base a dove lavori (Cursor → MCP comodo; script → CLI).
-- **Prodotto utente:** né MCP né CLI è ideale come strato principale; l’obiettivo è **`fetch` verso API REST** (o SDK ufficiale) con chiavi lato server. CLI/MCP restano utili per **prototipi** o tooling che non gira sul path critico di ogni generazione.
-
----
-
-*Ultimo aggiornamento contenuti: prestazioni, audit, console, stabile, prodotto, Code UI, CLI-Anything, Google Stitch (MCP/CLI/API) / art direction (Generate).*
+*Ultimo aggiornamento contenuti: prestazioni, audit, console, stabile, prodotto, Code UI, integrazioni esterne generiche / art direction (Generate).*

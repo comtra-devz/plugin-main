@@ -1,7 +1,7 @@
 # Generate — DS Import: Resoconto tecnico performance fix
 
 COMTRA by Ben & Cordiska — Aprile 2026
-Documento per handoff Antigravity / Cursor
+Documento per handoff tecnico interno
 
 ---
 
@@ -136,7 +136,7 @@ Il plugin non ha mai bisogno del blob completo in locale. Il blob viene usato so
 
 ---
 
-## 6. File da modificare — indice per Cursor
+## 6. File da modificare — indice operativo
 
 | Priorità | File | Modifica |
 |---|---|---|
@@ -175,4 +175,4 @@ Se uno dei test fallisce la diagnosi è localizzabile: (1) scan/chunking, (2) di
 
 ---
 
-COMTRA by Ben & Cordiska — Sviluppo: Antigravity
+COMTRA by Ben & Cordiska — Sviluppo: team interno

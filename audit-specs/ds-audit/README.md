@@ -7,6 +7,7 @@ Questa cartella contiene le specifiche per l’agente di **Design System Audit**
 | File | Uso |
 |------|-----|
 | **DS-AUDIT-RULES.md** | Regole complete dell’audit: cosa controllare, dove cercare nel JSON del file, severity, esempio di fix. Riferimento per il system prompt e per chi implementa l’endpoint. |
+| **DS-AUDIT-AGENT-READABILITY-RULES.md** | English extension for DS Audit focused on agent-readability quality checks (`AR-001`…`AR-010`), with rollout and implementation-ready detection/fix guidance. |
 | **OUTPUT-SCHEMA.md** | Schema JSON che l’agente deve restituire (`issues[]` con campi `AuditIssue`). Esempi e regole di validazione. |
 | **SOURCES.md** | Fonti autorevoli: link, sintesi e come sono usate nelle regole. |
 | **RECURRING-PROBLEMS.md** | Problematiche ricorrenti da 100 thread (forum, community, repository, governance, multi‑prodotto): cluster, severity 1–5, mappatura alle regole di audit. |

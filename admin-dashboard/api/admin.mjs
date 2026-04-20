@@ -1186,7 +1186,7 @@ async function handlePluginLogs(req, res) {
       category: 'throttle',
       category_label: 'Limite richieste',
       description: 'Utente ha raggiunto il limite delle richieste (503).',
-      fix: 'Attendere 15 minuti o passare a piano superiore. In Cursor: verificare rate limit backend.',
+      fix: 'Attendere 15 minuti o passare a piano superiore. Verificare il rate limit backend.',
       risolto: !r.ripetuto,
       user_masked: maskEmail(r.email),
     }));

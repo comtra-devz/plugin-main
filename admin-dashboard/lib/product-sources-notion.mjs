@@ -175,7 +175,7 @@ export function buildMarkdownReport({
     ``,
     `- Migliorie **sì**, se supportate da fonti linkate.`,
     `- **No** a cambiamenti che peggiorano o confondono comportamenti esistenti; **no** breaking non voluti; delta minimo e PR piccole.`,
-    `- Solo **URL** da Notion (niente codice “sparato” senza link); blocchi con **Antigravity** esclusi.`,
+    `- Solo **URL** da Notion (niente codice “sparato” senza link); blocchi con token esclusi.`,
     `- **LinkedIn:** post + testo + link nel payload Apify; **niente commenti** ai post.`,
     `- **Web (non LinkedIn):** fetch HTTP grezzo + **classificazione** (GitHub→raw, YouTube/X stub, PDF rilevato, allow/block list).`,
     `- **Snapshot doc plugin (Fase 4):** contesto rules/docs del repo (URL e/o filesystem) per confronto con le fonti Notion.`,
@@ -485,7 +485,7 @@ export async function runNotionProductSourcesExtract(opts) {
     );
   }
 
-  const defaultIgnore = ['Antigravity'];
+  const defaultIgnore = ['internal-note-token'];
   const ignorePatterns = buildIgnorePatterns([...defaultIgnore, ...ignoreTokens]);
 
   let result;

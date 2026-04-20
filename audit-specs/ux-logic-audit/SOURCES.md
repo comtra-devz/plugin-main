@@ -42,7 +42,7 @@ Normativa: EU DSA, California CPRA, FTC guidelines su dark pattern e consenso.
 
 ## Data tables e layout
 
-- **Pencil & Paper (2025).** “Data Table Design UX Patterns & Best Practices.” pencilandpaper.io
+- **Industry article (2025).** “Data Table Design UX Patterns & Best Practices.”
 - **Coyle, A. / UX Planet (2025).** “Best Practices for Usable and Efficient Data Tables.”
 - **Nielsen Norman Group (2024).** “Breakpoints in Responsive Design.”
 
@@ -67,7 +67,7 @@ Normativa: EU DSA, California CPRA, FTC guidelines su dark pattern e consenso.
 - **C3 Form UX:** Baymard, Carbon Forms, Smashing Magazine live validation.
 - **C5 Content & Copy:** Nielsen H2, H8.
 - **C6 Error / Empty:** UXPin, NNGroup H9.
-- **C7 Data Tables:** Pencil & Paper, Coyle/UX Planet.
+- **C7 Data Tables:** industry references and UX pattern articles.
 - **C8 Responsive:** NNGroup Breakpoints, Material.
 - **C10 Dark Patterns:** NNGroup Deceptive Patterns, Brignull, studi Princeton/Zurich.
 - **C11 i18n:** W3C, Lokalise/Crowdin, GOV.UK.

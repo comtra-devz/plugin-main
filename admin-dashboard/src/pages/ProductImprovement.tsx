@@ -246,7 +246,7 @@ export default function ProductImprovement() {
           incollare l’ID ogni volta.
         </p>
         <p style={{ fontSize: '0.8rem', color: 'var(--muted-fg, #555)', marginBottom: '1rem' }}>
-          I blocchi che contengono <strong>Antigravity</strong> vengono ignorati (nessun link estratto da quel blocco).
+          I blocchi che contengono token esclusi vengono ignorati (nessun link estratto da quel blocco).
           Consideriamo solo URL <code>http(s)</code>; niente suggerimenti codice non linkati.
         </p>
         <div style={{ display: 'grid', gap: '0.75rem', maxWidth: '32rem' }}>

@@ -11,7 +11,7 @@
  *
  * Abilitazione costi: `PRODUCT_SOURCES_LLM_SYNTHESIS=1`
  *
- * Esecuzione **senza token su Vercel** (delega a Cursor/MCP):
+ * Esecuzione **senza token su Vercel** (delega a client locale/MCP):
  * - `PRODUCT_SOURCES_LLM_EXECUTION=mcp` (alias: `client`) oppure `PRODUCT_SOURCES_LLM_MCP=1`
  * - Il report include un fence `product-sources-llm-bundle`; il server MCP locale chiama Kimi solo quando invochi il tool.
  * - Vedi `mcp/product-sources-synthesis/README.md`.
@@ -493,7 +493,7 @@ export function buildProductSourcesMcpDelegationMarkdown(ctx) {
     ``,
     `_Su questo deploy **non** è stata eseguita alcuna chiamata LLM (risparmio token). Completare così:_`,
     ``,
-    `1. **Cursor** → MCP \`comtra-product-sources\` → tool **\`synthesize_product_sources\`** (\`bundle\` = JSON sotto o solo \`userBundle\`).`,
+    `1. **Client locale** → MCP \`comtra-product-sources\` → tool **\`synthesize_product_sources\`** (\`bundle\` = JSON sotto o solo \`userBundle\`).`,
     `2. Env MCP: \`PRODUCT_SOURCES_LLM_PROVIDER=gemini\` + \`GEMINI_API_KEY\`, oppure \`groq\` + \`GROQ_API_KEY\`, oppure Moonshot/OpenAI come in \`lib/product-sources-llm.mjs\`.`,
     `3. Incolla l’output Markdown del tool nella PR / nello storico report se serve.`,
     ``,

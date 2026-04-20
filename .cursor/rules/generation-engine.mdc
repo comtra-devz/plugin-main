@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Generation Engine (Comtra)
 
-Quando lavori su **Generate** (UI plugin), sul **servizio di generazione** (geminiService, backend che chiama Kimi/Claude) o sull’**esecuzione dell’action plan** in Figma, rispetta la ruleset ufficiale.
+Quando lavori su **Generate** (UI plugin), sul **servizio di generazione** (geminiService, backend che chiama il modello primario o fallback) o sull’**esecuzione dell’action plan** in Figma, rispetta la ruleset ufficiale.
 
 ## Riferimento
 

@@ -1,6 +1,6 @@
 # MCP — sintesi fonti prodotto (Kimi / Moonshot)
 
-Consente di **non chiamare l’LLM da Vercel/cron** (zero token Moonshot sul deploy) e di eseguire la Fase 5 **solo quando apri Cursor**, usando la stessa logica di `admin-dashboard/lib/product-sources-llm.mjs`.
+Consente di **non chiamare l’LLM da Vercel/cron** (zero token Moonshot sul deploy) e di eseguire la Fase 5 **solo da client locale**, usando la stessa logica di `admin-dashboard/lib/product-sources-llm.mjs`.
 
 ## 1. Variabili sul deploy (cron / API)
 
@@ -20,9 +20,9 @@ Dalla root del monorepo:
 cd mcp/product-sources-synthesis && npm install
 ```
 
-## 3. Cursor — registrazione MCP
+## 3. Registrazione MCP
 
-In **Cursor Settings → MCP** aggiungi un server (adatta il path assoluto al tuo clone).
+Nelle impostazioni MCP del tuo client locale aggiungi un server (adatta il path assoluto al tuo clone).
 
 **Esempio Gemini (Google AI Studio):** default model nel codice `gemini-2.5-flash` (evitare 2.0 Flash, deprecato).
 

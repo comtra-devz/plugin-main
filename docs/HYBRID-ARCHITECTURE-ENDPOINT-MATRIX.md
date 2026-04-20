@@ -94,7 +94,7 @@ Rules:
 ## 6) Ownership suggestion
 
 - **Backend contract/adapters:** Ben
-- **Plugin adapter slimming:** Ben + Cursor
+- **Plugin adapter slimming:** Ben + internal tooling
 - **Webapp MVP read layer:** shared
 - **Penpot adapter spike:** dedicated branch once v2 contract is merged
 

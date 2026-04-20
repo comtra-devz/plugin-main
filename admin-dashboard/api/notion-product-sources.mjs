@@ -4,7 +4,7 @@
  *
  * Body JSON:
  *   { "pageId": "uuid" } | { "databaseId": "uuid" }
- *   opzionale: "ignoreTokens": ["Antigravity", ...]
+ *   opzionale: "ignoreTokens": ["internal-note-token", ...]
  *   opzionale: "enrichLinkedIn": true — chiama Apify sui URL LinkedIn (stessi env del cron; richiesta lunga)
  *   opzionale: "fetchWeb": true — Fase 1 bis + 2: fetch / strategia per URL web non-LinkedIn (stessi limiti env del cron)
  *   opzionale: "includeDocSnapshot": true — Fase 4: include snapshot rules/docs (env URL/repo come il cron)
