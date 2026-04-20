@@ -19,17 +19,17 @@ export function evaluatePreflightClarifier(prompt: string): PreflightEvaluation 
   if (len >= 160) return { show: false, variant: null, chips: [] };
 
   if (
-    /\bdashboard\b|\banalytics\b|\bkpi\b|\bmetriche\b|\badmin panel\b|\bbackoffice\b/i.test(lower) &&
+    /\bdashboard\b|\banalytics\b|\bkpi\b|\bmetriche\b|\bmetrics\b|\badmin panel\b|\bbackoffice\b/i.test(lower) &&
     len < 170
   ) {
     return {
       show: true,
       variant: 'dashboard',
       chips: [
-        { id: 'kpi', label: 'Metriche KPI in alto' },
-        { id: 'charts', label: 'Focus grafici / trend' },
-        { id: 'table', label: 'Tabella dati principale' },
-        { id: 'filters', label: 'Filtri o periodo in header' },
+        { id: 'kpi', label: 'KPI metrics at top' },
+        { id: 'charts', label: 'Charts / trends focus' },
+        { id: 'table', label: 'Primary data table' },
+        { id: 'filters', label: 'Filters or date range in header' },
       ],
     };
   }
@@ -43,24 +43,13 @@ export function evaluatePreflightClarifier(prompt: string): PreflightEvaluation 
       variant: 'login',
       chips: [
         { id: 'sso', label: 'SSO / social login' },
-        { id: '2fa', label: '2FA opzionale' },
+        { id: '2fa', label: 'Optional 2FA' },
         { id: 'reset', label: 'Self-serve password reset' },
       ],
     };
   }
 
-  if (len < 44) {
-    return {
-      show: true,
-      variant: 'generic',
-      chips: [
-        { id: 'desktop', label: 'Desktop layout' },
-        { id: 'mobile', label: 'Mobile-first' },
-        { id: 'density', label: 'UI compatta (density alta)' },
-      ],
-    };
-  }
-
+  /** Short prompts: let the run proceed (assistant / server can clarify in-chat). Avoid a robotic “pick layout” gate on every terse message — see conversational UX goals. */
   return { show: false, variant: null, chips: [] };
 }
 
@@ -76,33 +65,33 @@ export type RefinementChipDef = {
 export const REFINEMENT_CHIPS: RefinementChipDef[] = [
   {
     id: 'tighten_spacing',
-    label: 'Stringi spaziatura',
+    label: 'Tighten spacing',
     append:
       '\n\nRefinement: tighten vertical rhythm and spacing between sections; keep existing hierarchy.',
     tier: 1,
   },
   {
     id: 'hierarchy',
-    label: 'Più gerarchia visiva',
+    label: 'Stronger visual hierarchy',
     append:
       '\n\nRefinement: strengthen visual hierarchy (typography scale, section separation, focal points).',
     tier: 1,
   },
   {
     id: 'cta',
-    label: 'CTA più evidente',
+    label: 'Stronger CTA',
     append: '\n\nRefinement: make primary call-to-action stronger (contrast, size, placement).',
     tier: 2,
   },
   {
     id: 'mobile',
-    label: 'Adatta al mobile',
+    label: 'Mobile-friendly',
     append: '\n\nRefinement: adapt layout for narrow viewport; prioritize vertical flow and thumb reach.',
     tier: 2,
   },
   {
     id: 'density',
-    label: 'Density più pulita',
+    label: 'Cleaner density',
     append:
       '\n\nRefinement: reduce visual density; simplify secondary elements while preserving content.',
     tier: 3,
@@ -134,23 +123,23 @@ export function reasoningSummaryLinesFromPlan(plan: object): string[] {
   if (!diag || typeof diag !== 'object') return lines;
 
   const pipe = diag.pipeline != null ? String(diag.pipeline).trim() : '';
-  if (pipe) lines.push(`Pipeline server: ${pipe}`);
+  if (pipe) lines.push(`Server pipeline: ${pipe}`);
 
   const timers = diag.phase_timers as Record<string, unknown> | undefined;
   if (timers && typeof timers === 'object') {
     const total = timers.total_ms;
     const val = timers.validation_ms;
     if (typeof total === 'number' && Number.isFinite(total)) {
-      lines.push(`Tempo round-trip server ~${Math.round(total / 1000)}s (rete + modello + validazione).`);
+      lines.push(`Server round-trip ~${Math.round(total / 1000)}s (network + model + validation).`);
     } else if (typeof val === 'number' && Number.isFinite(val)) {
-      lines.push(`Validazione interna ~${Math.round(val / 1000)}s.`);
+      lines.push(`Internal validation ~${Math.round(val / 1000)}s.`);
     }
   }
 
   const shape = diag.action_plan_shape as Record<string, unknown> | undefined;
   if (shape && typeof shape === 'object') {
     const ac = shape.action_count;
-    if (typeof ac === 'number' && ac > 0) lines.push(`Shape: ${ac} azioni pianificate dopo i gate qualità.`);
+    if (typeof ac === 'number' && ac > 0) lines.push(`Shape: ${ac} planned actions after quality gates.`);
   }
 
   return lines.slice(0, 4);
@@ -164,18 +153,18 @@ export function activeThreadStorageKey(userId: string, fileKey: string, dsHash: 
   return `comtra-gen-thread-id:${userId}:${fileKey}:${dsHash}`;
 }
 
-/** Short Italian relative time for thread lists (§7). */
+/** Short English relative time for thread lists (§7). */
 export function formatShortRelativeTime(updatedAtMs: number): string {
   const n = Number(updatedAtMs);
   if (!Number.isFinite(n)) return '';
   const diff = Date.now() - n;
   const sec = Math.floor(diff / 1000);
-  if (sec < 45) return 'ora';
+  if (sec < 45) return 'now';
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min fa`;
+  if (min < 60) return `${min}m ago`;
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} h fa`;
+  if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d} g fa`;
-  return new Date(n).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+  if (d < 7) return `${d}d ago`;
+  return new Date(n).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 }

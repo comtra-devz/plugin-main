@@ -60,7 +60,13 @@ export const COLORS = {
 export const BRUTAL = {
   card: `bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] p-4`,
   btn: `border-2 border-black shadow-[4px_4px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_#000] transition-all font-bold uppercase tracking-wider px-4 py-2`,
-  input: `w-full border-2 border-black p-3 font-mono focus:bg-[#ffc900] outline-none transition-colors`
+  input: `w-full border-2 border-black p-3 font-mono focus:bg-[#ffc900] outline-none transition-colors`,
+  /** Padded informational surface (import feed, notices) — full width, no radius. */
+  infoPanel: `w-full border-2 border-black bg-white p-3 shadow-[3px_3px_0_0_#000]`,
+  /** Same frame, neutral fill; use for stacked logs / accordions (padding on inner rows). */
+  infoShelf: `w-full border-2 border-black bg-neutral-50 shadow-[3px_3px_0_0_#000]`,
+  /** Warning / gap hints — same frame as info, amber fill. */
+  snackbarWarning: `w-full border-2 border-black bg-amber-100 p-2.5 shadow-[3px_3px_0_0_#000]`,
 };
 
 export const TIER_LIMITS: Record<string, number> = {

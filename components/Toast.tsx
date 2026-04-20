@@ -12,32 +12,33 @@ interface Props {
   onDismiss: () => void;
 }
 
+/** All toasts share the same black frame; only fill + text tone vary (no soft colored borders). */
 const variantStyles = {
-  default: 'bg-white border-black text-black',
-  error: 'bg-red-100 border-red-500 text-red-800',
-  warning: 'bg-amber-100 border-amber-600 text-amber-900',
-  info: 'bg-sky-50 border-sky-600 text-sky-800',
+  default: 'bg-white text-black',
+  error: 'bg-red-50 text-red-900',
+  warning: 'bg-amber-100 text-black',
+  info: 'bg-sky-100 text-sky-950',
 };
 
 const variantTextStyles = {
   default: 'text-black',
-  error: 'text-red-800',
-  warning: 'text-amber-900',
-  info: 'text-sky-800',
+  error: 'text-red-900',
+  warning: 'text-black',
+  info: 'text-sky-950',
 };
 
 const variantDescStyles = {
-  default: 'text-gray-700',
-  error: 'text-red-700',
-  warning: 'text-amber-800',
-  info: 'text-sky-700',
+  default: 'text-gray-800',
+  error: 'text-red-800',
+  warning: 'text-neutral-900',
+  info: 'text-sky-900',
 };
 
 const variantBorderStyles = {
-  default: 'border-black/10',
-  error: 'border-red-300',
-  warning: 'border-amber-300',
-  info: 'border-sky-200',
+  default: 'border-black',
+  error: 'border-black',
+  warning: 'border-black',
+  info: 'border-black',
 };
 
 export const Toast: React.FC<Props> = ({
@@ -55,11 +56,11 @@ export const Toast: React.FC<Props> = ({
   return (
     <div
       role="alert"
-      className={`border-2 shadow-[4px_4px_0_0_#000] pt-4 px-3 pb-3 max-w-full animate-in slide-in-from-bottom-2 duration-200 ${v}`}
+      className={`border-2 border-black shadow-[3px_3px_0_0_#000] pt-4 px-3 pb-3 w-full max-w-full animate-in slide-in-from-bottom-2 duration-200 ${v}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className={`text-base font-black uppercase leading-snug ${titleCls}`}>{title}</p>
+          <p className={`text-sm font-black uppercase leading-snug tracking-wide ${titleCls}`}>{title}</p>
           {description && (
             <p className={`text-sm mt-2 leading-relaxed ${descCls}`}>{description}</p>
           )}
@@ -84,7 +85,7 @@ export const Toast: React.FC<Props> = ({
         )}
       </div>
       {actions.length > 0 && (
-        <div className={`flex flex-wrap items-center gap-2 mt-3 pt-2 border-t ${actionBorder}`}>
+        <div className={`flex flex-wrap items-center gap-2 mt-3 border-t-2 pt-2 ${actionBorder}`}>
           {actions.map((a, i) => (
             <Button
               key={i}

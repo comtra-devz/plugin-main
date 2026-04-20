@@ -2005,7 +2005,10 @@ export default function AppTest() {
           />
         </div>
 
-        <div className={view === ViewState.GENERATE ? '' : 'hidden'} aria-hidden={view !== ViewState.GENERATE}>
+        <div
+          className={view === ViewState.GENERATE ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+          aria-hidden={view !== ViewState.GENERATE}
+        >
           <Generate
             plan={user?.plan || 'FREE'}
             userTier={user?.tier}

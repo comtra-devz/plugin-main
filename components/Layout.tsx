@@ -20,9 +20,9 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
 
   return (
     <div className="h-screen flex flex-col bg-[#fdfdfd] text-black font-sans overflow-x-hidden">
-      <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] p-4 sticky top-0 z-[100] flex items-center justify-between shrink-0 shadow-[0_2px_0_0_#000]">
-        <div className="flex items-center gap-3">
-          <h1 data-component="Layout: Brand Name" className="text-2xl font-black uppercase tracking-tighter leading-[0.9]">Comtra</h1>
+      <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] px-3 py-1.5 sticky top-0 z-[100] flex min-h-9 items-center justify-between shrink-0 shadow-[0_2px_0_0_#000]">
+        <div className="flex items-center gap-2">
+          <h1 data-component="Layout: Brand Name" className="text-lg font-black uppercase tracking-tighter leading-none sm:text-xl">Comtra</h1>
           <div data-component="Layout: Tagline Badge" className="inline-block bg-black text-white px-2 py-0.5 text-[10px] font-bold uppercase rotate-2 transform">
             Design System AI
           </div>
@@ -38,7 +38,13 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
           </button>
         )}
       </header>
-      <main ref={mainRef} data-component="Layout: Main Content Area" className="flex-1 min-h-0 overflow-y-auto max-w-md mx-auto w-full pb-16">{children}</main>
+      <main
+        ref={mainRef}
+        data-component="Layout: Main Content Area"
+        className="mx-auto flex w-full max-w-md flex-1 min-h-0 flex-col overflow-y-auto pb-16"
+      >
+        {children}
+      </main>
       {(current !== ViewState.SUBSCRIPTION && current !== ViewState.DOCUMENTATION && current !== ViewState.PRIVACY && current !== ViewState.TERMS) && <NavBar current={current} onChange={setView} />}
       {(current === ViewState.SUBSCRIPTION || current === ViewState.DOCUMENTATION || current === ViewState.PRIVACY || current === ViewState.TERMS) && (
          <button 

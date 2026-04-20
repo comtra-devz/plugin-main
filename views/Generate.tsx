@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useCallback, startTransition } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, startTransition } from 'react';
 import { BRUTAL } from '../constants';
 import { Button } from '../components/ui/Button';
 import { GenerateDsImport, type RequestDsContextIndexFn } from './GenerateDsImport';
@@ -25,7 +25,6 @@ import {
   reasoningSummaryLinesFromPlan,
   refinementEstimateActionType,
   tierCreditHint,
-  formatShortRelativeTime,
 } from '../lib/generateConversationHelpers';
 import {
   safeLocalStorageGetItem,
@@ -33,7 +32,11 @@ import {
   safeLocalStorageSetItem,
 } from '../lib/safeWebStorage';
 
-/** Hybrid UX §8 — cockpit plugin (questa view); archivio/ricerca/analytics via web/API admin. */
+/** Break out of view `p-3 sm:p-4` so black rules span the full plugin width. */
+const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
+const FULL_BLEED_IN = 'px-3 sm:px-4';
+
+/** Hybrid UX §8 — cockpit plugin (this view); archive/search/analytics via web/API admin. */
 
 interface Props { 
   plan: UserPlan; 
@@ -101,7 +104,7 @@ interface Props {
     file_name?: string | null;
     hint?: string | null;
   }) => Promise<{ text: string }>;
-  /** Telemetria / learning loop (DI v2): eventi post-generazione lato plugin. */
+  /** Telemetry / learning loop (DI v2): post-generation events from the plugin. */
   fetchGenerationPluginEvent?: (body: {
     event_type: string;
     request_id?: string | null;
@@ -201,7 +204,7 @@ function humanizeCanvasError(raw: string): string {
   const msg = String(raw || '').trim();
   if (!msg) return 'Canvas apply failed.';
   if (msg.includes('CUSTOM_DS_INSTANCE_PREFLIGHT_FAILED')) {
-    return 'Generate: i componenti del DS non sono risolvibili in questo file (chiavi pubblicate o librerie collegate). Abilita le librerie usate dal DS, riesegui l’import da questa schermata e riprova.';
+    return 'Generate: some design-system components cannot be resolved in this file (published keys or linked libraries). Enable the libraries your DS uses, re-run import from this screen, and try again.';
   }
   if (msg.includes('INSTANCE_UNRESOLVED')) {
     return 'Some DS component instances are not resolvable in this file. Check DS import and linked libraries.';
@@ -241,20 +244,20 @@ function buildAssistantSummaryFromPlan(
   const pipeline =
     meta.generation_pipeline != null ? String(meta.generation_pipeline).trim() : '';
   const lines: string[] = [];
-  lines.push('Ok — ho capito: layout pronto sul file, allineato al DS.');
+  lines.push('Done — layout is on the file and aligned with your design system.');
   lines.push('');
   const reasoning = reasoningSummaryLinesFromPlan(plan);
   if (reasoning.length) {
-    lines.push('Sintesi (sicura, senza catena di pensiero):');
+    lines.push('Summary (safe, no chain-of-thought):');
     for (const r of reasoning) lines.push(`• ${r}`);
     lines.push('');
   }
-  lines.push(`Azioni nel piano: ${actions.length}`);
-  if (archetype) lines.push(`Archetipo schermo: ${archetype}`);
+  lines.push(`Actions in plan: ${actions.length}`);
+  if (archetype) lines.push(`Screen archetype: ${archetype}`);
   if (pipeline) lines.push(`Pipeline: ${pipeline}`);
-  if (opts.rootId) lines.push('Frame creato sulla pagina corrente — controlla il canvas.');
+  if (opts.rootId) lines.push('Frame created on the current page — check the canvas.');
   lines.push('');
-  lines.push('Prossimo passo: affina con i chip sotto o scrivi una modifica nel terminale.');
+  lines.push('Next: refine with the chips below or describe a change in the prompt.');
   return lines.join('\n');
 }
 
@@ -287,7 +290,7 @@ export const Generate: React.FC<Props> = ({
 }) => {
   const [res, setRes] = useState('');
   const [loading, setLoading] = useState(false);
-  /** Dove siamo nel flusso Generate (visibile durante loading). */
+  /** Position in the Generate pipeline (used while loading). */
   const [generateStep, setGenerateStep] = useState<'idle' | 'context' | 'ai' | 'canvas' | 'credits'>('idle');
   const [genError, setGenError] = useState<string | null>(null);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
@@ -316,6 +319,7 @@ export const Generate: React.FC<Props> = ({
 
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   /** After Enhance: button stays off until the user edits the terminal (avoids nested enhance). */
   const [enhanceLocked, setEnhanceLocked] = useState(false);
   /** Clean goal text used to rebuild the block when DS or context changes. */
@@ -345,14 +349,17 @@ export const Generate: React.FC<Props> = ({
 
   // New State for Report Flow
   const [showReport, setShowReport] = useState(false);
-  /** Timeline conversazione (Phase 1): una coppia user/assistant per ogni click Generate rilevante. */
+  /** Conversation timeline (Phase 1): one user/assistant pair per relevant Generate action. */
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
+  /** Fake typing + first assistant bubble before any timeline message. */
+  const [showIntroTyping, setShowIntroTyping] = useState(false);
+  const [showIntroBubble, setShowIntroBubble] = useState(false);
   const [dsScopeHash, setDsScopeHash] = useState<string>('');
   const [serverThreadId, setServerThreadId] = useState<string | null>(null);
   const [threadList, setThreadList] = useState<
     Array<{ id: string; title: string | null; updated_at_ms?: number }>
   >([]);
-  /** §7.2 — Chat vs dedicated Conversazioni panel (Phase 3). */
+  /** §7.2 — Chat vs dedicated Threads panel (Phase 3). */
   const [generateComposerTab, setGenerateComposerTab] = useState<'chat' | 'threads'>('chat');
   const [showPreflight, setShowPreflight] = useState(false);
   const [preflightPromptSnapshot, setPreflightPromptSnapshot] = useState('');
@@ -365,12 +372,18 @@ export const Generate: React.FC<Props> = ({
   const [preflightPick, setPreflightPick] = useState<Record<string, boolean>>({});
   /** After a successful canvas run: show refinement chips (§5–6). */
   const [showRefinementChips, setShowRefinementChips] = useState(false);
+  /** User typed in the composer while chips were visible — hide chip row, keep history. */
+  const [refineChipsHiddenByComposer, setRefineChipsHiddenByComposer] = useState(false);
   /** §6 — per-chip estimates from POST /api/credits/estimate (preview). */
   const [refinementEstimates, setRefinementEstimates] = useState<Record<string, number>>({});
   const [lastDiagLine, setLastDiagLine] = useState<string | null>(null);
   const pendingPreflightPromptRef = useRef<string | null>(null);
   const skippedPreflightHashRef = useRef<string | null>(null);
   const serverThreadIdRef = useRef<string | null>(null);
+  /** When set, `completeGenerateTurn` merges the assistant reply onto this user bubble instead of appending a second user row. */
+  const pendingOptimisticUserTurnIdRef = useRef<string | null>(null);
+  /** True while `runGeneratePipeline` is in flight (suppresses refinement-chip hide on programmatic prompt fills). */
+  const pipelineUiLockRef = useRef(false);
   useEffect(() => {
     serverThreadIdRef.current = serverThreadId;
   }, [serverThreadId]);
@@ -444,23 +457,8 @@ export const Generate: React.FC<Props> = ({
     }
   }, [generateConversationApi, genFileKey, dsScopeHash]);
 
-  const appendGenerateTurn = useCallback(
-    (userPrompt: string, assistantMarkdown: string) => {
-      const t = Date.now();
-      const u = userPrompt.slice(0, 1200);
-      const pair = [
-        { id: `u-${t}`, role: 'user' as const, body: u, createdAt: t },
-        { id: `a-${t}`, role: 'assistant' as const, body: assistantMarkdown, createdAt: t },
-      ];
-      setConversationTurns((prev) => {
-        const next: ConversationTurn[] = [...prev, ...pair];
-        const trimmed =
-          next.length > MAX_CONVERSATION_MESSAGES
-            ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
-            : next;
-        persistTurnsLocal(trimmed);
-        return trimmed;
-      });
+  const syncConversationPairToServer = useCallback(
+    (u: string, assistantMarkdown: string) => {
       const api = generateConversationApi;
       const fk = genFileKey;
       const dh =
@@ -500,9 +498,80 @@ export const Generate: React.FC<Props> = ({
       dsScopeHash,
       usesFileDs,
       selectedSystem,
-      persistTurnsLocal,
       refreshThreadList,
     ],
+  );
+
+  const beginOptimisticUserTurn = useCallback(
+    (body: string) => {
+      const t = Date.now();
+      const id = `u-${t}`;
+      pendingOptimisticUserTurnIdRef.current = id;
+      setConversationTurns((prev) => {
+        const next: ConversationTurn[] = [
+          ...prev,
+          { id, role: 'user' as const, body: body.slice(0, 1200), createdAt: t },
+        ];
+        const trimmed =
+          next.length > MAX_CONVERSATION_MESSAGES
+            ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
+            : next;
+        persistTurnsLocal(trimmed);
+        return trimmed;
+      });
+    },
+    [persistTurnsLocal],
+  );
+
+  const abortOptimisticUserTurn = useCallback(() => {
+    const pid = pendingOptimisticUserTurnIdRef.current;
+    pendingOptimisticUserTurnIdRef.current = null;
+    if (!pid) return;
+    setConversationTurns((prev) => {
+      const next = prev.filter((x) => x.id !== pid);
+      persistTurnsLocal(next);
+      return next;
+    });
+  }, [persistTurnsLocal]);
+
+  const completeGenerateTurn = useCallback(
+    (userPrompt: string, assistantMarkdown: string) => {
+      const u = userPrompt.slice(0, 1200);
+      const pid = pendingOptimisticUserTurnIdRef.current;
+      pendingOptimisticUserTurnIdRef.current = null;
+      const t = Date.now();
+      setConversationTurns((prev) => {
+        let next: ConversationTurn[];
+        if (pid) {
+          const idx = prev.findIndex((x) => x.id === pid && x.role === 'user');
+          if (idx >= 0) {
+            next = [...prev];
+            next[idx] = { ...next[idx], body: u };
+            next.push({ id: `a-${t}`, role: 'assistant' as const, body: assistantMarkdown, createdAt: t });
+          } else {
+            next = [
+              ...prev,
+              { id: `u-${t}`, role: 'user' as const, body: u, createdAt: t },
+              { id: `a-${t}`, role: 'assistant' as const, body: assistantMarkdown, createdAt: t },
+            ];
+          }
+        } else {
+          next = [
+            ...prev,
+            { id: `u-${t}`, role: 'user' as const, body: u, createdAt: t },
+            { id: `a-${t}`, role: 'assistant' as const, body: assistantMarkdown, createdAt: t },
+          ];
+        }
+        const trimmed =
+          next.length > MAX_CONVERSATION_MESSAGES
+            ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
+            : next;
+        persistTurnsLocal(trimmed);
+        return trimmed;
+      });
+      syncConversationPairToServer(u, assistantMarkdown);
+    },
+    [persistTurnsLocal, syncConversationPairToServer],
   );
 
   /** DS scope hash for thread persistence (file + snapshot or preset slug). */
@@ -674,7 +743,7 @@ export const Generate: React.FC<Props> = ({
     };
   }, [hasSelection, screenshotAttachment, estimateCredits]);
 
-  /** §6 — Stima crediti per chip affinamento (preview API; addebito finale dal piano server). */
+  /** §6 — Per-chip credit estimates for refinement (preview API; final charge from server plan). */
   useEffect(() => {
     if (!showRefinementChips) {
       setRefinementEstimates({});
@@ -702,6 +771,10 @@ export const Generate: React.FC<Props> = ({
       cancelled = true;
     };
   }, [showRefinementChips, hasSelection, screenshotAttachment, estimateCredits]);
+
+  useEffect(() => {
+    if (showRefinementChips) setRefineChipsHiddenByComposer(false);
+  }, [showRefinementChips]);
 
   const promptPlaceholder = hasSelection
     ? `> Modify "${selectedLayerName}": keep layout, improve hierarchy and spacing.`
@@ -789,6 +862,9 @@ export const Generate: React.FC<Props> = ({
     setHasContent(text.length > 0);
     setPromptText(text);
     skippedPreflightHashRef.current = null;
+    if (showRefinementChips && text.trim().length > 0 && !pipelineUiLockRef.current) {
+      setRefineChipsHiddenByComposer(true);
+    }
     if (enhanceLockedRef.current && lastEnhancedBodyRef.current !== null) {
       if (text !== normalizeTerminalText(lastEnhancedBodyRef.current)) {
         setEnhanceLocked(false);
@@ -971,6 +1047,7 @@ export const Generate: React.FC<Props> = ({
         setGenError('Finish the design system import above before generating.');
         return;
       }
+      pipelineUiLockRef.current = true;
       setLoading(true);
       setGenerateStep('context');
       setShowReport(false);
@@ -987,13 +1064,21 @@ export const Generate: React.FC<Props> = ({
 
       const trimmed = finalPrompt.trim();
       if (!trimmed) {
+        abortOptimisticUserTurn();
+        pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
         return;
       }
 
+      if (!pendingOptimisticUserTurnIdRef.current) {
+        beginOptimisticUserTurn(trimmed);
+      }
+
       const { fileKey, error: ctxError } = await requestFileContext();
       if (ctxError || !fileKey) {
+        abortOptimisticUserTurn();
+        pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
         const opts = getSystemToastOptions('file_link_unavailable');
@@ -1016,9 +1101,9 @@ export const Generate: React.FC<Props> = ({
         });
         const actionPlan = data?.action_plan;
         if (!actionPlan || typeof actionPlan !== 'object') {
-          appendGenerateTurn(
+          completeGenerateTurn(
             trimmed,
-            'Errore: risposta dal server non valida (action plan mancante o malformato).',
+            'Error: invalid server response (missing or malformed action plan).',
           );
           setGenError('Invalid response from server.');
           setLoading(false);
@@ -1029,7 +1114,7 @@ export const Generate: React.FC<Props> = ({
           .metadata?.generation_diagnostics;
         const totalMs = metaDiag?.phase_timers?.total_ms;
         if (typeof totalMs === 'number' && Number.isFinite(totalMs)) {
-          setLastDiagLine(`Ultimo round-trip server ~${Math.round(totalMs / 1000)}s`);
+          setLastDiagLine(`Last server round-trip ~${Math.round(totalMs / 1000)}s`);
         }
 
         lastActionPlanRef.current = actionPlan;
@@ -1048,7 +1133,7 @@ export const Generate: React.FC<Props> = ({
           qualityWatch: Boolean(data?.request_id),
         });
         if (!canvasResult.ok) {
-          appendGenerateTurn(
+          completeGenerateTurn(
             trimmed,
             `Canvas: ${humanizeCanvasError(canvasResult.error || 'Canvas apply failed.')}`,
           );
@@ -1084,16 +1169,16 @@ export const Generate: React.FC<Props> = ({
           file_id: fileKey,
         });
         if (consumed?.error) {
-          appendGenerateTurn(
+          completeGenerateTurn(
             trimmed,
-            `Crediti: ${consumed.error}\n\nIl frame era già stato creato sulla canvas; controlla il saldo e riprova.`,
+            `Credits: ${consumed.error}\n\nThe frame was already created on the canvas; check your balance and try again.`,
           );
           setGenError(consumed.error);
           setLoading(false);
           setGenerateStep('idle');
           return;
         }
-        appendGenerateTurn(
+        completeGenerateTurn(
           trimmed,
           buildAssistantSummaryFromPlan(actionPlan, { rootId: canvasResult.rootId ?? null }),
         );
@@ -1113,7 +1198,7 @@ export const Generate: React.FC<Props> = ({
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        appendGenerateTurn(trimmed, `Errore: ${humanizeCanvasError(msg)}`);
+        completeGenerateTurn(trimmed, `Error: ${humanizeCanvasError(msg)}`);
         void fetchGenerationPluginEvent?.({
           event_type: 'generate_chat_turn_failed',
           figma_file_key: fileKey,
@@ -1128,6 +1213,7 @@ export const Generate: React.FC<Props> = ({
         }
         setGenError(humanizeCanvasError(msg));
       } finally {
+        pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
       }
@@ -1143,10 +1229,12 @@ export const Generate: React.FC<Props> = ({
       fetchGenerate,
       selectedSystem,
       runCanvasApply,
-      appendGenerateTurn,
+      completeGenerateTurn,
       consumeCredits,
       fetchGenerationPluginEvent,
       humanizeCanvasError,
+      abortOptimisticUserTurn,
+      beginOptimisticUserTurn,
     ],
   );
 
@@ -1173,7 +1261,7 @@ export const Generate: React.FC<Props> = ({
     const labels = chipList.filter((c) => preflightPick[c.id]).map((c) => c.label);
     const merged =
       labels.length > 0
-        ? `${raw.trim()}\n\n[Vincoli da chiarimento]\n${labels.map((l) => `- ${l}`).join('\n')}`
+        ? `${raw.trim()}\n\n[Clarification constraints]\n${labels.map((l) => `- ${l}`).join('\n')}`
         : raw.trim();
     setShowPreflight(false);
     void fetchGenerationPluginEvent?.({
@@ -1228,7 +1316,11 @@ export const Generate: React.FC<Props> = ({
     setConversationTurns([]);
     setServerThreadId(null);
     serverThreadIdRef.current = null;
+    pendingOptimisticUserTurnIdRef.current = null;
+    setShowIntroTyping(false);
+    setShowIntroBubble(false);
     setShowRefinementChips(false);
+    setRefineChipsHiddenByComposer(false);
     setShowPreflight(false);
     setPreflightRemote(null);
     skippedPreflightHashRef.current = null;
@@ -1266,7 +1358,7 @@ export const Generate: React.FC<Props> = ({
           persistTurnsLocal(turns.slice(-MAX_CONVERSATION_MESSAGES));
         }
       } catch {
-        setGenError('Impossibile caricare la conversazione.');
+        setGenError('Could not load this conversation.');
       }
     },
     [generateConversationApi, userId, genFileKey, dsScopeHash, persistTurnsLocal],
@@ -1279,6 +1371,7 @@ export const Generate: React.FC<Props> = ({
         event_type: 'generate_chip_clicked',
         payload: { chip_id: chip.id, tier: chip.tier },
       });
+      beginOptimisticUserTurn(chip.label);
       const base = getPlainTerminalText(inputRef.current);
       const next = `${base}${chip.append}`.trim();
       inputRef.current.innerText = next;
@@ -1286,19 +1379,8 @@ export const Generate: React.FC<Props> = ({
       setHasContent(true);
       await runGeneratePipeline(next, { chipId: chip.id });
     },
-    [loading, runGeneratePipeline, fetchGenerationPluginEvent],
+    [loading, runGeneratePipeline, fetchGenerationPluginEvent, beginOptimisticUserTurn],
   );
-
-  const generateStepLabel =
-    generateStep === 'context'
-      ? 'Contesto file…'
-      : generateStep === 'ai'
-        ? 'Generazione layout (server)…'
-        : generateStep === 'canvas'
-          ? 'Creazione su Figma (può richiedere un minuto con molti componenti)…'
-          : generateStep === 'credits'
-            ? 'Aggiornamento crediti…'
-            : '';
 
   const handleViewFigma = async () => {
     const plan = lastActionPlanRef.current;
@@ -1313,7 +1395,13 @@ export const Generate: React.FC<Props> = ({
   };
 
   const handleInsertInspiration = (txt: string) => {
-    setPromptFromSuggestion(txt);
+    beginOptimisticUserTurn(txt);
+    if (inputRef.current) {
+      inputRef.current.innerText = '';
+    }
+    setPromptText('');
+    setHasContent(false);
+    void runGeneratePipeline(txt);
   };
 
   const handleUploadClick = () => {
@@ -1390,23 +1478,6 @@ export const Generate: React.FC<Props> = ({
         : 'bg-yellow-50 text-yellow-900'
     : 'bg-sky-50 text-sky-900';
 
-  const generateContextSummary = hasSelection
-    ? `Modifica · ${selectedLayerName ?? 'layer'}`
-    : screenshotAttachment
-      ? `Screenshot · ${screenshotAttachment.name}`
-      : 'Creazione wireframe';
-  const generatePhaseActiveIndex =
-    generateStep === 'context'
-      ? 0
-      : generateStep === 'ai'
-        ? 1
-        : generateStep === 'canvas'
-          ? 2
-          : generateStep === 'credits'
-            ? 3
-            : -1;
-  const generatePhaseLabels = ['Contesto', 'Server AI', 'Canvas', 'Crediti'] as const;
-
   const dsCardHeaderRight =
     usesFileDs && genFileName ? (
       <span
@@ -1426,44 +1497,74 @@ export const Generate: React.FC<Props> = ({
       </span>
     ) : undefined;
 
-  const threadScopeReady = !!(
-    userId &&
-    generateConversationApi &&
-    genFileKey &&
-    dsScopeHash
-  );
-  const showChatComposerShell = !threadScopeReady || generateComposerTab === 'chat';
-  const hasConversationStarted = conversationTurns.length > 0;
+  /** Threads API still needs file + scope hash; tabs stay visible whenever API is wired. */
+  const threadScopeReady = !!(userId && generateConversationApi && genFileKey && dsScopeHash);
+  const showComposerThreadTabs = !!(userId && generateConversationApi);
+  /** Chat UI vs threads list — follow the active tab (threads shows a stub until scope is ready). */
+  const showChatComposerShell = generateComposerTab === 'chat';
+
+  useEffect(() => {
+    if (!showGenerateComposer || showReport || conversationTurns.length > 0 || !showChatComposerShell) return;
+    setShowIntroTyping(true);
+    const t = setTimeout(() => {
+      setShowIntroTyping(false);
+      setShowIntroBubble(true);
+    }, 900);
+    return () => clearTimeout(t);
+  }, [showGenerateComposer, showReport, conversationTurns.length, showChatComposerShell]);
+
+  /** Keep latest bubbles at the bottom of the fixed-height chat panel (scroll only when content overflows). */
+  useLayoutEffect(() => {
+    const root = chatScrollRef.current;
+    if (!root) return;
+    root.scrollTop = root.scrollHeight;
+  }, [
+    conversationTurns,
+    loading,
+    showIntroTyping,
+    showIntroBubble,
+    showPreflight,
+    showRefinementChips,
+    refineChipsHiddenByComposer,
+  ]);
+
+  const showAssistantThinkingDots =
+    loading &&
+    conversationTurns.length > 0 &&
+    conversationTurns[conversationTurns.length - 1]?.role === 'user';
 
   return (
     <div
       data-component="Generate: View Container"
-      className="relative flex min-h-full flex-col gap-3 p-3 pb-28 sm:gap-4 sm:p-4"
+      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-28 sm:gap-2 sm:p-4"
     >
-      <div data-component="Generate: Global header" className="shrink-0">
-        <div className="flex items-center justify-center">
-          <div
-            data-component="Generate: Credit Banner"
-            className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}
-          >
-            Credits · {creditsDisplay}
+      <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
+        <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
+          <div className="mb-2 grid min-h-9 grid-cols-[1fr_auto_1fr] items-center gap-x-2">
+            <span className="min-w-0" aria-hidden />
+            <div
+              data-component="Generate: Credit Banner"
+              className={`justify-self-center transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}
+            >
+              Credits: {creditsDisplay}
+            </div>
+            <div className="flex min-w-0 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowReadFirstModal(true)}
+                className="shrink-0 text-right text-[10px] font-black uppercase tracking-wide text-gray-600 underline decoration-black/25 underline-offset-2 hover:text-black"
+              >
+                Privacy & Data
+              </button>
+            </div>
           </div>
         </div>
-        <div className="mt-2 border-t-2 border-black/10 pt-2">
-          <button
-            type="button"
-            onClick={() => setShowReadFirstModal(true)}
-            className="w-full text-left text-[10px] font-black uppercase tracking-wide text-gray-600 underline decoration-black/25 underline-offset-2 hover:text-black"
-          >
-            Read first + Design system data
-          </button>
-        </div>
-        <div className="mt-2 h-[2px] w-full bg-black/10" />
+        <div className="h-[2px] w-full shrink-0 bg-black" aria-hidden />
       </div>
 
       {/* Error from generation or file context */}
       {genError && (
-        <div className="bg-red-50 border-2 border-red-400 p-3 text-[10px] font-medium text-red-800 flex justify-between items-start gap-2">
+        <div className="w-full border-2 border-black bg-red-50 p-3 text-[10px] font-bold text-red-900 shadow-[3px_3px_0_0_#000] flex justify-between items-start gap-2">
           <span>{genError}</span>
           <button type="button" onClick={() => setGenError(null)} className="font-bold shrink-0" aria-label="Dismiss">✕</button>
         </div>
@@ -1490,8 +1591,8 @@ export const Generate: React.FC<Props> = ({
       )}
 
       {showGenerateComposer && !showReport && (
-        <div className="shrink-0">
-          <div className="border-2 border-black bg-white p-2">
+        <div className={`${FULL_BLEED_OUT} shrink-0 flex flex-col`}>
+          <div className={`${FULL_BLEED_IN} bg-white`}>
             <BrutalDropdown
               open={isSystemOpen}
               onOpenChange={setIsSystemOpen}
@@ -1502,52 +1603,16 @@ export const Generate: React.FC<Props> = ({
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="w-full p-2 flex justify-between items-center cursor-pointer text-xs font-black bg-white text-left uppercase"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-2 text-left text-xs font-black uppercase leading-none"
                 >
                   <span className="truncate min-w-0">
-                    <span className="text-gray-500">Target &amp; DS</span> · {generateContextSummary} · {selectedSystem}
+                    <span className="text-gray-500">Design system</span> · {selectedSystem}
                   </span>
                   <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
                 </button>
               }
             >
-              <div className="p-2 border-t border-black/10 space-y-2">
-                <div className="text-[10px] font-bold">
-                  {hasSelection
-                    ? `Target: ${selectedLayerName}`
-                    : screenshotAttachment
-                      ? `Screenshot: ${screenshotAttachment.name}`
-                      : 'Target will be inferred from your conversational request.'}
-                </div>
-                {!hasSelection && !screenshotAttachment ? (
-                  <>
-                    <input
-                      ref={screenshotFileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      aria-hidden
-                      onChange={handleScreenshotFileChange}
-                    />
-                    <button
-                      type="button"
-                      data-component="Generate: Upload Button"
-                      onClick={handleUploadClick}
-                      className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-600"
-                    >
-                      Upload image
-                    </button>
-                  </>
-                ) : null}
-                {screenshotAttachment ? (
-                  <button
-                    type="button"
-                    onClick={handleDeleteUpload}
-                    className="w-full text-left text-[10px] font-bold underline"
-                  >
-                    Remove screenshot
-                  </button>
-                ) : null}
+              <div className="space-y-2 border-t border-black/10 p-2">
                 <input
                   type="text"
                   placeholder="Search System..."
@@ -1593,21 +1658,16 @@ export const Generate: React.FC<Props> = ({
               </div>
             </BrutalDropdown>
           </div>
-          <div className="mt-2 h-[2px] w-full bg-black/10" />
-        </div>
-      )}
-
-      {showGenerateComposer && !showReport ? (
-        <div data-component="Generate: Conversational column" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {userId && generateConversationApi && genFileKey && dsScopeHash ? (
+          <div className="h-[2px] w-full shrink-0 bg-black" aria-hidden />
+          {showComposerThreadTabs ? (
             <>
               <div
-                className="inline-flex w-fit max-w-full flex-wrap gap-0 border-2 border-black bg-white"
-                data-component="Generate: Chat / Conversazioni tabs"
+                className="flex w-full border-b-2 border-black bg-white"
+                data-component="Generate: Chat / Threads tabs"
               >
                 <button
                   type="button"
-                  className={`text-[10px] font-black uppercase px-2.5 py-1 border-r-2 border-black ${
+                  className={`min-h-10 flex-1 basis-0 border-r-2 border-black py-1.5 text-[10px] font-black uppercase ${
                     generateComposerTab === 'chat' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
                   }`}
                   onClick={() => setGenerateComposerTab('chat')}
@@ -1616,7 +1676,7 @@ export const Generate: React.FC<Props> = ({
                 </button>
                 <button
                   type="button"
-                  className={`text-[10px] font-black uppercase px-2.5 py-1 ${
+                  className={`min-h-10 flex-1 basis-0 py-1.5 text-[10px] font-black uppercase ${
                     generateComposerTab === 'threads' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
                   }`}
                   onClick={() => setGenerateComposerTab('threads')}
@@ -1624,103 +1684,81 @@ export const Generate: React.FC<Props> = ({
                   Threads
                 </button>
               </div>
-              <div className="h-[2px] w-full bg-black/10 mt-2 shrink-0" />
+              <div className="h-[2px] w-full shrink-0 bg-black" aria-hidden />
             </>
           ) : null}
+        </div>
+      )}
 
+      {showGenerateComposer && !showReport ? (
+        <div data-component="Generate: Conversational column" className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {showChatComposerShell ? (
             <>
-              <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar py-2">
-                {showPreflight ? (
-                  <div data-component="Generate: Preflight clarifier" className="space-y-2 px-1 pb-2">
-                    <p className="text-[10px] font-black uppercase">
-                      {preflightRemote?.title || 'Chiarimenti leggeri (opzionale)'}
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {(preflightRemote?.chips?.length
-                        ? preflightRemote.chips
-                        : evaluatePreflightClarifier(preflightPromptSnapshot).chips
-                      ).map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() =>
-                            setPreflightPick((p) => ({
-                              ...p,
-                              [c.id]: !p[c.id],
-                            }))
-                          }
-                          className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
-                            preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
-                          }`}
-                        >
-                          {c.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" className="text-[10px]" type="button" onClick={() => void handlePreflightDismissRun()}>
-                        Continua senza
-                      </Button>
-                      <Button variant="primary" className="text-[10px]" type="button" onClick={() => void handlePreflightConfirm()}>
-                        Genera
-                      </Button>
-                    </div>
-                    <div className="h-[2px] w-full bg-black/10" />
-                  </div>
-                ) : null}
-
-                <div className="px-1 space-y-2">
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono leading-tight">
-                    <span><span className="font-black uppercase text-gray-500">DS </span>{selectedSystem}</span>
-                    <span><span className="font-black uppercase text-gray-500">Contesto </span>{generateContextSummary}</span>
-                    {usesFileDs && genFileName ? (
-                      <span className="truncate max-w-full">
-                        <span className="font-black uppercase text-gray-500">File </span>{genFileName}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {generatePhaseLabels.map((label, i) => {
-                      const active = loading && generatePhaseActiveIndex === i;
-                      const done = loading && generatePhaseActiveIndex > i;
-                      return (
-                        <span
-                          key={label}
-                          className={`text-[9px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
-                            active ? 'bg-[#ffc900]' : done ? 'bg-emerald-100' : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                  {lastDiagLine ? (
-                    <p className="text-[9px] text-emerald-900 font-mono leading-snug">{lastDiagLine}</p>
-                  ) : null}
-                </div>
-
-                <div className="px-1 pt-1 space-y-2">
-                  {conversationTurns.length === 0 ? (
-                    <div className="text-[10px] leading-snug text-gray-700 space-y-2">
-                      <p>Start chatting with Generate. I will reason live on context, AI, canvas, and credits steps.</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {contextSuggestions.map((txt, i) => (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                  ref={chatScrollRef}
+                  data-component="Generate: Chat scroll"
+                  className="generate-chat-scroll flex min-h-0 flex-1 flex-col pb-40"
+                >
+                  {showPreflight ? (
+                    <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
+                      <p className="text-[10px] font-black uppercase">
+                        {preflightRemote?.title || 'Light clarifications (optional)'}
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {(preflightRemote?.chips?.length
+                          ? preflightRemote.chips
+                          : evaluatePreflightClarifier(preflightPromptSnapshot).chips
+                        ).map((c) => (
                           <button
-                            key={`starter-empty-${i}`}
+                            key={c.id}
                             type="button"
-                            onClick={() => handleInsertInspiration(txt)}
-                            disabled={!canGenerate || dsGateBlocked}
-                            className={`text-[9px] border-2 border-black px-2 py-1 bg-white font-bold ${canGenerate && !dsGateBlocked ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
+                            onClick={() =>
+                              setPreflightPick((p) => ({
+                                ...p,
+                                [c.id]: !p[c.id],
+                              }))
+                            }
+                            className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
+                              preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
+                            }`}
                           >
-                            {txt}
+                            {c.label}
                           </button>
                         ))}
                       </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" className="text-[10px]" type="button" onClick={() => void handlePreflightDismissRun()}>
+                          Continue without
+                        </Button>
+                        <Button variant="primary" className="text-[10px]" type="button" onClick={() => void handlePreflightConfirm()}>
+                          Generate
+                        </Button>
+                      </div>
                     </div>
-                  ) : (
-                    conversationTurns.map((turn) => (
+                  ) : null}
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="mt-auto flex w-full flex-col gap-2 px-1 pb-2 pt-1">
+                    {showIntroTyping && conversationTurns.length === 0 ? (
+                      <div className="flex justify-start">
+                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
+                          <span className="inline-flex items-center gap-0.5" aria-label="Assistant is typing">
+                            <span className="animate-bounce">·</span>
+                            <span className="animate-bounce delay-100">·</span>
+                            <span className="animate-bounce delay-200">·</span>
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
+                    {showIntroBubble && conversationTurns.length === 0 ? (
+                      <div className="flex justify-start">
+                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                          Hi — I am here to generate on the frame using your design system. Below you have three quick starters, or
+                          type what you need: I reason step by step as we go.
+                        </div>
+                      </div>
+                    ) : null}
+                    {conversationTurns.map((turn) => (
                       <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
                           className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
@@ -1730,105 +1768,180 @@ export const Generate: React.FC<Props> = ({
                           {turn.body}
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-
-                {showRefinementChips ? (
-                  <div data-component="Generate: Refinement chips" className="px-1 pt-2">
-                    <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">Refinement chips</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {REFINEMENT_CHIPS.map((chip) => (
-                        <button
-                          key={chip.id}
-                          type="button"
-                          disabled={loading || dsGateBlocked}
-                          onClick={() => void applyRefinementChip(chip)}
-                          title={`Stima: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} crediti (preview)`}
-                          className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
-                        >
-                          {chip.label} (~{refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
-                        </button>
-                      ))}
+                    ))}
+                    {showAssistantThinkingDots ? (
+                      <div className="flex justify-start" aria-live="polite" aria-busy="true">
+                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
+                          <span className="inline-flex items-center gap-0.5" aria-label="Assistant is thinking">
+                            <span className="animate-bounce">·</span>
+                            <span className="animate-bounce delay-100">·</span>
+                            <span className="animate-bounce delay-200">·</span>
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
+                    {showRefinementChips && !refineChipsHiddenByComposer ? (
+                      <div data-component="Generate: Refinement chips" className="pt-1">
+                        <div className="flex flex-wrap gap-1.5">
+                          {REFINEMENT_CHIPS.map((chip) => (
+                            <button
+                              key={chip.id}
+                              type="button"
+                              disabled={loading || dsGateBlocked}
+                              onClick={() => void applyRefinementChip(chip)}
+                              title={`Estimate: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} credits (preview)`}
+                              className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
+                            >
+                              {chip.label} (~{refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {conversationTurns.length === 0 && !promptText.trim() ? (
+                      <div className="-mx-1 border-t-2 border-black bg-white px-1 py-2">
+                        <p className="mb-1.5 px-1 text-[9px] font-black uppercase text-gray-500">Quick starters</p>
+                        <div className="flex flex-col gap-1.5">
+                          {contextSuggestions.map((txt, i) => (
+                            <button
+                              key={`starter-empty-${i}`}
+                              type="button"
+                              onClick={() => handleInsertInspiration(txt)}
+                              disabled={!canGenerate || dsGateBlocked || loading}
+                              className={`w-full border-2 border-black bg-white px-2 py-1.5 text-left text-[9px] font-bold leading-snug ${canGenerate && !dsGateBlocked && !loading ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
+                            >
+                              {txt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     </div>
                   </div>
-                ) : null}
+                </div>
               </div>
 
-              <div className="h-[2px] w-full bg-black/10 shrink-0" />
-              <div data-component="Generate: Composer dock" className="shrink-0 bg-white pt-2">
-                <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={handleEnhancePrompt}
-                      disabled={!hasContent || loading || enhancePlusBusy || enhanceLocked || dsGateBlocked}
-                      className={`text-[9px] border-2 border-black px-2 py-0.5 uppercase font-black ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#ffc900]'}`}
-                    >
-                      Enhance
-                    </button>
-                    {fetchEnhancePlus ? (
+              <div
+                data-component="Generate: Composer dock"
+                className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-3 py-2 sm:px-4"
+                style={{ bottom: 'calc(3.5rem + 5px)' }}
+              >
+                <input
+                  ref={screenshotFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  aria-hidden
+                  onChange={handleScreenshotFileChange}
+                />
+                <div
+                  className={`relative w-full overflow-hidden rounded-2xl border-2 border-black bg-white shadow-[3px_3px_0_0_#000] ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  <div
+                    ref={inputRef}
+                    contentEditable
+                    onPaste={handlePaste}
+                    onInput={checkContent}
+                    onKeyDown={handlePromptKeyDown}
+                    onClick={handleContentClick}
+                    data-component="Generate: Rich Input"
+                    className="max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-3 pb-14 pt-2.5 text-sm font-mono leading-snug outline-none focus:bg-[#ffc900]/15"
+                    style={{ whiteSpace: 'pre-wrap' }}
+                    data-placeholder={promptPlaceholder}
+                  />
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-neutral-50 px-2 py-1.5">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      <details className="group relative shrink-0">
+                        <summary className="flex size-9 cursor-pointer list-none items-center justify-center border-2 border-black bg-white font-black leading-none hover:bg-[#ffc900] [&::-webkit-details-marker]:hidden">
+                          +
+                        </summary>
+                        <div className="absolute bottom-full left-0 z-[60] mb-1 min-w-[10rem] border-2 border-black bg-white py-1 shadow-[3px_3px_0_0_#000]">
+                          <button
+                            type="button"
+                            className="block w-full px-2 py-1.5 text-left text-[9px] font-black uppercase hover:bg-[#ffc900]"
+                            onClick={(e) => {
+                              (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                              handleUploadClick();
+                            }}
+                          >
+                            Add image
+                          </button>
+                          <button
+                            type="button"
+                            className="block w-full px-2 py-1.5 text-left text-[9px] font-black uppercase hover:bg-[#ffc900]"
+                            onClick={(e) => {
+                              (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                              setPromptFromSuggestion('Use this Figma frame as reference: ');
+                            }}
+                          >
+                            Frame as reference
+                          </button>
+                        </div>
+                      </details>
                       <button
                         type="button"
-                        onClick={() => void handleEnhancePlusPrompt()}
-                        disabled={!hasContent || loading || enhancePlusBusy || dsGateBlocked}
-                        className={`text-[9px] border-2 border-black px-2 py-0.5 uppercase font-black ${!hasContent || loading || enhancePlusBusy ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#ffc900]'}`}
+                        onClick={handleEnhancePrompt}
+                        disabled={!hasContent || loading || enhancePlusBusy || enhanceLocked || dsGateBlocked}
+                        className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center border-2 border-black px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
                       >
-                        {enhancePlusBusy ? '…' : plan === 'PRO' ? 'Enhance+' : `Enhance+ ${enhancePlusCost}cr`}
+                        Enhance
                       </button>
-                    ) : null}
+                      {fetchEnhancePlus ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleEnhancePlusPrompt()}
+                          disabled={!hasContent || loading || enhancePlusBusy || dsGateBlocked}
+                          className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center border-2 border-black px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
+                        >
+                          {enhancePlusBusy ? '…' : plan === 'PRO' ? 'Enhance+' : `Enhance+ ${enhancePlusCost}cr`}
+                        </button>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleGen}
+                      disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
+                      className="flex size-9 shrink-0 items-center justify-center rounded-none p-0 shadow-[2px_2px_0_0_#000]"
+                      aria-label="Send"
+                    >
+                      ➤
+                    </Button>
                   </div>
-                  <span className="text-[9px] font-mono text-gray-500">Cmd/Ctrl + Enter</span>
                 </div>
-                <div
-                  ref={inputRef}
-                  contentEditable
-                  onPaste={handlePaste}
-                  onInput={checkContent}
-                  onKeyDown={handlePromptKeyDown}
-                  onClick={handleContentClick}
-                  data-component="Generate: Rich Input"
-                  className={`${BRUTAL.input} min-h-[120px] text-sm bg-white focus:bg-white cursor-text ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''}`}
-                  style={{ whiteSpace: 'pre-wrap' }}
-                  data-placeholder={promptPlaceholder}
-                />
-                {promptHints.length > 0 && (
-                  <div className="mt-1 bg-yellow-50 border border-yellow-300 p-2 text-[10px] text-yellow-900">
-                    {promptHints.slice(0, 2).map((hint) => (
-                      <p key={hint}>- {hint}</p>
-                    ))}
-                  </div>
-                )}
-                <Button
-                  data-component="Generate: Generate Button"
-                  variant="primary"
-                  fullWidth
-                  layout="row"
-                  onClick={handleGen}
-                  disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
-                  className="relative overflow-hidden min-h-[48px] mt-2"
-                  aria-busy={loading}
-                >
-                  {loading ? (
-                    <span className="relative z-10 flex items-center justify-center gap-2">
-                      <span className="w-2 h-2 shrink-0 bg-black animate-pulse" aria-hidden />
-                      Weaving Magic...
-                    </span>
-                  ) : (
-                    <>
-                      <span className="relative z-10">{ctaLabel}</span>
-                      {canGenerate && (
-                        <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
-                          -{creditEstimate} Credits
-                        </span>
-                      )}
-                    </>
-                  )}
-                </Button>
               </div>
             </>
+          ) : threadScopeReady ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 pt-2 pb-40">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
+                <p className="text-[10px] font-black uppercase">Threads</p>
+                <Button variant="secondary" type="button" className="text-[9px] uppercase" onClick={() => void handleNewConversation()}>
+                  New chat
+                </Button>
+              </div>
+              <div className="custom-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+                {threadList.length === 0 ? (
+                  <p className="text-[10px] text-gray-800">No threads yet. Send a message in Chat to start one.</p>
+                ) : (
+                  threadList.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => void handleSelectThread(t.id)}
+                      className={`w-full border-2 border-black px-2 py-2 text-left text-[10px] font-bold shadow-[2px_2px_0_0_#000] hover:bg-[#ffc900] ${
+                        serverThreadId === t.id ? 'bg-[#ffc900]/50' : 'bg-white'
+                      }`}
+                    >
+                      {t.title || 'Untitled conversation'}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           ) : (
-            <div className="py-2 text-[10px] text-gray-600">Open Chat tab to continue.</div>
+            <div className="border-2 border-black bg-neutral-50 p-3 text-[10px] font-black uppercase leading-snug shadow-[3px_3px_0_0_#000]">
+              Finish design system import for this file to load saved threads.
+            </div>
           )}
         </div>
       ) : showReport ? (

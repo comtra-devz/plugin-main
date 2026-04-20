@@ -303,12 +303,9 @@ function WizardImportGapSnackbars({
   return (
     <div className="shrink-0 space-y-2" role="region" aria-label={ariaLabel}>
       {hints.map((h) => (
-        <div
-          key={h.id}
-          className="border-2 border-amber-800 bg-amber-50 p-2.5 shadow-[3px_3px_0_0_#000]"
-        >
-          <p className="text-[10px] font-black uppercase leading-tight tracking-wide text-amber-950">{h.title}</p>
-          <p className="mt-1 text-[11px] font-medium leading-snug text-amber-950/95">{h.body}</p>
+        <div key={h.id} className={BRUTAL.snackbarWarning}>
+          <p className="text-[10px] font-black uppercase leading-tight tracking-wide text-black">{h.title}</p>
+          <p className="mt-1 text-[11px] font-medium leading-snug text-black">{h.body}</p>
         </div>
       ))}
     </div>
@@ -359,8 +356,8 @@ function ImportComponentsCatalogCard({
       </div>
       {/* logo/title/description internal metrics intentionally hidden from user-facing recap */}
       {truncated && fileTotal != null && (
-        <div className="flex gap-2 border-t-2 border-amber-700 bg-amber-50 px-3 py-2.5 text-[11px] font-bold leading-snug text-amber-950">
-          <span className="shrink-0 rounded-sm border border-amber-800 bg-amber-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-950">
+        <div className="flex gap-2 border-t-2 border-black bg-amber-100 px-3 py-2.5 text-[11px] font-bold leading-snug text-black">
+          <span className="shrink-0 border-2 border-black bg-[#ffc900] px-1.5 py-0.5 text-[9px] font-black uppercase text-black">
             Cap
           </span>
           <span>
@@ -1316,11 +1313,11 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             </div>
           ) : null}
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-5">
-            <div className="flex w-full flex-col gap-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4">
+            <div className="flex w-full flex-col gap-3">
               {!importSessionConfirmed ? (
                 <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
-                  <p className="text-center text-2xl font-normal leading-snug text-neutral-900" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                  <p className="text-center text-base sm:text-lg font-black uppercase leading-snug tracking-wide text-black">
                     Set up from this Figma file
                   </p>
                   <p className="text-center text-sm leading-relaxed text-neutral-700">

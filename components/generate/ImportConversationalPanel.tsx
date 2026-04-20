@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { BRUTAL } from '../../constants';
 
 export type ImportFeedAssistant = {
   id: string;
@@ -20,10 +21,10 @@ export type ImportFeedItem = ImportFeedAssistant | ImportFeedActionLog;
 function ImportActionBar({ title, lines }: { title: string; lines: string[] }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="rounded-xl border border-neutral-200 bg-neutral-50/90 text-neutral-900 shadow-sm">
+    <div className={`${BRUTAL.infoShelf} text-black`}>
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[11px] font-semibold leading-snug text-neutral-800"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[11px] font-black uppercase leading-snug tracking-wide"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
@@ -33,14 +34,14 @@ function ImportActionBar({ title, lines }: { title: string; lines: string[] }) {
           </span>
           <span className="min-w-0 truncate">{title}</span>
         </span>
-        <span className="shrink-0 text-neutral-500 tabular-nums" aria-hidden>
+        <span className="shrink-0 font-black tabular-nums text-gray-600" aria-hidden>
           {open ? '▲' : '▼'}
         </span>
       </button>
       {open && lines.length > 0 && (
-        <ul className="border-t border-neutral-200/80 px-3 py-2 text-[10px] leading-relaxed text-neutral-700">
+        <ul className="border-t-2 border-black px-3 py-2 text-[10px] font-medium leading-relaxed text-neutral-900">
           {lines.map((line, i) => (
-            <li key={i} className="list-disc pl-4 marker:text-neutral-400">
+            <li key={i} className="list-disc pl-4 marker:text-black">
               {line}
             </li>
           ))}
@@ -65,7 +66,7 @@ export const ImportConversationalPanel: React.FC<{
 
   return (
     <div
-      className="flex max-h-[min(42vh,320px)] min-h-[120px] flex-col gap-3 overflow-y-auto rounded-xl border border-neutral-200 bg-[#faf9f6] px-3 py-3"
+      className={`${BRUTAL.infoPanel} flex max-h-[min(42vh,320px)] min-h-0 flex-col gap-3 overflow-y-auto`}
       data-component="ImportConversationalPanel"
     >
       {items.map((item) => {
@@ -73,14 +74,14 @@ export const ImportConversationalPanel: React.FC<{
           return (
             <div key={item.id} className="flex flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[9px] font-black uppercase tracking-wide text-neutral-500">Comtra</span>
+                <span className="text-[9px] font-black uppercase tracking-wide text-gray-600">Comtra</span>
                 {item.flavored ? (
-                  <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[8px] font-black uppercase text-amber-900">
+                  <span className="border-2 border-black bg-[#ffc900] px-1.5 py-0.5 text-[8px] font-black uppercase text-black">
                     Kimi
                   </span>
                 ) : null}
               </div>
-              <p className="text-[13px] leading-relaxed text-neutral-900">{item.text}</p>
+              <p className="text-[13px] leading-relaxed text-black">{item.text}</p>
             </div>
           );
         }

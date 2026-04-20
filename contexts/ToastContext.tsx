@@ -10,7 +10,7 @@ export interface ToastOptions {
   title: string;
   description?: string;
   actions?: ToastAction[];
-  /** Se true, mostra un pulsante Chiudi per chiudere il toast. Default true. */
+  /** If true, show a close control on the toast. Default true. */
   dismissible?: boolean;
   /** error = red, warning = amber (temporary/retriable), info = blue/gray, default = white */
   variant?: 'default' | 'error' | 'warning' | 'info';
@@ -59,14 +59,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** 32px sopra la tab bar; nav bar ~3.5rem → bottom = 32px + 56px */
+/** ~32px above tab bar; nav bar ~3.5rem */
 const TOAST_BOTTOM = 'calc(2rem + 3.5rem)';
 
 function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: string) => void }) {
   if (toasts.length === 0) return null;
   return (
     <div
-      className="fixed left-4 right-4 z-[55] flex flex-col gap-2 pointer-events-none"
+      className="fixed inset-x-0 z-[55] flex flex-col gap-2 px-3 sm:px-4 pointer-events-none"
       style={{ bottom: TOAST_BOTTOM }}
       aria-live="polite"
     >
