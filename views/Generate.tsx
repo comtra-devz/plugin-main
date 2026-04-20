@@ -1599,348 +1599,171 @@ export const Generate: React.FC<Props> = ({
 
       {showGenerateComposer && !showReport ? (
         <div data-component="Generate: Conversational column" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {userId && generateConversationApi && genFileKey && dsScopeHash ? (
-              <div className="shrink-0 border-2 border-black border-b-0 bg-white px-2 py-2">
-                <div
-                  className="inline-flex max-w-full flex-wrap gap-0 border-2 border-black bg-white shadow-[2px_2px_0_0_#000]"
-                  data-component="Generate: Chat / Conversazioni tabs"
-                >
-                  <button
-                    type="button"
-                    className={`text-[10px] font-black uppercase px-2.5 py-1 border-r-2 border-black ${
-                      generateComposerTab === 'chat' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={() => setGenerateComposerTab('chat')}
-                  >
-                    Chat
-                  </button>
-                  <button
-                    type="button"
-                    className={`text-[10px] font-black uppercase px-2.5 py-1 ${
-                      generateComposerTab === 'threads' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={() => setGenerateComposerTab('threads')}
-                  >
-                    Threads
-                  </button>
-                </div>
-
-                {generateComposerTab === 'threads' ? (
-                  <div data-component="Generate: Thread scope" className="mt-2 border-2 border-black bg-gray-50 p-2 text-[10px]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="text-[9px] font-bold underline hover:text-[#ff90e8]"
-                        onClick={() => setGenerateComposerTab('chat')}
-                      >
-                        ← Chat
-                      </button>
-                      <span className="font-black uppercase">Conversazioni</span>
-                      <button
-                        type="button"
-                        className="font-bold underline hover:text-[#ff90e8]"
-                        onClick={handleNewConversation}
-                      >
-                        Nuova
-                      </button>
-                      {threadList.length > 0 ? (
-                        <label className="flex items-center gap-1">
-                          <span className="text-[9px] text-gray-600">Server</span>
-                          <select
-                            className="border-2 border-black text-[9px] px-1 py-0.5 bg-white max-w-[168px]"
-                            value={serverThreadId || ''}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (v) void handleSelectThread(v);
-                            }}
-                          >
-                            <option value="">— In uso (locale) —</option>
-                            {threadList.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {(t.title || t.id).slice(0, 40)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
-                    </div>
-                    {threadList.length > 0 ? (
-                      <div
-                        className="mt-1 pt-1 border-t border-black/15 space-y-0.5"
-                        data-component="Generate: Recent threads"
-                      >
-                        <div className="text-[9px] font-bold uppercase text-gray-600">Recenti</div>
-                        <div className="max-h-[220px] overflow-y-auto flex flex-col gap-0.5 pr-0.5">
-                          {threadList.slice(0, 12).map((t) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => void handleSelectThread(t.id)}
-                              className={`text-left flex justify-between items-baseline gap-2 px-1 py-0.5 text-[9px] border shadow-[1px_1px_0_0_#000] hover:bg-[#ffc900]/30 ${
-                                serverThreadId === t.id
-                                  ? 'bg-amber-100 border-black'
-                                  : 'border-black/20 bg-white'
-                              }`}
-                            >
-                              <span className="truncate font-medium min-w-0">
-                                {(t.title || 'Senza titolo').slice(0, 44)}
-                              </span>
-                              <span className="shrink-0 text-gray-500 tabular-nums">
-                                {t.updated_at_ms != null
-                                  ? formatShortRelativeTime(t.updated_at_ms)
-                                  : '—'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                    <p className="text-[9px] text-gray-600 leading-snug font-medium">
-                      Scope thread: stesso file + hash DS — evita confusione tra snapshot diversi (§7).
-                    </p>
-                    <p className="text-[9px] text-gray-600 leading-snug font-medium">
-                      §8 — Cockpit nel plugin; ricerca archivio, playbook riusabili e analytics team restano sul portale web
-                      / admin.
-                    </p>
-                  </div>
-                ) : (
-                  <div data-component="Generate: Thread strip (compact)" className="mt-2 border-2 border-black bg-gray-50 px-2 py-1 text-[10px] flex flex-wrap items-center gap-2">
-                    <span className="font-black uppercase">Thread</span>
-                    <button
-                      type="button"
-                      className="font-bold underline hover:text-[#ff90e8]"
-                      onClick={handleNewConversation}
-                    >
-                      Nuova
-                    </button>
-                    {threadList.length > 0 ? (
-                      <label className="flex items-center gap-1">
-                        <span className="text-[9px] text-gray-600">Server</span>
-                        <select
-                          className="border-2 border-black text-[9px] px-1 py-0.5 bg-white max-w-[168px]"
-                          value={serverThreadId || ''}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v) void handleSelectThread(v);
-                          }}
-                        >
-                          <option value="">— In uso (locale) —</option>
-                          {threadList.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {(t.title || t.id).slice(0, 40)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="text-[9px] font-bold underline ml-auto shrink-0"
-                      onClick={() => setGenerateComposerTab('threads')}
-                    >
-                      Elenco completo
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            {showChatComposerShell ? (
-              <>
-            <div className="h-[2px] w-full bg-black/10 shrink-0" />
-            <div className="flex min-h-0 flex-1 flex-col border-2 border-black border-t-0 bg-[#f7f7f7]">
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-2 custom-scrollbar">
-            {showPreflight ? (
+          {userId && generateConversationApi && genFileKey && dsScopeHash ? (
+            <>
               <div
-                data-component="Generate: Preflight clarifier"
-                className="space-y-2 border-2 border-amber-500 bg-amber-50 p-2"
+                className="inline-flex w-fit max-w-full flex-wrap gap-0 border-2 border-black bg-white"
+                data-component="Generate: Chat / Conversazioni tabs"
               >
-                <p className="text-[10px] font-black uppercase">
-                  {preflightRemote?.title || 'Chiarimenti leggeri (opzionale)'}
-                </p>
-                <p className="text-[9px] text-gray-700 leading-snug">
-                  Zero crediti: completa o salta. I vincoli scelti vengono aggiunti al prompt per lo stesso{' '}
-                  <code className="font-mono text-[8px]">POST /api/agents/generate</code>.
-                  {preflightRemote?.source ? (
-                    <span className="block mt-1 text-[8px] text-gray-500">
-                      Suggerimenti: pack ({preflightRemote.source})
-                    </span>
-                  ) : null}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {(preflightRemote?.chips?.length
-                    ? preflightRemote.chips
-                    : evaluatePreflightClarifier(preflightPromptSnapshot).chips
-                  ).map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() =>
-                        setPreflightPick((p) => ({
-                          ...p,
-                          [c.id]: !p[c.id],
-                        }))
-                      }
-                      className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
-                        preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    className="text-[10px]"
-                    type="button"
-                    onClick={() => void handlePreflightDismissRun()}
-                  >
-                    Continua senza
-                  </Button>
-                  <Button
-                    variant="primary"
-                    className="text-[10px]"
-                    type="button"
-                    onClick={() => void handlePreflightConfirm()}
-                  >
-                    Genera
-                  </Button>
-                </div>
+                <button
+                  type="button"
+                  className={`text-[10px] font-black uppercase px-2.5 py-1 border-r-2 border-black ${
+                    generateComposerTab === 'chat' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
+                  }`}
+                  onClick={() => setGenerateComposerTab('chat')}
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  className={`text-[10px] font-black uppercase px-2.5 py-1 ${
+                    generateComposerTab === 'threads' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
+                  }`}
+                  onClick={() => setGenerateComposerTab('threads')}
+                >
+                  Threads
+                </button>
               </div>
-            ) : null}
+              <div className="h-[2px] w-full bg-black/10 mt-2 shrink-0" />
+            </>
+          ) : null}
 
-            <div data-component="Generate: Run transparency + timeline" className="space-y-2 border-2 border-black bg-white p-2">
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono leading-tight">
-                <span>
-                  <span className="font-black uppercase text-gray-500">DS </span>
-                  {selectedSystem}
-                </span>
-                <span>
-                  <span className="font-black uppercase text-gray-500">Contesto </span>
-                  {generateContextSummary}
-                </span>
-                {usesFileDs && genFileName ? (
-                  <span className="truncate max-w-full">
-                    <span className="font-black uppercase text-gray-500">File </span>
-                    {genFileName}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {generatePhaseLabels.map((label, i) => {
-                  const active = loading && generatePhaseActiveIndex === i;
-                  const done = loading && generatePhaseActiveIndex > i;
-                  return (
-                    <span
-                      key={label}
-                      className={`text-[9px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
-                        active ? 'bg-[#ffc900]' : done ? 'bg-emerald-100' : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  );
-                })}
-              </div>
-              <p className="text-[9px] text-gray-600 leading-snug">
-                Una run completa può richiedere fino a ~2 minuti (canvas con molti componenti è di solito il passo più lungo).
-              </p>
-              {lastDiagLine ? (
-                <details className="text-[9px] text-emerald-900 font-mono leading-snug">
-                  <summary className="cursor-pointer font-black uppercase text-gray-600 list-inside">
-                    Diagnostica (opzionale) — §5.3
-                  </summary>
-                  <p className="mt-1 pl-1" aria-live="polite">
-                    {lastDiagLine}
-                  </p>
-                </details>
-              ) : null}
-              <div className="space-y-2 border-2 border-black bg-gray-50 p-2">
-                {conversationTurns.length === 0 ? (
-                  <>
-                    <p className="text-[10px] leading-snug text-gray-700">
-                      Chat is ready. Describe what to generate and I will reason live while executing context, AI,
-                      canvas, and credits steps.
+          {showChatComposerShell ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar py-2">
+                {showPreflight ? (
+                  <div data-component="Generate: Preflight clarifier" className="space-y-2 px-1 pb-2">
+                    <p className="text-[10px] font-black uppercase">
+                      {preflightRemote?.title || 'Chiarimenti leggeri (opzionale)'}
                     </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {contextSuggestions.map((txt, i) => (
+                    <div className="flex flex-wrap gap-1">
+                      {(preflightRemote?.chips?.length
+                        ? preflightRemote.chips
+                        : evaluatePreflightClarifier(preflightPromptSnapshot).chips
+                      ).map((c) => (
                         <button
-                          key={`starter-empty-${i}`}
+                          key={c.id}
                           type="button"
-                          onClick={() => handleInsertInspiration(txt)}
-                          disabled={!canGenerate || dsGateBlocked}
-                          className={`text-[9px] border-2 border-black px-2 py-1 bg-white font-bold ${canGenerate && !dsGateBlocked ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
+                          onClick={() =>
+                            setPreflightPick((p) => ({
+                              ...p,
+                              [c.id]: !p[c.id],
+                            }))
+                          }
+                          className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
+                            preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
+                          }`}
                         >
-                          {txt}
+                          {c.label}
                         </button>
                       ))}
                     </div>
-                  </>
-                ) : (
-                  conversationTurns.map((turn) => (
-                    <div
-                      key={turn.id}
-                      className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] shadow-[2px_2px_0_0_#000] whitespace-pre-wrap leading-snug ${
-                          turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
-                        }`}
-                      >
-                        {turn.body}
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="secondary" className="text-[10px]" type="button" onClick={() => void handlePreflightDismissRun()}>
+                        Continua senza
+                      </Button>
+                      <Button variant="primary" className="text-[10px]" type="button" onClick={() => void handlePreflightConfirm()}>
+                        Genera
+                      </Button>
+                    </div>
+                    <div className="h-[2px] w-full bg-black/10" />
+                  </div>
+                ) : null}
+
+                <div className="px-1 space-y-2">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono leading-tight">
+                    <span><span className="font-black uppercase text-gray-500">DS </span>{selectedSystem}</span>
+                    <span><span className="font-black uppercase text-gray-500">Contesto </span>{generateContextSummary}</span>
+                    {usesFileDs && genFileName ? (
+                      <span className="truncate max-w-full">
+                        <span className="font-black uppercase text-gray-500">File </span>{genFileName}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {generatePhaseLabels.map((label, i) => {
+                      const active = loading && generatePhaseActiveIndex === i;
+                      const done = loading && generatePhaseActiveIndex > i;
+                      return (
+                        <span
+                          key={label}
+                          className={`text-[9px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
+                            active ? 'bg-[#ffc900]' : done ? 'bg-emerald-100' : 'bg-gray-100 text-gray-500'
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {lastDiagLine ? (
+                    <p className="text-[9px] text-emerald-900 font-mono leading-snug">{lastDiagLine}</p>
+                  ) : null}
+                </div>
+
+                <div className="px-1 pt-1 space-y-2">
+                  {conversationTurns.length === 0 ? (
+                    <div className="text-[10px] leading-snug text-gray-700 space-y-2">
+                      <p>Start chatting with Generate. I will reason live on context, AI, canvas, and credits steps.</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {contextSuggestions.map((txt, i) => (
+                          <button
+                            key={`starter-empty-${i}`}
+                            type="button"
+                            onClick={() => handleInsertInspiration(txt)}
+                            disabled={!canGenerate || dsGateBlocked}
+                            className={`text-[9px] border-2 border-black px-2 py-1 bg-white font-bold ${canGenerate && !dsGateBlocked ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
+                          >
+                            {txt}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {showRefinementChips ? (
-              <div data-component="Generate: Refinement chips" className="border-2 border-black bg-white p-2">
-                <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">
-                  Affina output (stessi gate del Generate)
-                </p>
-                <p className="text-[8px] text-gray-600 leading-snug mb-1.5">
-                  Stima da policy §6 (light/medium/heavy). Addebito finale = crediti nel piano dopo successo su canvas,
-                  come una nuova run.
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {REFINEMENT_CHIPS.map((chip) => (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      disabled={loading || dsGateBlocked}
-                      onClick={() => void applyRefinementChip(chip)}
-                      title={`Stima: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} crediti (preview)`}
-                      className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
-                    >
-                      {chip.label} (~
-                      {refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
-                    </button>
-                  ))}
+                  ) : (
+                    conversationTurns.map((turn) => (
+                      <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
+                            turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
+                          }`}
+                        >
+                          {turn.body}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
+
+                {showRefinementChips ? (
+                  <div data-component="Generate: Refinement chips" className="px-1 pt-2">
+                    <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">Refinement chips</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {REFINEMENT_CHIPS.map((chip) => (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          disabled={loading || dsGateBlocked}
+                          onClick={() => void applyRefinementChip(chip)}
+                          title={`Stima: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} crediti (preview)`}
+                          className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
+                        >
+                          {chip.label} (~{refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            </div>
-            <div
-              data-component="Generate: Composer dock"
-              className="relative z-[1] shrink-0 border-t-2 border-black bg-white px-2 pb-2 pt-2"
-            >
-            <div className="relative z-[1] flex flex-col gap-0">
-                <div data-component="Generate: Terminal Header" className="flex items-center justify-between border-2 border-b-0 border-black bg-black p-2 text-xs font-bold uppercase text-white">
-                  <span>Compose</span>
-                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+
+              <div className="h-[2px] w-full bg-black/10 shrink-0" />
+              <div data-component="Generate: Composer dock" className="shrink-0 bg-white pt-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={handleEnhancePrompt}
                       disabled={!hasContent || loading || enhancePlusBusy || enhanceLocked || dsGateBlocked}
-                      title={
-                        enhanceLocked
-                          ? 'Edit the terminal text to unlock Enhance again.'
-                          : 'Free: structured template (no AI).'
-                      }
-                      className={`text-[9px] border border-white/50 px-2 py-0.5 uppercase ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-black'}`}
+                      className={`text-[9px] border-2 border-black px-2 py-0.5 uppercase font-black ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#ffc900]'}`}
                     >
                       Enhance
                     </button>
@@ -1949,22 +1772,15 @@ export const Generate: React.FC<Props> = ({
                         type="button"
                         onClick={() => void handleEnhancePlusPrompt()}
                         disabled={!hasContent || loading || enhancePlusBusy || dsGateBlocked}
-                        title={
-                          plan === 'PRO'
-                            ? 'Kimi: richer prompt (no credit charge on PRO).'
-                            : `Uses Kimi — ${enhancePlusCost} credit(s). Charged only after a successful response.`
-                        }
-                        className={`text-[9px] border border-amber-200/80 px-2 py-0.5 uppercase text-amber-100 ${!hasContent || loading || enhancePlusBusy ? 'opacity-40 cursor-not-allowed' : 'hover:bg-amber-100 hover:text-black'}`}
+                        className={`text-[9px] border-2 border-black px-2 py-0.5 uppercase font-black ${!hasContent || loading || enhancePlusBusy ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#ffc900]'}`}
                       >
                         {enhancePlusBusy ? '…' : plan === 'PRO' ? 'Enhance+' : `Enhance+ ${enhancePlusCost}cr`}
                       </button>
                     ) : null}
-                    <span className="opacity-70 font-mono">v1.2</span>
                   </div>
+                  <span className="text-[9px] font-mono text-gray-500">Cmd/Ctrl + Enter</span>
                 </div>
-
-                {/* ContentEditable Div replacing Textarea */}
-                <div 
+                <div
                   ref={inputRef}
                   contentEditable
                   onPaste={handlePaste}
@@ -1972,97 +1788,48 @@ export const Generate: React.FC<Props> = ({
                   onKeyDown={handlePromptKeyDown}
                   onClick={handleContentClick}
                   data-component="Generate: Rich Input"
-                  className={`${BRUTAL.input} min-h-[120px] text-sm bg-white focus:bg-white overflow-y-auto cursor-text ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''}`}
+                  className={`${BRUTAL.input} min-h-[120px] text-sm bg-white focus:bg-white cursor-text ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''}`}
                   style={{ whiteSpace: 'pre-wrap' }}
                   data-placeholder={promptPlaceholder}
                 />
-            <p className="-mt-1 text-[10px] text-gray-500">
-              {dsGateBlocked ? (
-                <span className="text-amber-800 font-bold">
-                  Complete the design system import above to unlock the prompt and generation.
-                </span>
-              ) : (
-                <>Tip: include goal, constraints, and expected output. Press Cmd/Ctrl + Enter to run.</>
-              )}
-            </p>
-            {promptHints.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-300 p-2 text-[10px] text-yellow-900">
-                {promptHints.slice(0, 2).map((hint) => (
-                  <p key={hint}>- {hint}</p>
-                ))}
-              </div>
-            )}
-            
-            <Button
-              data-component="Generate: Generate Button"
-              variant="primary"
-              fullWidth
-              layout="row"
-              onClick={handleGen}
-              disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
-              className="relative overflow-hidden min-h-[48px]"
-              aria-busy={loading}
-            >
-              {loading ? (
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  <span className="w-2 h-2 shrink-0 bg-black animate-pulse" aria-hidden />
-                  Weaving Magic...
-                </span>
-              ) : (
-                <>
-                  <span className="relative z-10">{ctaLabel}</span>
-                  {canGenerate && (
-                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
-                      -{creditEstimate} Credits
-                    </span>
-                  )}
-                </>
-              )}
-            </Button>
-            {loading && generateStepLabel ? (
-              <p className="text-[9px] text-gray-600 mt-1.5 text-center font-mono" aria-live="polite">
-                {generateStepLabel}
-              </p>
-            ) : null}
-
-            <div className="mt-2">
-                <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Conversational starters:</p>
-                <div className="flex flex-wrap gap-2">
-                {contextSuggestions.map((txt, i) => (
-                    <button 
-                    key={txt} 
-                    data-component={`Generate: Inspiration Chip ${i+1}`}
-                    onClick={() => handleInsertInspiration(txt)} 
-                    disabled={!canGenerate || dsGateBlocked}
-                    className={`text-[10px] border border-black px-2 py-1 bg-white transition-colors text-left ${canGenerate && !dsGateBlocked ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
-                    >
-                    {txt}
-                    </button>
-                ))}
-                </div>
-            </div>
-            </div>
-            </div>
-            </div>
-              </>
-            ) : (
-              <div
-                className="m-2 border-2 border-dashed border-black/50 bg-gray-50 px-2 py-2 text-[9px] text-gray-700"
-                data-component="Generate: Threads-only placeholder"
-              >
-                <span className="font-black uppercase text-gray-500">Solo conversazioni</span>
-                <p className="mt-1 leading-snug">
-                  Torna a <strong>Chat</strong> per terminale, chiarimenti e Generate.
-                </p>
-                <button
-                  type="button"
-                  className="mt-1 text-[9px] font-black uppercase underline"
-                  onClick={() => setGenerateComposerTab('chat')}
+                {promptHints.length > 0 && (
+                  <div className="mt-1 bg-yellow-50 border border-yellow-300 p-2 text-[10px] text-yellow-900">
+                    {promptHints.slice(0, 2).map((hint) => (
+                      <p key={hint}>- {hint}</p>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  data-component="Generate: Generate Button"
+                  variant="primary"
+                  fullWidth
+                  layout="row"
+                  onClick={handleGen}
+                  disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
+                  className="relative overflow-hidden min-h-[48px] mt-2"
+                  aria-busy={loading}
                 >
-                  Apri Chat
-                </button>
+                  {loading ? (
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      <span className="w-2 h-2 shrink-0 bg-black animate-pulse" aria-hidden />
+                      Weaving Magic...
+                    </span>
+                  ) : (
+                    <>
+                      <span className="relative z-10">{ctaLabel}</span>
+                      {canGenerate && (
+                        <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
+                          -{creditEstimate} Credits
+                        </span>
+                      )}
+                    </>
+                  )}
+                </Button>
               </div>
-            )}
+            </>
+          ) : (
+            <div className="py-2 text-[10px] text-gray-600">Open Chat tab to continue.</div>
+          )}
         </div>
       ) : showReport ? (
         <div data-component="Generate: Report Container" className="animate-in slide-in-from-bottom-2 fade-in duration-300">
