@@ -1433,36 +1433,32 @@ export const Generate: React.FC<Props> = ({
     dsScopeHash
   );
   const showChatComposerShell = !threadScopeReady || generateComposerTab === 'chat';
+  const hasConversationStarted = conversationTurns.length > 0;
 
   return (
     <div
       data-component="Generate: View Container"
       className="relative flex min-h-full flex-col gap-3 p-3 pb-28 sm:gap-4 sm:p-4"
     >
-      {/* Top bar: credits + quick links (conversational shell header) */}
-      <div
-        data-component="Generate: Top bar"
-        className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-neutral-200/90 pb-2"
-      >
-        <div
-          data-component="Generate: Credit Banner"
-          className={`rounded-lg border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide shadow-sm ${
-            knownZeroCredits
-              ? 'border-red-300 bg-red-50 text-red-700'
-              : 'border-black/20 bg-[#ffc900]/95 text-black'
-          }`}
-        >
-          Credits · {creditsDisplay}
+      <div data-component="Generate: Global header" className="shrink-0">
+        <div className="flex items-center justify-center">
+          <div
+            data-component="Generate: Credit Banner"
+            className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}
+          >
+            Credits · {creditsDisplay}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase">
+        <div className="mt-2 border-t-2 border-black/10 pt-2">
           <button
             type="button"
             onClick={() => setShowReadFirstModal(true)}
-            className="text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-[#ff90e8]"
+            className="w-full text-left text-[10px] font-black uppercase tracking-wide text-gray-600 underline decoration-black/25 underline-offset-2 hover:text-black"
           >
-            Read first
+            Read first + Design system data
           </button>
         </div>
+        <div className="mt-2 h-[2px] w-full bg-black/10" />
       </div>
 
       {/* Error from generation or file context */}
@@ -1494,190 +1490,125 @@ export const Generate: React.FC<Props> = ({
       )}
 
       {showGenerateComposer && !showReport && (
-        <details
-          data-component="Generate: Context & DS (compact)"
-          className="group shrink-0 rounded-xl border border-neutral-200 bg-white px-3 py-2 shadow-sm open:bg-[#faf9f6]"
-        >
-          <summary className="cursor-pointer list-none text-[11px] font-bold leading-snug text-neutral-900 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex w-full items-center justify-between gap-2">
-              <span className="min-w-0 truncate">
-                <span className="font-black uppercase text-[9px] text-neutral-500">Target &amp; DS ·</span>{' '}
-                {generateContextSummary}
-                <span className="text-neutral-400"> · </span>
-                <span className="text-neutral-800">{selectedSystem}</span>
-              </span>
-              <span className="shrink-0 text-[9px] font-black text-neutral-500 group-open:hidden">▼</span>
-              <span className="hidden shrink-0 text-[9px] font-black text-neutral-500 group-open:inline">▲</span>
-            </span>
-          </summary>
-          <div className="mt-3 space-y-3 border-t border-neutral-200/80 pt-3">
-            <div>
-              <p className="mb-1.5 text-[9px] font-black uppercase text-neutral-500">Canvas context</p>
-              {hasSelection ? (
-                <>
-                  <span
-                    data-component="Generate: Selection Value"
-                    className="block truncate rounded-lg border border-blue-200 bg-blue-50/90 p-2 font-mono text-xs text-blue-800"
-                  >
-                    Target: {selectedLayerName}
-                  </span>
-                  <p className="mt-1 text-[10px] text-neutral-600">
-                    Selection is active. Screenshot context is disabled until you deselect in Figma.
-                  </p>
-                </>
-              ) : screenshotAttachment ? (
-                <div
-                  data-component="Generate: Uploaded File"
-                  className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2"
+        <div className="shrink-0">
+          <div className="border-2 border-black bg-white p-2">
+            <BrutalDropdown
+              open={isSystemOpen}
+              onOpenChange={setIsSystemOpen}
+              maxHeightClassName="max-h-[260px]"
+              panelClassName="!overflow-hidden flex flex-col p-0"
+              trigger={
+                <button
+                  type="button"
+                  data-component="Generate: DS Selector"
+                  onClick={() => setIsSystemOpen(!isSystemOpen)}
+                  className="w-full p-2 flex justify-between items-center cursor-pointer text-xs font-black bg-white text-left uppercase"
                 >
-                  <span className="truncate text-[10px] font-bold">📄 {screenshotAttachment.name}</span>
+                  <span className="truncate min-w-0">
+                    <span className="text-gray-500">Target &amp; DS</span> · {generateContextSummary} · {selectedSystem}
+                  </span>
+                  <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
+                </button>
+              }
+            >
+              <div className="p-2 border-t border-black/10 space-y-2">
+                <div className="text-[10px] font-bold">
+                  {hasSelection
+                    ? `Target: ${selectedLayerName}`
+                    : screenshotAttachment
+                      ? `Screenshot: ${screenshotAttachment.name}`
+                      : 'Target will be inferred from your conversational request.'}
+                </div>
+                {!hasSelection && !screenshotAttachment ? (
+                  <>
+                    <input
+                      ref={screenshotFileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      aria-hidden
+                      onChange={handleScreenshotFileChange}
+                    />
+                    <button
+                      type="button"
+                      data-component="Generate: Upload Button"
+                      onClick={handleUploadClick}
+                      className="w-full border-2 border-black border-dashed py-2 text-[10px] font-bold uppercase hover:bg-gray-50 text-gray-600"
+                    >
+                      Upload image
+                    </button>
+                  </>
+                ) : null}
+                {screenshotAttachment ? (
                   <button
                     type="button"
                     onClick={handleDeleteUpload}
-                    className="shrink-0 font-bold text-red-600 hover:text-red-800"
+                    className="w-full text-left text-[10px] font-bold underline"
                   >
-                    ✕
+                    Remove screenshot
                   </button>
-                </div>
-              ) : (
-                <>
-                  <p data-component="Generate: Selection Empty" className="text-[10px] italic text-neutral-600">
-                    No layer selected. Add a screenshot to start from a product reference.
-                  </p>
-                  <input
-                    ref={screenshotFileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    aria-hidden
-                    onChange={handleScreenshotFileChange}
-                  />
-                  <button
-                    type="button"
-                    data-component="Generate: Upload Button"
-                    onClick={handleUploadClick}
-                    className="mt-2 w-full rounded-lg border border-dashed border-neutral-300 py-2 text-[10px] font-bold uppercase text-neutral-600 hover:bg-neutral-50"
-                  >
-                    Upload image
-                  </button>
-                </>
-              )}
-            </div>
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <p className="text-[9px] font-black uppercase text-neutral-500">Design system</p>
-                <div className="max-w-[58%] min-w-0 shrink-0 text-right">{dsCardHeaderRight}</div>
-              </div>
-              <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-                <BrutalDropdown
-                  open={isSystemOpen}
-                  onOpenChange={setIsSystemOpen}
-                  maxHeightClassName="max-h-[240px]"
-                  panelClassName="!overflow-hidden flex flex-col p-0"
-                  trigger={
-                    <button
-                      type="button"
-                      data-component="Generate: DS Selector"
-                      onClick={() => setIsSystemOpen(!isSystemOpen)}
-                      className="flex w-full cursor-pointer items-center justify-between border-b border-neutral-200 bg-white p-2 text-left text-xs font-bold hover:bg-neutral-50"
+                ) : null}
+                <input
+                  type="text"
+                  placeholder="Search System..."
+                  autoFocus
+                  value={systemSearch}
+                  onChange={(e) => setSystemSearch(e.target.value)}
+                  className="w-full p-2 text-xs border-2 border-black outline-none font-mono bg-yellow-50"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="overflow-y-auto custom-scrollbar border-2 border-black max-h-[160px] bg-white">
+                  {filteredSystems.map((sys) => (
+                    <div
+                      key={sys}
+                      role="option"
+                      onClick={() => {
+                        setSelectedSystem(sys);
+                        setIsSystemOpen(false);
+                        setSystemSearch('');
+                      }}
+                      className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
                     >
-                      <span className="min-w-0 truncate">{selectedSystem}</span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {selectedSystem !== availableSystems[0] && (
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedSystem(availableSystems[0]);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setSelectedSystem(availableSystems[0]);
-                              }
-                            }}
-                            className="rounded-full px-1.5 text-xs font-black text-red-600 hover:bg-red-50"
-                          >
-                            ✕
-                          </span>
-                        )}
-                        <span aria-hidden className="text-neutral-500">
-                          {isSystemOpen ? '▲' : '▼'}
-                        </span>
-                      </div>
-                    </button>
-                  }
+                      {sys}
+                    </div>
+                  ))}
+                </div>
+                <div
+                  data-component="Generate: DS Connection Status"
+                  className={`border-2 border-black px-2.5 py-2 text-[10px] leading-snug font-bold ${dsConnectionTone}`}
                 >
-                  <input
-                    type="text"
-                    placeholder="Search system…"
-                    autoFocus
-                    value={systemSearch}
-                    onChange={(e) => setSystemSearch(e.target.value)}
-                    className="w-full shrink-0 border-b border-neutral-200 bg-amber-50/50 p-2 font-mono text-xs outline-none"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <div className="max-h-[240px] min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-                    {filteredSystems.map((sys) => (
-                      <div
-                        key={sys}
-                        role="option"
-                        onClick={() => {
-                          setSelectedSystem(sys);
-                          setIsSystemOpen(false);
-                          setSystemSearch('');
-                        }}
-                        className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
-                      >
-                        {sys}
-                      </div>
-                    ))}
-                    {filteredSystems.length === 0 && (
-                      <div className="p-2 text-[10px] italic text-neutral-500">No system found</div>
-                    )}
+                  {dsConnectionText}
+                </div>
+                {usesFileDs && catalogReady ? (
+                  <div className="pt-2 pb-1">
+                    <Button
+                      variant="secondary"
+                      className="w-full text-[10px] uppercase"
+                      onClick={handleInvalidateCatalog}
+                    >
+                      Update Design System
+                    </Button>
                   </div>
-                </BrutalDropdown>
+                ) : null}
               </div>
-              <div
-                data-component="Generate: DS Connection Status"
-                className={`mt-2 rounded-lg border border-black/10 px-2.5 py-2 text-[10px] font-bold leading-snug ${dsConnectionTone}`}
-              >
-                {dsConnectionText}
-              </div>
-              {usesFileDs && catalogReady ? (
-                <button
-                  type="button"
-                  data-component="Generate: DS Re-import"
-                  onClick={handleInvalidateCatalog}
-                  className="mt-2 w-full text-left text-[10px] font-black uppercase text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-[#ff90e8]"
-                >
-                  Re-import design system (new server snapshot)
-                </button>
-              ) : null}
-            </div>
+            </BrutalDropdown>
           </div>
-        </details>
+          <div className="mt-2 h-[2px] w-full bg-black/10" />
+        </div>
       )}
 
       {showGenerateComposer && !showReport ? (
-        <div
-          data-component="Generate: Conversational column"
-          className="flex min-h-[min(52vh,480px)] flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-[#faf9f6] shadow-sm"
-        >
+        <div data-component="Generate: Conversational column" className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {userId && generateConversationApi && genFileKey && dsScopeHash ? (
-              <div className="shrink-0 border-b border-neutral-200/90 bg-white/90 px-2 py-2">
+              <div className="shrink-0 border-2 border-black border-b-0 bg-white px-2 py-2">
                 <div
-                  className="inline-flex max-w-full flex-wrap gap-1 rounded-full border border-neutral-200 bg-neutral-50 p-0.5"
+                  className="inline-flex max-w-full flex-wrap gap-0 border-2 border-black bg-white shadow-[2px_2px_0_0_#000]"
                   data-component="Generate: Chat / Conversazioni tabs"
                 >
                   <button
                     type="button"
-                    className={`rounded-full px-3 py-1 text-[10px] font-black uppercase transition-colors ${
-                      generateComposerTab === 'chat'
-                        ? 'bg-[#ffc900] text-black shadow-sm'
-                        : 'text-neutral-600 hover:bg-white'
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 border-r-2 border-black ${
+                      generateComposerTab === 'chat' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
                     }`}
                     onClick={() => setGenerateComposerTab('chat')}
                   >
@@ -1685,10 +1616,8 @@ export const Generate: React.FC<Props> = ({
                   </button>
                   <button
                     type="button"
-                    className={`rounded-full px-3 py-1 text-[10px] font-black uppercase transition-colors ${
-                      generateComposerTab === 'threads'
-                        ? 'bg-[#ffc900] text-black shadow-sm'
-                        : 'text-neutral-600 hover:bg-white'
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 ${
+                      generateComposerTab === 'threads' ? 'bg-[#ffc900]' : 'bg-white hover:bg-gray-50'
                     }`}
                     onClick={() => setGenerateComposerTab('threads')}
                   >
@@ -1697,10 +1626,7 @@ export const Generate: React.FC<Props> = ({
                 </div>
 
                 {generateComposerTab === 'threads' ? (
-                  <div
-                    data-component="Generate: Thread scope"
-                    className="mt-2 flex flex-col gap-1 rounded-lg border border-neutral-200 bg-neutral-50/90 px-2 py-1.5 text-[10px]"
-                  >
+                  <div data-component="Generate: Thread scope" className="mt-2 border-2 border-black bg-gray-50 p-2 text-[10px]">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
@@ -1778,10 +1704,7 @@ export const Generate: React.FC<Props> = ({
                     </p>
                   </div>
                 ) : (
-                  <div
-                    data-component="Generate: Thread strip (compact)"
-                    className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50/90 px-2 py-1 text-[10px]"
-                  >
+                  <div data-component="Generate: Thread strip (compact)" className="mt-2 border-2 border-black bg-gray-50 px-2 py-1 text-[10px] flex flex-wrap items-center gap-2">
                     <span className="font-black uppercase">Thread</span>
                     <button
                       type="button"
@@ -1824,12 +1747,13 @@ export const Generate: React.FC<Props> = ({
 
             {showChatComposerShell ? (
               <>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="h-[2px] w-full bg-black/10 shrink-0" />
+            <div className="flex min-h-0 flex-1 flex-col border-2 border-black border-t-0 bg-[#f7f7f7]">
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-2 custom-scrollbar">
             {showPreflight ? (
               <div
                 data-component="Generate: Preflight clarifier"
-                className="space-y-2 rounded-xl border border-amber-300/80 bg-amber-50/90 p-2 shadow-sm"
+                className="space-y-2 border-2 border-amber-500 bg-amber-50 p-2"
               >
                 <p className="text-[10px] font-black uppercase">
                   {preflightRemote?.title || 'Chiarimenti leggeri (opzionale)'}
@@ -1886,10 +1810,7 @@ export const Generate: React.FC<Props> = ({
               </div>
             ) : null}
 
-            <div
-              data-component="Generate: Run transparency + timeline"
-              className="space-y-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-sm"
-            >
+            <div data-component="Generate: Run transparency + timeline" className="space-y-2 border-2 border-black bg-white p-2">
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono leading-tight">
                 <span>
                   <span className="font-black uppercase text-gray-500">DS </span>
@@ -1913,12 +1834,8 @@ export const Generate: React.FC<Props> = ({
                   return (
                     <span
                       key={label}
-                      className={`text-[9px] font-black uppercase px-2 py-0.5 ${
-                        active
-                          ? 'rounded-full bg-[#ffc900] text-black shadow-sm'
-                          : done
-                            ? 'rounded-full bg-emerald-100 text-emerald-900'
-                            : 'rounded-full bg-neutral-100 text-neutral-500'
+                      className={`text-[9px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
+                        active ? 'bg-[#ffc900]' : done ? 'bg-emerald-100' : 'bg-gray-100 text-gray-500'
                       }`}
                     >
                       {label}
@@ -1939,12 +1856,27 @@ export const Generate: React.FC<Props> = ({
                   </p>
                 </details>
               ) : null}
-              <div className="max-h-[min(38vh,280px)] space-y-2 overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-50/80 p-2 custom-scrollbar">
+              <div className="space-y-2 border-2 border-black bg-gray-50 p-2">
                 {conversationTurns.length === 0 ? (
-                  <p className="text-[10px] italic leading-snug text-neutral-500">
-                    Nessun messaggio ancora: dopo Generate vedrai qui il prompt e una sintesi della run (successo o
-                    errore).
-                  </p>
+                  <>
+                    <p className="text-[10px] leading-snug text-gray-700">
+                      Chat is ready. Describe what to generate and I will reason live while executing context, AI,
+                      canvas, and credits steps.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {contextSuggestions.map((txt, i) => (
+                        <button
+                          key={`starter-empty-${i}`}
+                          type="button"
+                          onClick={() => handleInsertInspiration(txt)}
+                          disabled={!canGenerate || dsGateBlocked}
+                          className={`text-[9px] border-2 border-black px-2 py-1 bg-white font-bold ${canGenerate && !dsGateBlocked ? 'hover:bg-[#ffc900]' : 'opacity-50'}`}
+                        >
+                          {txt}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   conversationTurns.map((turn) => (
                     <div
@@ -1952,10 +1884,8 @@ export const Generate: React.FC<Props> = ({
                       className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-[95%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[11px] leading-snug shadow-sm ${
-                          turn.role === 'user'
-                            ? 'border border-amber-200/80 bg-[#ffc900]/85 font-mono text-black'
-                            : 'border border-neutral-200 bg-white text-neutral-900'
+                        className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] shadow-[2px_2px_0_0_#000] whitespace-pre-wrap leading-snug ${
+                          turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
                         }`}
                       >
                         {turn.body}
@@ -1967,10 +1897,7 @@ export const Generate: React.FC<Props> = ({
             </div>
 
             {showRefinementChips ? (
-              <div
-                data-component="Generate: Refinement chips"
-                className="rounded-xl border border-neutral-200 bg-white p-2 shadow-sm"
-              >
+              <div data-component="Generate: Refinement chips" className="border-2 border-black bg-white p-2">
                 <p className="text-[9px] font-black uppercase text-gray-600 mb-1.5">
                   Affina output (stessi gate del Generate)
                 </p>
@@ -1986,7 +1913,7 @@ export const Generate: React.FC<Props> = ({
                       disabled={loading || dsGateBlocked}
                       onClick={() => void applyRefinementChip(chip)}
                       title={`Stima: ${refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} crediti (preview)`}
-                      className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-1 text-[9px] font-bold hover:border-black/30 hover:bg-[#ffc900]/40 disabled:opacity-40"
+                      className="text-[9px] border-2 border-black px-2 py-1 bg-gray-50 hover:bg-[#ffc900] disabled:opacity-40 font-bold"
                     >
                       {chip.label} (~
                       {refinementEstimates[chip.id] ?? tierCreditHint(chip.tier)} cr)
@@ -1998,11 +1925,11 @@ export const Generate: React.FC<Props> = ({
             </div>
             <div
               data-component="Generate: Composer dock"
-              className="relative z-[1] shrink-0 border-t border-neutral-200 bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.06)]"
+              className="relative z-[1] shrink-0 border-t-2 border-black bg-white px-2 pb-2 pt-2"
             >
             <div className="relative z-[1] flex flex-col gap-0">
                 <div data-component="Generate: Terminal Header" className="flex items-center justify-between border-2 border-b-0 border-black bg-black p-2 text-xs font-bold uppercase text-white">
-                  <span>AI Terminal</span>
+                  <span>Compose</span>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     <button
                       type="button"
@@ -2099,7 +2026,7 @@ export const Generate: React.FC<Props> = ({
             ) : null}
 
             <div className="mt-2">
-                <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Prompt starters (context-aware):</p>
+                <p data-component="Generate: Inspiration Title" className="text-[10px] font-bold uppercase text-gray-500 mb-2">Conversational starters:</p>
                 <div className="flex flex-wrap gap-2">
                 {contextSuggestions.map((txt, i) => (
                     <button 
@@ -2120,7 +2047,7 @@ export const Generate: React.FC<Props> = ({
               </>
             ) : (
               <div
-                className="mb-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-2 py-2 text-[9px] text-neutral-700"
+                className="m-2 border-2 border-dashed border-black/50 bg-gray-50 px-2 py-2 text-[9px] text-gray-700"
                 data-component="Generate: Threads-only placeholder"
               >
                 <span className="font-black uppercase text-gray-500">Solo conversazioni</span>
@@ -2291,32 +2218,16 @@ export const Generate: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Sticky above main tab bar: opens full legal copy in a dialog */}
-      <div
-        data-component="Generate: Legal strip"
-        className="fixed left-0 right-0 z-[55] max-w-md mx-auto w-full border-t-2 border-black bg-[#fdfdfd] px-3 pt-2.5 pb-2.5"
-        style={{ bottom: '3.5rem' }}
-      >
-        <button
-          type="button"
-          onClick={() => setShowLegalModal(true)}
-          className="w-full text-left text-[10px] font-black uppercase tracking-wide text-gray-600 underline decoration-black/25 underline-offset-2 hover:text-black"
-        >
-          Design system data — tap for full notice
-        </button>
-      </div>
-
       {showLegalModal && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
           onClick={() => setShowLegalModal(false)}
         >
           <div className={`${BRUTAL.card} bg-white max-w-lg w-full p-4`} onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-black uppercase text-sm mb-2">Design system data (placeholder)</h3>
+            <h3 className="font-black uppercase text-sm mb-2">Design system data</h3>
             <p className="text-xs text-gray-700 leading-[1.4]">
               Comtra uses your design system data to run Generate and the features you requested. DS content is not
-              used to train generic AI models. Final copy, privacy links, and retention details will appear here after
-              legal sign-off.
+              used to train generic AI models. Privacy and retention details are provided in product legal docs.
             </p>
             <div className="flex justify-end mt-4">
               <Button variant="secondary" onClick={() => setShowLegalModal(false)} className="text-xs">

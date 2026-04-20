@@ -1284,11 +1284,19 @@ export default function AppTest() {
       selection_label?: string | null;
     }) => {
       if (!user?.authToken) throw new Error('Unauthorized');
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/enhance-plus`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify(body),
-      });
+      let r: Response;
+      try {
+        r = await fetch(`${AUTH_BACKEND_URL}/api/agents/enhance-plus`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(
+          `Enhance+ network error: cannot reach backend right now (${msg || 'fetch failed'}).`,
+        );
+      }
       if (r.status === 503) {
         handle503();
         throw new Error('Service temporarily unavailable');
