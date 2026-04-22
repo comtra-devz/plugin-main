@@ -104,6 +104,31 @@ export interface AuditIssue {
   };
 }
 
+export interface DsAuditSummary {
+  score: number;
+  issues_total: number;
+  high_issues: number;
+  med_issues: number;
+  low_issues: number;
+  penalty_points?: number;
+  breakdown?: {
+    description_rate?: number;
+    property_contract_rate?: number;
+    token_binding_rate?: number;
+    text_style_rate?: number;
+    penalty_points?: number;
+  };
+}
+
+export interface DsQualityGates {
+  overall_score: number;
+  status: 'pass' | 'warn' | 'block';
+  gates: {
+    spec_coverage: 'pass' | 'warn' | 'block';
+    agent_readability: 'pass' | 'warn' | 'block';
+  };
+}
+
 export interface NavProps {
   current: ViewState;
   onChange: (view: ViewState) => void;

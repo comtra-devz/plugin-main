@@ -8,6 +8,7 @@ Questa cartella contiene le specifiche per l’agente di **Design System Audit**
 |------|-----|
 | **DS-AUDIT-RULES.md** | Regole complete dell’audit: cosa controllare, dove cercare nel JSON del file, severity, esempio di fix. Riferimento per il system prompt e per chi implementa l’endpoint. |
 | **DS-AUDIT-AGENT-READABILITY-RULES.md** | English extension for DS Audit focused on agent-readability quality checks (`AR-001`…`AR-010`), with rollout and implementation-ready detection/fix guidance. |
+| **DS-AUDIT-SPEC-COVERAGE-RULES.md** | English extension for DS Audit focused on specification coverage checks (`SC-001`…`SC-005`) for deterministic component contracts. |
 | **OUTPUT-SCHEMA.md** | Schema JSON che l’agente deve restituire (`issues[]` con campi `AuditIssue`). Esempi e regole di validazione. |
 | **SOURCES.md** | Fonti autorevoli: link, sintesi e come sono usate nelle regole. |
 | **RECURRING-PROBLEMS.md** | Problematiche ricorrenti da 100 thread (forum, community, repository, governance, multi‑prodotto): cluster, severity 1–5, mappatura alle regole di audit. |
@@ -41,3 +42,10 @@ L’audit è fatto **rispetto alla library che l’utente sta controllando** (li
 - REST API del servizio (documentazione file e nodi): [File node types](https://developers.figma.com/docs/rest-api/file-node-types), [File endpoints](https://developers.figma.com/docs/rest-api/file-endpoints/).
 - Tipo frontend: `AuditIssue` in `types.ts`.
 - Piano d’azione: `docs/ACTION-PLAN-KIMI-AGENTS.md`.
+
+## Scoring model
+
+- `spec_coverage_summary.score` (0-100): weighted completeness of component contracts and tokenized implementation.
+- `readability_summary.score` (0-100): derived from `AR-*` issue severity mix.
+- `quality_gates.overall_score`: weighted blend (coverage 60%, readability 40%).
+- `quality_gates.status`: `pass` / `warn` / `block` for release-readiness signals.

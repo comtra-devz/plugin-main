@@ -10,15 +10,5 @@
     "api/notion-product-sources.mjs": {
       "maxDuration": 300
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron-notify-discord",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron-product-sources",
-      "schedule": "0 9 * * *"
-    }
-  ]
+  }
 }

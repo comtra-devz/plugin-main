@@ -8,11 +8,19 @@ L’agente DS Audit deve restituire un unico JSON valido. Nessun testo prima o d
 
 ```json
 {
-  "issues": [ ... ]
+  "issues": [ ... ],
+  "spec_snapshot": { ... },
+  "spec_coverage_summary": { ... },
+  "readability_summary": { ... },
+  "quality_gates": { ... }
 }
 ```
 
 - **issues** (array, obbligatorio): lista di issue. Array vuoto `[]` se non ci sono problemi.
+- **spec_snapshot** (object, opzionale): snapshot strutturato del file DS (componenti, coverage inputs, metriche).
+- **spec_coverage_summary** (object, opzionale): score e breakdown per regole `SC-*`.
+- **readability_summary** (object, opzionale): score e conteggi per regole `AR-*`.
+- **quality_gates** (object, opzionale): esito sintetico `pass|warn|block` e gate per coverage/readability.
 
 ---
 
@@ -88,6 +96,7 @@ Ogni elemento di `issues` deve rispettare questo schema:
 6. **fix**: sempre in inglese (o lingua concordata); frase chiara e actionable.
 7. Ordinamento: opzionale per severity (HIGH prima) o per categoryId; non obbligatorio.
 8. Per regole Agent Readability usare namespace `AR-xxx` (es. `AR-001`, `AR-006`, `AR-010`).
+9. Per regole Spec Coverage usare namespace `SC-xxx` (es. `SC-001`, `SC-004`).
 
 ---
 

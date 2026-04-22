@@ -1779,6 +1779,186 @@ function countFigmaNodes(obj) {
   return n;
 }
 
+function clampNumber(v, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function walkFigmaNodes(node, visit) {
+  if (!node || typeof node !== 'object') return;
+  visit(node);
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) walkFigmaNodes(c, visit);
+  }
+}
+
+function buildDsSpecSnapshot(fileJson) {
+  const doc = fileJson?.document;
+  const components = fileJson?.components && typeof fileJson.components === 'object' ? fileJson.components : {};
+  const componentSets =
+    fileJson?.componentSets && typeof fileJson.componentSets === 'object' ? fileJson.componentSets : {};
+  const compIds = Object.keys(components);
+  const componentCount = compIds.length;
+  const componentSetCount = Object.keys(componentSets).length;
+
+  const byComponentInstanceCount = new Map();
+  let totalNodeCount = 0;
+  let tokenBoundNodeCount = 0;
+  let textNodeCount = 0;
+  let textStyleBoundCount = 0;
+
+  if (doc) {
+    walkFigmaNodes(doc, (n) => {
+      totalNodeCount += 1;
+      if (n.type === 'INSTANCE' && n.componentId) {
+        const cid = String(n.componentId);
+        byComponentInstanceCount.set(cid, (byComponentInstanceCount.get(cid) || 0) + 1);
+      }
+      const bv = n.boundVariables;
+      if (
+        bv &&
+        typeof bv === 'object' &&
+        (bv.fills != null ||
+          bv.strokes != null ||
+          bv.effects != null ||
+          bv.fontSize != null ||
+          bv.fontFamily != null ||
+          bv.fontWeight != null)
+      ) {
+        tokenBoundNodeCount += 1;
+      }
+      if (n.type === 'TEXT') {
+        textNodeCount += 1;
+        if (
+          (n.textStyleId != null && String(n.textStyleId).trim() !== '') ||
+          (n.styles && n.styles.text != null && String(n.styles.text).trim() !== '')
+        ) {
+          textStyleBoundCount += 1;
+        }
+      }
+    });
+  }
+
+  const componentSummaries = compIds.slice(0, 80).map((id) => {
+    const c = components[id] || {};
+    const name = c.name != null ? String(c.name) : '';
+    const description = c.description != null ? String(c.description) : '';
+    const propertyDefs = c.propertyDefinitions && typeof c.propertyDefinitions === 'object' ? c.propertyDefinitions : {};
+    return {
+      id,
+      name,
+      has_description: description.trim().length > 0,
+      property_count: Object.keys(propertyDefs).length,
+      instance_count: byComponentInstanceCount.get(id) || 0,
+      remote: c.remote === true,
+    };
+  });
+
+  const describedComponents = componentSummaries.filter((c) => c.has_description).length;
+  const variantReadyComponents = componentSummaries.filter((c) => c.property_count > 0).length;
+  const tokenBindingRate = totalNodeCount > 0 ? tokenBoundNodeCount / totalNodeCount : 0;
+  const textStyleRate = textNodeCount > 0 ? textStyleBoundCount / textNodeCount : 0;
+
+  return {
+    generated_at: new Date().toISOString(),
+    totals: {
+      nodes: totalNodeCount,
+      components: componentCount,
+      component_sets: componentSetCount,
+      text_nodes: textNodeCount,
+    },
+    coverage_inputs: {
+      components_with_description: describedComponents,
+      components_with_properties: variantReadyComponents,
+      nodes_with_token_binding: tokenBoundNodeCount,
+      text_nodes_with_style: textStyleBoundCount,
+      token_binding_rate: Number(tokenBindingRate.toFixed(4)),
+      text_style_rate: Number(textStyleRate.toFixed(4)),
+    },
+    components: componentSummaries,
+  };
+}
+
+function countIssuesByRulePrefix(issues, prefix) {
+  const out = { total: 0, high: 0, med: 0, low: 0 };
+  if (!Array.isArray(issues)) return out;
+  const rx = new RegExp(`^${prefix}-\\d{3}$`, 'i');
+  for (const issue of issues) {
+    const ruleId = String(issue?.rule_id || '').trim();
+    if (!rx.test(ruleId)) continue;
+    out.total += 1;
+    if (issue.severity === 'HIGH') out.high += 1;
+    else if (issue.severity === 'MED') out.med += 1;
+    else out.low += 1;
+  }
+  return out;
+}
+
+function buildCoverageSummaryFromSnapshot(specSnapshot, issues) {
+  const inp = specSnapshot?.coverage_inputs || {};
+  const totals = specSnapshot?.totals || {};
+  const compCount = Math.max(1, Number(totals.components) || 0);
+  const descRate = clampNumber((Number(inp.components_with_description) || 0) / compCount, 0, 1);
+  const propRate = clampNumber((Number(inp.components_with_properties) || 0) / compCount, 0, 1);
+  const tokenRate = clampNumber(Number(inp.token_binding_rate) || 0, 0, 1);
+  const textRate = clampNumber(Number(inp.text_style_rate) || 0, 0, 1);
+  const sc = countIssuesByRulePrefix(issues, 'SC');
+  const baseScore = Math.round((descRate * 30 + propRate * 25 + tokenRate * 25 + textRate * 20) * 100);
+  const penalties = sc.high * 12 + sc.med * 6 + sc.low * 3;
+  const score = clampNumber(baseScore - penalties, 0, 100);
+  return {
+    score,
+    issues_total: sc.total,
+    high_issues: sc.high,
+    med_issues: sc.med,
+    low_issues: sc.low,
+    breakdown: {
+      description_rate: Number(descRate.toFixed(3)),
+      property_contract_rate: Number(propRate.toFixed(3)),
+      token_binding_rate: Number(tokenRate.toFixed(3)),
+      text_style_rate: Number(textRate.toFixed(3)),
+      penalty_points: penalties,
+    },
+  };
+}
+
+function buildReadabilitySummary(issues) {
+  const ar = countIssuesByRulePrefix(issues, 'AR');
+  const penalties = ar.high * 10 + ar.med * 5 + ar.low * 2;
+  const score = clampNumber(100 - penalties, 0, 100);
+  return {
+    score,
+    issues_total: ar.total,
+    high_issues: ar.high,
+    med_issues: ar.med,
+    low_issues: ar.low,
+    penalty_points: penalties,
+  };
+}
+
+function deriveQualityGates(specCoverageSummary, readabilitySummary) {
+  const overall = Math.round(specCoverageSummary.score * 0.6 + readabilitySummary.score * 0.4);
+  let status = 'pass';
+  if (
+    overall < 60 ||
+    (specCoverageSummary.high_issues || 0) > 0 ||
+    (readabilitySummary.high_issues || 0) > 1
+  ) {
+    status = 'block';
+  } else if (overall < 80) {
+    status = 'warn';
+  }
+  return {
+    overall_score: overall,
+    status,
+    gates: {
+      spec_coverage: specCoverageSummary.score >= 70 ? 'pass' : specCoverageSummary.score >= 50 ? 'warn' : 'block',
+      agent_readability: readabilitySummary.score >= 75 ? 'pass' : readabilitySummary.score >= 55 ? 'warn' : 'block',
+    },
+  };
+}
+
 function sizeBandFromNodeCount(n) {
   if (n <= 500) return 'small';
   if (n <= 5000) return 'medium';
@@ -2077,8 +2257,16 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     const components = fileJson?.components;
     const componentCount = components && typeof components === 'object' ? Object.keys(components).length : null;
     if (componentCount === 0) {
+      const specSnapshot = buildDsSpecSnapshot(fileJson);
+      const specCoverageSummary = buildCoverageSummaryFromSnapshot(specSnapshot, []);
+      const readabilitySummary = buildReadabilitySummary([]);
+      const qualityGates = deriveQualityGates(specCoverageSummary, readabilitySummary);
       return res.json({
         issues: [],
+        spec_snapshot: specSnapshot,
+        spec_coverage_summary: specCoverageSummary,
+        readability_summary: readabilitySummary,
+        quality_gates: qualityGates,
         advisory: {
           type: 'no_design_system',
           message: 'Questo file non ha componenti definiti. Per partire da zero, ti consigliamo Preline: design system gratuito con 840+ componenti e template.',
@@ -2128,6 +2316,10 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     issues = filterFalsePositiveHardcodedPaintCoverage(issues, fileJson);
     issues = filterFalsePositiveGhostEmptyFrameStructure(issues, fileJson);
     issues = filterFalsePositiveTypeScaleTypography(issues, fileJson);
+    const specSnapshot = buildDsSpecSnapshot(fileJson);
+    const specCoverageSummary = buildCoverageSummaryFromSnapshot(specSnapshot, issues);
+    const readabilitySummary = buildReadabilitySummary(issues);
+    const qualityGates = deriveQualityGates(specCoverageSummary, readabilitySummary);
 
     // Telemetria uso token (anonima): log per dashboard. Vedi docs/TOKEN-USAGE-TELEMETRY.md
     const { inputTokens, outputTokens } = normalizeMoonshotUsage(kimiData?.usage);
@@ -2141,7 +2333,14 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     }
 
     const libraryContextHint = getLibraryContextHint(fileJson);
-    res.json({ issues, ...(libraryContextHint ? { libraryContextHint } : {}) });
+    res.json({
+      issues,
+      spec_snapshot: specSnapshot,
+      spec_coverage_summary: specCoverageSummary,
+      readability_summary: readabilitySummary,
+      quality_gates: qualityGates,
+      ...(libraryContextHint ? { libraryContextHint } : {}),
+    });
   } catch (err) {
     console.error('POST /api/agents/ds-audit', err);
     res.status(500).json({ error: 'Server error' });

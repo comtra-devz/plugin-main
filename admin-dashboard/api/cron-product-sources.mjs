@@ -298,6 +298,13 @@ export default async function handler(req, res) {
 }
 
 async function handleCronProductSources(req, res) {
+  // Legacy cron disabled: automation moved outside dashboard.
+  return res.status(410).json({
+    ok: false,
+    disabled: true,
+    message: 'Legacy product-sources cron disabled.',
+  });
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });

@@ -39,13 +39,13 @@ function ImportActionBar({ title, lines }: { title: string; lines: string[] }) {
         </span>
       </button>
       {open && lines.length > 0 && (
-        <ul className="border-t-2 border-black px-3 py-2 text-[10px] font-medium leading-relaxed text-neutral-900">
+        <div className="border-t-2 border-black px-3 py-2 text-[10px] font-medium leading-relaxed text-neutral-900">
           {lines.map((line, i) => (
-            <li key={i} className="list-disc pl-4 marker:text-black">
+            <p key={i} className="py-0.5">
               {line}
-            </li>
+            </p>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

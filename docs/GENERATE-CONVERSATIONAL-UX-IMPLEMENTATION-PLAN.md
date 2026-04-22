@@ -61,6 +61,7 @@ Before UX refactor starts, all checks below must pass.
 
 - DS Audit must include Agent Readability rules (`AR-001`…`AR-010`) in the same issue contract.
 - At least top AR findings are visible in DS Audit UI before advanced conversational refinements are enabled by default.
+- DS Audit should also include Spec Coverage rules (`SC-001`…`SC-005`) with a score summary and quality gate (`pass|warn|block`).
 
 ---
 
@@ -502,7 +503,7 @@ Phase 3+ (threads, web hub) unchanged in intent; pre-flight feeds **same** threa
 | **§7** | Thread `file_key + ds_cache_hash`, lista, nuova, persistenza locale + server | Tabelle + API + pannello inline con **Recenti** (titolo + tempo) + select server; sync lista dopo append. |
 | **§8** | Split plugin vs web | Cockpit + tab Chat/Conversazioni nel plugin; admin: conversazioni + governance; **ToV risolto nel motore generate** (DS wizard → admin JSON → neutro), vedi §17. |
 | **§9–10** | API + modello dati | `generate_threads` / `generate_messages`; optional `actions/:chipId` = stesso generate (non route separata). |
-| **§2.5 / §5.5** | DS Audit Agent Readability preflight signal | DS ruleset added (`AR-*`), prompt/schema aligned, DS tab shows dedicated Agent Readability block from DS issues. |
+| **§2.5 / §5.5** | DS Audit preflight signal (Readability + Spec Coverage) | DS rulesets added (`AR-*`, `SC-*`), prompt/schema aligned, DS tab shows dedicated Agent Readability and Spec Coverage summaries with quality gates. |
 
 **Miglioramenti opzionali (non bloccanti per “chiusura” tecnica):** Phase 5 affinamento ToV con dati reali; trigger §15.2 più profondi sul motore quando servono in produzione; playbook iniettati dal plugin solo quando scegliamo **selezione playbook** in UI (storage già pronto).
 

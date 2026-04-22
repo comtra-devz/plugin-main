@@ -623,6 +623,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   /** DI v2 / wizard_integration: salvate nello snapshot come `wizard_signals` (tone + keywords). */
   const [wizardToneOfVoice, setWizardToneOfVoice] = useState('');
   const [wizardBrandKeywords, setWizardBrandKeywords] = useState('');
+  const [finalizeLoading, setFinalizeLoading] = useState(false);
   const [wizardError, setWizardError] = useState<string | null>(null);
   const [rulesSummary, setRulesSummary] = useState<DsIndexSummary['rules_summary'] | null>(null);
   /** Tokens loaded vs full index with components (for split Figma reads). */
@@ -692,14 +693,16 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       },
     ]);
     if (fetchImportNarration) {
-      void fetchImportNarration({ kind: 'session_locked', file_name: fileName }).then(({ text }) => {
-        const t = String(text || '').trim();
-        if (!t) return;
-        setImportFeedItems((prev) => [
-          ...prev,
-          { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-        ]);
-      });
+      void fetchImportNarration({ kind: 'session_locked', file_name: fileName })
+        .then(({ text }) => {
+          const t = String(text || '').trim();
+          if (!t) return;
+          setImportFeedItems((prev) => [
+            ...prev,
+            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+          ]);
+        })
+        .catch(() => {});
     }
   }, [fetchImportNarration, fileName]);
 
@@ -723,14 +726,16 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     setImportSessionConfirmed(false);
     setImportFeedItems([{ id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('welcome') }]);
     if (fetchImportNarration) {
-      void fetchImportNarration({ kind: 'welcome', file_name: fileName }).then(({ text }) => {
-        const t = String(text || '').trim();
-        if (!t) return;
-        setImportFeedItems((prev) => [
-          ...prev,
-          { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-        ]);
-      });
+      void fetchImportNarration({ kind: 'welcome', file_name: fileName })
+        .then(({ text }) => {
+          const t = String(text || '').trim();
+          if (!t) return;
+          setImportFeedItems((prev) => [
+            ...prev,
+            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+          ]);
+        })
+        .catch(() => {});
     }
     setWizardOpen(true);
   }, [fileKey, isPro, onUnlockRequest, fetchImportNarration, fileName]);
@@ -773,14 +778,18 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   }, []);
 
   const finishWizard = useCallback(async () => {
+    if (finalizeLoading) return;
+    setFinalizeLoading(true);
     if (!fileKey) {
       onBusyChange(false);
+      setFinalizeLoading(false);
       return;
     }
     const tierGate = canFreeTierUseFileForDsImport(fileKey, isPro);
     if (!tierGate.ok) {
       onUnlockRequest();
       onBusyChange(false);
+      setFinalizeLoading(false);
       return;
     }
 
@@ -798,6 +807,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         dismissible: true,
       });
       onBusyChange(false);
+      setFinalizeLoading(false);
       return;
     }
 
@@ -854,6 +864,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         dismissible: true,
       });
       onBusyChange(false);
+      setFinalizeLoading(false);
       return;
     }
 
@@ -865,14 +876,22 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     if (!isPro) enforceSingleImportForFreeTier();
     setImports(loadDsImports());
 
-    const metaRes = await writeDsImportMeta({
-      fileKey,
-      importedAt: new Date().toISOString(),
-      dsCacheHash: hashForMeta,
-      componentCount: componentCountFromIndex,
-      tokenCount: tokenCountFromIndex,
-      name: label,
-    });
+    let metaRes: { ok: boolean; error?: string } = { ok: false, error: 'Unknown metadata write error' };
+    try {
+      metaRes = await writeDsImportMeta({
+        fileKey,
+        importedAt: new Date().toISOString(),
+        dsCacheHash: hashForMeta,
+        componentCount: componentCountFromIndex,
+        tokenCount: tokenCountFromIndex,
+        name: label,
+      });
+    } catch (err) {
+      metaRes = {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
     if (!metaRes.ok) {
       const err = metaRes.error || 'Timeout writing DS metadata';
       showToast({
@@ -887,7 +906,9 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     onCatalogReady();
     setWizardOpen(false);
     onBusyChange(false);
+    setFinalizeLoading(false);
   }, [
+    finalizeLoading,
     fileKey,
     fileName,
     selectedImport,
@@ -1010,14 +1031,16 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       ]);
       if (fetchImportNarration) {
         const hint = `total_tokens=${parsed.total_tokens}; paint=${parsed.styles_summary?.paintStyles ?? 0}; text=${parsed.styles_summary?.textStyles ?? 0}`;
-        void fetchImportNarration({ kind: 'tokens_done', file_name: fileName, hint }).then(({ text }) => {
-          const t = String(text || '').trim();
-          if (!t) return;
-          setImportFeedItems((prev) => [
-            ...prev,
-            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-          ]);
-        });
+        void fetchImportNarration({ kind: 'tokens_done', file_name: fileName, hint })
+          .then(({ text }) => {
+            const t = String(text || '').trim();
+            if (!t) return;
+            setImportFeedItems((prev) => [
+              ...prev,
+              { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+            ]);
+          })
+          .catch(() => {});
       }
       onBusyChange(false);
     })();
@@ -1125,14 +1148,16 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       ]);
       if (fetchImportNarration) {
         const hint = `indexed=${inIndex}; sets=${parts.sets}; singles=${parts.singles}; logoLike=${logoLike}; titleLike=${titleLike}`;
-        void fetchImportNarration({ kind: 'components_done', file_name: fileName, hint }).then(({ text }) => {
-          const t = String(text || '').trim();
-          if (!t) return;
-          setImportFeedItems((prev) => [
-            ...prev,
-            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-          ]);
-        });
+        void fetchImportNarration({ kind: 'components_done', file_name: fileName, hint })
+          .then(({ text }) => {
+            const t = String(text || '').trim();
+            if (!t) return;
+            setImportFeedItems((prev) => [
+              ...prev,
+              { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
+            ]);
+          })
+          .catch(() => {});
       }
       onBusyChange(false);
     })();
@@ -1317,12 +1342,9 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
             <div className="flex w-full flex-col gap-3">
               {!importSessionConfirmed ? (
                 <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
-                  <p className="text-center text-base sm:text-lg font-black uppercase leading-snug tracking-wide text-black">
-                    Set up from this Figma file
-                  </p>
-                  <p className="text-center text-sm leading-relaxed text-neutral-700">
-                    Comtra reads your design system from the <strong>live session</strong> you already have open — no
-                    .fig upload circus. Confirm below, then we walk tokens, styles, and components together.
+                  <p className="text-left text-sm leading-relaxed text-neutral-700">
+                    Comtra reads your design system from the <strong>live session</strong> you already have open. Confirm
+                    below, then we walk tokens, styles, and components together.
                   </p>
                   <ImportConversationalPanel items={importFeedItems} />
                 </div>
@@ -1630,12 +1652,24 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
                   {wizardStep === 4 && importFlowPhase === 'full' && wizardCapture && (
                     <Button
                       variant="primary"
-                      className="flex-1 min-h-[44px] text-xs font-black uppercase py-3"
+                      className="relative flex-1 min-h-[44px] overflow-hidden text-xs font-black uppercase py-3"
+                      disabled={finalizeLoading || dsImportBusy}
                       onClick={() => {
                         void finishWizard();
                       }}
                     >
-                      Confirm and import
+                      {finalizeLoading ? (
+                        <span className="absolute inset-0">
+                          <span
+                            className="absolute inset-y-0 left-0 bg-yellow-300"
+                            style={{ animation: `fill-cta-bar ${INTRO_STEP_MIN_MS}ms linear forwards` }}
+                            aria-hidden
+                          />
+                        </span>
+                      ) : null}
+                      <span className="relative z-10 w-full text-center">
+                        {finalizeLoading ? 'Importing…' : 'Confirm and import'}
+                      </span>
                     </Button>
                   )}
                   {wizardStep === 2 && dsImportBusy && importFlowPhase === 'none' && !wizardError && (

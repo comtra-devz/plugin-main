@@ -20,6 +20,20 @@ The DS Audit includes an Agent Readability extension with rule IDs:
 When relevant, include these findings in the same `issues` list and set `rule_id` to `AR-xxx`.
 Keep them DS-focused (readability and maintainability of the design system). A Generate mention is optional context only.
 
+## Spec Coverage extension (DS Audit)
+
+The DS Audit includes a Spec Coverage extension with rule IDs:
+
+- `SC-001` Missing component purpose statement
+- `SC-002` Variant axis incomplete or ambiguous
+- `SC-003` Missing prop contract/default behavior
+- `SC-004` Missing state matrix (default/hover/focus/disabled/error)
+- `SC-005` Missing token binding strategy for core UI properties
+
+When relevant, include these findings in the same `issues` list and set `rule_id` to `SC-xxx`.
+Use `categoryId` aligned to the issue type (`naming`, `coverage`, `consistency`, `structure`).
+Focus on specification completeness and machine-readable contracts.
+
 ## Context: library of reference
 
 The audit is done **relative to the library the user is checking**. That library can be:

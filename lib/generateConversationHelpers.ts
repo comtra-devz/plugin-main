@@ -53,6 +53,32 @@ export function evaluatePreflightClarifier(prompt: string): PreflightEvaluation 
   return { show: false, variant: null, chips: [] };
 }
 
+/**
+ * Guardrail for obviously ambiguous or random prompts.
+ * We keep this lightweight so valid short intents (e.g. "login mobile") still pass.
+ */
+export function isLowIntentPrompt(prompt: string): boolean {
+  const p = prompt.trim().toLowerCase();
+  if (!p) return true;
+  if (p.length < 4) return true;
+  const tokens = p.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1 && p.length < 12) return true;
+
+  const alphaNum = p.replace(/[^a-z0-9]/g, '');
+  if (alphaNum.length >= 8) {
+    const uniqueRatio = new Set(alphaNum).size / alphaNum.length;
+    if (uniqueRatio < 0.28) return true;
+  }
+
+  const hasUiIntentKeyword =
+    /\b(screen|page|layout|wireframe|landing|hero|dashboard|login|signup|checkout|profile|settings|form|table|chart|modal|navbar|footer|card|search|pricing|onboarding|schermata|pagina|layout|wireframe|accesso|registrazione|carrello|profilo|impostazioni|modale|barra|tabella)\b/i.test(
+      p,
+    );
+  if (!hasUiIntentKeyword && tokens.length < 3) return true;
+
+  return false;
+}
+
 export type RefinementChipDef = {
   id: string;
   label: string;

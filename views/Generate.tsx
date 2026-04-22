@@ -7,6 +7,7 @@ import {
   clearSessionCatalogPrepared,
   hasImportForFileKey,
   isSessionCatalogPreparedForFile,
+  loadDsImports,
   setSessionCatalogPrepared,
 } from '../lib/dsImportsStorage';
 import {
@@ -26,6 +27,7 @@ import {
   refinementEstimateActionType,
   tierCreditHint,
 } from '../lib/generateConversationHelpers';
+import { classifyIntent, getResponse, type IntentId } from '../lib/intentClassifier';
 import {
   safeLocalStorageGetItem,
   safeLocalStorageRemoveItem,
@@ -220,6 +222,18 @@ type ConversationTurn = {
   role: 'user' | 'assistant';
   body: string;
   createdAt: number;
+  actions?: string[];
+  actionIntent?: IntentId;
+  actionPrompt?: string;
+};
+
+type ComposerAttachment = {
+  id: string;
+  type: 'image' | 'frame';
+  name: string;
+  previewUrl?: string;
+  sourceUrl?: string;
+  status: 'loading' | 'ready';
 };
 
 const MAX_CONVERSATION_MESSAGES = 32;
@@ -307,6 +321,10 @@ export const Generate: React.FC<Props> = ({
   const [promptText, setPromptText] = useState(initialPrompt || '');
   /** Screenshot/reference image: full data URL or raw base64 sent to generate API. */
   const [screenshotAttachment, setScreenshotAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([]);
+  const [showFrameAttachDialog, setShowFrameAttachDialog] = useState(false);
+  const [frameAttachInput, setFrameAttachInput] = useState('');
+  const [composerDragActive, setComposerDragActive] = useState(false);
   const screenshotFileInputRef = useRef<HTMLInputElement>(null);
   const [creditEstimate, setCreditEstimate] = useState(3);
   const availableSystems =
@@ -332,6 +350,7 @@ export const Generate: React.FC<Props> = ({
 
   const [enhancePlusBusy, setEnhancePlusBusy] = useState(false);
   const [enhancePlusCost, setEnhancePlusCost] = useState(1);
+  const [composerFocused, setComposerFocused] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -574,6 +593,22 @@ export const Generate: React.FC<Props> = ({
     [persistTurnsLocal, syncConversationPairToServer],
   );
 
+  const appendConversationTurns = useCallback(
+    (turns: ConversationTurn[]) => {
+      if (!turns.length) return;
+      setConversationTurns((prev) => {
+        const next = [...prev, ...turns];
+        const trimmed =
+          next.length > MAX_CONVERSATION_MESSAGES
+            ? next.slice(next.length - MAX_CONVERSATION_MESSAGES)
+            : next;
+        persistTurnsLocal(trimmed);
+        return trimmed;
+      });
+    },
+    [persistTurnsLocal],
+  );
+
   /** DS scope hash for thread persistence (file + snapshot or preset slug). */
   useEffect(() => {
     let cancelled = false;
@@ -689,7 +724,12 @@ export const Generate: React.FC<Props> = ({
             : null;
       setGenFileCtxError(err);
       if (err || !r.fileKey) return;
-      const localListed = hasImportForFileKey(r.fileKey);
+      const localListedByKey = hasImportForFileKey(r.fileKey);
+      const fileNameNorm = String(r.fileName || '').trim().toLowerCase();
+      const localListedByName =
+        fileNameNorm.length > 0 &&
+        loadDsImports().some((row) => String(row.figmaFileName || '').trim().toLowerCase() === fileNameNorm);
+      const localListed = localListedByKey || localListedByName;
       const sessionPrepared = isSessionCatalogPreparedForFile(r.fileKey);
       let serverOk = false;
       try {
@@ -708,7 +748,7 @@ export const Generate: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [usesFileDs, requestFileContext, checkServerHasDsContext]);
+  }, [usesFileDs, requestFileContext, checkServerHasDsContext, creditsRemaining]);
 
   const handleInvalidateCatalog = useCallback(() => {
     clearSessionCatalogPrepared();
@@ -959,6 +999,15 @@ export const Generate: React.FC<Props> = ({
     }
   };
 
+  const clearComposerInput = useCallback(() => {
+    if (inputRef.current) inputRef.current.innerText = '';
+    setPromptText('');
+    setHasContent(false);
+    setEnhanceLocked(false);
+    setEnhancedGoalSnapshot(null);
+    lastEnhancedBodyRef.current = null;
+  }, []);
+
   const handleEnhancePrompt = () => {
     if (!inputRef.current || enhanceLocked) return;
     const raw = getPlainTerminalText(inputRef.current);
@@ -1038,7 +1087,7 @@ export const Generate: React.FC<Props> = ({
   ]);
 
   const runGeneratePipeline = useCallback(
-    async (finalPrompt: string, opts?: { chipId?: string }) => {
+    async (finalPrompt: string, opts?: { chipId?: string; clearComposer?: boolean }) => {
       if (!canGenerate) {
         onUnlockRequest();
         return;
@@ -1069,6 +1118,10 @@ export const Generate: React.FC<Props> = ({
         setLoading(false);
         setGenerateStep('idle');
         return;
+      }
+
+      if (opts?.clearComposer) {
+        clearComposerInput();
       }
 
       if (!pendingOptimisticUserTurnIdRef.current) {
@@ -1235,6 +1288,7 @@ export const Generate: React.FC<Props> = ({
       humanizeCanvasError,
       abortOptimisticUserTurn,
       beginOptimisticUserTurn,
+      clearComposerInput,
     ],
   );
 
@@ -1288,6 +1342,72 @@ export const Generate: React.FC<Props> = ({
     }
     const rawText = getPlainTerminalText(inputRef.current);
     if (!rawText.trim()) return;
+    clearComposerInput();
+
+    const userTurn: ConversationTurn = {
+      id: `u-${Date.now()}`,
+      role: 'user',
+      body: rawText.slice(0, 1200),
+      createdAt: Date.now(),
+    };
+    const cls = classifyIntent(rawText);
+    const response = getResponse(cls, rawText);
+    const pauseAssistantBriefly = async () => {
+      setLoading(true);
+      setGenerateStep('context');
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 520);
+      });
+      setLoading(false);
+      setGenerateStep('idle');
+    };
+
+    if (!response.callKimi) {
+      appendConversationTurns([userTurn]);
+      await pauseAssistantBriefly();
+      const assistantTurns = response.bubbles.map((b, i) => ({
+        id: `a-${Date.now()}-${i}`,
+        role: 'assistant' as const,
+        body: b.slice(0, 1200),
+        createdAt: Date.now() + i,
+        actions: i === response.bubbles.length - 1 ? response.actions : undefined,
+        actionIntent: i === response.bubbles.length - 1 ? cls.intent : undefined,
+        actionPrompt: i === response.bubbles.length - 1 ? rawText : undefined,
+      }));
+      appendConversationTurns(assistantTurns);
+      return;
+    }
+
+    if (cls.intent === 'GENERATE_CLEAR' || cls.intent === 'EDIT') {
+      appendConversationTurns([userTurn]);
+      await pauseAssistantBriefly();
+      const assistantTurns = response.bubbles.map((b, i) => ({
+        id: `a-${Date.now()}-${i}`,
+        role: 'assistant' as const,
+        body: b.slice(0, 1200),
+        createdAt: Date.now() + i,
+        actions: i === response.bubbles.length - 1 ? response.actions : undefined,
+        actionIntent: i === response.bubbles.length - 1 ? cls.intent : undefined,
+        actionPrompt: i === response.bubbles.length - 1 ? rawText : undefined,
+      }));
+      appendConversationTurns(assistantTurns);
+      return;
+    }
+
+    let hints:
+      | {
+          legacy_screen_key?: string | null;
+          pack_v2_archetype_id?: string | null;
+          preflight: { title?: string; chips: Array<{ id: string; label: string }>; source: string } | null;
+        }
+      | null = null;
+    if (fetchConversationHints) {
+      try {
+        hints = await fetchConversationHints(rawText);
+      } catch {
+        hints = null;
+      }
+    }
 
     const ev = evaluatePreflightClarifier(rawText);
     const gate = promptGateKey(rawText);
@@ -1295,21 +1415,16 @@ export const Generate: React.FC<Props> = ({
       pendingPreflightPromptRef.current = rawText;
       setPreflightPromptSnapshot(rawText);
       setPreflightPick({});
-      setPreflightRemote(null);
+      setPreflightRemote(hints?.preflight ?? null);
       setShowPreflight(true);
       void fetchGenerationPluginEvent?.({
         event_type: 'generate_preflight_opened',
         payload: { variant: ev.variant },
       });
-      if (fetchConversationHints) {
-        void fetchConversationHints(rawText).then((h) => {
-          if (h?.preflight?.chips?.length) setPreflightRemote(h.preflight);
-        });
-      }
       return;
     }
 
-    await runGeneratePipeline(rawText);
+    await runGeneratePipeline(rawText, { clearComposer: true });
   };
 
   const handleNewConversation = useCallback(() => {
@@ -1330,6 +1445,41 @@ export const Generate: React.FC<Props> = ({
     }
     void fetchGenerationPluginEvent?.({ event_type: 'generate_thread_new', payload: {} });
   }, [userId, genFileKey, dsScopeHash, fetchGenerationPluginEvent]);
+
+  const handleIntentAction = useCallback(
+    (action: string, intent?: IntentId, prompt?: string) => {
+      const basePrompt = String(prompt || '').trim();
+      if (!basePrompt && action !== 'Start over') return;
+      if (action === 'Generate now' || action === 'Apply change') {
+        void runGeneratePipeline(basePrompt, { clearComposer: false });
+        return;
+      }
+      if (action === 'Show examples') {
+        const eg = contextSuggestions[0] || 'Create a mobile login screen with social sign-in and primary CTA.';
+        setPromptFromSuggestion(eg);
+        return;
+      }
+      if (action === 'Start over') {
+        handleNewConversation();
+        return;
+      }
+      if (action === 'Show components' || action === 'Show tokens') {
+        const text =
+          intent === 'QUESTION_DS' && action === 'Show components'
+            ? 'Open the Design System selector above to inspect available component families in this file.'
+            : 'Open the Design System selector above to inspect tokens and active DS scope.';
+        appendConversationTurns([
+          {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            body: text,
+            createdAt: Date.now(),
+          },
+        ]);
+      }
+    },
+    [appendConversationTurns, contextSuggestions, handleNewConversation, runGeneratePipeline],
+  );
 
   const handleSelectThread = useCallback(
     async (threadId: string) => {
@@ -1408,28 +1558,80 @@ export const Generate: React.FC<Props> = ({
     screenshotFileInputRef.current?.click();
   };
 
-  const handleScreenshotFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+  const ingestScreenshotFile = useCallback((file: File) => {
     if (!file || !file.type.startsWith('image/')) return;
     const maxBytes = 6 * 1024 * 1024;
     if (file.size > maxBytes) {
       setGenError('Image too large (max 6MB).');
       return;
     }
+    const id = `att-${Date.now()}`;
+    const objectUrl = URL.createObjectURL(file);
+    setComposerAttachments((prev) => [
+      ...prev,
+      { id, type: 'image', name: file.name, previewUrl: objectUrl, status: 'loading' },
+    ]);
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = typeof reader.result === 'string' ? reader.result : '';
       if (!dataUrl) return;
       setScreenshotAttachment({ name: file.name, dataUrl });
+      setComposerAttachments((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, previewUrl: dataUrl, status: 'ready' } : a)),
+      );
       setGenError(null);
     };
     reader.readAsDataURL(file);
+  }, []);
+
+  const handleScreenshotFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    ingestScreenshotFile(file);
   };
 
   const handleDeleteUpload = () => {
     setScreenshotAttachment(null);
+    setComposerAttachments((prev) => prev.filter((a) => a.type !== 'image'));
   };
+
+  const finalizeFrameAttachment = useCallback((raw: string) => {
+    const url = String(raw || '').trim();
+    if (!/^https?:\/\/(www\.)?figma\.com\/.+/i.test(url)) {
+      setGenError('Paste a valid public Figma frame URL.');
+      return;
+    }
+    const id = `att-${Date.now()}`;
+    const label = (() => {
+      try {
+        const u = new URL(url);
+        return u.pathname.split('/').filter(Boolean).pop() || 'Figma frame';
+      } catch {
+        return 'Figma frame';
+      }
+    })();
+    setComposerAttachments((prev) => [...prev, { id, type: 'frame', name: label, sourceUrl: url, status: 'loading' }]);
+    setShowFrameAttachDialog(false);
+    setFrameAttachInput('');
+    window.setTimeout(() => {
+      setComposerAttachments((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: 'ready' } : a)),
+      );
+    }, 550);
+  }, []);
+
+  const handleComposerDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setComposerDragActive(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file && file.type.startsWith('image/')) {
+        ingestScreenshotFile(file);
+      }
+    },
+    [ingestScreenshotFile],
+  );
 
   const handleFeedback = async (thumbs: 'up' | 'down') => {
     if (!lastRequestId || feedbackSent) return;
@@ -1463,20 +1665,6 @@ export const Generate: React.FC<Props> = ({
 
   // Filter Design Systems
   const filteredSystems = availableSystems.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
-  const dsConnectionText = usesFileDs
-    ? catalogReady
-      ? 'Connected to this file. Generate will use imported rules, tokens, and components.'
-      : dsImportBusy
-        ? 'Importing design system data for this file…'
-        : 'Import the design system for this file to unlock Generate with Custom (Current).'
-    : `Using ${selectedSystem} as the active reference system.`;
-  const dsConnectionTone = usesFileDs
-    ? catalogReady
-      ? 'bg-emerald-50 text-emerald-900'
-      : dsImportBusy
-        ? 'bg-amber-50 text-amber-900'
-        : 'bg-yellow-50 text-yellow-900'
-    : 'bg-sky-50 text-sky-900';
 
   const dsCardHeaderRight =
     usesFileDs && genFileName ? (
@@ -1521,6 +1709,7 @@ export const Generate: React.FC<Props> = ({
   }, [
     conversationTurns,
     loading,
+    generateStep,
     showIntroTyping,
     showIntroBubble,
     showPreflight,
@@ -1528,10 +1717,12 @@ export const Generate: React.FC<Props> = ({
     refineChipsHiddenByComposer,
   ]);
 
+  /** Solo mentre aspettiamo contesto/modello — non durante canvas/crediti (altrimenti puntini “fantasma” col messaggio già pronto). */
   const showAssistantThinkingDots =
     loading &&
     conversationTurns.length > 0 &&
-    conversationTurns[conversationTurns.length - 1]?.role === 'user';
+    conversationTurns[conversationTurns.length - 1]?.role === 'user' &&
+    (generateStep === 'context' || generateStep === 'ai');
 
   return (
     <div
@@ -1596,16 +1787,16 @@ export const Generate: React.FC<Props> = ({
             <BrutalDropdown
               open={isSystemOpen}
               onOpenChange={setIsSystemOpen}
-              maxHeightClassName="max-h-[260px]"
-              panelClassName="!overflow-hidden flex flex-col p-0"
+              maxHeightClassName=""
+              panelClassName="!overflow-visible flex flex-col p-0"
               trigger={
                 <button
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-2 text-left text-xs font-black uppercase leading-none"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-2 text-left text-xs font-black uppercase"
                 >
-                  <span className="truncate min-w-0">
+                  <span className="truncate min-w-0 leading-tight">
                     <span className="text-gray-500">Design system</span> · {selectedSystem}
                   </span>
                   <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
@@ -1622,7 +1813,7 @@ export const Generate: React.FC<Props> = ({
                   className="w-full p-2 text-xs border-2 border-black outline-none font-mono bg-yellow-50"
                   onClick={(e) => e.stopPropagation()}
                 />
-                <div className="overflow-y-auto custom-scrollbar border-2 border-black max-h-[160px] bg-white">
+                <div className="border-2 border-black bg-white">
                   {filteredSystems.map((sys) => (
                     <div
                       key={sys}
@@ -1637,12 +1828,6 @@ export const Generate: React.FC<Props> = ({
                       {sys}
                     </div>
                   ))}
-                </div>
-                <div
-                  data-component="Generate: DS Connection Status"
-                  className={`border-2 border-black px-2.5 py-2 text-[10px] leading-snug font-bold ${dsConnectionTone}`}
-                >
-                  {dsConnectionText}
                 </div>
                 {usesFileDs && catalogReady ? (
                   <div className="pt-2 pb-1">
@@ -1698,48 +1883,49 @@ export const Generate: React.FC<Props> = ({
                 <div
                   ref={chatScrollRef}
                   data-component="Generate: Chat scroll"
-                  className="generate-chat-scroll flex min-h-0 flex-1 flex-col pb-40"
+                  className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
                 >
-                  {showPreflight ? (
-                    <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
-                      <p className="text-[10px] font-black uppercase">
-                        {preflightRemote?.title || 'Light clarifications (optional)'}
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {(preflightRemote?.chips?.length
-                          ? preflightRemote.chips
-                          : evaluatePreflightClarifier(preflightPromptSnapshot).chips
-                        ).map((c) => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() =>
-                              setPreflightPick((p) => ({
-                                ...p,
-                                [c.id]: !p[c.id],
-                              }))
-                            }
-                            className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
-                              preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
-                            }`}
-                          >
-                            {c.label}
-                          </button>
-                        ))}
+                  <div className="flex h-full min-h-full flex-1 flex-col pb-2">
+                    <div className="flex-1" aria-hidden />
+                    <div className="flex w-full flex-col gap-2 px-1 pb-2 pt-1">
+                    {showPreflight ? (
+                      <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
+                        <p className="text-[10px] font-black uppercase">
+                          {preflightRemote?.title || 'Light clarifications (optional)'}
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {(preflightRemote?.chips?.length
+                            ? preflightRemote.chips
+                            : evaluatePreflightClarifier(preflightPromptSnapshot).chips
+                          ).map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() =>
+                                setPreflightPick((p) => ({
+                                  ...p,
+                                  [c.id]: !p[c.id],
+                                }))
+                              }
+                              className={`text-[9px] px-2 py-1 border-2 border-black font-bold ${
+                                preflightPick[c.id] ? 'bg-[#ffc900]' : 'bg-white'
+                              }`}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="secondary" className="text-[10px]" type="button" onClick={() => void handlePreflightDismissRun()}>
+                            Continue without
+                          </Button>
+                          <Button variant="primary" className="text-[10px]" type="button" onClick={() => void handlePreflightConfirm()}>
+                            Generate
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="secondary" className="text-[10px]" type="button" onClick={() => void handlePreflightDismissRun()}>
-                          Continue without
-                        </Button>
-                        <Button variant="primary" className="text-[10px]" type="button" onClick={() => void handlePreflightConfirm()}>
-                          Generate
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="mt-auto flex w-full flex-col gap-2 px-1 pb-2 pt-1">
-                    {showIntroTyping && conversationTurns.length === 0 ? (
+                    ) : null}
+                    {showIntroTyping && conversationTurns.length === 0 && !showIntroBubble ? (
                       <div className="flex justify-start">
                         <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
                           <span className="inline-flex items-center gap-0.5" aria-label="Assistant is typing">
@@ -1766,6 +1952,20 @@ export const Generate: React.FC<Props> = ({
                           }`}
                         >
                           {turn.body}
+                          {turn.role === 'assistant' && turn.actions && turn.actions.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {turn.actions.map((action) => (
+                                <button
+                                  key={`${turn.id}-${action}`}
+                                  type="button"
+                                  onClick={() => handleIntentAction(action, turn.actionIntent, turn.actionPrompt)}
+                                  className="text-[9px] border-2 border-black px-2 py-1 bg-white hover:bg-[#ffc900] font-bold"
+                                >
+                                  {action}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -1798,7 +1998,7 @@ export const Generate: React.FC<Props> = ({
                         </div>
                       </div>
                     ) : null}
-                    {conversationTurns.length === 0 && !promptText.trim() ? (
+                    {conversationTurns.length === 0 ? (
                       <div className="-mx-1 border-t-2 border-black bg-white px-1 py-2">
                         <p className="mb-1.5 px-1 text-[9px] font-black uppercase text-gray-500">Quick starters</p>
                         <div className="flex flex-col gap-1.5">
@@ -1823,7 +2023,7 @@ export const Generate: React.FC<Props> = ({
 
               <div
                 data-component="Generate: Composer dock"
-                className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-3 py-2 sm:px-4"
+                className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-0 py-0"
                 style={{ bottom: 'calc(3.5rem + 5px)' }}
               >
                 <input
@@ -1835,21 +2035,67 @@ export const Generate: React.FC<Props> = ({
                   onChange={handleScreenshotFileChange}
                 />
                 <div
-                  className={`relative w-full overflow-hidden rounded-2xl border-2 border-black bg-white shadow-[3px_3px_0_0_#000] ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''}`}
+                  className={`relative w-full bg-[#f7f7f7] ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''} ${
+                    composerDragActive ? 'ring-2 ring-[#4b6bff] ring-inset bg-[#eef2ff]' : ''
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setComposerDragActive(true);
+                  }}
+                  onDragLeave={() => setComposerDragActive(false)}
+                  onDrop={handleComposerDrop}
                 >
+                  {composerAttachments.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+                      {composerAttachments.map((att) => (
+                        <div key={att.id} className="relative">
+                          {att.type === 'image' && att.previewUrl ? (
+                            <img
+                              src={att.previewUrl}
+                              alt={att.name}
+                              className="h-12 w-12 rounded-md border-2 border-black object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-12 min-w-[7rem] items-center border-2 border-black bg-white px-2 text-[9px] font-bold">
+                              {att.name}
+                            </div>
+                          )}
+                          {att.status === 'loading' ? (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/75 text-[9px] font-black">
+                              <span className="inline-flex items-center gap-0.5">
+                                <span className="animate-bounce">·</span>
+                                <span className="animate-bounce delay-100">·</span>
+                                <span className="animate-bounce delay-200">·</span>
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div
                     ref={inputRef}
                     contentEditable
                     onPaste={handlePaste}
                     onInput={checkContent}
+                    onFocus={() => setComposerFocused(true)}
+                    onBlur={() => setComposerFocused(false)}
                     onKeyDown={handlePromptKeyDown}
                     onClick={handleContentClick}
                     data-component="Generate: Rich Input"
-                    className="max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-3 pb-14 pt-2.5 text-sm font-mono leading-snug outline-none focus:bg-[#ffc900]/15"
+                    className={`max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-3 pb-14 ${
+                      composerAttachments.length > 0 ? 'pt-1.5' : 'pt-2.5'
+                    } text-sm font-mono leading-snug outline-none ${
+                      composerFocused ? 'bg-[#ece7cf]' : 'bg-[#f7f7f7]'
+                    }`}
                     style={{ whiteSpace: 'pre-wrap' }}
                     data-placeholder={promptPlaceholder}
                   />
-                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-neutral-50 px-2 py-1.5">
+                  <div
+                    className={`absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-2 py-1.5 ${
+                      composerFocused ? 'bg-[#ece7cf]' : 'bg-neutral-50'
+                    }`}
+                  >
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                       <details className="group relative shrink-0">
                         <summary className="flex size-9 cursor-pointer list-none items-center justify-center border-2 border-black bg-white font-black leading-none hover:bg-[#ffc900] [&::-webkit-details-marker]:hidden">
@@ -1871,10 +2117,10 @@ export const Generate: React.FC<Props> = ({
                             className="block w-full px-2 py-1.5 text-left text-[9px] font-black uppercase hover:bg-[#ffc900]"
                             onClick={(e) => {
                               (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
-                              setPromptFromSuggestion('Use this Figma frame as reference: ');
+                              setShowFrameAttachDialog(true);
                             }}
                           >
-                            Frame as reference
+                            Add frame
                           </button>
                         </div>
                       </details>
@@ -1882,7 +2128,7 @@ export const Generate: React.FC<Props> = ({
                         type="button"
                         onClick={handleEnhancePrompt}
                         disabled={!hasContent || loading || enhancePlusBusy || enhanceLocked || dsGateBlocked}
-                        className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center border-2 border-black px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
+                        className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center border-2 border-black bg-white px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
                       >
                         Enhance
                       </button>
@@ -1891,9 +2137,20 @@ export const Generate: React.FC<Props> = ({
                           type="button"
                           onClick={() => void handleEnhancePlusPrompt()}
                           disabled={!hasContent || loading || enhancePlusBusy || dsGateBlocked}
-                          className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center border-2 border-black px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
+                          className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 border-2 border-black bg-white px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
                         >
-                          {enhancePlusBusy ? '…' : plan === 'PRO' ? 'Enhance+' : `Enhance+ ${enhancePlusCost}cr`}
+                          {enhancePlusBusy ? (
+                            '…'
+                          ) : (
+                            <>
+                              <span>Enhance Plus</span>
+                              {plan !== 'PRO' ? (
+                                <span className="border border-black bg-[#ffc900] px-1 py-0 leading-none text-[8px]">
+                                  {enhancePlusCost}CR
+                                </span>
+                              ) : null}
+                            </>
+                          )}
                         </button>
                       ) : null}
                     </div>
@@ -1902,7 +2159,7 @@ export const Generate: React.FC<Props> = ({
                       variant="primary"
                       onClick={handleGen}
                       disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
-                      className="flex size-9 shrink-0 items-center justify-center rounded-none p-0 shadow-[2px_2px_0_0_#000]"
+                      className="flex size-9 shrink-0 items-center justify-center rounded-none bg-white p-0 shadow-[2px_2px_0_0_#000]"
                       aria-label="Send"
                     >
                       ➤
@@ -2033,7 +2290,7 @@ export const Generate: React.FC<Props> = ({
 
       {/* Feedback Modal (thumbs down) */}
       {showFeedbackModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowFeedbackModal(false)}>
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40" onClick={() => setShowFeedbackModal(false)}>
           <div className={`${BRUTAL.card} bg-white max-w-sm w-full mx-4 p-4`} onClick={e => e.stopPropagation()}>
             <h3 className="font-black uppercase text-sm mb-2">Share your feedback</h3>
             <p className="text-[10px] text-gray-600 mb-3">What could we improve? (optional)</p>
@@ -2058,7 +2315,7 @@ export const Generate: React.FC<Props> = ({
 
       {/* Read First Modal */}
       {showReadFirstModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowReadFirstModal(false)}>
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40" onClick={() => setShowReadFirstModal(false)}>
           <div className={`${BRUTAL.card} bg-white max-w-lg w-full mx-4 p-4`} onClick={e => e.stopPropagation()}>
             <h3 className="font-black uppercase text-sm mb-2">Generation Logic</h3>
             <ul className="list-disc list-inside space-y-1 text-[11px] text-gray-700 leading-tight">
@@ -2078,7 +2335,7 @@ export const Generate: React.FC<Props> = ({
 
       {showCatalogReadyModal && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[330] flex items-center justify-center bg-black/45 p-4"
           onClick={() => setShowCatalogReadyModal(false)}
         >
           <Confetti key={catalogConfettiKey} density="lite" />
@@ -2100,7 +2357,7 @@ export const Generate: React.FC<Props> = ({
 
       {showLegalModal && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4"
           onClick={() => setShowLegalModal(false)}
         >
           <div className={`${BRUTAL.card} bg-white max-w-lg w-full p-4`} onClick={(e) => e.stopPropagation()}>
@@ -2117,6 +2374,48 @@ export const Generate: React.FC<Props> = ({
           </div>
         </div>
       )}
+      {showFrameAttachDialog ? (
+        <div
+          className="fixed inset-0 z-[340] flex items-center justify-center bg-black/45 p-4"
+          onClick={() => setShowFrameAttachDialog(false)}
+        >
+          <div
+            className={`${BRUTAL.card} w-full max-w-md bg-white p-4`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-black">Attach a frame</h3>
+            <p className="mt-2 text-xs text-gray-600">
+              Paste a public Figma frame URL, or paste copied frame content/link.
+            </p>
+            <input
+              autoFocus
+              value={frameAttachInput}
+              onChange={(e) => setFrameAttachInput(e.target.value)}
+              onPaste={(e) => {
+                const t = e.clipboardData.getData('text/plain');
+                if (t && /figma\.com/i.test(t)) {
+                  e.preventDefault();
+                  finalizeFrameAttachment(t);
+                }
+              }}
+              placeholder="Link to a Figma frame"
+              className="mt-3 w-full border-2 border-black px-2 py-2 text-xs"
+            />
+            <div className="mt-3 flex gap-2">
+              <Button variant="secondary" className="flex-1 text-xs" onClick={() => setShowFrameAttachDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1 text-xs"
+                onClick={() => finalizeFrameAttachment(frameAttachInput)}
+              >
+                Attach
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -6,7 +6,7 @@ import { BrutalDropdown, brutalMenuRowClass } from '../../../components/ui/Bruta
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
-import { AuditIssue } from '../../../types';
+import { AuditIssue, DsAuditSummary, DsQualityGates } from '../../../types';
 
 export type ScanScope = 'all' | 'current' | 'page' | 'unselected';
 
@@ -48,6 +48,9 @@ interface Props {
   dsAdvisory?: { type: string; message: string; ctaLabel: string; ctaUrl: string } | null;
   /** No remote components in API export: audit uses in-file masters only */
   dsLibraryContextHint?: { type: string; message: string } | null;
+  specCoverageSummary?: DsAuditSummary | null;
+  readabilitySummary?: DsAuditSummary | null;
+  qualityGates?: DsQualityGates | null;
   onRetryConnection?: () => void;
   onCheckTokenStatus?: () => void;
   /** When true, "All Pages" is visible but disabled with "Coming soon" message */
@@ -90,6 +93,9 @@ export const DesignSystemTab: React.FC<Props> = ({
   dsAuditError,
   dsAdvisory,
   dsLibraryContextHint,
+  specCoverageSummary,
+  readabilitySummary,
+  qualityGates,
   onRetryConnection,
   onCheckTokenStatus,
   disableAllPages = false,
@@ -99,6 +105,36 @@ export const DesignSystemTab: React.FC<Props> = ({
   const agentReadabilityIssues = (displayIssues ?? []).filter((i) => /^AR-\d{3}$/i.test(String(i.rule_id || '').trim()));
   const agentReadabilityHigh = agentReadabilityIssues.filter((i) => i.severity === 'HIGH').length;
   const topAgentReadability = agentReadabilityIssues.slice(0, 4);
+  const derivedCoverageScore = Math.max(
+    0,
+    100 - (displayIssues ?? []).filter((i) => /^SC-\d{3}$/i.test(String(i.rule_id || '').trim())).reduce((acc, i) => {
+      if (i.severity === 'HIGH') return acc + 12;
+      if (i.severity === 'MED') return acc + 6;
+      return acc + 3;
+    }, 0),
+  );
+  const coverage = specCoverageSummary ?? {
+    score: derivedCoverageScore,
+    issues_total: (displayIssues ?? []).filter((i) => /^SC-\d{3}$/i.test(String(i.rule_id || '').trim())).length,
+    high_issues: (displayIssues ?? []).filter((i) => /^SC-\d{3}$/i.test(String(i.rule_id || '').trim()) && i.severity === 'HIGH').length,
+    med_issues: (displayIssues ?? []).filter((i) => /^SC-\d{3}$/i.test(String(i.rule_id || '').trim()) && i.severity === 'MED').length,
+    low_issues: (displayIssues ?? []).filter((i) => /^SC-\d{3}$/i.test(String(i.rule_id || '').trim()) && i.severity === 'LOW').length,
+  };
+  const readability = readabilitySummary ?? {
+    score: Math.max(0, 100 - (agentReadabilityHigh * 10 + (agentReadabilityIssues.length - agentReadabilityHigh) * 4)),
+    issues_total: agentReadabilityIssues.length,
+    high_issues: agentReadabilityHigh,
+    med_issues: agentReadabilityIssues.filter((i) => i.severity === 'MED').length,
+    low_issues: agentReadabilityIssues.filter((i) => i.severity === 'LOW').length,
+  };
+  const effectiveGates = qualityGates ?? {
+    overall_score: Math.round(coverage.score * 0.6 + readability.score * 0.4),
+    status: (coverage.high_issues > 0 ? 'block' : coverage.score >= 80 ? 'pass' : 'warn') as 'pass' | 'warn' | 'block',
+    gates: {
+      spec_coverage: (coverage.score >= 80 ? 'pass' : coverage.score >= 60 ? 'warn' : 'block') as 'pass' | 'warn' | 'block',
+      agent_readability: (readability.score >= 80 ? 'pass' : readability.score >= 60 ? 'warn' : 'block') as 'pass' | 'warn' | 'block',
+    },
+  };
 
   const handleScanClick = () => {
     onStartScan();
@@ -355,6 +391,46 @@ export const DesignSystemTab: React.FC<Props> = ({
         </div>
       ) : (
         <>
+          <div className={`${BRUTAL.card} bg-violet-50 border-2 border-violet-400 p-3`}>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h3 className="font-black uppercase text-xs text-violet-950">Spec Coverage</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">
+                  Score {coverage.score}%
+                </span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm border border-black ${
+                  effectiveGates.status === 'pass'
+                    ? 'bg-green-200 text-green-900'
+                    : effectiveGates.status === 'warn'
+                      ? 'bg-yellow-200 text-yellow-900'
+                      : 'bg-red-200 text-red-900'
+                }`}>
+                  {effectiveGates.status.toUpperCase()}
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-violet-900 font-medium mb-2">
+              Coverage highlights missing specification contracts (variants, token usage, component semantics) before they become reliability problems.
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="bg-white border border-violet-200 px-2 py-1.5">
+                <p className="font-bold text-violet-950">Coverage issues</p>
+                <p className="text-gray-700">{coverage.issues_total} total ({coverage.high_issues} high)</p>
+              </div>
+              <div className="bg-white border border-violet-200 px-2 py-1.5">
+                <p className="font-bold text-violet-950">Readability score</p>
+                <p className="text-gray-700">{readability.score}% ({readability.high_issues} high)</p>
+              </div>
+              <div className="bg-white border border-violet-200 px-2 py-1.5">
+                <p className="font-bold text-violet-950">Spec gate</p>
+                <p className="text-gray-700 uppercase">{effectiveGates.gates.spec_coverage}</p>
+              </div>
+              <div className="bg-white border border-violet-200 px-2 py-1.5">
+                <p className="font-bold text-violet-950">Readability gate</p>
+                <p className="text-gray-700 uppercase">{effectiveGates.gates.agent_readability}</p>
+              </div>
+            </div>
+          </div>
           {/* Categories */}
           {agentReadabilityIssues.length > 0 && (
             <div className={`${BRUTAL.card} bg-sky-50 border-2 border-sky-400 p-3`}>

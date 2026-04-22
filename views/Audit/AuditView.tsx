@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP, AUTH_BACKEND_URL } from '../../constants';
-import { UserPlan, AuditIssue } from '../../types';
+import { UserPlan, AuditIssue, DsAuditSummary, DsQualityGates } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CircularScore } from '../../components/widgets/CircularScore';
 import { Confetti } from '../../components/Confetti';
@@ -61,6 +61,9 @@ interface Props {
   fetchDsAudit?: (body: { file_key: string; depth?: number }) => Promise<{
     issues: AuditIssue[];
     libraryContextHint?: { type: string; message: string };
+    spec_coverage_summary?: DsAuditSummary;
+    readability_summary?: DsAuditSummary;
+    quality_gates?: DsQualityGates;
   }>;
   /** A11Y Audit agent: fetch issues from backend (no Kimi). Called after confirm when fileKey is available. */
   fetchA11yAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
@@ -177,6 +180,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [dsAdvisory, setDsAdvisory] = useState<{ type: string; message: string; ctaLabel: string; ctaUrl: string } | null>(null);
   /** In-file-only masters (no remote components in JSON) — explains audit scope vs external library */
   const [dsLibraryContextHint, setDsLibraryContextHint] = useState<{ type: string; message: string } | null>(null);
+  const [dsSpecCoverageSummary, setDsSpecCoverageSummary] = useState<DsAuditSummary | null>(null);
+  const [dsReadabilitySummary, setDsReadabilitySummary] = useState<DsAuditSummary | null>(null);
+  const [dsQualityGates, setDsQualityGates] = useState<DsQualityGates | null>(null);
   // A11Y Audit agent: real issues from backend (no Kimi)
   const [a11yAuditIssues, setA11yAuditIssues] = useState<AuditIssue[] | null>(null);
   const [a11yAuditLoading, setA11yAuditLoading] = useState(false);
@@ -255,12 +261,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
           setDsAuditError(opts.description ?? opts.title);
           setDsAuditIssues(null);
           setDsLibraryContextHint(null);
+          setDsSpecCoverageSummary(null);
+          setDsReadabilitySummary(null);
+          setDsQualityGates(null);
           return;
         }
         setDsAuditError(null);
         setDsAuditIssues(null);
         setDsAdvisory(null);
         setDsLibraryContextHint(null);
+        setDsSpecCoverageSummary(null);
+        setDsReadabilitySummary(null);
+        setDsQualityGates(null);
       }
       if (isFigmaConnectionError(message)) {
         const opts = getSystemToastOptions('figma_connection_lost');
@@ -915,6 +927,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setDsAuditError(null);
               setDsAdvisory(null);
               setDsLibraryContextHint(null);
+              setDsSpecCoverageSummary(null);
+              setDsReadabilitySummary(null);
+              setDsQualityGates(null);
               setDsAuditLoading(true);
               const data = await fetchDsAudit(auditBody);
               const rawIssues = Array.isArray(data?.issues) ? (data.issues as AuditIssue[]) : [];
@@ -958,6 +973,19 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               } else {
                 setDsLibraryContextHint(null);
               }
+              setDsSpecCoverageSummary(
+                data?.spec_coverage_summary && typeof data.spec_coverage_summary === 'object'
+                  ? data.spec_coverage_summary
+                  : null,
+              );
+              setDsReadabilitySummary(
+                data?.readability_summary && typeof data.readability_summary === 'object'
+                  ? data.readability_summary
+                  : null,
+              );
+              setDsQualityGates(
+                data?.quality_gates && typeof data.quality_gates === 'object' ? data.quality_gates : null,
+              );
             } else {
               setAuditError('Audit not available');
               return;
@@ -1678,6 +1706,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             dsAuditError={dsAuditError}
             dsAdvisory={dsAdvisory}
             dsLibraryContextHint={dsLibraryContextHint}
+            specCoverageSummary={dsSpecCoverageSummary}
+            readabilitySummary={dsReadabilitySummary}
+            qualityGates={dsQualityGates}
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
             disableAllPages={false}
