@@ -273,9 +273,20 @@ function magicLinkEmailSubject() {
   return (process.env.MAGIC_LINK_EMAIL_SUBJECT || 'Sign in to Comtra (Figma plugin)').toString();
 }
 
+/** From header for magic-link SMTP. Prefer explicit SMTP_FROM; else same mailbox as auth (required by many providers e.g. OVH). */
+function smtpFromAddressForMagic() {
+  return (
+    process.env.SMTP_FROM ||
+    process.env.MAIL_FROM ||
+    process.env.SMTP_USER ||
+    process.env.MAIL_USER ||
+    ''
+  ).trim();
+}
+
 async function sendMagicLinkEmailSmtp(toAddress, verifyUrl) {
   const { default: nodemailer } = await import('nodemailer');
-  const from = (process.env.SMTP_FROM || process.env.MAIL_FROM || '').trim();
+  const from = smtpFromAddressForMagic();
   if (!from) {
     return { ok: false, reason: 'smtp_no_from' };
   }
@@ -324,9 +335,7 @@ async function sendMagicLinkEmailResend(toAddress, verifyUrl) {
 }
 
 function hasSmtpForMagic() {
-  return Boolean(
-    (process.env.SMTP_HOST || process.env.MAIL_HOST) && (process.env.SMTP_FROM || process.env.MAIL_FROM)
-  );
+  return Boolean((process.env.SMTP_HOST || process.env.MAIL_HOST) && smtpFromAddressForMagic());
 }
 
 async function sendMagicLinkEmail(toAddress, verifyUrl) {
@@ -604,7 +613,8 @@ app.post('/auth/magic-link/request', async (req, res) => {
   if (!resendOk) {
     return res.status(503).json({
       error: 'email_not_configured',
-      message: 'Set SMTP (SMTP_HOST + SMTP_FROM) or RESEND_API_KEY, or MAGIC_LINK_DEV_LOG=1 for local testing.',
+      message:
+        'Set SMTP (SMTP_HOST and sender: SMTP_FROM or SMTP_USER/MAIL_USER) or RESEND_API_KEY, or MAGIC_LINK_DEV_LOG=1 for local testing.',
     });
   }
   const store = await getFlowStore();
@@ -640,7 +650,7 @@ app.get('/auth/magic-link/diagnostic', (req, res) => {
   }
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const host = (process.env.SMTP_HOST || process.env.MAIL_HOST || '').trim();
-  const from = (process.env.SMTP_FROM || process.env.MAIL_FROM || '').trim();
+  const from = smtpFromAddressForMagic();
   const user = (process.env.SMTP_USER || process.env.MAIL_USER || '').trim();
   const pass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASS || '').trim();
   const jwtOk =
@@ -649,7 +659,9 @@ app.get('/auth/magic-link/diagnostic', (req, res) => {
     hasSmtpForMagic() || Boolean(process.env.RESEND_API_KEY) || process.env.MAGIC_LINK_DEV_LOG === '1';
   const hints = [];
   if (!host) hints.push('Missing SMTP_HOST or MAIL_HOST');
-  if (!from) hints.push('Missing SMTP_FROM or MAIL_FROM (required together with host for the mail gate)');
+  if (!from) {
+    hints.push('Missing sender for SMTP: set SMTP_FROM/MAIL_FROM or SMTP_USER/MAIL_USER (use a real, allowed address — fake From is often dropped)');
+  }
   if (host && from && !user) hints.push('SMTP user missing (SMTP_USER / MAIL_USER) — send may fail after gate');
   if (host && from && !pass) hints.push('SMTP password missing (SMTP_PASS / etc.)');
   if (!emailGate && !process.env.RESEND_API_KEY && process.env.MAGIC_LINK_DEV_LOG !== '1') {
