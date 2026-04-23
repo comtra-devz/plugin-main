@@ -214,53 +214,75 @@ const MAGIC_LINK_FLOW_TTL_SEC = Math.min(
   3600,
   Math.max(300, Number(process.env.MAGIC_LINK_FLOW_TTL_SEC) || 900)
 );
+const MAGIC_LINK_JWT_TTL_SEC = 15 * 60;
 
-/** Template email magic link: HTML semantico, stili inline (no layout a tabella). Vedi `sendMagicLinkEmail*`. */
-function buildComtraMagicLinkEmailHtml(verifyUrl) {
-  const raw = String(verifyUrl);
+/**
+ * Template email magic link: HTML semantico, stili inline.
+ * Stile allineato al plugin (bordo nero, ombra, giallo CTA, sfondo card bianco).
+ * Logo: `MAGIC_LINK_EMAIL_LOGO_URL`. Banner: `MAGIC_LINK_EMAIL_BANNER_URL` (opz., più tardi).
+ */
+function buildComtraMagicLinkEmailHtml(signInUrl) {
+  const raw = String(signInUrl);
   const hrefAttr = raw.replace(/&/g, '&amp;');
   const plainUrlDisplay = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const logoUrl = (process.env.MAGIC_LINK_EMAIL_LOGO_URL || 'https://comtra.dev/android-chrome-192x192.png')
+    .toString()
+    .trim();
+  const bannerUrl = (process.env.MAGIC_LINK_EMAIL_BANNER_URL || '').toString().trim();
+  const tagline = (process.env.MAGIC_LINK_EMAIL_TAGLINE || '').toString().trim();
+  const logoBlock = logoUrl
+    ? `<a href="https://comtra.dev" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+        <img src="${logoUrl.replace(/&/g, '&amp;')}" width="120" height="" alt="Comtra" style="display:block;max-width:120px;height:auto;border:0;outline:0;" />
+      </a>`
+    : `<p style="margin:0;font-size:1.5rem;font-weight:800;letter-spacing:-0.04em;color:#000;font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif;">Comtra</p>`;
+  const taglineBlock = tagline
+    ? `<p style="margin:8px 0 0 0;">
+        <span style="display:inline-block;background:#000;color:#fff;padding:6px 10px;font-size:10px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">${tagline.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>
+      </p>`
+    : '';
+  const bannerBlock = bannerUrl
+    ? `<div style="margin:0 0 16px 0;">
+        <img src="${bannerUrl.replace(/&/g, '&amp;')}" width="456" height="" alt="" style="display:block;width:100%;max-width:100%;height:auto;border:0;border-bottom:2px solid #000;" />
+      </div>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>Comtra — sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
 </head>
-<body style="margin:0;padding:0;background:#f0f0f0;">
+<body style="margin:0;padding:0;background:#e8e8e8;">
   <div style="max-width:480px;margin:0 auto;padding:24px 12px;">
     <article
-      style="border:3px solid #000;background:#ff90e8;box-shadow:8px 8px 0 #000;padding:0;overflow:hidden;font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif;"
+      style="border:2px solid #000;background:#fff;box-shadow:4px 4px 0 #000;padding:0;overflow:hidden;font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;"
     >
-      <header style="padding:32px 28px 8px 28px;">
-        <p style="margin:0 0 12px 0;">
-          <span
-            style="display:inline-block;background:#000;color:#fff;padding:6px 10px;font-size:10px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;"
-            >Design System AI</span
-          >
-        </p>
-        <h1
-          style="margin:0;font-size:2rem;font-weight:900;letter-spacing:-0.04em;color:#000;text-transform:uppercase;line-height:0.95;font-family:Georgia,'Times New Roman',serif;"
-        >Comtra</h1>
+      <header style="padding:28px 24px 12px 24px;">
+        ${taglineBlock}
+        ${logoBlock}
       </header>
-      <section style="padding:0 28px 20px 28px;font-size:15px;color:#000;line-height:1.5;">
+      ${bannerBlock}
+      <section style="padding:0 24px 20px 24px;font-size:15px;color:#000;line-height:1.5;">
         <p style="margin:0 0 12px 0;font-weight:700;">Sign in to the Comtra Figma plugin</p>
         <p style="margin:0 0 20px 0;">This link is valid for about <strong>15 minutes</strong>. If you did not request it, you can ignore this message.</p>
         <p style="margin:0;">
           <a
             href="${hrefAttr}"
-            style="display:inline-block;background:#000;color:#fff !important;padding:14px 28px;font-size:15px;font-weight:800;text-decoration:none;border:2px solid #fff;box-shadow:4px 4px 0 #000;"
+            style="display:inline-block;background:#ffc900;color:#000 !important;padding:14px 28px;font-size:15px;font-weight:800;text-decoration:none;border:2px solid #000;box-shadow:4px 4px 0 #000;font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;"
             >Open sign-in link</a
           >
         </p>
       </section>
       <section
-        style="padding:0 28px 24px 28px;font-size:12px;color:#333;line-height:1.45;border-top:2px dashed #000;"
+        style="padding:0 24px 24px 24px;font-size:12px;color:#333;line-height:1.45;border-top:1px solid #e0e0e0;"
       >
         <p style="margin:16px 0 0 0;">If the button does not work, paste this in your browser:</p>
-        <p style="margin:6px 0 0 0;word-break:break-all;color:#000;font-size:11px;">${plainUrlDisplay}</p>
+        <p style="margin:6px 0 0 0;word-break:break-all;color:#0000ee;font-size:12px;">${plainUrlDisplay}</p>
       </section>
-      <footer style="padding:0 28px 28px 28px;font-size:10px;color:#555;">
+      <footer style="padding:0 24px 24px 24px;font-size:10px;color:#666;">
         Cordiska &amp; Ben — Comtra
       </footer>
     </article>
@@ -365,7 +387,10 @@ async function createFlowStore() {
     await client.connect();
     return {
       async set(key, value) {
-        await client.set(key, JSON.stringify(value), { EX: MAGIC_LINK_FLOW_TTL_SEC });
+        const ex = key.startsWith('mshort:')
+          ? Math.max(MAGIC_LINK_FLOW_TTL_SEC, MAGIC_LINK_JWT_TTL_SEC)
+          : MAGIC_LINK_FLOW_TTL_SEC;
+        await client.set(key, JSON.stringify(value), { EX: ex });
       },
       async get(key) {
         const v = await client.get(key);
@@ -621,15 +646,20 @@ app.post('/auth/magic-link/request', async (req, res) => {
   const readKey = randomBytes(16).toString('hex');
   await store.set(readKey, null);
   const token = jwt.sign({ typ: 'ml', readKey, email: em }, JWT_SECRET, { expiresIn: '15m' });
-  const verifyUrl = `${BASE_URL}/auth/magic/verify?token=${encodeURIComponent(token)}`;
-  const send = await sendMagicLinkEmail(em, verifyUrl);
+  const shortId = randomBytes(10)
+    .toString('base64url')
+    .replace(/=+$/g, '');
+  const shortTokenPayload = { token, _mlShortExp: Date.now() + MAGIC_LINK_JWT_TTL_SEC * 1000 };
+  await store.set(`mshort:${shortId}`, shortTokenPayload);
+  const signInUrl = `${BASE_URL}/auth/m/${shortId}`;
+  const send = await sendMagicLinkEmail(em, signInUrl);
   if (!send.ok && process.env.MAGIC_LINK_DEV_LOG !== '1') {
     return res.status(503).json({ error: 'email_send_failed' });
   }
   res.json({
     readKey,
     ok: true,
-    ...(process.env.MAGIC_LINK_DEV_LOG === '1' ? { devLink: verifyUrl } : {}),
+    ...(process.env.MAGIC_LINK_DEV_LOG === '1' ? { devLink: signInUrl } : {}),
   });
 });
 
@@ -687,6 +717,59 @@ app.get('/auth/magic-link/diagnostic', (req, res) => {
     email_request_gate_would_pass: emailGate,
     hints,
   });
+});
+
+/**
+ * Short sign-in link: resolves to the same flow as /auth/magic/verify?token=…
+ * (email CTA and fallback line use this URL; token stays server-side in Redis / memory until redirect).
+ */
+app.get('/auth/m/:id', async (req, res) => {
+  const id = (req.params?.id || req.query?.id || '').toString();
+  if (!id || !/^[A-Za-z0-9_-]{10,50}$/.test(id)) {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Invalid link',
+          message: 'This sign-in link is not valid. Request a new one from the Comtra plugin in Figma.',
+        })
+      );
+  }
+  const store = await getFlowStore();
+  const key = `mshort:${id}`;
+  const entry = await store.get(key);
+  if (entry == null || typeof entry !== 'object') {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Link expired',
+          message: 'This sign-in link is no longer valid. Open the plugin, enter your email again, and we’ll send a new link.',
+        })
+      );
+  }
+  if (entry._mlShortExp && Date.now() > Number(entry._mlShortExp)) {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Link expired',
+          message: 'This sign-in link is no longer valid. Open the plugin, enter your email again, and we’ll send a new link.',
+        })
+      );
+  }
+  const token = entry.token;
+  if (!token || typeof token !== 'string') {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Invalid link',
+          message: 'This sign-in link is not valid. Request a new one from the Comtra plugin in Figma.',
+        })
+      );
+  }
+  return res.redirect(302, `${BASE_URL}/auth/magic/verify?token=${encodeURIComponent(token)}`);
 });
 
 app.get('/auth/magic/verify', async (req, res) => {
