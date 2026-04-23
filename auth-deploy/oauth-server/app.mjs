@@ -623,6 +623,60 @@ app.post('/auth/magic-link/request', async (req, res) => {
   });
 });
 
+/**
+ * Diagnostica runtime (nessun valore di segreto). Opzionale: ?token= o ?s= uguale a MAGIC_LINK_DIAG_TOKEN in env.
+ * GET /api/magic-link/diagnostic
+ */
+app.get('/auth/magic-link/diagnostic', (req, res) => {
+  const need = (process.env.MAGIC_LINK_DIAG_TOKEN || '').toString().trim();
+  if (need) {
+    const got = (req.query?.token || req.query?.s || '').toString();
+    if (got !== need) {
+      return res.status(401).json({
+        error: 'unauthorized',
+        message: 'Set MAGIC_LINK_DIAG_TOKEN in env and pass ?token= or ?s= with the same value.',
+      });
+    }
+  }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const host = (process.env.SMTP_HOST || process.env.MAIL_HOST || '').trim();
+  const from = (process.env.SMTP_FROM || process.env.MAIL_FROM || '').trim();
+  const user = (process.env.SMTP_USER || process.env.MAIL_USER || '').trim();
+  const pass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASS || '').trim();
+  const jwtOk =
+    Boolean((process.env.JWT_SECRET || '').trim()) && process.env.JWT_SECRET !== 'comtra-dev-secret-change-in-prod';
+  const emailGate =
+    hasSmtpForMagic() || Boolean(process.env.RESEND_API_KEY) || process.env.MAGIC_LINK_DEV_LOG === '1';
+  const hints = [];
+  if (!host) hints.push('Missing SMTP_HOST or MAIL_HOST');
+  if (!from) hints.push('Missing SMTP_FROM or MAIL_FROM (required together with host for the mail gate)');
+  if (host && from && !user) hints.push('SMTP user missing (SMTP_USER / MAIL_USER) — send may fail after gate');
+  if (host && from && !pass) hints.push('SMTP password missing (SMTP_PASS / etc.)');
+  if (!emailGate && !process.env.RESEND_API_KEY && process.env.MAGIC_LINK_DEV_LOG !== '1') {
+    hints.push('email gate: add RESEND_API_KEY, or set MAGIC_LINK_DEV_LOG=1 for dev, or complete SMTP as above');
+  }
+  if (!POSTGRES_URL) hints.push('Missing DATABASE_URL or POSTGRES_URL');
+  if (!jwtOk) hints.push('JWT_SECRET missing or still default (unsafe for production)');
+
+  res.json({
+    ok: emailGate && Boolean(POSTGRES_URL) && jwtOk,
+    base_url_configured: Boolean((process.env.BASE_URL || '').replace(/\/$/, '')),
+    database: Boolean(POSTGRES_URL),
+    jwt_secret_ok: jwtOk,
+    smtp: {
+      host: Boolean(host),
+      from: Boolean(from),
+      user: Boolean(user),
+      pass: Boolean(pass),
+      path_ready: hasSmtpForMagic(),
+    },
+    resend: Boolean(process.env.RESEND_API_KEY),
+    magic_link_dev_log: process.env.MAGIC_LINK_DEV_LOG === '1',
+    email_request_gate_would_pass: emailGate,
+    hints,
+  });
+});
+
 app.get('/auth/magic/verify', async (req, res) => {
   const countryCode = (req.headers['x-vercel-ip-country'] || '').toString().toUpperCase().trim().slice(0, 2) || null;
   const qToken = (req.query?.token || '').toString();

@@ -45,6 +45,7 @@
     { "source": "/auth/figma/callback", "destination": "/api/figma-oauth/callback" },
     { "source": "/auth/figma/poll", "destination": "/api/figma-oauth/poll" },
     { "source": "/api/magic-link/request", "destination": "/api/magic-link-request" },
+    { "source": "/api/magic-link/diagnostic", "destination": "/api/magic-link-diagnostic" },
     { "source": "/auth/magic/verify", "destination": "/api/magic-verify" },
     { "source": "/api/magic/verify", "destination": "/api/magic-verify" },
     { "source": "/api/credits/estimate", "destination": "/api/credits-trophies?service=credits&sub=estimate" },
