@@ -14,9 +14,9 @@ function getEnrichmentCacheTtlMs() {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_CACHE_TTL_MS;
 }
 
-function enrichmentCacheKey(userId, archetypeId, tone, keywordsSorted, baseObj) {
+function enrichmentCacheKey(userId, archetypeId, tone, keywordsSorted, baseObj, partition = '') {
   return createHash('sha256')
-    .update(JSON.stringify({ u: userId, a: archetypeId, t: tone, k: keywordsSorted, b: baseObj }))
+    .update(JSON.stringify({ u: userId, a: archetypeId, t: tone, k: keywordsSorted, b: baseObj, p: partition }))
     .digest('hex')
     .slice(0, 56);
 }
@@ -58,6 +58,7 @@ function safeJsonParseObject(text) {
  *   brandVoiceKeywords: string[] | null,
  *   charLimits?: Record<string, number>,
  *   cacheUserId?: string | null,
+ *   cachePartition?: string | null,
  * }} opts
  * @returns {Promise<{ block: string, used: boolean, usage: { input: number, output: number }, enriched: Record<string, string> | null, cacheHit?: boolean }>}
  */
@@ -86,8 +87,11 @@ export async function runKimiContentDefaultsEnrichment(opts) {
   const cacheUserId =
     opts.cacheUserId && String(opts.cacheUserId).trim() ? String(opts.cacheUserId).trim() : null;
   const ttlMs = getEnrichmentCacheTtlMs();
+  const cachePart = opts.cachePartition != null ? String(opts.cachePartition) : '';
   const cacheKey =
-    cacheUserId && archetypeId ? enrichmentCacheKey(cacheUserId, archetypeId, tone, [...kw].sort(), base) : null;
+    cacheUserId && archetypeId
+      ? enrichmentCacheKey(cacheUserId, archetypeId, tone, [...kw].sort(), base, cachePart)
+      : null;
   if (cacheKey) {
     const hit = enrichmentCache.get(cacheKey);
     if (hit && Date.now() - hit.at < ttlMs && hit.payload?.used) {

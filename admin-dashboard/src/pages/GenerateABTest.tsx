@@ -25,6 +25,9 @@ export default function GenerateABTest() {
   const b = data?.by_variant?.find((v) => v.variant === 'B');
   const fbA = data?.feedback_by_variant?.['A'] ?? { up: 0, down: 0 };
   const fbB = data?.feedback_by_variant?.['B'] ?? { up: 0, down: 0 };
+  const hasLegacyS =
+    (data?.by_variant?.some((v) => v.variant === 'S') ?? false) ||
+    (data?.timeline || []).some((d) => (d.S?.count ?? 0) > 0);
 
   return (
     <>
@@ -67,10 +70,14 @@ export default function GenerateABTest() {
       </section>
 
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Performance per variante</h2>
+        <h2 className="section-title">Performance per braccio A/B (50/50)</h2>
+        <p style={{ color: 'var(--muted)', marginTop: '-0.5rem', marginBottom: '1rem', maxWidth: 720 }}>
+          Arm A e B sono assegnati a caso per richiesta (variante nel DB). Il modello Moonshot effettivo è definito da{' '}
+          <code>KIMI_GENERATE_MODEL_A</code> / <code>KIMI_GENERATE_MODEL_B</code> (o <code>KIMI_MODEL</code> come fallback).
+        </p>
         <div className="grid grid-2">
           <div className="brutal-card">
-            <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Variante A (Direct)</h3>
+            <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Arm A — modello primario</h3>
             <dl style={{ margin: 0, fontSize: '0.9rem' }}>
               <dt style={{ fontWeight: 700, marginTop: '0.5rem' }}>Richieste</dt>
               <dd style={{ margin: 0 }}>{a?.count ?? 0}</dd>
@@ -89,7 +96,7 @@ export default function GenerateABTest() {
             </dl>
           </div>
           <div className="brutal-card">
-            <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Variante B (ASCII wireframe)</h3>
+            <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>Arm B — modello alternativo</h3>
             <dl style={{ margin: 0, fontSize: '0.9rem' }}>
               <dt style={{ fontWeight: 700, marginTop: '0.5rem' }}>Richieste</dt>
               <dd style={{ margin: 0 }}>{b?.count ?? 0}</dd>
@@ -110,6 +117,40 @@ export default function GenerateABTest() {
         </div>
       </section>
 
+      {data?.by_kimi_model?.length ? (
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 className="section-title">Aggregato per slug modello Kimi</h2>
+          <div className="brutal-card">
+            <div className="brutal-table-wrap">
+              <table className="brutal-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>Modello (kimi_model)</th>
+                    <th>Richieste</th>
+                    <th>Token in</th>
+                    <th>Token out</th>
+                    <th>Crediti</th>
+                    <th>Latency media</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_kimi_model.map((row) => (
+                    <tr key={row.kimi_model}>
+                      <td><code style={{ fontSize: '0.85rem' }}>{row.kimi_model}</code></td>
+                      <td>{row.count}</td>
+                      <td>{row.input_tokens.toLocaleString()}</td>
+                      <td>{row.output_tokens.toLocaleString()}</td>
+                      <td>{row.credits_consumed}</td>
+                      <td>{row.avg_latency_ms ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section style={{ marginBottom: '2rem' }}>
         <h2 className="section-title">Timeline richieste per variante</h2>
         {data?.timeline?.length ? (
@@ -120,6 +161,11 @@ export default function GenerateABTest() {
                   <span style={{ minWidth: 100, fontWeight: 700 }}>{d.date}</span>
                   <span>A: {d.A?.count ?? 0} req, {d.A?.credits ?? 0} cr</span>
                   <span>B: {d.B?.count ?? 0} req, {d.B?.credits ?? 0} cr</span>
+                  {hasLegacyS ? (
+                    <span style={{ color: 'var(--muted)' }}>
+                      S (legacy): {d.S?.count ?? 0} req, {d.S?.credits ?? 0} cr
+                    </span>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -139,7 +185,9 @@ export default function GenerateABTest() {
                 <tr>
                   <th>Data</th>
                   <th>Utente</th>
-                  <th>Variante</th>
+                  <th>Arm</th>
+                  <th>Modello</th>
+                  <th>Percorso</th>
                   <th>Token</th>
                   <th>Crediti</th>
                   <th>Latency</th>
@@ -153,6 +201,8 @@ export default function GenerateABTest() {
                     <td>{new Date(r.created_at).toLocaleString('it-IT')}</td>
                     <td>{r.user_masked}</td>
                     <td><strong>{r.variant}</strong></td>
+                    <td>{r.kimi_model ? <code style={{ fontSize: '0.8rem' }}>{r.kimi_model}</code> : '—'}</td>
+                    <td>{r.generation_route ? <code style={{ fontSize: '0.75rem' }}>{r.generation_route}</code> : '—'}</td>
                     <td>{(r.input_tokens + r.output_tokens).toLocaleString()}</td>
                     <td>{r.credits_consumed}</td>
                     <td>{r.latency_ms != null ? `${r.latency_ms} ms` : '—'}</td>

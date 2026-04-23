@@ -1,17 +1,39 @@
-import React from 'react';
-import { BRUTAL, COLORS } from '../constants';
+import React, { useState, useEffect } from 'react';
+import { BRUTAL, COLORS, SHOW_FIGMA_LOGIN, MAGIC_LINK_HINT_MINUTES } from '../constants';
 import { Button } from './ui/Button';
 
 interface Props {
   onLoginWithFigma: () => void;
+  onRequestMagicLink: (email: string) => void;
   onOpenPrivacy: () => void;
   oauthInProgress?: boolean;
+  signInMode?: 'figma' | 'email' | null;
+  magicLinkSentTo?: string | null;
+  /** Dopo scadenza o per ripristino, precompila il campo (stesso usato per “reinvia”). */
+  defaultEmail?: string;
   loginError?: string | null;
   logoutToast?: string | null;
   onDismissToast?: () => void;
 }
 
-export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, oauthInProgress, loginError, logoutToast, onDismissToast }) => (
+export const LoginModal: React.FC<Props> = ({
+  onLoginWithFigma,
+  onRequestMagicLink,
+  onOpenPrivacy,
+  oauthInProgress,
+  signInMode,
+  magicLinkSentTo,
+  defaultEmail = '',
+  loginError,
+  logoutToast,
+  onDismissToast,
+}) => {
+  const [email, setEmail] = useState(defaultEmail);
+  useEffect(() => {
+    if (defaultEmail) setEmail(defaultEmail);
+  }, [defaultEmail]);
+
+  return (
   <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4" style={{ backgroundColor: COLORS.primary }}>
 
     <div data-component="Login: Card" className={`${BRUTAL.card} max-w-sm w-full text-center py-10 relative shadow-[8px_8px_0px_0px_#000] z-10`}>
@@ -27,28 +49,67 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
             {loginError}
           </p>
         )}
-        {oauthInProgress ? (
+        {oauthInProgress && signInMode === 'figma' ? (
           <p className="text-sm font-bold text-black/80">
             Open the browser to sign in with Figma, then come back here.
           </p>
+        ) : oauthInProgress && signInMode === 'email' ? (
+          <div className="space-y-3 text-left">
+            <p className="text-sm font-bold text-black/80">
+              {magicLinkSentTo
+                ? `We sent a sign-in link to ${magicLinkSentTo}. Open it in your browser — the Figma plugin will sign you in automatically.`
+                : 'Preparing your link…'}
+            </p>
+            {magicLinkSentTo ? (
+              <>
+                <p className="text-xs font-bold text-black/60">
+                  The link in the email is valid for about {MAGIC_LINK_HINT_MINUTES} minutes. If you didn’t get the email, check spam or request a new link.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { onRequestMagicLink(magicLinkSentTo); }}
+                  className="w-full text-sm font-bold text-black border-2 border-black bg-white py-2.5 rounded shadow-[2px_2px_0px_0px_#000] hover:bg-black/5"
+                  data-component="Login: Resend magic"
+                >
+                  Send a new sign-in link
+                </button>
+              </>
+            ) : null}
+          </div>
         ) : (
-          <Button
-            variant="black"
-            fullWidth
-            layout="row"
-            onClick={onLoginWithFigma}
-            data-component="Login: Figma Button"
-            className="gap-3 py-3 border-white"
-          >
-            <svg width="18" height="27" viewBox="0 0 18 27" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M4.5 27C6.98528 27 9 24.9853 9 22.5V18H4.5C2.01472 18 0 20.0147 0 22.5C0 24.9853 2.01472 27 4.5 27Z" fill="#0ACF83"/>
-              <path d="M0 13.5C0 11.0147 2.01472 9 4.5 9H9V18H4.5C2.01472 18 0 15.9853 0 13.5Z" fill="#A259FF"/>
-              <path d="M0 4.5C0 2.01472 2.01472 0 4.5 0H9V9H4.5C2.01472 9 0 6.98528 0 4.5Z" fill="#F24E1E"/>
-              <path d="M9 0H13.5C15.9853 0 18 2.01472 18 4.5C18 6.98528 15.9853 9 13.5 9H9V0Z" fill="#FF7262"/>
-              <path d="M18 13.5C18 15.9853 15.9853 18 13.5 18H9V9H13.5C15.9853 9 18 11.0147 18 13.5Z" fill="#1ABCFE"/>
-            </svg>
-            Login with Figma
-          </Button>
+          <>
+            <p className="text-xs font-bold text-black/70 text-left mb-1">Work email</p>
+            <input
+              type="email"
+              name="comtra-magic-email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className="w-full border-2 border-black rounded px-3 py-2.5 text-sm font-bold bg-white"
+              data-component="Login: Email"
+            />
+            <Button
+              variant="black"
+              fullWidth
+              layout="row"
+              onClick={() => { onRequestMagicLink(email); }}
+              data-component="Login: Magic link"
+              className="gap-3 py-3 border-white"
+            >
+              Send sign-in link
+            </Button>
+            {SHOW_FIGMA_LOGIN && (
+              <button
+                type="button"
+                onClick={onLoginWithFigma}
+                className="w-full text-xs font-bold text-black/60 underline py-1 bg-transparent border-none cursor-pointer"
+                data-component="Login: Figma optional"
+              >
+                Sign in with Figma (OAuth) instead
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -83,4 +144,5 @@ export const LoginModal: React.FC<Props> = ({ onLoginWithFigma, onOpenPrivacy, o
       </div>
     )}
   </div>
-);
+  );
+};

@@ -198,6 +198,9 @@ export default function AppTest() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [logoutToast, setLogoutToast] = useState<string | null>(null);
   const [oauthReadKey, setOauthReadKey] = useState<string | null>(null);
+  const [signInMode, setSignInMode] = useState<'figma' | 'email' | null>(null);
+  const [magicLinkSentTo, setMagicLinkSentTo] = useState<string | null>(null);
+  const [lastMagicLinkEmail, setLastMagicLinkEmail] = useState('');
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
   const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number; discount: number; discountCode?: string | null } | null>(null);
   const [showCreditGiftModal, setShowCreditGiftModal] = useState(false);
@@ -863,11 +866,71 @@ export default function AppTest() {
     return () => clearTimeout(t);
   }, []);
 
-  /** Apre OAuth nel browser esterno e fa polling dall'UI: l'utente resta sulla login e poi va in home senza "chiudi e riapri". */
+  const handleRequestMagicLink = React.useCallback(async (email: string) => {
+    setLoginError(null);
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setLoginError('Enter your email address.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setLoginError('Enter a valid email address.');
+      return;
+    }
+    try {
+      setOauthInProgress(true);
+      setSignInMode('email');
+      setMagicLinkSentTo(null);
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/magic-link/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = (await r.json().catch(() => ({}))) as { readKey?: string; error?: string; message?: string; devLink?: string };
+      if (!r.ok) {
+        setOauthInProgress(false);
+        setSignInMode(null);
+        setLoginError(
+          data?.message
+            || (data?.error === 'email_not_configured'
+              ? 'Sign-in by email is not available yet (server not configured).'
+              : 'Could not send the sign-in link. Try again.'),
+        );
+        return;
+      }
+      const readKey = data?.readKey;
+      if (!readKey) {
+        setOauthInProgress(false);
+        setSignInMode(null);
+        setLoginError('Invalid server response.');
+        return;
+      }
+      if (import.meta.env?.DEV && data?.devLink) {
+        console.log('[Comtra] Magic link (dev):', data.devLink);
+      }
+      setOauthReadKey(readKey);
+      setMagicLinkSentTo(trimmed);
+      setLastMagicLinkEmail(trimmed);
+    } catch (e) {
+      setOauthInProgress(false);
+      setSignInMode(null);
+      const msg = e instanceof Error ? e.message : 'Connection error';
+      const isNetwork = msg === 'Failed to fetch' || /fetch|network|CORS/i.test(msg);
+      setLoginError(
+        isNetwork
+          ? `Could not reach the server (${msg}). Check that auth is up.`
+          : msg,
+      );
+    }
+  }, []);
+
+  /** Apre OAuth nel browser esterno e fa polling dall'UI: l'utente resta sulla login e poi va in home senza "chiudi e riapri". Nascosto in UI se `SHOW_FIGMA_LOGIN` è false; usato per es. "Riconnetti Figma". */
   const handleLoginWithFigma = React.useCallback(async () => {
     setLoginError(null);
     try {
       setOauthInProgress(true);
+      setSignInMode('figma');
+      setMagicLinkSentTo(null);
       const initUrl = `${AUTH_BACKEND_URL}/api/figma-oauth/init`;
       const res = await fetch(initUrl);
       if (!res.ok) throw new Error(`Init failed: ${res.status}`);
@@ -879,6 +942,7 @@ export default function AppTest() {
       window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl } }, '*');
     } catch (e) {
       setOauthInProgress(false);
+      setSignInMode(null);
       const msg = e instanceof Error ? e.message : 'Connection error';
       const isNetwork = msg === 'Failed to fetch' || /fetch|network|CORS/i.test(msg);
       setLoginError(isNetwork
@@ -895,12 +959,25 @@ export default function AppTest() {
       try {
         const r = await fetch(pollUrl);
         if (r.status === 202) return;
+        if (r.status === 404) {
+          setOauthReadKey(null);
+          if (intervalId != null) clearInterval(intervalId);
+          setOauthInProgress(false);
+          setSignInMode(null);
+          setMagicLinkSentTo(null);
+          setLoginError(
+            'This sign-in wait expired (the link in the email is no longer valid). Enter your email below and request a new link.',
+          );
+          return;
+        }
         if (!r.ok) return;
         const data = await r.json();
         if (data?.error) {
           setOauthReadKey(null);
           if (intervalId != null) clearInterval(intervalId);
           setOauthInProgress(false);
+          setSignInMode(null);
+          setMagicLinkSentTo(null);
           setLoginError('Login didn\'t go through. Try again.');
           return;
         }
@@ -908,6 +985,9 @@ export default function AppTest() {
           setOauthReadKey(null);
           if (intervalId != null) clearInterval(intervalId);
           setOauthInProgress(false);
+          setSignInMode(null);
+          setMagicLinkSentTo(null);
+          setLastMagicLinkEmail('');
           if (data.tokenSaved === false) {
             setLoginError('Login didn\'t go through. Try again.');
             return;
@@ -1948,8 +2028,12 @@ export default function AppTest() {
       return (
         <LoginModal
           onLoginWithFigma={() => { setLogoutToast(null); handleLoginWithFigma(); }}
+          onRequestMagicLink={(e) => { setLogoutToast(null); void handleRequestMagicLink(e); }}
           onOpenPrivacy={handleOpenPrivacy}
           oauthInProgress={oauthInProgress}
+          signInMode={signInMode}
+          magicLinkSentTo={magicLinkSentTo}
+          defaultEmail={lastMagicLinkEmail}
           loginError={loginError}
           logoutToast={logoutToast}
           onDismissToast={() => setLogoutToast(null)}

@@ -540,3 +540,56 @@ Questa sezione aggiorna il gap dopo implementazione nel repo (plugin + admin das
 
 Il repository implementa il **comportamento descritto** per conversazione, crediti, thread, hub admin, analytics, governance storage, **e risoluzione ToV nel prompt Generate**. Ciò che resta è **solo** configurazione ambiente (stesso DB per admin e auth se si vuole edit da dashboard), deploy, e miglioramenti **opzionali** elencati sopra.
 
+---
+
+## 18) Definition of Done (Generate Conversational)
+
+Questa checklist è il gate operativo per ogni change su `Generate`.  
+Una PR è “done” solo se tutti i punti **bloccanti** passano.
+
+### 18.1 Intent & orchestration (bloccante)
+
+- Ogni input passa dal classifier deterministic prima di qualsiasi call LLM.
+- `Kimi` parte solo su intent che lo richiedono **e** conferma utente (`Generate now` / `Apply change`).
+- Input ambiguo o nonsense non produce errori secchi: la chat risponde sempre con next step utile.
+- Casi “fun/roleplay” (es. persona celebri o frasi goliardiche) non finiscono in fallback generico quando sono riconoscibili.
+
+### 18.2 Conversational UX behavior (bloccante)
+
+- Nessun dead-end: ogni risposta assistant ha un percorso d’uscita (azioni o prompt chiaro).
+- Thinking/typing dots compaiono prima della risposta assistant, non in ritardo e non sovrapposti a messaggio già finalizzato.
+- Dopo conferma generate, il `live reasoning` mostra avanzamento in step (`context -> ai -> canvas -> credits`) fino a completion/fail.
+- Composer: invio svuota il field subito e non mantiene testo stale.
+
+### 18.3 UI coherence (bloccante)
+
+- Stato focus del composer è visivamente coerente (un solo background, niente split non voluti).
+- Nessun box ridondante o informazione duplicata (es. DS già esplicitato altrove).
+- Overlay/modal stanno sopra tutta l’interfaccia (header, nav, tab, composer).
+- Componenti action hanno fill/border coerenti con il brutal style e stati disabled leggibili.
+
+### 18.4 Attachments UX (bloccante)
+
+- Add image: dialog sistema, preview nel composer, spinner durante ingest.
+- Drag & drop image: stato visivo dedicato + drop funzionante.
+- Add frame: dialog dedicata, supporto paste URL pubblico Figma, chiusura automatica al capture valido.
+- Preview attachment persistente nel composer fino a rimozione esplicita o nuova azione che la sostituisce.
+
+### 18.5 DS readiness & lifecycle (bloccante)
+
+- `Custom (Current)` riconosce correttamente DS ready/not-ready anche con load asincrono di crediti/sessione.
+- Nessun falso negativo persistente: se il contesto cambia, il check viene rieseguito.
+- Wizard import: copy introduttiva leggibile, senza ridondanze decorative.
+
+### 18.6 Technical quality gates (bloccante)
+
+- `npm run build` passa.
+- Nessun errore lint introdotto nei file toccati.
+- Nessun nuovo runtime error in console al bootstrap o durante send/confirm.
+
+### 18.7 Nice-to-have (non bloccante)
+
+- Micro-variation controllata del timing dots per naturalness.
+- Espansione pool copy per intent secondari.
+- Ulteriore tuning pixel-perfect su composer/select con screenshot regression.
+

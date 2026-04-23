@@ -5,12 +5,13 @@
 --   ALTER TABLE users ADD COLUMN IF NOT EXISTS current_level INTEGER NOT NULL DEFAULT 1;
 --   ALTER TABLE users ADD COLUMN IF NOT EXISTS level_rewards JSONB;
 
--- id = Figma user id (from OAuth)
+-- id = chiave Comtra: Figma id (OAuth classico) oppure comtra_* (magic link). figma_user_id = id account Figma quando collegato.
 CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  email TEXT,
-  name TEXT,
-  img_url TEXT,
+    id TEXT PRIMARY KEY,
+    email TEXT,
+    name TEXT,
+    img_url TEXT,
+    figma_user_id TEXT,
   plan TEXT NOT NULL DEFAULT 'FREE',
   plan_expires_at TIMESTAMPTZ,
   credits_total INTEGER NOT NULL DEFAULT 25,
@@ -195,7 +196,7 @@ CREATE TABLE IF NOT EXISTS user_throttle_discounts (
 );
 CREATE INDEX IF NOT EXISTS idx_user_throttle_discounts_issued_at ON user_throttle_discounts(issued_at);
 
--- A/B test Generate: Direct (A) vs ASCII wireframe first (B)
+-- A/B test Generate: arm A vs B (random 50/50 chat models); variant S kept for legacy rows
 CREATE TABLE IF NOT EXISTS generate_ab_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
@@ -210,10 +211,14 @@ CREATE TABLE IF NOT EXISTS generate_ab_requests (
   inferred_pack_v2_archetype TEXT,
   kimi_enrichment_used BOOLEAN NOT NULL DEFAULT false,
   learning_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  kimi_model TEXT,
+  generation_route TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_variant ON generate_ab_requests(variant);
 CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_created_at ON generate_ab_requests(created_at);
+CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_kimi_model ON generate_ab_requests(kimi_model);
+CREATE INDEX IF NOT EXISTS idx_generate_ab_requests_generation_route ON generate_ab_requests(generation_route);
 
 CREATE TABLE IF NOT EXISTS generate_ab_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

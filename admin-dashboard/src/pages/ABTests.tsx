@@ -12,7 +12,7 @@ export default function ABTests() {
           className={({ isActive }) => `brutal-btn ${isActive ? 'active' : ''}`}
           style={{ fontSize: '0.85rem', textDecoration: 'none' }}
         >
-          Generate (A vs B)
+          Generate (modelli Kimi · A/B)
         </NavLink>
       </nav>
       <Outlet />

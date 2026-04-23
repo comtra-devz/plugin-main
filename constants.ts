@@ -8,6 +8,13 @@ export const AUTH_BACKEND_URL =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_AUTH_BACKEND_URL) ||
   'https://auth.comtra.dev';
 
+/**
+ * Se true, il login con Figma OAuth è visibile in login oltre al magic link.
+ * Default false (Figma nascosto finché l’app OAuth non è approvata).
+ */
+export const SHOW_FIGMA_LOGIN =
+  typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SHOW_FIGMA_LOGIN === 'true';
+
 /** Plugin ID (manifest); usato per postMessage sicuro verso Figma */
 export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
 
@@ -19,6 +26,9 @@ export const TEST_USER_EMAILS: string[] = [];
 
 /** Crediti free tier (usati anche per simulazione test user quando API non disponibile). */
 export const FREE_TIER_CREDITS = 25;
+
+/** Stesso ordine di grandezza del server (flow Redis + testo in UI; override con MAGIC_LINK_FLOW_TTL_SEC lato server). */
+export const MAGIC_LINK_HINT_MINUTES = 15;
 
 const STORAGE_KEY_SIMULATE_FREE = 'comtra_simulate_free_tier';
 const STORAGE_KEY_SIMULATED_CREDITS_PREFIX = 'comtra_test_simulated_credits_';

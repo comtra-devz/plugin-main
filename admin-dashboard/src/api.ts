@@ -561,12 +561,22 @@ export interface GenerateABStatsResponse {
     credits_consumed: number;
     avg_latency_ms: number | null;
   }[];
+  by_kimi_model: {
+    kimi_model: string;
+    count: number;
+    input_tokens: number;
+    output_tokens: number;
+    credits_consumed: number;
+    avg_latency_ms: number | null;
+  }[];
   feedback_by_variant: Record<string, { up: number; down: number }>;
   requests_list: {
     id: string;
     user_id: string;
     user_masked: string;
     variant: string;
+    kimi_model: string | null;
+    generation_route: string | null;
     input_tokens: number;
     output_tokens: number;
     credits_consumed: number;
@@ -575,7 +585,12 @@ export interface GenerateABStatsResponse {
     feedback_thumbs: string | null;
     feedback_comment: string | null;
   }[];
-  timeline: { date: string; A: { count: number; credits: number }; B: { count: number; credits: number } }[];
+  timeline: {
+    date: string;
+    A: { count: number; credits: number };
+    B: { count: number; credits: number };
+    S?: { count: number; credits: number };
+  }[];
 }
 
 export async function fetchGenerateABStats(period = 30): Promise<GenerateABStatsResponse> {

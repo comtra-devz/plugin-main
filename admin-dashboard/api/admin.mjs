@@ -1013,6 +1013,16 @@ async function handleGenerateABStats(req, res) {
       FROM generate_ab_requests WHERE created_at >= ${since}
       GROUP BY variant
     `;
+    const requestsByKimiModel = await sql`
+      SELECT COALESCE(NULLIF(trim(kimi_model), ''), '(unknown)') AS kimi_model, COUNT(*)::int AS count,
+             COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+             COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+             COALESCE(SUM(credits_consumed), 0)::int AS credits_consumed,
+             AVG(latency_ms)::numeric(12,2) AS avg_latency_ms
+      FROM generate_ab_requests WHERE created_at >= ${since}
+      GROUP BY 1
+      ORDER BY count DESC
+    `.catch(() => ({ rows: [] }));
     const totals = await sql`
       SELECT COUNT(*)::int AS count,
              COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
@@ -1030,7 +1040,7 @@ async function handleGenerateABStats(req, res) {
     `;
     const requestsLimit = Math.min(200, Math.max(50, parseInt(req.query?.requests_limit, 10) || 100));
     const requestsList = await sql`
-      SELECT r.id, r.user_id, r.variant, r.input_tokens, r.output_tokens, r.credits_consumed, r.latency_ms, r.created_at,
+      SELECT r.id, r.user_id, r.variant, r.kimi_model, r.generation_route, r.input_tokens, r.output_tokens, r.credits_consumed, r.latency_ms, r.created_at,
              u.email, f.thumbs AS feedback_thumbs, f.comment AS feedback_comment
       FROM generate_ab_requests r
       LEFT JOIN users u ON u.id = r.user_id
@@ -1073,6 +1083,8 @@ async function handleGenerateABStats(req, res) {
       user_id: r.user_id,
       user_masked: maskEmail(r.email),
       variant: r.variant,
+      kimi_model: r.kimi_model ?? null,
+      generation_route: r.generation_route ?? null,
       input_tokens: r.input_tokens ?? 0,
       output_tokens: r.output_tokens ?? 0,
       credits_consumed: r.credits_consumed ?? 0,
@@ -1081,11 +1093,25 @@ async function handleGenerateABStats(req, res) {
       feedback_thumbs: r.feedback_thumbs ?? null,
       feedback_comment: r.feedback_comment ?? null,
     }));
+    const by_kimi_model = (requestsByKimiModel.rows || []).map((r) => ({
+      kimi_model: r.kimi_model,
+      count: r.count ?? 0,
+      input_tokens: Number(r.input_tokens) || 0,
+      output_tokens: Number(r.output_tokens) || 0,
+      credits_consumed: r.credits_consumed ?? 0,
+      avg_latency_ms: r.avg_latency_ms != null ? Math.round(Number(r.avg_latency_ms)) : null,
+    }));
     const timeline = {};
     for (const r of byDay.rows || []) {
       const d = toDateStr(r.day);
-      if (!timeline[d]) timeline[d] = { A: { count: 0, credits: 0 }, B: { count: 0, credits: 0 } };
-      const v = r.variant || 'A';
+      if (!timeline[d])
+        timeline[d] = {
+          A: { count: 0, credits: 0 },
+          B: { count: 0, credits: 0 },
+          S: { count: 0, credits: 0 },
+        };
+      const rawV = String(r.variant || 'A');
+      const v = rawV === 'A' || rawV === 'B' || rawV === 'S' ? rawV : 'A';
       timeline[d][v].count = r.count ?? 0;
       timeline[d][v].credits = r.credits ?? 0;
     }
@@ -1095,6 +1121,7 @@ async function handleGenerateABStats(req, res) {
       since,
       total: { ...total, cost_usd: Math.round(costUsd * 1000) / 1000 },
       by_variant,
+      by_kimi_model,
       feedback_by_variant,
       requests_list,
       timeline: Object.entries(timeline).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date)),
@@ -1109,6 +1136,7 @@ async function handleGenerateABStats(req, res) {
         since,
         total: { count: 0, input_tokens: 0, output_tokens: 0, credits_consumed: 0, avg_latency_ms: null, cost_usd: 0 },
         by_variant: [],
+        by_kimi_model: [],
         feedback_by_variant: {},
         requests_list: [],
         timeline: [],

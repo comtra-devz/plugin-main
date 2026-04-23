@@ -396,6 +396,12 @@ export const Generate: React.FC<Props> = ({
   /** §6 — per-chip estimates from POST /api/credits/estimate (preview). */
   const [refinementEstimates, setRefinementEstimates] = useState<Record<string, number>>({});
   const [lastDiagLine, setLastDiagLine] = useState<string | null>(null);
+  const [liveReasoningLines, setLiveReasoningLines] = useState<string[]>([]);
+  const pushLiveReasoning = useCallback((line: string) => {
+    const next = String(line || '').trim();
+    if (!next) return;
+    setLiveReasoningLines((prev) => (prev.includes(next) ? prev : [...prev, next]));
+  }, []);
   const pendingPreflightPromptRef = useRef<string | null>(null);
   const skippedPreflightHashRef = useRef<string | null>(null);
   const serverThreadIdRef = useRef<string | null>(null);
@@ -816,6 +822,43 @@ export const Generate: React.FC<Props> = ({
     if (showRefinementChips) setRefineChipsHiddenByComposer(false);
   }, [showRefinementChips]);
 
+  useEffect(() => {
+    if (!loading) return;
+    if (generateStep === 'context') {
+      pushLiveReasoning('I am validating file access and current DS scope...');
+      pushLiveReasoning(
+        usesFileDs
+          ? 'I will anchor generation to the imported Custom (Current) snapshot.'
+          : `I will use ${selectedSystem} as style reference.`,
+      );
+      if (hasSelection) pushLiveReasoning('Selection mode active: I will preserve structure and improve it.');
+      if (screenshotAttachment) pushLiveReasoning('Screenshot reference detected: extracting layout intent...');
+      return;
+    }
+    if (generateStep === 'ai') {
+      pushLiveReasoning('I am mapping your request to a concrete screen archetype...');
+      pushLiveReasoning('I am composing an action plan with constraints, hierarchy, and spacing intent...');
+      pushLiveReasoning('I am validating plan consistency before canvas apply...');
+      return;
+    }
+    if (generateStep === 'canvas') {
+      pushLiveReasoning('Applying actions on canvas in deterministic order...');
+      pushLiveReasoning('Resolving instances/variables and checking unresolved references...');
+      return;
+    }
+    if (generateStep === 'credits') {
+      pushLiveReasoning('Final quality check completed, confirming credit consumption...');
+    }
+  }, [
+    loading,
+    generateStep,
+    usesFileDs,
+    selectedSystem,
+    hasSelection,
+    screenshotAttachment,
+    pushLiveReasoning,
+  ]);
+
   const promptPlaceholder = hasSelection
     ? `> Modify "${selectedLayerName}": keep layout, improve hierarchy and spacing.`
     : screenshotAttachment
@@ -845,7 +888,7 @@ export const Generate: React.FC<Props> = ({
             : 'Use this screenshot as inspiration and make it production-ready.',
         ]
       : [
-          `Create a desktop login screen aligned to ${selectedSystem}.`,
+          'Create a desktop login screen with clear hierarchy and primary CTA.',
           'Create a mobile checkout summary with sticky CTA and trust cues.',
           userTier === 'PRO'
             ? 'Create a hero section with 2 variants and clear conversion hierarchy.'
@@ -1105,6 +1148,10 @@ export const Generate: React.FC<Props> = ({
       lastActionPlanRef.current = null;
       setShowRefinementChips(false);
       setLastDiagLine(null);
+      setLiveReasoningLines([
+        'Understanding your request and preparing generation context...',
+        'I will keep this transparent and narrate each step live.',
+      ]);
 
       void fetchGenerationPluginEvent?.({
         event_type: 'generate_chat_turn_started',
@@ -1134,6 +1181,7 @@ export const Generate: React.FC<Props> = ({
         pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
+        setLiveReasoningLines([]);
         const opts = getSystemToastOptions('file_link_unavailable');
         setGenError(opts.description ?? opts.title);
         return;
@@ -1143,6 +1191,7 @@ export const Generate: React.FC<Props> = ({
       const dsSource = usesFileDs ? 'custom' : selectedSystem;
 
       setGenerateStep('ai');
+      pushLiveReasoning('Generating action plan with DS constraints...');
       try {
         const data = await fetchGenerate({
           file_key: fileKey,
@@ -1179,6 +1228,7 @@ export const Generate: React.FC<Props> = ({
         setFeedbackSent(false);
 
         setGenerateStep('canvas');
+        pushLiveReasoning('Applying layout to canvas...');
         const canvasResult = await runCanvasApply(actionPlan, {
           modifyMode: isModify,
           serverRequestId: data?.request_id ?? null,
@@ -1209,6 +1259,7 @@ export const Generate: React.FC<Props> = ({
         });
 
         setGenerateStep('credits');
+        pushLiveReasoning('Finalizing credits and wrapping up...');
         const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
         const creditsToConsume = meta?.estimated_credits ?? 3;
         let consumeActionType: string = mode === 'modify' ? 'wireframe_modified' : 'generate';
@@ -1269,6 +1320,7 @@ export const Generate: React.FC<Props> = ({
         pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
+        setLiveReasoningLines([]);
       }
     },
     [
@@ -1289,6 +1341,7 @@ export const Generate: React.FC<Props> = ({
       abortOptimisticUserTurn,
       beginOptimisticUserTurn,
       clearComposerInput,
+      pushLiveReasoning,
     ],
   );
 
@@ -1352,11 +1405,18 @@ export const Generate: React.FC<Props> = ({
     };
     const cls = classifyIntent(rawText);
     const response = getResponse(cls, rawText);
+    const actionWithCredits = (action: string): string => {
+      if (action === 'Generate now' || action === 'Apply change') {
+        return `${action} (~${creditEstimate} cr)`;
+      }
+      return action;
+    };
     const pauseAssistantBriefly = async () => {
       setLoading(true);
       setGenerateStep('context');
+      const delayMs = 450 + Math.floor(Math.random() * 451); // 450..900
       await new Promise<void>((resolve) => {
-        window.setTimeout(() => resolve(), 520);
+        window.setTimeout(() => resolve(), delayMs);
       });
       setLoading(false);
       setGenerateStep('idle');
@@ -1370,7 +1430,8 @@ export const Generate: React.FC<Props> = ({
         role: 'assistant' as const,
         body: b.slice(0, 1200),
         createdAt: Date.now() + i,
-        actions: i === response.bubbles.length - 1 ? response.actions : undefined,
+        actions:
+          i === response.bubbles.length - 1 ? response.actions.map((a) => actionWithCredits(a)) : undefined,
         actionIntent: i === response.bubbles.length - 1 ? cls.intent : undefined,
         actionPrompt: i === response.bubbles.length - 1 ? rawText : undefined,
       }));
@@ -1386,7 +1447,8 @@ export const Generate: React.FC<Props> = ({
         role: 'assistant' as const,
         body: b.slice(0, 1200),
         createdAt: Date.now() + i,
-        actions: i === response.bubbles.length - 1 ? response.actions : undefined,
+        actions:
+          i === response.bubbles.length - 1 ? response.actions.map((a) => actionWithCredits(a)) : undefined,
         actionIntent: i === response.bubbles.length - 1 ? cls.intent : undefined,
         actionPrompt: i === response.bubbles.length - 1 ? rawText : undefined,
       }));
@@ -1450,7 +1512,7 @@ export const Generate: React.FC<Props> = ({
     (action: string, intent?: IntentId, prompt?: string) => {
       const basePrompt = String(prompt || '').trim();
       if (!basePrompt && action !== 'Start over') return;
-      if (action === 'Generate now' || action === 'Apply change') {
+      if (action.startsWith('Generate now') || action.startsWith('Apply change')) {
         void runGeneratePipeline(basePrompt, { clearComposer: false });
         return;
       }
@@ -1545,13 +1607,12 @@ export const Generate: React.FC<Props> = ({
   };
 
   const handleInsertInspiration = (txt: string) => {
-    beginOptimisticUserTurn(txt);
     if (inputRef.current) {
-      inputRef.current.innerText = '';
+      inputRef.current.innerText = txt;
     }
-    setPromptText('');
-    setHasContent(false);
-    void runGeneratePipeline(txt);
+    setPromptText(txt);
+    setHasContent(true);
+    void handleGen();
   };
 
   const handleUploadClick = () => {
@@ -1724,6 +1785,8 @@ export const Generate: React.FC<Props> = ({
     conversationTurns[conversationTurns.length - 1]?.role === 'user' &&
     (generateStep === 'context' || generateStep === 'ai');
 
+  const showLiveReasoning = loading && liveReasoningLines.length > 0;
+
   return (
     <div
       data-component="Generate: View Container"
@@ -1794,12 +1857,14 @@ export const Generate: React.FC<Props> = ({
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-2 text-left text-xs font-black uppercase"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 text-left text-xs font-black uppercase"
                 >
-                  <span className="truncate min-w-0 leading-tight">
+                  <span className="flex h-full min-w-0 items-center truncate leading-none">
                     <span className="text-gray-500">Design system</span> · {selectedSystem}
                   </span>
-                  <span aria-hidden>{isSystemOpen ? '▲' : '▼'}</span>
+                  <span className="flex h-full items-center leading-none" aria-hidden>
+                    {isSystemOpen ? '▲' : '▼'}
+                  </span>
                 </button>
               }
             >
@@ -1946,24 +2011,47 @@ export const Generate: React.FC<Props> = ({
                     ) : null}
                     {conversationTurns.map((turn) => (
                       <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`max-w-[95%] border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
-                            turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
-                          }`}
-                        >
-                          {turn.body}
+                        <div className="max-w-[95%]">
+                          <div
+                            className={`border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
+                              turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
+                            }`}
+                          >
+                            {turn.body}
+                          </div>
                           {turn.role === 'assistant' && turn.actions && turn.actions.length > 0 ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {turn.actions.map((action) => (
-                                <button
-                                  key={`${turn.id}-${action}`}
-                                  type="button"
-                                  onClick={() => handleIntentAction(action, turn.actionIntent, turn.actionPrompt)}
-                                  className="text-[9px] border-2 border-black px-2 py-1 bg-white hover:bg-[#ffc900] font-bold"
-                                >
-                                  {action}
-                                </button>
-                              ))}
+                            <div className="mt-1.5 flex flex-wrap gap-1.5 pl-2">
+                              {turn.actions.map((action) => {
+                                const m = action.match(/^(.*)\s+\(~\s*(\d+)\s*cr\)$/i);
+                                const baseAction = m ? m[1].trim() : action;
+                                const cost = m ? m[2] : null;
+                                const isConfirm = /^Generate now|^Apply change/i.test(baseAction);
+                                return (
+                                  <button
+                                    key={`${turn.id}-${action}`}
+                                    type="button"
+                                    onClick={() => handleIntentAction(action, turn.actionIntent, turn.actionPrompt)}
+                                    className={`inline-flex min-h-9 items-center gap-1.5 border-2 border-black px-3 py-1 text-[10px] font-black ${
+                                      isConfirm
+                                        ? 'relative bg-[#ffc900] pr-12 text-black shadow-[2px_2px_0_0_#000] hover:bg-yellow-300'
+                                        : 'bg-white hover:bg-[#ffc900]'
+                                    }`}
+                                  >
+                                    <span>{baseAction}</span>
+                                    {cost ? (
+                                      isConfirm ? (
+                                        <span className="absolute right-1 top-1/2 -translate-y-1/2 border border-black bg-black px-1 py-0 leading-none text-[8px] text-[#ffc900]">
+                                          {cost}CR
+                                        </span>
+                                      ) : (
+                                        <span className="border border-black bg-white px-1 py-0 leading-none text-[8px]">
+                                          {cost}CR
+                                        </span>
+                                      )
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
                             </div>
                           ) : null}
                         </div>
@@ -1977,6 +2065,18 @@ export const Generate: React.FC<Props> = ({
                             <span className="animate-bounce delay-100">·</span>
                             <span className="animate-bounce delay-200">·</span>
                           </span>
+                        </div>
+                      </div>
+                    ) : null}
+                    {showLiveReasoning ? (
+                      <div className="flex justify-start" aria-live="polite">
+                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                          <p className="mb-1 font-black uppercase">Live reasoning</p>
+                          <div className="space-y-0.5">
+                            {liveReasoningLines.map((line, idx) => (
+                              <p key={`lr-${idx}`}>- {line}</p>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -2160,7 +2260,8 @@ export const Generate: React.FC<Props> = ({
                       onClick={handleGen}
                       disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
                       className="flex size-9 shrink-0 items-center justify-center rounded-none bg-white p-0 shadow-[2px_2px_0_0_#000]"
-                      aria-label="Send"
+                      aria-label={`Send (~${creditEstimate} credits)`}
+                      title={`Estimated cost: ~${creditEstimate} credits`}
                     >
                       ➤
                     </Button>

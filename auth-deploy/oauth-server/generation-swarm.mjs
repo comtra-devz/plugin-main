@@ -19,7 +19,7 @@ const COMPONENT_MAPPER_PATH = path.join(__dirname, '..', 'prompts', 'generate-co
 
 /**
  * @param {object} opts
- * @param {(messages: Array<{role:string,content:string}>, maxTokens?: number) => Promise<{content?: string, usage?: object}>} opts.callKimi
+ * @param {(messages: Array<{role:string,content:string}>, maxTokens?: number, textModelOverride?: string | null) => Promise<{content?: string, usage?: object}>} opts.callKimi
  * @param {(text: string) => object | null} opts.extractJsonFromContent
  * @param {string} opts.userPrompt
  * @param {string} opts.contextBlob

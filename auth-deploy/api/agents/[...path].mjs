@@ -10,6 +10,5 @@ export default function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).end();
-  req.url = '/api/agents/a11y-audit';
   return app(req, res);
 }

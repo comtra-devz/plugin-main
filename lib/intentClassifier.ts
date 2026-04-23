@@ -149,6 +149,13 @@ function detectFamousPerson(t: string): string | null {
     'susan kare': '__generic__',
     'matías duarte': '__generic__',
     'matias duarte': '__generic__',
+    batman: '__generic__',
+    'bruce wayne': '__generic__',
+    superman: '__generic__',
+    'clark kent': '__generic__',
+    spiderman: '__generic__',
+    'spider-man': '__generic__',
+    'peter parker': '__generic__',
   };
   const sorted = Object.keys(map).sort((a, b) => b.length - a.length);
   for (const key of sorted) {

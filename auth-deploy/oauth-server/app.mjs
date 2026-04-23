@@ -124,6 +124,230 @@ const JWT_SECRET = process.env.JWT_SECRET || 'comtra-dev-secret-change-in-prod';
 const POSTGRES_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 const FREE_TIER_CREDITS = 25;
 
+function normalizeUserEmail(s) {
+  if (s == null || typeof s !== 'string') return '';
+  return s.trim().toLowerCase();
+}
+
+function isValidEmailFormat(s) {
+  if (!s || typeof s !== 'string') return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
+function generateComtraUserId() {
+  return `comtra_${randomBytes(12).toString('hex')}`;
+}
+
+/**
+ * Figma OAuth: una sola riga `users` per account; merge su email; `users.id` resta la PK
+ * (Figma classico) o comtra_* se creato prima con magic link.
+ */
+async function runFigmaOAuthUserPersistence(executor, figmaUser, tokenData, countryCode) {
+  const emailNorm = normalizeUserEmail(figmaUser.email);
+  const figmaId = String(figmaUser.id);
+  const name = figmaUser.handle || figmaUser.email || 'User';
+  const email = figmaUser.email || '';
+  const img = figmaUser.img_url || null;
+  const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
+  const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+  const refreshToken = tokenData.refresh_token || tokenData.access_token;
+  let userId = null;
+  if (emailNorm) {
+    const r1 = await executor`SELECT id FROM users WHERE LOWER(BTRIM(email)) = ${emailNorm} LIMIT 1`;
+    if (r1.rows.length) userId = r1.rows[0].id;
+  }
+  if (!userId) {
+    const r2 = await executor`SELECT id FROM users WHERE id = ${figmaId} OR figma_user_id = ${figmaId} LIMIT 1`;
+    if (r2.rows.length) userId = r2.rows[0].id;
+  }
+  if (!userId) {
+    userId = figmaId;
+  }
+  await executor`
+    INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, figma_user_id, updated_at)
+    VALUES (${userId}, ${email}, ${name}, ${img}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, ${figmaId}, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      email = COALESCE(NULLIF(EXCLUDED.email, ''), users.email),
+      name = EXCLUDED.name,
+      img_url = EXCLUDED.img_url,
+      country_code = COALESCE(EXCLUDED.country_code, users.country_code),
+      figma_user_id = ${figmaId},
+      updated_at = NOW()
+  `;
+  await executor`
+    INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
+    VALUES (${userId}, ${tokenData.access_token}, ${refreshToken}, ${expiresAt.toISOString()}, NOW())
+    ON CONFLICT (user_id) DO UPDATE SET
+      access_token = EXCLUDED.access_token,
+      refresh_token = EXCLUDED.refresh_token,
+      expires_at = EXCLUDED.expires_at,
+      updated_at = NOW()
+  `;
+  return { userId, name, email, img };
+}
+
+async function resolveOrCreateUserByEmail(executor, email, countryCode) {
+  const em = normalizeUserEmail(email);
+  if (!em) throw new Error('empty_email');
+  const r = await executor`
+    SELECT id, email, name, img_url FROM users WHERE LOWER(BTRIM(email)) = ${em} LIMIT 1
+  `;
+  if (r.rows.length) {
+    const row = r.rows[0];
+    return {
+      userId: String(row.id),
+      name: row.name || em.split('@')[0] || 'User',
+      email: row.email || em,
+      img_url: row.img_url,
+    };
+  }
+  const newId = generateComtraUserId();
+  const localPart = em.split('@')[0] || 'User';
+  await executor`
+    INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, figma_user_id, updated_at)
+    VALUES (${newId}, ${em}, ${localPart}, null, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, null, NOW())
+  `;
+  return { userId: newId, name: localPart, email: em, img_url: null };
+}
+
+const MAGIC_LINK_FLOW_TTL_SEC = Math.min(
+  3600,
+  Math.max(300, Number(process.env.MAGIC_LINK_FLOW_TTL_SEC) || 900)
+);
+
+/** Template email magic link: HTML semantico, stili inline (no layout a tabella). Vedi `sendMagicLinkEmail*`. */
+function buildComtraMagicLinkEmailHtml(verifyUrl) {
+  const raw = String(verifyUrl);
+  const hrefAttr = raw.replace(/&/g, '&amp;');
+  const plainUrlDisplay = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width" />
+  <title>Comtra — sign in</title>
+</head>
+<body style="margin:0;padding:0;background:#f0f0f0;">
+  <div style="max-width:480px;margin:0 auto;padding:24px 12px;">
+    <article
+      style="border:3px solid #000;background:#ff90e8;box-shadow:8px 8px 0 #000;padding:0;overflow:hidden;font-family:system-ui,-apple-system,'Segoe UI',Arial,sans-serif;"
+    >
+      <header style="padding:32px 28px 8px 28px;">
+        <p style="margin:0 0 12px 0;">
+          <span
+            style="display:inline-block;background:#000;color:#fff;padding:6px 10px;font-size:10px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;"
+            >Design System AI</span
+          >
+        </p>
+        <h1
+          style="margin:0;font-size:2rem;font-weight:900;letter-spacing:-0.04em;color:#000;text-transform:uppercase;line-height:0.95;font-family:Georgia,'Times New Roman',serif;"
+        >Comtra</h1>
+      </header>
+      <section style="padding:0 28px 20px 28px;font-size:15px;color:#000;line-height:1.5;">
+        <p style="margin:0 0 12px 0;font-weight:700;">Sign in to the Comtra Figma plugin</p>
+        <p style="margin:0 0 20px 0;">This link is valid for about <strong>15 minutes</strong>. If you did not request it, you can ignore this message.</p>
+        <p style="margin:0;">
+          <a
+            href="${hrefAttr}"
+            style="display:inline-block;background:#000;color:#fff !important;padding:14px 28px;font-size:15px;font-weight:800;text-decoration:none;border:2px solid #fff;box-shadow:4px 4px 0 #000;"
+            >Open sign-in link</a
+          >
+        </p>
+      </section>
+      <section
+        style="padding:0 28px 24px 28px;font-size:12px;color:#333;line-height:1.45;border-top:2px dashed #000;"
+      >
+        <p style="margin:16px 0 0 0;">If the button does not work, paste this in your browser:</p>
+        <p style="margin:6px 0 0 0;word-break:break-all;color:#000;font-size:11px;">${plainUrlDisplay}</p>
+      </section>
+      <footer style="padding:0 28px 28px 28px;font-size:10px;color:#555;">
+        Cordiska &amp; Ben — Comtra
+      </footer>
+    </article>
+  </div>
+</body>
+</html>`;
+}
+
+function magicLinkEmailSubject() {
+  return (process.env.MAGIC_LINK_EMAIL_SUBJECT || 'Sign in to Comtra (Figma plugin)').toString();
+}
+
+async function sendMagicLinkEmailSmtp(toAddress, verifyUrl) {
+  const { default: nodemailer } = await import('nodemailer');
+  const from = (process.env.SMTP_FROM || process.env.MAIL_FROM || '').trim();
+  if (!from) {
+    return { ok: false, reason: 'smtp_no_from' };
+  }
+  const port = Math.max(1, Number(process.env.SMTP_PORT) || 587);
+  const secure = process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true' || port === 465;
+  const host = (process.env.SMTP_HOST || process.env.MAIL_HOST || '').trim();
+  if (!host) {
+    return { ok: false, reason: 'smtp_no_host' };
+  }
+  const user = (process.env.SMTP_USER || process.env.MAIL_USER || '').trim();
+  const pass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASS || '').trim();
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: user || pass ? { user: user || undefined, pass: pass || undefined } : undefined,
+  });
+  const html = buildComtraMagicLinkEmailHtml(verifyUrl);
+  const text = `Comtra sign-in\n\nOpen this link (valid ~15 min):\n${verifyUrl}\n\nIf you did not request this, ignore this email.`;
+  await transporter.sendMail({ from, to: toAddress, subject: magicLinkEmailSubject(), html, text });
+  return { ok: true };
+}
+
+async function sendMagicLinkEmailResend(toAddress, verifyUrl) {
+  const resend = process.env.RESEND_API_KEY;
+  if (!resend) {
+    return { ok: false, reason: 'no_resend' };
+  }
+  const from = process.env.RESEND_FROM || 'Comtra <onboarding@resend.dev>';
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resend}` },
+    body: JSON.stringify({
+      from,
+      to: [toAddress],
+      subject: magicLinkEmailSubject(),
+      html: buildComtraMagicLinkEmailHtml(verifyUrl),
+    }),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    console.error('Resend error', r.status, t);
+    return { ok: false, reason: 'resend_http' };
+  }
+  return { ok: true };
+}
+
+function hasSmtpForMagic() {
+  return Boolean(
+    (process.env.SMTP_HOST || process.env.MAIL_HOST) && (process.env.SMTP_FROM || process.env.MAIL_FROM)
+  );
+}
+
+async function sendMagicLinkEmail(toAddress, verifyUrl) {
+  if (hasSmtpForMagic()) {
+    try {
+      return await sendMagicLinkEmailSmtp(toAddress, verifyUrl);
+    } catch (e) {
+      console.error('[magic-link] SMTP send failed', e);
+      return { ok: false, reason: 'smtp_error' };
+    }
+  }
+  if (process.env.RESEND_API_KEY) {
+    return sendMagicLinkEmailResend(toAddress, verifyUrl);
+  }
+  if (process.env.MAGIC_LINK_DEV_LOG === '1') {
+    console.log('[magic-link] (no SMTP/Resend) verify URL for ', toAddress, verifyUrl);
+    return { ok: false, reason: 'dev_log' };
+  }
+  return { ok: false, reason: 'no_provider' };
+}
+
 async function createFlowStore() {
   if (process.env.REDIS_URL) {
     const { createClient } = await import('redis');
@@ -132,7 +356,7 @@ async function createFlowStore() {
     await client.connect();
     return {
       async set(key, value) {
-        await client.set(key, JSON.stringify(value), { EX: 600 });
+        await client.set(key, JSON.stringify(value), { EX: MAGIC_LINK_FLOW_TTL_SEC });
       },
       async get(key) {
         const v = await client.get(key);
@@ -292,66 +516,31 @@ app.get('/auth/figma/callback', async (req, res) => {
   let txError = null;
 
   if (POSTGRES_URL && withTransaction) {
-    const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
-    const expiresAt = new Date(Date.now() + expiresInSec * 1000);
-    const refreshToken = tokenData.refresh_token || tokenData.access_token;
-
     try {
       await withTransaction(async (tx) => {
-        await tx`
-          INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, updated_at)
-          VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, NOW())
-          ON CONFLICT (id) DO UPDATE SET
-            email = EXCLUDED.email,
-            name = EXCLUDED.name,
-            img_url = EXCLUDED.img_url,
-            country_code = COALESCE(EXCLUDED.country_code, users.country_code),
-            updated_at = NOW()
-        `;
-        await tx`
-          INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
-          VALUES (${user.id}, ${tokenData.access_token}, ${refreshToken}, ${expiresAt.toISOString()}, NOW())
-          ON CONFLICT (user_id) DO UPDATE SET
-            access_token = EXCLUDED.access_token,
-            refresh_token = EXCLUDED.refresh_token,
-            expires_at = EXCLUDED.expires_at,
-            updated_at = NOW()
-        `;
+        const p = await runFigmaOAuthUserPersistence(tx, figmaUser, tokenData, countryCode);
+        user.id = p.userId;
+        user.name = p.name;
+        user.email = p.email;
+        user.img_url = p.img;
       });
       tokenSaved = true;
     } catch (err) {
       txError = err;
-      console.error('OAuth callback: users+figma_tokens transaction FAILED — user_id=', user.id, 'error=', err?.message || err);
+      console.error('OAuth callback: users+figma_tokens transaction FAILED —', err?.message || err);
     }
   } else if (POSTGRES_URL) {
     console.warn('OAuth callback: withTransaction not available, falling back to non-atomic save');
     try {
-      await dbSql`
-        INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, updated_at)
-        VALUES (${user.id}, ${user.email}, ${user.name}, ${user.img_url}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, NOW())
-        ON CONFLICT (id) DO UPDATE SET
-          email = EXCLUDED.email,
-          name = EXCLUDED.name,
-          img_url = EXCLUDED.img_url,
-          country_code = COALESCE(EXCLUDED.country_code, users.country_code),
-          updated_at = NOW()
-      `;
-      const expiresInSec = Math.max(60, Number(tokenData.expires_in) || 90 * 24 * 3600);
-      const expiresAt = new Date(Date.now() + expiresInSec * 1000);
-      const refreshToken = tokenData.refresh_token || tokenData.access_token;
-      await dbSql`
-        INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
-        VALUES (${user.id}, ${tokenData.access_token}, ${refreshToken}, ${expiresAt.toISOString()}, NOW())
-        ON CONFLICT (user_id) DO UPDATE SET
-          access_token = EXCLUDED.access_token,
-          refresh_token = EXCLUDED.refresh_token,
-          expires_at = EXCLUDED.expires_at,
-          updated_at = NOW()
-      `;
+      const p = await runFigmaOAuthUserPersistence(dbSql, figmaUser, tokenData, countryCode);
+      user.id = p.userId;
+      user.name = p.name;
+      user.email = p.email;
+      user.img_url = p.img;
       tokenSaved = true;
     } catch (err) {
       txError = err;
-      console.error('OAuth callback: fallback save failed — user_id=', user.id, 'error=', err?.message || err);
+      console.error('OAuth callback: fallback save failed —', err?.message || err);
     }
   }
 
@@ -379,44 +568,7 @@ app.get('/auth/figma/callback', async (req, res) => {
 
   if (POSTGRES_URL && tokenSaved) {
     try {
-      const aff = await dbSql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
-      if (aff.rows.length > 0) user.stats.affiliatesCount = Number(aff.rows[0].total_referrals) || 0;
-      const xpRow = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${user.id} LIMIT 1`;
-      if (xpRow.rows.length > 0) {
-        const txp = Number(xpRow.rows[0].total_xp) || 0;
-        const info = getLevelInfo(txp);
-        user.total_xp = txp;
-        user.current_level = info.level;
-        user.xp_for_next_level = info.xpForNextLevel;
-        user.xp_for_current_level_start = info.xpForCurrentLevelStart;
-      }
-      try {
-        const creditsRow = await dbSql`
-          SELECT credits_total, credits_used, plan
-          FROM users
-          WHERE id = ${user.id}
-          LIMIT 1
-        `;
-        if (creditsRow.rows.length > 0) {
-          const creditsTotal = Math.max(0, Number(creditsRow.rows[0].credits_total) || 0);
-          const creditsUsed = Math.max(0, Number(creditsRow.rows[0].credits_used) || 0);
-          user.credits_total = creditsTotal;
-          user.credits_used = creditsUsed;
-          user.credits_remaining = Math.max(0, creditsTotal - creditsUsed);
-          if (creditsRow.rows[0].plan) user.plan = String(creditsRow.rows[0].plan).toUpperCase();
-        }
-      } catch (err) {
-        console.error('OAuth callback: credits select failed (non-fatal)', err);
-      }
-      try {
-        const tagRow = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${user.id} LIMIT 1`;
-        if (tagRow.rows.length > 0) {
-          const rawTags = tagRow.rows[0].tags;
-          user.tags = Array.isArray(rawTags) ? rawTags : (rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags) ? [] : []);
-        }
-      } catch (_) { /* tags column may not exist before migration 006 */ }
-      const productionStats = await getProductionStats(dbSql, user.id);
-      if (productionStats) user.stats = productionStats;
+      await loadUserForLoginResponse(dbSql, user);
     } catch (err) {
       console.error('OAuth callback: post-save SELECT failed (non-fatal)', err);
     }
@@ -429,6 +581,180 @@ app.get('/auth/figma/callback', async (req, res) => {
   await store.set(flowId, { user, tokenSaved });
   res.clearCookie('figma_oauth_flow');
   res.send(getReturnToFigmaHtml());
+});
+
+/**
+ * Richiede link al login: stesso meccanismo readKey + /auth/figma/poll.
+ * Dopo run migration 017 (figma_user_id, unique email).
+ */
+app.post('/auth/magic-link/request', async (req, res) => {
+  if (!POSTGRES_URL) {
+    return res.status(503).json({ error: 'database_unavailable' });
+  }
+  const email = typeof req.body?.email === 'string' ? req.body.email : '';
+  if (!isValidEmailFormat(email)) {
+    return res.status(400).json({ error: 'invalid_email' });
+  }
+  const em = normalizeUserEmail(email);
+  if (!em) {
+    return res.status(400).json({ error: 'invalid_email' });
+  }
+  const resendOk =
+    hasSmtpForMagic() || Boolean(process.env.RESEND_API_KEY) || process.env.MAGIC_LINK_DEV_LOG === '1';
+  if (!resendOk) {
+    return res.status(503).json({
+      error: 'email_not_configured',
+      message: 'Set SMTP (SMTP_HOST + SMTP_FROM) or RESEND_API_KEY, or MAGIC_LINK_DEV_LOG=1 for local testing.',
+    });
+  }
+  const store = await getFlowStore();
+  const readKey = randomBytes(16).toString('hex');
+  await store.set(readKey, null);
+  const token = jwt.sign({ typ: 'ml', readKey, email: em }, JWT_SECRET, { expiresIn: '15m' });
+  const verifyUrl = `${BASE_URL}/auth/magic/verify?token=${encodeURIComponent(token)}`;
+  const send = await sendMagicLinkEmail(em, verifyUrl);
+  if (!send.ok && process.env.MAGIC_LINK_DEV_LOG !== '1') {
+    return res.status(503).json({ error: 'email_send_failed' });
+  }
+  res.json({
+    readKey,
+    ok: true,
+    ...(process.env.MAGIC_LINK_DEV_LOG === '1' ? { devLink: verifyUrl } : {}),
+  });
+});
+
+app.get('/auth/magic/verify', async (req, res) => {
+  const countryCode = (req.headers['x-vercel-ip-country'] || '').toString().toUpperCase().trim().slice(0, 2) || null;
+  const qToken = (req.query?.token || '').toString();
+  if (!qToken) {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Invalid link',
+          message: 'This link is missing a token. Request a new sign-in link from the Comtra plugin in Figma.',
+        })
+      );
+  }
+  let payload;
+  try {
+    payload = jwt.verify(qToken, JWT_SECRET);
+  } catch {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Link expired',
+          message: 'This sign-in link is no longer valid. Open the plugin, enter your email again, and we’ll send a new link.',
+        })
+      );
+  }
+  if (payload?.typ !== 'ml' || !payload?.readKey || !payload?.email) {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Invalid link',
+          message: 'This link is not valid. Use the new link we sent to your email, or request a new one from the plugin.',
+        })
+      );
+  }
+  const readKey = String(payload.readKey);
+  const em = String(payload.email);
+  if (!POSTGRES_URL) {
+    return res
+      .status(503)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Service unavailable',
+          message: 'Comtra is not able to sign you in right now. Try again later.',
+        })
+      );
+  }
+  const store = await getFlowStore();
+  const flowState = await store.get(readKey);
+  if (flowState === undefined) {
+    return res
+      .status(400)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Session expired',
+          message: 'This sign-in request timed out. Open the Comtra plugin, enter your email, and request a new link.',
+        })
+      );
+  }
+  if (flowState && typeof flowState === 'object' && flowState.user) {
+    return res
+      .status(200)
+      .send(
+        getComtraPostLoginHtml({ variant: 'magic' })
+      );
+  }
+  let tokenSaved = false;
+  let u;
+  try {
+    if (withTransaction) {
+      await withTransaction(async (tx) => {
+        u = await resolveOrCreateUserByEmail(tx, em, countryCode);
+      });
+    } else {
+      u = await resolveOrCreateUserByEmail(dbSql, em, countryCode);
+    }
+    tokenSaved = true;
+  } catch (e) {
+    console.error('magic/verify: user upsert failed', e);
+    return res
+      .status(500)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Could not sign you in',
+          message: 'Something went wrong on our side. Please try again from the plugin.',
+        })
+      );
+  }
+  if (!u) {
+    return res
+      .status(500)
+      .send(
+        getMagicLinkVerifyErrorPageHtml({
+          title: 'Error',
+          message: 'Please try again from the Comtra plugin in Figma.',
+        })
+      );
+  }
+  const user = {
+    id: u.userId,
+    name: u.name,
+    email: u.email,
+    img_url: u.img_url,
+    plan: 'FREE',
+    stats: {
+      maxHealthScore: 0,
+      wireframesGenerated: 0,
+      wireframesModified: 0,
+      analyzedA11y: 0,
+      analyzedUX: 0,
+      analyzedProto: 0,
+      syncedStorybook: 0,
+      syncedGithub: 0,
+      syncedBitbucket: 0,
+      affiliatesCount: 0,
+    },
+  };
+  if (tokenSaved) {
+    try {
+      await loadUserForLoginResponse(dbSql, user);
+    } catch (e) {
+      console.error('magic/verify: loadUserForLoginResponse', e);
+    }
+  }
+  const authToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '365d' });
+  user.authToken = authToken;
+  await store.set(readKey, { user, tokenSaved: true });
+  if (process.env.MAGIC_LINK_DEV_LOG === '1') {
+    console.log('[magic/verify] session ready for', user.id, user.email);
+  }
+  return res.status(200).send(getComtraPostLoginHtml({ variant: 'magic' }));
 });
 
 function getOAuthErrorHtml() {
@@ -456,32 +782,84 @@ function getOAuthErrorHtml() {
 </html>`;
 }
 
-function getReturnToFigmaHtml() {
+/** Pagina “successo” in browser: brand Comtra + CTA apre app Figma (schema URL `figma://`). */
+function getComtraPostLoginHtml({ variant = 'figma' } = {}) {
+  const isMagic = variant === 'magic';
+  const title = isMagic ? "You're in — Comtra" : 'Login completato – Comtra';
+  const h1 = isMagic ? "You're in!" : 'Login completato';
+  const lead = isMagic
+    ? "Sign-in is done. Figma with the Comtra plugin should pick you up in a moment. If the plugin doesn’t update, use the button below to open the Figma app."
+    : "OAuth completed. The plugin in Figma should connect shortly. You can also open the Figma app with the button below.";
   return `<!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login completato – Comtra</title>
+  <title>${title}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Tiny5&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
-    h1 { font-family: 'Tiny5', sans-serif; font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; color: #000; text-transform: uppercase; letter-spacing: 0.05em; }
-    p { font-size: 0.95rem; color: #000; margin: 0 0 1.5rem; font-weight: 500; }
+    .card { max-width: 420px; width: 100%; border: 3px solid #000; background: #fff; box-shadow: 8px 8px 0 #000; padding: 2rem; text-align: center; }
+    .badge { display: inline-block; background: #000; color: #fff; padding: 6px 10px; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem; }
+    h1 { font-family: 'Tiny5', sans-serif; font-size: 1.75rem; font-weight: 700; margin: 0 0 0.75rem; color: #000; text-transform: uppercase; letter-spacing: 0.05em; }
+    p { font-size: 0.95rem; color: #000; margin: 0 0 1.25rem; font-weight: 500; line-height: 1.5; }
+    .btn { display: inline-block; background: #000; color: #fff !important; font-weight: 800; text-decoration: none; padding: 14px 24px; border: 2px solid #fff; box-shadow: 4px 4px 0 #000; font-size: 0.95rem; cursor: pointer; font-family: inherit; }
+    .btn:hover { opacity: 0.92; }
+    .hint { font-size: 0.75rem; color: #333; margin-top: 1.25rem; }
   </style>
 </head>
 <body>
-  <h1>Login completato</h1>
-  <p>Questa finestra si chiuderà e tornerai a Figma.</p>
+  <div class="card">
+    <div class="badge">Design System AI</div>
+    <h1>${h1}</h1>
+    <p>${lead}</p>
+    <p><a class="btn" id="comtra-cta" href="figma://">Start rocking in Figma</a></p>
+    <p class="hint">This tries to open the Figma app. You can return to the window where the plugin is open.</p>
+  </div>
   <script>
-    setTimeout(function() {
-      try { window.location.href = 'figma://'; } catch(e) {}
-      setTimeout(function() { window.close(); }, 300);
-    }, 5000);
+    function goFigma() { try { window.location.href = 'figma://'; } catch (e) {} }
+    var cta = document.getElementById('comtra-cta');
+    if (cta) cta.addEventListener('click', function (e) { e.preventDefault(); goFigma(); });
+    setTimeout(goFigma, 2200);
   </script>
+</body>
+</html>`;
+}
+
+function getReturnToFigmaHtml() {
+  return getComtraPostLoginHtml({ variant: 'figma' });
+}
+
+function getMagicLinkVerifyErrorPageHtml(
+  { title, message } = { title: 'Link issue', message: 'Something went wrong. Request a new link from the plugin.' }
+) {
+  const t = (title || 'Link issue').replace(/</g, '&lt;');
+  const m = (message || '').replace(/</g, '&lt;');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${t} – Comtra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Tiny5&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
+    .card { max-width: 420px; width: 100%; border: 3px solid #000; background: #fff; box-shadow: 8px 8px 0 #000; padding: 2rem; text-align: center; }
+    h1 { font-family: 'Tiny5', sans-serif; font-size: 1.5rem; font-weight: 700; margin: 0 0 0.75rem; color: #000; }
+    p { font-size: 0.95rem; color: #000; margin: 0; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${t}</h1>
+    <p>${m}</p>
+  </div>
 </body>
 </html>`;
 }
@@ -1245,6 +1623,23 @@ const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
  * @see https://platform.moonshot.ai/docs/guide/use-kimi-vision-model
  */
 const KIMI_VISION_MODEL = process.env.KIMI_VISION_MODEL || 'kimi-k2.5';
+/** Plugin Generate A/B (50/50): Moonshot chat model slug per arm — set B to alternate flagship (e.g. Kimi 2.6) via env. */
+const KIMI_GENERATE_MODEL_A =
+  process.env.KIMI_GENERATE_MODEL_A || process.env.KIMI_MODEL_PRIMARY || process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
+const KIMI_GENERATE_MODEL_B =
+  process.env.KIMI_GENERATE_MODEL_B ||
+  process.env.KIMI_MODEL_SECONDARY ||
+  process.env.KIMI_MODEL_ALT ||
+  process.env.KIMI_MODEL_B ||
+  '';
+
+function resolveGenerateChatModel(abVariant) {
+  const primary = String(KIMI_GENERATE_MODEL_A || '').trim() || 'kimi-k2-0905-preview';
+  const secondaryRaw = String(KIMI_GENERATE_MODEL_B || '').trim();
+  const secondary = secondaryRaw || primary;
+  return abVariant === 'B' ? secondary : primary;
+}
+
 const DS_AUDIT_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'ds-audit-system.md');
 
 /** Risposta Moonshot/OpenAI: campi usage variabili; a volte solo total_tokens (dashboard costi). */
@@ -2347,7 +2742,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
   }
 });
 
-// --- Generate agent (Kimi): file_key + prompt → action plan JSON. A/B: 50% Direct (A), 50% ASCII first (B)
+// --- Generate agent (Kimi): file_key + prompt → action plan JSON. A/B: 50% model A vs model B (see KIMI_GENERATE_MODEL_*)
 const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
 
 function normalizeScreenshotFromBody(body) {
@@ -2379,10 +2774,14 @@ function normalizeScreenshotFromBody(body) {
   return { dataUrl: `data:image/${m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase()};base64,${b64}`, error: null };
 }
 
-async function callKimi(messages, maxTokens = 8192) {
+async function callKimi(messages, maxTokens = 8192, textModelOverride = null) {
   const usesVision =
     Array.isArray(messages) && messages.some((m) => m && typeof m === 'object' && Array.isArray(m.content));
-  const model = usesVision ? KIMI_VISION_MODEL : KIMI_MODEL;
+  const textModel =
+    textModelOverride != null && String(textModelOverride).trim() !== ''
+      ? String(textModelOverride).trim()
+      : KIMI_MODEL;
+  const model = usesVision ? KIMI_VISION_MODEL : textModel;
   /** kimi-k2.5: la doc Moonshot impone temperature/top_p fissi; altri valori possono dare errore. */
   const isK25Family = /k2\.5/i.test(String(model));
   const payload = { model, messages, max_tokens: maxTokens };
@@ -2402,7 +2801,7 @@ async function callKimi(messages, maxTokens = 8192) {
   return { content: data?.choices?.[0]?.message?.content, usage: data?.usage };
 }
 
-async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, promptContext) {
+async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, promptContext, textModelOverride = null) {
   const repairUserMsg = [
     'Your previous JSON is invalid. Repair it and return only one valid JSON object.',
     `Validation errors: ${(errors || []).join(' | ')}`,
@@ -2412,7 +2811,8 @@ async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, prompt
   ].join('\n\n');
   return callKimi(
     [{ role: 'system', content: systemPrompt }, { role: 'user', content: repairUserMsg }],
-    8192
+    8192,
+    textModelOverride,
   );
 }
 
@@ -3361,7 +3761,11 @@ app.post('/api/agents/generate', async (req, res) => {
   const useKimiDualSwarmPipeline =
     process.env.USE_KIMI_SWARM !== '0' && process.env.USE_KIMI_SWARM !== 'false';
 
-  let variant = 'A';
+  const abVariant = Math.random() < 0.5 ? 'A' : 'B';
+  let variant = abVariant;
+  const generateChatModel = resolveGenerateChatModel(abVariant);
+  const callKimiGenerate = (messages, maxTokens = 8192) => callKimi(messages, maxTokens, generateChatModel);
+
   const startMs = Date.now();
   const phaseTimers = {
     started_at_ms: startMs,
@@ -3372,7 +3776,7 @@ app.post('/api/agents/generate', async (req, res) => {
   };
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
-  let generationPipeline = 'legacy_ab';
+  let generationPipeline = 'legacy_direct_json';
   let dualPipelineSucceeded = false;
   const repairStats = {
     repair_passes_attempted: 0,
@@ -3522,7 +3926,7 @@ app.post('/api/agents/generate', async (req, res) => {
             ? tovRule.char_limits
             : undefined;
         const enrich = await runKimiContentDefaultsEnrichment({
-          callKimi,
+          callKimi: callKimiGenerate,
           archetypeId: packV2ArchetypeId,
           contentDefaultsEntry: cdEntry,
           kimiEnrichableFields: cdEntry.kimi_enrichable_fields,
@@ -3530,6 +3934,7 @@ app.post('/api/agents/generate', async (req, res) => {
           brandVoiceKeywords: kwW.length ? kwW : null,
           charLimits,
           cacheUserId: userId,
+          cachePartition: generateChatModel,
         });
         if (enrich.used) {
           kimiEnrichmentBlock = enrich.block;
@@ -3589,7 +3994,7 @@ app.post('/api/agents/generate', async (req, res) => {
     if (useKimiDualSwarmPipeline) {
       try {
         const dual = await runGenerateDualCallPipeline({
-          callKimi,
+          callKimi: callKimiGenerate,
           extractJsonFromContent,
           userPrompt: prompt,
           contextBlob,
@@ -3600,7 +4005,6 @@ app.post('/api/agents/generate', async (req, res) => {
         totalOutputTokens = dual.usage.output;
         if (dual.actionPlan && typeof dual.actionPlan === 'object') {
           actionPlan = dual.actionPlan;
-          variant = 'S';
           dualPipelineSucceeded = true;
           generationPipeline = 'kimi_dual_layout_mapper';
     } else {
@@ -3619,7 +4023,7 @@ app.post('/api/agents/generate', async (req, res) => {
             { type: 'text', text: userText },
           ]
         : userText;
-      const { content, usage } = await callKimi(
+      const { content, usage } = await callKimiGenerate(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
         8192,
       );
@@ -3694,6 +4098,7 @@ app.post('/api/agents/generate', async (req, res) => {
           actionPlan,
           repairPasses[pass],
           `User prompt: ${prompt}\n\n${contextBlob}`,
+          generateChatModel,
         );
         totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
         totalOutputTokens += Math.max(0, Number(repair?.usage?.output_tokens ?? repair?.usage?.completion_tokens ?? 0));
@@ -3743,6 +4148,7 @@ app.post('/api/agents/generate', async (req, res) => {
           'Replace semantically incompatible INSTANCE_COMPONENT with either a correct DS component from index or CREATE_RECT + CREATE_TEXT fallback for that slot.',
         ],
         `User prompt: ${prompt}\n\n${contextBlob}`,
+        generateChatModel,
       );
       totalInputTokens += Math.max(
         0,
@@ -3960,6 +4366,8 @@ app.post('/api/agents/generate', async (req, res) => {
     const slotPackSummary = summarizeSlotPack(slotCandidatePack);
     actionPlan.metadata.generation_diagnostics = {
       pipeline: generationPipeline,
+      kimi_model: generateChatModel,
+      generate_ab_variant: variant,
       phase_timers: phaseTimers,
       repair: repairStats,
       validation_state_final: validationStateFinal,
@@ -3996,7 +4404,7 @@ app.post('/api/agents/generate', async (req, res) => {
     if (dbSql) {
       dbSql`
         INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
-        VALUES ('generate', ${totalInputTokens}, ${totalOutputTokens}, null, ${KIMI_MODEL})
+        VALUES ('generate', ${totalInputTokens}, ${totalOutputTokens}, null, ${generateChatModel})
       `.catch((err) => console.error('Kimi usage log generate failed', err.message));
 
       const learningSnapshot = JSON.stringify({
@@ -4008,8 +4416,8 @@ app.post('/api/agents/generate', async (req, res) => {
         inferred_pack_v2_archetype: packV2ArchetypeId ?? null,
       });
       const ins = await dbSql`
-        INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms, figma_file_key, ds_source, inferred_screen_archetype, inferred_pack_v2_archetype, kimi_enrichment_used, learning_snapshot)
-        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs}, ${legacyFileKey || null}, ${String(dsSource)}, ${inferredScreenArchetype || null}, ${packV2ArchetypeId || null}, ${kimiEnrichmentUsed}, ${learningSnapshot}::jsonb)
+        INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms, figma_file_key, ds_source, inferred_screen_archetype, inferred_pack_v2_archetype, kimi_enrichment_used, learning_snapshot, kimi_model, generation_route)
+        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs}, ${legacyFileKey || null}, ${String(dsSource)}, ${inferredScreenArchetype || null}, ${packV2ArchetypeId || null}, ${kimiEnrichmentUsed}, ${learningSnapshot}::jsonb, ${generateChatModel}, ${generationPipeline})
         RETURNING id
       `.catch(() => ({ rows: [] }));
       const requestId = ins?.rows?.[0]?.id ?? null;
@@ -4028,6 +4436,8 @@ app.post('/api/agents/generate', async (req, res) => {
       res.json({
         action_plan: actionPlan,
         variant,
+        kimi_model: generateChatModel,
+        generation_route: generationPipeline,
         request_id: requestId,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
@@ -4048,6 +4458,8 @@ app.post('/api/agents/generate', async (req, res) => {
       res.json({
         action_plan: actionPlan,
         variant,
+        kimi_model: generateChatModel,
+        generation_route: generationPipeline,
         request_id: null,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
         ds_validation: actionPlan.metadata.ds_validation,
@@ -5060,6 +5472,48 @@ async function getProductionStats(dbSql, userId) {
     syncedBitbucket: ctx.syncBitbucket,
     affiliatesCount: ctx.affiliateReferrals,
   };
+}
+
+/** XP, crediti, tag, trofei stats — dopo login Figma o magic link. */
+async function loadUserForLoginResponse(dbSql, user) {
+  const aff = await dbSql`SELECT total_referrals FROM affiliates WHERE user_id = ${user.id} LIMIT 1`;
+  if (aff.rows.length > 0) user.stats.affiliatesCount = Number(aff.rows[0].total_referrals) || 0;
+  const xpRow = await dbSql`SELECT total_xp, current_level FROM users WHERE id = ${user.id} LIMIT 1`;
+  if (xpRow.rows.length > 0) {
+    const txp = Number(xpRow.rows[0].total_xp) || 0;
+    const info = getLevelInfo(txp);
+    user.total_xp = txp;
+    user.current_level = info.level;
+    user.xp_for_next_level = info.xpForNextLevel;
+    user.xp_for_current_level_start = info.xpForCurrentLevelStart;
+  }
+  try {
+    const creditsRow = await dbSql`
+      SELECT credits_total, credits_used, plan
+      FROM users
+      WHERE id = ${user.id}
+      LIMIT 1
+    `;
+    if (creditsRow.rows.length > 0) {
+      const creditsTotal = Math.max(0, Number(creditsRow.rows[0].credits_total) || 0);
+      const creditsUsed = Math.max(0, Number(creditsRow.rows[0].credits_used) || 0);
+      user.credits_total = creditsTotal;
+      user.credits_used = creditsUsed;
+      user.credits_remaining = Math.max(0, creditsTotal - creditsUsed);
+      if (creditsRow.rows[0].plan) user.plan = String(creditsRow.rows[0].plan).toUpperCase();
+    }
+  } catch (err) {
+    console.error('loadUserForLoginResponse: credits select failed (non-fatal)', err);
+  }
+  try {
+    const tagRow = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${user.id} LIMIT 1`;
+    if (tagRow.rows.length > 0) {
+      const rawTags = tagRow.rows[0].tags;
+      user.tags = Array.isArray(rawTags) ? rawTags : (rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags) ? [] : []);
+    }
+  } catch (_) { /* tags column may not exist before migration 006 */ }
+  const productionStats = await getProductionStats(dbSql, user.id);
+  if (productionStats) user.stats = productionStats;
 }
 
 function evaluateTrophyCondition(condition, ctx, unlockedIds) {
