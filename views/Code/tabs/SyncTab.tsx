@@ -110,6 +110,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   getRemainingTime,
   syncItems,
   syncScanError,
+  syncScanUpgradeUrl,
   expandedDriftId,
   setExpandedDriftId,
   handleSelectLayer,
@@ -322,8 +323,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   )}
                   {syncScanError && (
-                    <div className="mb-3 p-2 bg-red-50 border border-red-200 text-[10px] text-red-700">
-                      {syncScanError}
+                    <div className="mb-3 p-2 bg-red-50 border border-red-200 text-[10px] text-red-700 space-y-1">
+                      <p>{syncScanError}</p>
+                      {syncScanUpgradeUrl ? (
+                        <a
+                          href={syncScanUpgradeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-bold underline text-red-900 block"
+                        >
+                          Upgrade your Figma plan for higher limits
+                        </a>
+                      ) : null}
                     </div>
                   )}
                   {!hasSyncScanned ? (

@@ -19,6 +19,8 @@ import { LoginModal } from './components/LoginModal';
 import { ProfileSheet } from './components/ProfileSheet';
 import { useToast } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
+import type { SyncSnapshot } from './types';
+import { SyncScanRateLimitedError } from './lib/syncScanRateLimitedError';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
 import { replaceDsImportsFromServer } from './lib/dsImportsStorage';
@@ -1298,25 +1300,50 @@ export default function AppTest() {
     return r.json();
   }, [user?.authToken, handle503]);
 
-  const fetchSyncScan = React.useCallback(async (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => {
-    if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
-    const base = { storybook_url: body.storybook_url, storybook_token: body.storybook_token };
-    const payload = body.file_json
-      ? { ...base, file_json: body.file_json }
-      : { ...base, file_key: body.file_key, scope: body.scope, page_id: body.page_id, page_ids: body.page_ids };
-    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-scan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-      body: JSON.stringify(payload),
-    });
-    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const msg = data.error || `Sync scan failed (${r.status})`;
-      throw new Error(msg);
-    }
-    return data;
-  }, [user?.authToken, handle503]);
+  const fetchSyncScan = React.useCallback(
+    async (body: {
+      sync_snapshot?: SyncSnapshot;
+      file_key?: string;
+      file_json?: object;
+      storybook_url: string;
+      storybook_token?: string;
+      scope?: string;
+      page_id?: string;
+      page_ids?: string[];
+    }) => {
+      if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
+      const base = { storybook_url: body.storybook_url, storybook_token: body.storybook_token };
+      const payload =
+        body.sync_snapshot && typeof body.sync_snapshot === 'object'
+          ? { ...base, sync_snapshot: body.sync_snapshot }
+          : body.file_json
+            ? { ...base, file_json: body.file_json }
+            : { ...base, file_key: body.file_key, scope: body.scope, page_id: body.page_id, page_ids: body.page_ids };
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (r.status === 429 && data.error === 'rate_limited') {
+          const sec = data.retryAfterSec;
+          throw new SyncScanRateLimitedError({
+            retryAfterSec: typeof sec === 'number' && Number.isFinite(sec) ? sec : null,
+            upgradeUrl: typeof data.upgradeUrl === 'string' && data.upgradeUrl.trim() ? data.upgradeUrl.trim() : null,
+          });
+        }
+        const msg = data.error || `Sync scan failed (${r.status})`;
+        throw new Error(msg);
+      }
+      return data;
+    },
+    [user?.authToken, handle503, AUTH_BACKEND_URL],
+  );
 
   const fetchCheckStorybook = React.useCallback(async (storybookUrl: string, storybookToken?: string) => {
     if (!user?.authToken) return { ok: false as const, error: 'Unauthorized' };
@@ -1656,7 +1683,7 @@ export default function AppTest() {
       const timeoutMs =
         typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
       const phase = opts?.phase;
-      const componentLimit = plan === 'PRO' || useInfiniteCreditsForTest ? 0 : 300;
+      const componentLimit = user?.plan === 'PRO' || useInfiniteCreditsForTest ? 0 : 300;
       return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
         const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
         dsContextIndexWaitersRef.current.set(requestId, resolve);
@@ -1681,7 +1708,7 @@ export default function AppTest() {
         }, timeoutMs);
       });
     },
-    [plan, useInfiniteCreditsForTest],
+    [user?.plan, useInfiniteCreditsForTest],
   );
 
   const fetchDsImportContextSnapshot = useCallback(

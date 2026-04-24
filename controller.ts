@@ -2163,7 +2163,114 @@ figma.ui.onmessage = async (raw: any) => {
     return;
   }
 
-  // File context: for "current" selection we send fileJson from plugin (no token needed). For all/page we send identifiers and backend fetches via REST API (requires fileKey).
+  /** Lightweight snapshot for Deep Sync (no full document JSON, no REST on backend). */
+  if (msg.type === 'get-sync-snapshot') {
+    (async () => {
+      try {
+        await figma.loadAllPagesAsync();
+        const prevSkip = figma.skipInvisibleInstanceChildren;
+        figma.skipInvisibleInstanceChildren = true;
+        try {
+          const fileKey = figma.fileKey ?? '';
+          const fileName = figma.root.name;
+          const pages = figma.root.children
+            .filter((c): c is PageNode => c.type === 'PAGE')
+            .map((p) => ({ id: p.id, name: p.name }));
+
+          const pageIdOf = (node: BaseNode): string => {
+            let cur: BaseNode | null = node.parent;
+            while (cur) {
+              if (cur.type === 'PAGE') return (cur as PageNode).id;
+              cur = cur.parent;
+            }
+            return '';
+          };
+
+          const compAndSets = figma.root.findAllWithCriteria({
+            types: ['COMPONENT', 'COMPONENT_SET'],
+          }) as Array<ComponentNode | ComponentSetNode>;
+
+          const components: Array<{
+            key: string;
+            name: string;
+            pageId: string;
+            variantProperties: Record<string, string> | null;
+            description: string;
+          }> = [];
+
+          for (const node of compAndSets) {
+            if (node.type !== 'COMPONENT') continue;
+            const pageId = pageIdOf(node);
+            const description =
+              'description' in node &&
+              typeof (node as { description?: unknown }).description === 'string'
+                ? String((node as { description: string }).description)
+                : '';
+            const parent = node.parent;
+            const inSet = parent && parent.type === 'COMPONENT_SET';
+            const variantProperties =
+              inSet && node.variantProperties
+                ? ({ ...node.variantProperties } as Record<string, string>)
+                : null;
+            components.push({
+              key: node.id,
+              name: node.name,
+              pageId,
+              variantProperties,
+              description,
+            });
+          }
+
+          const instanceNodes = figma.root.findAllWithCriteria({ types: ['INSTANCE'] }) as InstanceNode[];
+          const instances = instanceNodes.map((i) => ({
+            id: i.id,
+            name: i.name,
+            mainComponentName: i.mainComponent ? i.mainComponent.name : null,
+          }));
+
+          const styles: Array<{ key: string; name: string; type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID' }> = [];
+          const pushStyle = (s: BaseStyle, type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID') => {
+            const k = 'key' in s && typeof (s as BaseStyle & { key?: string }).key === 'string' && (s as { key: string }).key
+              ? (s as { key: string }).key
+              : s.id;
+            styles.push({ key: k, name: s.name, type });
+          };
+          for (const s of figma.getLocalPaintStyles()) pushStyle(s, 'FILL');
+          for (const s of figma.getLocalTextStyles()) pushStyle(s, 'TEXT');
+          for (const s of figma.getLocalEffectStyles()) pushStyle(s, 'EFFECT');
+          const getGrid = (figma as { getLocalGridStyles?: () => readonly BaseStyle[] }).getLocalGridStyles;
+          if (typeof getGrid === 'function') {
+            for (const s of getGrid.call(figma)) {
+              pushStyle(s, 'GRID');
+            }
+          }
+
+          figma.ui.postMessage({
+            type: 'sync-snapshot-result',
+            sync_snapshot: {
+              fileKey,
+              fileName,
+              pages,
+              components,
+              instances,
+              styles,
+            },
+          });
+        } finally {
+          figma.skipInvisibleInstanceChildren = prevSkip;
+        }
+      } catch (e) {
+        console.error('[get-sync-snapshot]', e);
+        figma.ui.postMessage({
+          type: 'sync-snapshot-result',
+          error: String(e),
+        });
+      }
+    })();
+    return;
+  }
+
+  // File context: for "all/page" we send identifiers and backend fetches via REST API. Scope "current" sends fileJson from plugin.
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;

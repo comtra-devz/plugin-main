@@ -157,15 +157,41 @@ function extractStorybookComponentNames(sbData) {
 }
 
 /**
- * Genera drift items confrontando Figma e Storybook.
- * @param {object} fileJson - { document: { children: [...] } }
- * @param {string} storybookUrl
- * @param {string} [storybookToken] - Token opzionale per Storybook con accesso protetto
- * @returns {Promise<{ items: Array<{id: string, name: string, status: string, lastEdited: string, desc: string}>, connectionStatus: string, error?: string }>}
+ * @param {any} snapshot - sync_snapshot from plugin
+ * @returns {{ components: Array<{name: string, id: string}>, instances: Array<{name: string, id: string, mainName?: string}> }}
  */
-export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
-  const doc = fileJson?.document || fileJson;
-  const figma = extractFigmaComponents(doc);
+function figmaExtractFromSyncSnapshot(snapshot) {
+  const components = [];
+  const instances = [];
+  const compList = Array.isArray(snapshot?.components) ? snapshot.components : [];
+  for (const c of compList) {
+    const name = c && typeof c.name === 'string' ? c.name.trim() : '';
+    const layerId =
+      c && typeof c.key === 'string' && c.key.trim()
+        ? c.key.trim()
+        : c && typeof c.id === 'string' && c.id.trim()
+          ? c.id.trim()
+          : '';
+    if (name) components.push({ name, id: layerId || name });
+  }
+  const instList = Array.isArray(snapshot?.instances) ? snapshot.instances : [];
+  for (const i of instList) {
+    const name = i && typeof i.name === 'string' ? i.name : '';
+    const id = i && typeof i.id === 'string' ? i.id : '';
+    const mainName =
+      i && typeof i.mainComponentName === 'string' && i.mainComponentName.trim()
+        ? i.mainComponentName.trim()
+        : null;
+    if (!id && !name) continue;
+    instances.push({ name, id: id || name, mainName: mainName || undefined });
+  }
+  return { components, instances };
+}
+
+/**
+ * @param {{ components: Array<{name: string, id: string}>, instances: Array<{name: string, id: string, mainName?: string}> }} figma
+ */
+async function runSyncScanWithFigmaExtract(figma, storybookUrl, storybookToken) {
   const figmaComponentNames = new Set([
     ...figma.components.map((c) => c.name),
     ...figma.instances.map((i) => i.mainName || i.name).filter(Boolean),
@@ -184,7 +210,6 @@ export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
   const items = [];
   let idx = 0;
 
-  // Map component name -> first node id (for Select Layer in Figma)
   const nameToLayerId = new Map();
   for (const inst of figma.instances) {
     const key = inst.mainName || inst.name;
@@ -194,7 +219,6 @@ export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
     if (c.name && !nameToLayerId.has(c.name)) nameToLayerId.set(c.name, c.id);
   }
 
-  // In Figma ma non in Storybook
   for (const name of figmaComponentNames) {
     if (!sbNames.has(name)) {
       items.push({
@@ -208,7 +232,6 @@ export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
     }
   }
 
-  // In Storybook ma non in Figma
   for (const name of sbNames) {
     if (!figmaComponentNames.has(name)) {
       items.push({
@@ -226,4 +249,25 @@ export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
     items,
     connectionStatus: 'ok',
   };
+}
+
+/**
+ * @param {any} syncSnapshot - plugin-built sync_snapshot
+ */
+export async function runSyncScanFromSnapshot(syncSnapshot, storybookUrl, storybookToken) {
+  const figma = figmaExtractFromSyncSnapshot(syncSnapshot);
+  return runSyncScanWithFigmaExtract(figma, storybookUrl, storybookToken);
+}
+
+/**
+ * Genera drift items confrontando Figma e Storybook.
+ * @param {object} fileJson - { document: { children: [...] } }
+ * @param {string} storybookUrl
+ * @param {string} [storybookToken] - Token opzionale per Storybook con accesso protetto
+ * @returns {Promise<{ items: Array<{id: string, name: string, status: string, lastEdited: string, desc: string}>, connectionStatus: string, error?: string }>}
+ */
+export async function runSyncScan(fileJson, storybookUrl, storybookToken) {
+  const doc = fileJson?.document || fileJson;
+  const figma = extractFigmaComponents(doc);
+  return runSyncScanWithFigmaExtract(figma, storybookUrl, storybookToken);
 }

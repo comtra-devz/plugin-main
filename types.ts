@@ -143,6 +143,38 @@ export interface DsQualityGates {
   };
 }
 
+/**
+ * Lightweight design-system snapshot built in the plugin sandbox for Deep Sync.
+ * Replaces sending full `file_json` for the sync-scan flow (avoids Figma REST 429).
+ */
+export interface SyncSnapshot {
+  fileKey: string;
+  fileName: string;
+  pages: Array<{
+    id: string;
+    name: string;
+  }>;
+  components: Array<{
+    /** Stable id for "Select layer" (Figma node id in the file). */
+    key: string;
+    name: string;
+    pageId: string;
+    variantProperties: Record<string, string> | null;
+    description: string;
+  }>;
+  /** Canvas instances — used with `components` so drift names match the previous document walk. */
+  instances: Array<{
+    id: string;
+    name: string;
+    mainComponentName: string | null;
+  }>;
+  styles: Array<{
+    key: string;
+    name: string;
+    type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID';
+  }>;
+}
+
 export interface NavProps {
   current: ViewState;
   onChange: (view: ViewState) => void;

@@ -2672,7 +2672,7 @@ const FIGMA_AUDIT_REST_DEPTH_NODES = 8;
 const FIGMA_AUDIT_REST_DEPTH_PAGE = 8;
 const FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW = 5;
 /** Max parallel GET /v1/files/... per multi-page audit (Figma rate limits ~ tier-dependent; 6 is a safe default). */
-const FIGMA_AUDIT_PAGE_FETCH_CONCURRENCY = 6;
+const FIGMA_AUDIT_PAGE_FETCH_CONCURRENCY = 2;
 
 /** Fetch file JSON from Figma REST API. Never requests the full file in one go: per-page or per-node only, to avoid 400 on large files. Returns { document } for audit engines. */
 async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeIds, pageIds) {
@@ -2688,6 +2688,15 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
       throw new Error('No Figma token; re-login to grant file access');
     }
     if (res.status === 404) throw new Error('File not found');
+    if (res.status === 429) {
+      const retryRaw = res.headers.get('retry-after');
+      const retryNum = retryRaw != null && String(retryRaw).trim() !== '' ? Number(retryRaw) : NaN;
+      throw Object.assign(new Error('Figma rate limit exceeded'), {
+        code: 'FIGMA_RATE_LIMITED',
+        retryAfterSec: Number.isFinite(retryNum) ? retryNum : null,
+        upgradeUrl: res.headers.get('x-figma-upgrade-link') || null,
+      });
+    }
     throw new Error(t || 'Figma API error');
   };
 
@@ -2887,11 +2896,25 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
         }
       }
   if (fetchErr || !fileJson) {
-        const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
+    if (fetchErr && fetchErr.code === 'FIGMA_RATE_LIMITED') {
+      const err = new Error('Figma rate limit exceeded');
+      err.status = 429;
+      err.code = 'FIGMA_RATE_LIMITED';
+      err.retryAfterSec = fetchErr.retryAfterSec ?? null;
+      err.upgradeUrl = fetchErr.upgradeUrl ?? null;
+      throw err;
+    }
+    const msg = fetchErr && fetchErr.message ? fetchErr.message : 'Figma API error';
     const err = new Error(msg);
     if (msg.includes('re-login')) {
       err.status = 403;
       err.code = 'FIGMA_RECONNECT';
+    } else if (msg.includes('Rate limit exceeded') || /"status"\s*:\s*429/.test(msg) || /\b429\b/.test(msg)) {
+      err.status = 429;
+      err.code = 'FIGMA_RATE_LIMITED';
+      err.retryAfterSec = null;
+      err.upgradeUrl = null;
+      err.message = 'Figma rate limit reached. Wait a few seconds and retry the scan.';
     } else if (msg.includes('not found')) {
       err.status = 404;
     } else {
@@ -5449,7 +5472,7 @@ app.post('/api/agents/ux-audit', async (req, res) => {
 });
 
 // --- Sync: check Storybook URL (verifica che esponga /api/stories o equivalente)
-const { runSyncScan, fetchStorybookMetadata } = await import('./sync-scan-engine.mjs');
+const { runSyncScan, runSyncScanFromSnapshot, fetchStorybookMetadata } = await import('./sync-scan-engine.mjs');
 
 app.post('/api/agents/sync-check-storybook', async (req, res) => {
   const userId = getUserIdFromToken(req);
@@ -5481,19 +5504,46 @@ app.post('/api/agents/sync-scan', async (req, res) => {
   if (!POSTGRES_URL) return res.status(503).json({ error: 'Sync Scan requires database' });
 
   try {
-    let fileJson;
-    try {
-      const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
-      fileJson = resolved.fileJson;
-    } catch (resolveErr) {
-      const status = Number(resolveErr?.status) || 400;
-      const code = resolveErr?.code;
-      const msg = resolveErr?.message || 'Invalid design source';
-      if (code) return res.status(status).json({ error: msg, code });
-      return res.status(status).json({ error: msg });
-    }
+    const rawSnap = body.sync_snapshot ?? body.syncSnapshot;
+    const syncSnapshot =
+      rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap) ? rawSnap : null;
+    const comps = syncSnapshot?.components;
+    const hasValidSnapshot =
+      syncSnapshot &&
+      Array.isArray(comps) &&
+      comps.length > 0 &&
+      typeof syncSnapshot.fileKey === 'string';
 
-    const result = await runSyncScan(fileJson, storybookUrl, storybookToken);
+    let result;
+    if (hasValidSnapshot) {
+      result = await runSyncScanFromSnapshot(syncSnapshot, storybookUrl, storybookToken);
+    } else {
+      if (rawSnap) {
+        console.warn('[sync-scan] sync_snapshot malformed, falling back to REST — check plugin version');
+      } else {
+        console.warn('[sync-scan] sync_snapshot missing, falling back to REST — check plugin version');
+      }
+      let fileJson;
+      try {
+        const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
+        fileJson = resolved.fileJson;
+      } catch (resolveErr) {
+        if (resolveErr?.code === 'FIGMA_RATE_LIMITED') {
+          return res.status(429).json({
+            error: 'rate_limited',
+            retryAfterSec: resolveErr.retryAfterSec ?? null,
+            upgradeUrl: resolveErr.upgradeUrl ?? null,
+          });
+        }
+        const status = Number(resolveErr?.status) || 400;
+        const code = resolveErr?.code;
+        const msg = resolveErr?.message || 'Invalid design source';
+        if (code) return res.status(status).json({ error: msg, code });
+        return res.status(status).json({ error: msg });
+      }
+
+      result = await runSyncScan(fileJson, storybookUrl, storybookToken);
+    }
 
     if (result.connectionStatus === 'unreachable' && result.error) {
       return res.status(400).json({ error: result.error, connectionStatus: 'unreachable' });

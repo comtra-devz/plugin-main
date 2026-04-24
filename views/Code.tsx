@@ -13,6 +13,8 @@ import {
   type FigmaDesignTokensPayload
 } from '../services/tokenGeneration';
 import { getSystemToastOptions } from '../lib/errorCopy';
+import { SyncScanRateLimitedError } from '../lib/syncScanRateLimitedError';
+import type { SyncSnapshot } from '../types';
 import { collectSubtreeNodeIds, exportLocalDeepCode } from '../services/localDeepCodeExport';
 
 interface Props {
@@ -25,7 +27,16 @@ interface Props {
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string }) => Promise<{ credits_remaining?: number; error?: string }>;
   /** Log free (0-credit) actions into activity stream (credit_transactions) without touching balance. */
   logFreeAction?: (actionType: string) => Promise<void>;
-  fetchSyncScan?: (body: { file_key?: string; file_json?: object; storybook_url: string; storybook_token?: string; scope?: string; page_id?: string; page_ids?: string[] }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
+  fetchSyncScan?: (body: {
+    sync_snapshot?: SyncSnapshot;
+    file_key?: string;
+    file_json?: object;
+    storybook_url: string;
+    storybook_token?: string;
+    scope?: string;
+    page_id?: string;
+    page_ids?: string[];
+  }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string }>;
   /** POST /api/agents/code-gen — subtree from plugin + format → code */
   fetchCodeGen?: (body: {
@@ -101,6 +112,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [isSyncScanning, setIsSyncScanning] = useState(false);
   const [syncItems, setSyncItems] = useState<typeof SYNC_ITEMS_MOCK>([]);
   const [syncScanError, setSyncScanError] = useState<string | null>(null);
+  const [syncScanUpgradeUrl, setSyncScanUpgradeUrl] = useState<string | null>(null);
   const [hasSyncScanned, setHasSyncScanned] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [lastSyncAllDate, setLastSyncAllDate] = useState<Date | null>(null);
@@ -112,9 +124,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   // Token generation: pending request type for design-tokens-result handler
   const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
-  // Sync scan: waiting for file-context-result
+  // Sync scan: waiting for sync-snapshot-result from plugin
   const pendingSyncScanRef = useRef(false);
-  const chunkedSyncScanRef = useRef<{ totalChunks: number; meta: any; chunks: Record<number, string> } | null>(null);
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
   const isPro = plan === 'PRO';
@@ -168,84 +179,54 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         return;
       }
 
-      // --- Sync Scan: file-context ---
-      if (msg.type === 'file-context-chunked-start' && pendingSyncScanRef.current) {
-        chunkedSyncScanRef.current = {
-          totalChunks: msg.totalChunks ?? 0,
-          meta: { fileKey: msg.fileKey, scope: msg.scope, pageId: msg.pageId, pageIds: msg.pageIds },
-          chunks: {},
-        };
-      }
-      if (msg.type === 'file-context-chunk' && chunkedSyncScanRef.current) {
-        const state = chunkedSyncScanRef.current;
-        state.chunks[msg.index] = msg.chunk;
-        if (Object.keys(state.chunks).length !== state.totalChunks) return;
-        const parts: string[] = [];
-        for (let i = 0; i < state.totalChunks; i++) parts.push(state.chunks[i]);
-        chunkedSyncScanRef.current = null;
-        try {
-          const fileJson = JSON.parse(parts.join('')) as object;
-          (async () => {
-            if (!fetchSyncScan || !storybookUrl) return;
-            try {
-            const result = await fetchSyncScan({ file_json: fileJson, storybook_url: storybookUrl, storybook_token: storybookToken ?? undefined });
-              setSyncItems(result.items || []);
-              setHasSyncScanned(true);
-              setSyncScanError(null);
-              startCooldown('scan_sync');
-              setShowLevelUp(true);
-            } catch (err) {
-              setSyncScanError(err instanceof Error ? err.message : 'Sync scan failed');
-              setSyncItems([]);
-            } finally {
-              setIsSyncScanning(false);
-              pendingSyncScanRef.current = false;
-            }
-          })();
-        } catch {
-          setSyncScanError('Invalid data received. Try again.');
-          setIsSyncScanning(false);
-          pendingSyncScanRef.current = false;
-        }
-        return;
-      }
-      if (msg.type === 'file-context-result' && pendingSyncScanRef.current) {
+      // --- Sync Scan: plugin-built sync_snapshot (no full file JSON, no backend Figma REST) ---
+      if (msg.type === 'sync-snapshot-result' && pendingSyncScanRef.current) {
         pendingSyncScanRef.current = false;
         if (msg.error) {
           setSyncScanError(String(msg.error));
+          setSyncScanUpgradeUrl(null);
           setSyncItems([]);
           setIsSyncScanning(false);
           return;
         }
-        const hasFileKey = !!msg.fileKey;
-        const hasFileJson = !!(msg.fileJson && typeof msg.fileJson === 'object' && (msg.fileJson as { document?: unknown }).document);
-        if (!hasFileKey && !hasFileJson) {
+        const snap = msg.sync_snapshot as SyncSnapshot | undefined;
+        if (!snap || !Array.isArray(snap.components) || snap.components.length === 0) {
           const opts = getSystemToastOptions('file_link_unavailable');
           setSyncScanError(opts.description ?? opts.title);
+          setSyncScanUpgradeUrl(null);
+          setSyncItems([]);
           setIsSyncScanning(false);
           return;
         }
         (async () => {
           if (!fetchSyncScan || !storybookUrl) return;
           try {
-            const body = hasFileJson
-              ? { file_json: msg.fileJson as object, storybook_url: storybookUrl, storybook_token: storybookToken ?? undefined }
-              : {
-                  file_key: msg.fileKey as string,
-                  storybook_url: storybookUrl,
-                  storybook_token: storybookToken ?? undefined,
-                  scope: msg.scope ?? 'all',
-                  page_id: msg.pageId ?? undefined,
-                  page_ids: msg.pageIds ?? undefined,
-                };
-            const result = await fetchSyncScan(body);
+            const result = await fetchSyncScan({
+              sync_snapshot: snap,
+              storybook_url: storybookUrl,
+              storybook_token: storybookToken ?? undefined,
+            });
             setSyncItems(result.items || []);
             setHasSyncScanned(true);
             setSyncScanError(null);
+            setSyncScanUpgradeUrl(null);
             startCooldown('scan_sync');
             setShowLevelUp(true);
           } catch (err) {
-            setSyncScanError(err instanceof Error ? err.message : 'Sync scan failed');
+            if (err instanceof SyncScanRateLimitedError) {
+              const sec = err.retryAfterSec;
+              const mins =
+                sec != null && Number.isFinite(sec) ? Math.max(1, Math.ceil(sec / 60)) : null;
+              setSyncScanError(
+                mins != null
+                  ? `Figma has rate-limited this request. Please retry in ${mins} minute${mins === 1 ? '' : 's'}.`
+                  : 'Figma has rate-limited this request. Please retry in a few minutes.',
+              );
+              setSyncScanUpgradeUrl(err.upgradeUrl && err.upgradeUrl.trim() ? err.upgradeUrl.trim() : null);
+            } else {
+              setSyncScanError(err instanceof Error ? err.message : 'Sync scan failed');
+              setSyncScanUpgradeUrl(null);
+            }
             setSyncItems([]);
           } finally {
             setIsSyncScanning(false);
@@ -567,6 +548,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setStorybookToken(token ?? null);
     setIsSbConnected(true);
     setSyncScanError(null);
+    setSyncScanUpgradeUrl(null);
   };
 
   const handleDisconnectSb = () => {
@@ -574,6 +556,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setStorybookUrl(null);
     setStorybookToken(null);
     setSyncScanError(null);
+    setSyncScanUpgradeUrl(null);
     setHasSyncScanned(false);
     setSyncItems([]);
   };
@@ -591,6 +574,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     }
 
     setSyncScanError(null);
+    setSyncScanUpgradeUrl(null);
     setIsSyncScanning(true);
     pendingSyncScanRef.current = true;
 
@@ -612,9 +596,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
         return;
       }
-      window.parent.postMessage({ pluginMessage: { type: 'get-file-context', scope: 'all' } }, '*');
+      window.parent.postMessage({ pluginMessage: { type: 'get-sync-snapshot' } }, '*');
     } catch (err) {
       setSyncScanError(err instanceof Error ? err.message : 'Scan failed');
+      setSyncScanUpgradeUrl(null);
       setIsSyncScanning(false);
       pendingSyncScanRef.current = false;
     }
@@ -775,6 +760,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             getRemainingTime={getRemainingTime}
             syncItems={syncItems}
             syncScanError={syncScanError}
+            syncScanUpgradeUrl={syncScanUpgradeUrl}
             expandedDriftId={expandedDriftId}
             setExpandedDriftId={setExpandedDriftId}
             handleSelectLayer={handleSelectLayer}

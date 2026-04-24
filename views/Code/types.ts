@@ -66,6 +66,8 @@ export interface SyncTabProps {
   getRemainingTime: (key: string) => string | null;
   syncItems: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>;
   syncScanError: string | null;
+  /** Figma pricing / upgrade link when sync-scan returns structured 429. */
+  syncScanUpgradeUrl?: string | null;
   expandedDriftId: string | null;
   setExpandedDriftId: (id: string | null) => void;
   handleSelectLayer: (id: string, layerId: string | null | undefined, e: React.MouseEvent) => void;
