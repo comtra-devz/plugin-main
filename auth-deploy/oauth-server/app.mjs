@@ -163,15 +163,36 @@ async function runFigmaOAuthUserPersistence(executor, figmaUser, tokenData, coun
   if (!userId) {
     userId = figmaId;
   }
+  let hasConflict = false;
+  let conflictPayload = null;
+  const rPrior = await executor`
+    SELECT first_name, surname, profile_saved_at, figma_user_id, name
+    FROM users WHERE id = ${userId} LIMIT 1
+  `;
+  if (rPrior.rows.length) {
+    const p = rPrior.rows[0];
+    const hadFigma = p.figma_user_id != null;
+    if (!hadFigma && p.profile_saved_at) {
+      const f = (p.first_name || '').trim();
+      const s = (p.surname || '').trim();
+      const manual = [f, s].filter(Boolean).join(' ').trim();
+      if (manual && String(name).trim().toLowerCase() !== manual.toLowerCase()) {
+        hasConflict = true;
+        conflictPayload = { figma_handle: name, manual_first: f, manual_surname: s || null };
+      }
+    }
+  }
+  const conflictJson = conflictPayload ? JSON.stringify(conflictPayload) : null;
   await executor`
     INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, figma_user_id, updated_at)
     VALUES (${userId}, ${email}, ${name}, ${img}, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, ${figmaId}, NOW())
     ON CONFLICT (id) DO UPDATE SET
       email = COALESCE(NULLIF(EXCLUDED.email, ''), users.email),
-      name = EXCLUDED.name,
+      name = CASE WHEN ${hasConflict} THEN users.name ELSE EXCLUDED.name END,
       img_url = EXCLUDED.img_url,
       country_code = COALESCE(EXCLUDED.country_code, users.country_code),
       figma_user_id = ${figmaId},
+      name_conflict = CASE WHEN ${hasConflict} THEN ${conflictJson}::jsonb ELSE NULL END,
       updated_at = NOW()
   `;
   await executor`
@@ -1133,6 +1154,150 @@ function getUserAuthContext(req) {
   }
   return { userId: null, reason: 'jwt_verify_failed' };
 }
+
+/** First name + surname in DB + flags for plugin (Personal Details, badge). */
+function attachUserProfileFromRow(user, row) {
+  if (!row) return;
+  if (row.name) user.name = String(row.name);
+  const figma = row.figma_user_id != null;
+  const first = (row.first_name && String(row.first_name).trim()) || null;
+  const sur = (row.surname && String(row.surname).trim()) || null;
+  const saved = row.profile_saved_at != null;
+  const conflict = row.name_conflict && typeof row.name_conflict === 'object' ? row.name_conflict : null;
+  if (row.figma_user_id !== undefined) user.figma_user_id = row.figma_user_id;
+  user.first_name = first;
+  user.surname = sur;
+  user.profile_saved_at = row.profile_saved_at || null;
+  user.name_conflict = conflict;
+  user.profile_locked = figma;
+  const needsNameSave = !figma && !saved;
+  const needsConflictAction = Boolean(conflict);
+  user.show_profile_badge = needsNameSave || needsConflictAction;
+}
+
+app.get('/api/user/profile', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'database_unavailable' });
+  try {
+    const r = await dbSql`
+      SELECT email, name, first_name, surname, figma_user_id, profile_saved_at, name_conflict, img_url
+      FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (r.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    const row = r.rows[0];
+    const u = { id: userId, email: row.email, name: row.name };
+    attachUserProfileFromRow(u, row);
+    res.json({ ok: true, profile: u });
+  } catch (e) {
+    console.error('GET /api/user/profile', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.patch('/api/user/profile', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'database_unavailable' });
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const firstIn = body.first_name != null ? String(body.first_name).trim() : '';
+  const surIn = body.surname != null ? String(body.surname).trim() : '';
+  if (!firstIn) {
+    return res.status(400).json({ error: 'first_name_required' });
+  }
+  try {
+    const lock = await dbSql`SELECT figma_user_id FROM users WHERE id = ${userId} LIMIT 1`;
+    if (lock.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    if (lock.rows[0].figma_user_id != null) {
+      return res.status(403).json({ error: 'profile_locked', message: 'Name is managed from your Figma account.' });
+    }
+    const fullName = surIn ? `${firstIn} ${surIn}` : firstIn;
+    const r2 = await dbSql`
+      UPDATE users
+      SET
+        first_name = ${firstIn},
+        surname = ${surIn || null},
+        name = ${fullName},
+        profile_saved_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${userId} AND figma_user_id IS NULL
+      RETURNING email, name, first_name, surname, figma_user_id, profile_saved_at, name_conflict, img_url
+    `;
+    if (r2.rows.length === 0) {
+      return res.status(403).json({ error: 'profile_locked' });
+    }
+    const row = r2.rows[0];
+    const u = { id: userId, email: row.email, name: row.name };
+    attachUserProfileFromRow(u, row);
+    res.json({ ok: true, profile: u });
+  } catch (e) {
+    console.error('PATCH /api/user/profile', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/user/profile/resolve-name-conflict', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'database_unavailable' });
+  const use = (req.body && req.body.use) === 'figma' ? 'figma' : (req.body && req.body.use) === 'keep' ? 'keep' : null;
+  if (!use) {
+    return res.status(400).json({ error: 'invalid_body', message: 'use must be "figma" or "keep"' });
+  }
+  try {
+    const r0 = await dbSql`
+      SELECT name_conflict, name, first_name, surname, email, figma_user_id, img_url
+      FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (r0.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    const b = r0.rows[0];
+    if (b.figma_user_id == null) {
+      return res.status(400).json({ error: 'no_conflict' });
+    }
+    const c = b.name_conflict && typeof b.name_conflict === 'object' ? b.name_conflict : null;
+    if (!c) {
+      return res.status(400).json({ error: 'no_pending_conflict' });
+    }
+    if (use === 'figma') {
+      const h = (c.figma_handle && String(c.figma_handle).trim()) || b.name;
+      const r1 = await dbSql`
+        UPDATE users
+        SET
+          name = ${h},
+          first_name = ${h},
+          surname = NULL,
+          name_conflict = NULL,
+          profile_saved_at = COALESCE(profile_saved_at, NOW()),
+          updated_at = NOW()
+        WHERE id = ${userId}
+        RETURNING email, name, first_name, surname, figma_user_id, profile_saved_at, name_conflict, img_url
+      `;
+      const row = r1.rows[0];
+      const u = { id: userId, email: row.email, name: row.name };
+      attachUserProfileFromRow(u, row);
+      return res.json({ ok: true, profile: u });
+    }
+    const f = (c.manual_first && String(c.manual_first).trim()) || '';
+    const s = (c.manual_surname && String(c.manual_surname).trim()) || '';
+    const full = [f, s].filter(Boolean).join(' ').trim() || f;
+    const r2 = await dbSql`
+      UPDATE users
+      SET
+        name = ${full},
+        name_conflict = NULL,
+        updated_at = NOW()
+      WHERE id = ${userId}
+      RETURNING email, name, first_name, surname, figma_user_id, profile_saved_at, name_conflict, img_url
+    `;
+    const row = r2.rows[0];
+    const u = { id: userId, email: row.email, name: row.name };
+    attachUserProfileFromRow(u, row);
+    res.json({ ok: true, profile: u });
+  } catch (e) {
+    console.error('POST /api/user/profile/resolve-name-conflict', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
 
 const ADMIN_API_KEY = String(process.env.ADMIN_API_KEY || '').trim();
 const EXTERNAL_DS_STATUSES = new Set(['draft', 'published', 'archived']);
@@ -5673,6 +5838,19 @@ async function loadUserForLoginResponse(dbSql, user) {
     }
   } catch (err) {
     console.error('loadUserForLoginResponse: credits select failed (non-fatal)', err);
+  }
+  try {
+    const pr = await dbSql`
+      SELECT name, figma_user_id, first_name, surname, profile_saved_at, name_conflict
+      FROM users WHERE id = ${user.id} LIMIT 1
+    `;
+    if (pr.rows.length) {
+      attachUserProfileFromRow(user, pr.rows[0]);
+    }
+  } catch (e) {
+    if (!/column|does not exist/i.test(String(e))) {
+      console.error('loadUserForLoginResponse: profile select failed (non-fatal)', e);
+    }
   }
   try {
     const tagRow = await dbSql`SELECT COALESCE(tags, '[]'::jsonb) AS tags FROM users WHERE id = ${user.id} LIMIT 1`;

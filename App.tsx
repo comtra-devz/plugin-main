@@ -9,6 +9,7 @@ import { Documentation } from './views/Documentation';
 import { Privacy } from './views/Privacy';
 import { Terms } from './views/Terms';
 import { Affiliate } from './views/Affiliate';
+import { PersonalDetails } from './views/PersonalDetails';
 import { Analytics } from './views/Analytics';
 import { UpgradeModal } from './components/UpgradeModal';
 import { LevelUpModal } from './components/LevelUpModal';
@@ -110,9 +111,17 @@ function normalizeOAuthUser(raw: {
   stats?: User['stats']; authToken?: string;
   total_xp?: number; current_level?: number; xp_for_next_level?: number; xp_for_current_level_start?: number;
   credits_total?: number; credits_used?: number; credits_remaining?: number;
+  figma_user_id?: string | null;
+  first_name?: string | null;
+  surname?: string | null;
+  profile_saved_at?: string | null;
+  name_conflict?: User['name_conflict'];
+  profile_locked?: boolean;
+  show_profile_badge?: boolean;
 }): User {
   const name = raw.name || 'User';
-  const firstInitial = name.trim().charAt(0).toUpperCase() || 'U';
+  const forInitial = (raw.first_name && String(raw.first_name).trim()) || name;
+  const firstInitial = forInitial.trim().charAt(0).toUpperCase() || 'U';
   return {
     id: raw.id,
     name,
@@ -137,6 +146,13 @@ function normalizeOAuthUser(raw: {
     current_level: raw.current_level,
     xp_for_next_level: raw.xp_for_next_level,
     xp_for_current_level_start: raw.xp_for_current_level_start,
+    figma_user_id: raw.figma_user_id,
+    first_name: raw.first_name,
+    surname: raw.surname,
+    profile_saved_at: raw.profile_saved_at,
+    name_conflict: raw.name_conflict,
+    profile_locked: raw.profile_locked,
+    show_profile_badge: raw.show_profile_badge ?? false,
   };
 }
 
@@ -236,6 +252,19 @@ export default function AppTest() {
     creditsFetchLastLogAtRef.current = now;
     return true;
   };
+
+  const applyUserProfilePatch = useCallback((patch: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next: User = { ...prev, ...patch };
+      const av =
+        (patch.first_name != null && String(patch.first_name).trim()) ||
+        (next.first_name && String(next.first_name).trim()) ||
+        next.name;
+      next.avatar = (av || 'U').trim().charAt(0).toUpperCase();
+      return next;
+    });
+  }, []);
   const [simulateFreeTier, setSimulateFreeTier] = useState(getSimulateFreeTierFromStorage);
   /** Per utenti di test con "Simula Free Tier" ON quando l'API non restituisce crediti: simulazione locale (25 crediti, consumo in localStorage). */
   const [simulatedCredits, setSimulatedCredits] = useState<CreditsState | null>(null);
@@ -2174,6 +2203,9 @@ export default function AppTest() {
         </div>
 
         {view === ViewState.SUBSCRIPTION && <Subscription user={user} credits={effectiveCredits} useInfiniteCreditsForTest={useInfiniteCreditsForTest} onUpgrade={() => setShowUpgrade(true)} />}
+        {view === ViewState.PERSONAL_DETAILS && user && (
+          <PersonalDetails user={user} onUpdateUser={applyUserProfilePatch} />
+        )}
         {view === ViewState.DOCUMENTATION && <Documentation user={user} />}
         {view === ViewState.PRIVACY && <Privacy />}
         {view === ViewState.TERMS && <Terms />}
@@ -2233,6 +2265,10 @@ export default function AppTest() {
             onLogout={handleLogout}
             onManageSub={() => {
               setView(ViewState.SUBSCRIPTION);
+              setShowProfile(false);
+            }}
+            onPersonalDetails={() => {
+              setView(ViewState.PERSONAL_DETAILS);
               setShowProfile(false);
             }}
             onOpenDocs={() => {

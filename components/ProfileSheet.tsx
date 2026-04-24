@@ -19,12 +19,13 @@ interface Props {
   onClose: () => void;
   onLogout: () => void;
   onManageSub: () => void;
+  onPersonalDetails: () => void;
   onOpenDocs: () => void;
   onOpenPrivacy: () => void;
   onOpenTerms: () => void;
 }
 
-export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetchError, onRetryCredits, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onOpenDocs, onOpenPrivacy, onOpenTerms }) => (
+export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetchError, onRetryCredits, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onPersonalDetails, onOpenDocs, onOpenPrivacy, onOpenTerms }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
@@ -96,6 +97,13 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
           className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
         >
           Manage Subscription
+        </button>
+        <button
+          data-component="Profile: Personal Details"
+          onClick={onPersonalDetails}
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
+        >
+          Personal details
         </button>
         <button 
           data-component="Profile: Docs Button"

@@ -8,7 +8,8 @@ export enum ViewState {
   DOCUMENTATION = 'DOCUMENTATION',
   PRIVACY = 'PRIVACY',
   TERMS = 'TERMS',
-  AFFILIATE = 'AFFILIATE'
+  AFFILIATE = 'AFFILIATE',
+  PERSONAL_DETAILS = 'PERSONAL_DETAILS',
 }
 
 export type UserPlan = 'FREE' | 'PRO';
@@ -46,6 +47,19 @@ export interface User {
   xp_for_current_level_start?: number;
   /** Tag da backend (es. "enterprise"); clienti Enterprise inseriti manualmente, vedi docs/CONTACT-REQUESTS.md */
   tags?: string[];
+  /** Collegato Figma (OAuth) — "Personal details" in sola lettura. */
+  figma_user_id?: string | null;
+  first_name?: string | null;
+  surname?: string | null;
+  profile_saved_at?: string | null;
+  name_conflict?: {
+    figma_handle?: string;
+    manual_first?: string;
+    manual_surname?: string | null;
+  } | null;
+  profile_locked?: boolean;
+  /** Dot rosso su avatar: nome mancante (magic) o conflitto nome dopo OAuth. */
+  show_profile_badge?: boolean;
 }
 
 export interface AuditCategory {

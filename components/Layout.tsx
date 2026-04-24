@@ -32,9 +32,15 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
           <button 
             onClick={onOpenProfile}
             data-component="Layout: Avatar Button"
-            className="size-8 rounded-full bg-black border-2 border-white text-white font-bold flex items-center justify-center text-xs uppercase hover:bg-[#ffc900] hover:text-black transition-colors shrink-0"
+            className="relative size-8 rounded-full bg-black border-2 border-white text-white font-bold flex items-center justify-center text-xs uppercase hover:bg-[#ffc900] hover:text-black transition-colors shrink-0"
           >
             <span>{(user.avatar || user.name.charAt(0)).toUpperCase()}</span>
+            {user.show_profile_badge && (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-600"
+                aria-hidden
+              />
+            )}
           </button>
         )}
       </header>
@@ -45,8 +51,8 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
       >
         {children}
       </main>
-      {(current !== ViewState.SUBSCRIPTION && current !== ViewState.DOCUMENTATION && current !== ViewState.PRIVACY && current !== ViewState.TERMS) && <NavBar current={current} onChange={setView} />}
-      {(current === ViewState.SUBSCRIPTION || current === ViewState.DOCUMENTATION || current === ViewState.PRIVACY || current === ViewState.TERMS) && (
+      {(current !== ViewState.SUBSCRIPTION && current !== ViewState.DOCUMENTATION && current !== ViewState.PRIVACY && current !== ViewState.TERMS && current !== ViewState.PERSONAL_DETAILS) && <NavBar current={current} onChange={setView} />}
+      {(current === ViewState.SUBSCRIPTION || current === ViewState.DOCUMENTATION || current === ViewState.PRIVACY || current === ViewState.TERMS || current === ViewState.PERSONAL_DETAILS) && (
          <button 
            data-component="Layout: Back to Dashboard Button"
            onClick={() => setView(ViewState.AUDIT)} 
