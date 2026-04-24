@@ -3,7 +3,7 @@ import React from 'react';
 import { ViewState, NavProps } from '../types';
 
 export const NavBar: React.FC<NavProps> = ({ current, onChange }) => (
-  <nav className="fixed bottom-0 left-0 z-50 grid w-full grid-cols-4 gap-1 border-t-[3px] border-black bg-white p-2 shadow-[0_-6px_0_0_#000,0_12px_24px_-8px_rgba(0,0,0,0.18)]">
+  <nav className="fixed bottom-0 left-0 w-full bg-white border-t-2 border-black p-2 grid grid-cols-4 gap-1 z-50 shadow-[0px_-4px_0px_0px_rgba(0,0,0,0.1)]">
     {Object.values(ViewState)
       .filter(view => 
         view !== ViewState.SUBSCRIPTION && 

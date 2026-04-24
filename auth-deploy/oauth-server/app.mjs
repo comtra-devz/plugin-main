@@ -203,10 +203,29 @@ async function resolveOrCreateUserByEmail(executor, email, countryCode) {
   }
   const newId = generateComtraUserId();
   const localPart = em.split('@')[0] || 'User';
-  await executor`
-    INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, figma_user_id, updated_at)
-    VALUES (${newId}, ${em}, ${localPart}, null, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, null, NOW())
-  `;
+  try {
+    await executor`
+      INSERT INTO users (id, email, name, img_url, plan, credits_total, credits_used, total_xp, current_level, country_code, figma_user_id, updated_at)
+      VALUES (${newId}, ${em}, ${localPart}, null, 'FREE', ${FREE_TIER_CREDITS}, 0, 0, 1, ${countryCode}, null, NOW())
+    `;
+  } catch (e) {
+    // Race: due richieste in parallelo con la stessa email inesistente -> secondo INSERT urta unique su email
+    if (e?.code === '23505' || /unique|duplicate key/i.test(String(e?.message || e))) {
+      const r2 = await executor`
+        SELECT id, email, name, img_url FROM users WHERE LOWER(BTRIM(email)) = ${em} LIMIT 1
+      `;
+      if (r2.rows.length) {
+        const row = r2.rows[0];
+        return {
+          userId: String(row.id),
+          name: row.name || em.split('@')[0] || 'User',
+          email: row.email || em,
+          img_url: row.img_url,
+        };
+      }
+    }
+    throw e;
+  }
   return { userId: newId, name: localPart, email: em, img_url: null };
 }
 
@@ -998,9 +1017,10 @@ function getMagicLinkVerifyErrorPageHtml(
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Tiny5&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ff90e8; padding: 24px; }
+    body { font-family: 'Space Grotesk', sans-serif; margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #e8e8e8; padding: 24px; }
     .card { max-width: 420px; width: 100%; border: 3px solid #000; background: #fff; box-shadow: 8px 8px 0 #000; padding: 2rem; text-align: center; }
-    h1 { font-family: 'Tiny5', sans-serif; font-size: 1.5rem; font-weight: 700; margin: 0 0 0.75rem; color: #000; }
+    /* Tiny5: solo maiuscole + tracking per leggibilità (pixel font) */
+    h1 { font-family: 'Tiny5', sans-serif; font-size: 1.35rem; font-weight: 700; margin: 0 0 0.75rem; color: #000; text-transform: uppercase; letter-spacing: 0.08em; line-height: 1.25; }
     p { font-size: 0.95rem; color: #000; margin: 0; line-height: 1.5; }
   </style>
 </head>

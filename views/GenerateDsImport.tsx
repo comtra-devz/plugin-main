@@ -12,7 +12,6 @@ import {
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../lib/safeWebStorage';
 import { useToast } from '../contexts/ToastContext';
 import { ImportConversationalPanel, type ImportFeedItem } from '../components/generate/ImportConversationalPanel';
-import { fallbackImportNarration } from '../lib/dsImportFallbackNarration';
 
 const INTRO_SEEN_KEY = 'comtra-generate-ds-intro-seen';
 
@@ -599,7 +598,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   onUnlockRequest,
   persistDsImportToServer,
   writeDsImportMeta,
-  fetchImportNarration,
+  // Intentionally not using AI narration here: keep wizard copy deterministic and lightweight.
 }) => {
   const { showToast } = useToast();
   const feedIdRef = useRef(0);
@@ -680,7 +679,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       {
         id: nextFeedId(),
         role: 'assistant',
-        text: fallbackImportNarration('session_locked'),
+        text: 'Great, file connected. Next we read tokens, styles, and components so Generate can stay aligned.',
       },
       {
         id: nextFeedId(),
@@ -692,19 +691,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         ],
       },
     ]);
-    if (fetchImportNarration) {
-      void fetchImportNarration({ kind: 'session_locked', file_name: fileName })
-        .then(({ text }) => {
-          const t = String(text || '').trim();
-          if (!t) return;
-          setImportFeedItems((prev) => [
-            ...prev,
-            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-          ]);
-        })
-        .catch(() => {});
-    }
-  }, [fetchImportNarration, fileName]);
+  }, []);
 
   const openWizard = useCallback(() => {
     if (fileKey && !canFreeTierUseFileForDsImport(fileKey, isPro).ok) {
@@ -724,21 +711,20 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     progressLogIdRef.current = null;
     rulesDigestDoneRef.current = false;
     setImportSessionConfirmed(false);
-    setImportFeedItems([{ id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('welcome') }]);
-    if (fetchImportNarration) {
-      void fetchImportNarration({ kind: 'welcome', file_name: fileName })
-        .then(({ text }) => {
-          const t = String(text || '').trim();
-          if (!t) return;
-          setImportFeedItems((prev) => [
-            ...prev,
-            { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-          ]);
-        })
-        .catch(() => {});
-    }
+    setImportFeedItems([
+      {
+        id: nextFeedId(),
+        role: 'assistant',
+        text: 'Quick one-time setup: we read tokens, styles, and components so generated screens stay consistent with your system.',
+      },
+      {
+        id: nextFeedId(),
+        role: 'assistant',
+        text: 'No uploads needed. We read directly from this live Figma session.',
+      },
+    ]);
     setWizardOpen(true);
-  }, [fileKey, isPro, onUnlockRequest, fetchImportNarration, fileName]);
+  }, [fileKey, isPro, onUnlockRequest]);
 
   /** Discard wizard state and exit full-screen flow (after user confirms). */
   const abortImportFlow = useCallback(() => {
@@ -1027,21 +1013,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               : 'styles: (none reported)',
           ],
         },
-        { id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('tokens_done') },
+        { id: nextFeedId(), role: 'assistant', text: 'Tokens and local styles are in. Ready to continue with components scan.' },
       ]);
-      if (fetchImportNarration) {
-        const hint = `total_tokens=${parsed.total_tokens}; paint=${parsed.styles_summary?.paintStyles ?? 0}; text=${parsed.styles_summary?.textStyles ?? 0}`;
-        void fetchImportNarration({ kind: 'tokens_done', file_name: fileName, hint })
-          .then(({ text }) => {
-            const t = String(text || '').trim();
-            if (!t) return;
-            setImportFeedItems((prev) => [
-              ...prev,
-              { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-            ]);
-          })
-          .catch(() => {});
-      }
       onBusyChange(false);
     })();
     return () => {
@@ -1056,7 +1029,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     requestDsContextIndex,
     onBusyChange,
     parseIndexToSummary,
-    fetchImportNarration,
     fileName,
   ]);
 
@@ -1144,21 +1116,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       progressLogIdRef.current = null;
       setImportFeedItems((prev) => [
         ...prev,
-        { id: nextFeedId(), role: 'assistant', text: fallbackImportNarration('components_done') },
+        { id: nextFeedId(), role: 'assistant', text: 'Component scan completed. Review recap and confirm import.' },
       ]);
-      if (fetchImportNarration) {
-        const hint = `indexed=${inIndex}; sets=${parts.sets}; singles=${parts.singles}; logoLike=${logoLike}; titleLike=${titleLike}`;
-        void fetchImportNarration({ kind: 'components_done', file_name: fileName, hint })
-          .then(({ text }) => {
-            const t = String(text || '').trim();
-            if (!t) return;
-            setImportFeedItems((prev) => [
-              ...prev,
-              { id: nextFeedId(), role: 'assistant', text: t, flavored: true },
-            ]);
-          })
-          .catch(() => {});
-      }
       onBusyChange(false);
     })();
     return () => {
@@ -1174,7 +1133,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     requestDsContextIndex,
     onBusyChange,
     parseIndexToSummary,
-    fetchImportNarration,
     fileName,
   ]);
 
@@ -1233,7 +1191,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
 
       <div className={`${BRUTAL.card} bg-white border-2 border-black p-3 space-y-3`}>
         <div className="flex justify-between items-start gap-2">
-          <h3 className="text-sm font-black uppercase leading-tight sm:text-base">Design system in file</h3>
+          <h3 className="text-sm font-black uppercase leading-tight sm:text-base">Set up Generate for this file</h3>
           <span className="text-xs font-normal text-gray-500 truncate max-w-[160px] text-right" title={fileKey}>
             {fileName || 'Untitled file'}
           </span>
@@ -1266,8 +1224,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         ) : (
           <>
             <p className="text-sm font-normal text-gray-900 leading-normal">
-              No verified server snapshot for this file yet. Complete the import wizard: we only unlock Generate after
-              the snapshot is saved and read back from your account.
+              Quick one-time setup: we read your tokens, styles, and components so generated screens stay consistent
+              with your system.
             </p>
             {isPro && imports.length > 1 && (
               <p className="text-[10px] text-gray-600 leading-snug">
@@ -1276,7 +1234,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
               </p>
             )}
             <Button variant="primary" fullWidth className="min-h-[44px]" onClick={openWizard} disabled={dsImportBusy}>
-              {dsImportBusy ? 'Importing…' : 'Import Design System'}
+              {dsImportBusy ? 'Setting up…' : 'Start setup'}
             </Button>
           </>
         )}

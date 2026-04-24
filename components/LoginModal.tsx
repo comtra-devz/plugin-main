@@ -78,7 +78,7 @@ export const LoginModal: React.FC<Props> = ({
           </div>
         ) : (
           <>
-            <p className="text-xs font-bold text-black/70 text-left mb-1">Work email</p>
+            <p className="text-xs font-bold text-black/70 text-left mb-1">Your best e-mail address</p>
             <input
               type="email"
               name="comtra-magic-email"
@@ -95,7 +95,7 @@ export const LoginModal: React.FC<Props> = ({
               layout="row"
               onClick={() => { onRequestMagicLink(email); }}
               data-component="Login: Magic link"
-              className="gap-3 py-3 border-white"
+              className="gap-3 py-3.5"
             >
               Send sign-in link
             </Button>

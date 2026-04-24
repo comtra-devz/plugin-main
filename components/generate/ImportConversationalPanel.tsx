@@ -5,8 +5,6 @@ export type ImportFeedAssistant = {
   id: string;
   role: 'assistant';
   text: string;
-  /** When set, render a subtle “Kimi” badge for AI-flavored lines. */
-  flavored?: boolean;
 };
 
 export type ImportFeedActionLog = {
@@ -66,7 +64,7 @@ export const ImportConversationalPanel: React.FC<{
 
   return (
     <div
-      className={`${BRUTAL.infoPanel} flex max-h-[min(42vh,320px)] min-h-0 flex-col gap-3 overflow-y-auto`}
+      className={`${BRUTAL.infoPanel} flex max-h-[min(42vh,320px)] min-h-0 flex-col gap-3 overflow-y-auto pt-3 pb-5`}
       data-component="ImportConversationalPanel"
     >
       {items.map((item) => {
@@ -75,11 +73,6 @@ export const ImportConversationalPanel: React.FC<{
             <div key={item.id} className="flex flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[9px] font-black uppercase tracking-wide text-gray-600">Comtra</span>
-                {item.flavored ? (
-                  <span className="border-2 border-black bg-[#ffc900] px-1.5 py-0.5 text-[8px] font-black uppercase text-black">
-                    Kimi
-                  </span>
-                ) : null}
               </div>
               <p className="text-[13px] leading-relaxed text-black">{item.text}</p>
             </div>
