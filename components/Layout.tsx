@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { NavBar } from './NavBar';
 import { ViewState, User } from '../types';
 
@@ -10,8 +10,19 @@ interface Props {
   onOpenProfile: () => void;
 }
 
+/** Dot finché non c’è profilo salvato (magic) o c’è conflitto Figma; non dipende solo dal flag server. */
+function showProfileAvatarDot(u: User): boolean {
+  if (u.name_conflict && typeof u.name_conflict === 'object') return true;
+  if (u.show_profile_badge) return true;
+  const hasFigma = u.figma_user_id != null && String(u.figma_user_id).trim() !== '';
+  if (hasFigma) return false;
+  if (u.profile_saved_at) return false;
+  return true;
+}
+
 export const Layout: React.FC<Props> = ({ children, current, setView, user, onOpenProfile }) => {
   const mainRef = useRef<HTMLElement | null>(null);
+  const showDot = useMemo(() => (user ? showProfileAvatarDot(user) : false), [user]);
 
   useEffect(() => {
     if (!mainRef.current) return;
@@ -20,7 +31,7 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
 
   return (
     <div className="h-screen flex flex-col bg-[#fdfdfd] text-black font-sans overflow-x-hidden">
-      <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] px-3 py-1.5 sticky top-0 z-[100] flex min-h-9 items-center justify-between shrink-0 shadow-[0_2px_0_0_#000]">
+      <header data-component="Layout: Header Container" className="border-b-2 border-black bg-[#ff90e8] px-3 py-1.5 sticky top-0 z-[100] flex min-h-9 items-center justify-between shrink-0 overflow-visible shadow-[0_2px_0_0_#000]">
         <div className="flex items-center gap-2">
           <h1 data-component="Layout: Brand Name" className="text-lg font-black uppercase tracking-tighter leading-none sm:text-xl">Comtra</h1>
           <div data-component="Layout: Tagline Badge" className="inline-block bg-black text-white px-2 py-0.5 text-[10px] font-bold uppercase rotate-2 transform">
@@ -32,13 +43,15 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
           <button 
             onClick={onOpenProfile}
             data-component="Layout: Avatar Button"
-            className="relative size-8 rounded-full bg-black border-2 border-white text-white font-bold flex items-center justify-center text-xs uppercase hover:bg-[#ffc900] hover:text-black transition-colors shrink-0"
+            type="button"
+            className="relative z-[110] size-8 shrink-0 overflow-visible rounded-full border-2 border-white bg-black text-white font-bold flex items-center justify-center text-xs uppercase shadow-[0_0_0_1px_#000] hover:bg-[#ffc900] hover:text-black transition-colors"
           >
-            <span>{(user.avatar || user.name.charAt(0)).toUpperCase()}</span>
-            {user.show_profile_badge && (
+            <span className="relative z-0">{(user.avatar || user.name.charAt(0)).toUpperCase()}</span>
+            {showDot && (
               <span
-                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-600"
-                aria-hidden
+                className="pointer-events-none absolute -right-1 -top-1 z-10 h-3 w-3 rounded-full border-2 border-white bg-red-600 shadow-[0_0_0_1px_#000]"
+                aria-label="Profile action needed"
+                title="Add your name in Profile → Personal details"
               />
             )}
           </button>

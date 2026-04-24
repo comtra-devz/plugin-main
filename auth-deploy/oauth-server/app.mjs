@@ -463,16 +463,15 @@ function getFlowStore() {
 
 const app = express();
 app.use(cookieParser());
-app.use(cors({
-  origin: (origin, cb) => {
-    // Figma plugin UI runs in `data:` / opaque origin -> browser reports `origin = null`.
-    // Accept all origins here (auth is JWT-based), including null-origin preflights.
-    if (origin == null || origin === '' || origin === 'null') return cb(null, true);
-    return cb(null, true);
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key'],
-}));
+// JWT in header (no credentialed cookies) → `origin: *` is safe. Include PATCH for profile / Vercel.
+// Figma plugin UI us `Origin: null` (data: URL); * risolve il preflight.
+app.use(
+  cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key', 'X-Requested-With', 'Accept'],
+  })
+);
 app.options('*', cors());
 // Code-gen / audit / DS context index: corpi grandi; default 5mb (override con JSON_BODY_LIMIT).
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '5mb' }));
@@ -700,62 +699,6 @@ app.post('/auth/magic-link/request', async (req, res) => {
     readKey,
     ok: true,
     ...(process.env.MAGIC_LINK_DEV_LOG === '1' ? { devLink: signInUrl } : {}),
-  });
-});
-
-/**
- * Diagnostica runtime (nessun valore di segreto). Opzionale: ?token= o ?s= uguale a MAGIC_LINK_DIAG_TOKEN in env.
- * GET /api/magic-link/diagnostic
- */
-app.get('/auth/magic-link/diagnostic', (req, res) => {
-  const need = (process.env.MAGIC_LINK_DIAG_TOKEN || '').toString().trim();
-  if (need) {
-    const got = (req.query?.token || req.query?.s || '').toString();
-    if (got !== need) {
-      return res.status(401).json({
-        error: 'unauthorized',
-        message: 'Set MAGIC_LINK_DIAG_TOKEN in env and pass ?token= or ?s= with the same value.',
-      });
-    }
-  }
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const host = (process.env.SMTP_HOST || process.env.MAIL_HOST || '').trim();
-  const from = smtpFromAddressForMagic();
-  const user = (process.env.SMTP_USER || process.env.MAIL_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASS || '').trim();
-  const jwtOk =
-    Boolean((process.env.JWT_SECRET || '').trim()) && process.env.JWT_SECRET !== 'comtra-dev-secret-change-in-prod';
-  const emailGate =
-    hasSmtpForMagic() || Boolean(process.env.RESEND_API_KEY) || process.env.MAGIC_LINK_DEV_LOG === '1';
-  const hints = [];
-  if (!host) hints.push('Missing SMTP_HOST or MAIL_HOST');
-  if (!from) {
-    hints.push('Missing sender for SMTP: set SMTP_FROM/MAIL_FROM or SMTP_USER/MAIL_USER (use a real, allowed address — fake From is often dropped)');
-  }
-  if (host && from && !user) hints.push('SMTP user missing (SMTP_USER / MAIL_USER) — send may fail after gate');
-  if (host && from && !pass) hints.push('SMTP password missing (SMTP_PASS / etc.)');
-  if (!emailGate && !process.env.RESEND_API_KEY && process.env.MAGIC_LINK_DEV_LOG !== '1') {
-    hints.push('email gate: add RESEND_API_KEY, or set MAGIC_LINK_DEV_LOG=1 for dev, or complete SMTP as above');
-  }
-  if (!POSTGRES_URL) hints.push('Missing DATABASE_URL or POSTGRES_URL');
-  if (!jwtOk) hints.push('JWT_SECRET missing or still default (unsafe for production)');
-
-  res.json({
-    ok: emailGate && Boolean(POSTGRES_URL) && jwtOk,
-    base_url_configured: Boolean((process.env.BASE_URL || '').replace(/\/$/, '')),
-    database: Boolean(POSTGRES_URL),
-    jwt_secret_ok: jwtOk,
-    smtp: {
-      host: Boolean(host),
-      from: Boolean(from),
-      user: Boolean(user),
-      pass: Boolean(pass),
-      path_ready: hasSmtpForMagic(),
-    },
-    resend: Boolean(process.env.RESEND_API_KEY),
-    magic_link_dev_log: process.env.MAGIC_LINK_DEV_LOG === '1',
-    email_request_gate_would_pass: emailGate,
-    hints,
   });
 });
 
@@ -995,8 +938,20 @@ function getComtraPostLoginHtml({ variant = 'figma' } = {}) {
     .badge { display: inline-block; background: #000; color: #fff; padding: 6px 10px; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem; }
     h1 { font-family: 'Tiny5', sans-serif; font-size: 1.75rem; font-weight: 700; margin: 0 0 0.75rem; color: #000; text-transform: uppercase; letter-spacing: 0.05em; }
     p { font-size: 0.95rem; color: #000; margin: 0 0 1.25rem; font-weight: 500; line-height: 1.5; }
-    .btn { display: inline-block; background: #000; color: #fff !important; font-weight: 800; text-decoration: none; padding: 14px 24px; border: 2px solid #fff; box-shadow: 4px 4px 0 #000; font-size: 0.95rem; cursor: pointer; font-family: inherit; }
-    .btn:hover { opacity: 0.92; }
+    .btn {
+      display: inline-block; background: #000; color: #fff !important; font-weight: 800; text-decoration: none;
+      padding: 14px 24px; border: 2px solid #000; box-shadow: 4px 4px 0 #000; font-size: 0.95rem; cursor: pointer; font-family: inherit;
+      text-transform: uppercase; letter-spacing: 0.04em; user-select: none;
+      transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.1s ease, transform 0.1s ease;
+    }
+    .btn:hover { background: #262626; color: #fff !important; }
+    .btn:focus { outline: none; }
+    .btn:focus-visible { outline: 2px solid #000; outline-offset: 3px; }
+    .btn:active {
+      background: #000; color: #fff !important;
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0 #000;
+    }
     .hint { font-size: 0.75rem; color: #333; margin-top: 1.25rem; }
   </style>
 </head>
