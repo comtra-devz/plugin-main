@@ -77,7 +77,13 @@ export const LoginModal: React.FC<Props> = ({
             ) : null}
           </div>
         ) : (
-          <>
+          <form
+            className="w-full space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onRequestMagicLink(email);
+            }}
+          >
             <p className="text-xs font-bold text-black/70 text-left mb-1">Your best e-mail address</p>
             <input
               type="email"
@@ -90,10 +96,10 @@ export const LoginModal: React.FC<Props> = ({
               data-component="Login: Email"
             />
             <Button
+              type="submit"
               variant="black"
               fullWidth
               layout="row"
-              onClick={() => { onRequestMagicLink(email); }}
               data-component="Login: Magic link"
               className="gap-3 py-3.5"
             >
@@ -109,7 +115,7 @@ export const LoginModal: React.FC<Props> = ({
                 Sign in with Figma (OAuth) instead
               </button>
             )}
-          </>
+          </form>
         )}
       </div>
 
