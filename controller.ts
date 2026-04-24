@@ -1760,9 +1760,13 @@ figma.ui.onmessage = async (raw: any) => {
   if (msg.type === 'get-ds-context-index') {
     const requestId = msg.requestId;
     const reuseCached = msg.reuseCached !== false;
+    const componentLimit =
+      typeof msg.componentLimit === 'number' && Number.isFinite(msg.componentLimit)
+        ? Math.max(0, Math.floor(msg.componentLimit))
+        : undefined;
     (async () => {
       try {
-        const index = await resolveDsContextIndexForRequest({ reuseCached });
+        const index = await resolveDsContextIndexForRequest({ reuseCached, componentLimit });
         figma.ui.postMessage({ type: 'ds-context-index-result', requestId, index, hash: index.hash });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
@@ -1781,6 +1785,10 @@ figma.ui.onmessage = async (raw: any) => {
 
   if (msg.type === 'get-ds-context-index-phase') {
     const requestId = msg.requestId;
+    const componentLimit =
+      typeof msg.componentLimit === 'number' && Number.isFinite(msg.componentLimit)
+        ? Math.max(0, Math.floor(msg.componentLimit))
+        : undefined;
     const phase =
       msg.phase === 'components' ? 'components' : msg.phase === 'rules' ? 'rules' : 'tokens';
     (async () => {
@@ -1788,6 +1796,7 @@ figma.ui.onmessage = async (raw: any) => {
         const r =
           phase === 'components'
             ? await buildDsContextIndexComponentsMerge({
+                componentLimit,
                 onPageProgress: ({ pageName, pageIndex, pageTotal, scanned }) => {
                   figma.ui.postMessage({
                     type: 'ds-import-progress',

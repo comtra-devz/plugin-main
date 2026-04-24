@@ -361,7 +361,7 @@ function ImportComponentsCatalogCard({
           </span>
           <span>
             This file has <span className="tabular-nums font-black">{fileTotal}</span> catalog nodes; we keep{' '}
-            <span className="tabular-nums font-black">{n}</span> in the index for speed. Generate uses this capped
+            <span className="tabular-nums font-black">{n}</span> in the index for speed and responsiveness. Generate uses this capped
             list.
           </span>
         </div>
@@ -625,6 +625,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   const [finalizeLoading, setFinalizeLoading] = useState(false);
   const [wizardError, setWizardError] = useState<string | null>(null);
   const [rulesSummary, setRulesSummary] = useState<DsIndexSummary['rules_summary'] | null>(null);
+  const [forceNeedsPro, setForceNeedsPro] = useState(false);
   /** Tokens loaded vs full index with components (for split Figma reads). */
   const [importFlowPhase, setImportFlowPhase] = useState<ImportFlowPhase>('none');
   /** Minimum dwell on intro steps (Rules + Guidance) with CTA progress bar. */
@@ -651,9 +652,11 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
   useEffect(() => {
     if (!isPro) enforceSingleImportForFreeTier();
     setImports(loadDsImports());
+    if (isPro) setForceNeedsPro(false);
   }, [fileKey, wizardOpen, isPro]);
 
   const needsProForCurrentFile =
+    forceNeedsPro ||
     Boolean(fileKey) &&
     !isPro &&
     canFreeTierUseFileForDsImport(fileKey, isPro).ok === false;
@@ -771,14 +774,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       setFinalizeLoading(false);
       return;
     }
-    const tierGate = canFreeTierUseFileForDsImport(fileKey, isPro);
-    if (!tierGate.ok) {
-      onUnlockRequest();
-      onBusyChange(false);
-      setFinalizeLoading(false);
-      return;
-    }
-
     const label =
       selectedImport?.fileKey === fileKey
         ? selectedImport.displayName
@@ -842,6 +837,14 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      if (/free tier allows one design system file/i.test(msg)) {
+        setForceNeedsPro(true);
+        setWizardOpen(false);
+        onBusyChange(false);
+        setFinalizeLoading(false);
+        onUnlockRequest();
+        return;
+      }
       setWizardError(msg);
       showToast({
         title: 'Salvataggio non completato',
@@ -909,6 +912,7 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     onUnlockRequest,
     wizardToneOfVoice,
     wizardBrandKeywords,
+    forceNeedsPro,
   ]);
 
   const parseIndexToSummary = useCallback((raw: object): DsIndexSummary => {

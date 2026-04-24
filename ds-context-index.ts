@@ -474,16 +474,22 @@ async function collectAllLocalComponents(opts?: {
 function processComponentNodes(
   componentsRaw: (ComponentNode | ComponentSetNode)[],
   pageMetaByNodeId?: Map<string, { pageName: string; pageOrder: number }>,
+  opts?: { componentLimit?: number },
 ): { components: DsComponentSummary[]; totalInFile: number; truncated: boolean } {
   const totalInFile = componentsRaw.length;
   const sorted = componentsRaw.slice().sort((a, b) => a.id.localeCompare(b.id));
-  const truncated = sorted.length > MAX_COMPONENTS_IN_INDEX;
-  const componentsSlice = truncated ? sorted.slice(0, MAX_COMPONENTS_IN_INDEX) : sorted;
+  const requestedLimit =
+    typeof opts?.componentLimit === 'number' && Number.isFinite(opts.componentLimit)
+      ? Math.max(0, Math.floor(opts.componentLimit))
+      : MAX_COMPONENTS_IN_INDEX;
+  const unlimited = requestedLimit === 0;
+  const truncated = !unlimited && sorted.length > requestedLimit;
+  const componentsSlice = truncated ? sorted.slice(0, requestedLimit) : sorted;
   const components = componentsSlice.map((n) => summarizeComponent(n, pageMetaByNodeId?.get(n.id)));
   return { components, totalInFile, truncated };
 }
 
-export async function buildDsContextIndex(): Promise<BuildResult> {
+export async function buildDsContextIndex(opts?: { componentLimit?: number }): Promise<BuildResult> {
   return withFastTraversal(async () => {
     const [componentsRawResult, tokens] = await Promise.all([
       collectAllLocalComponents(),
@@ -492,6 +498,7 @@ export async function buildDsContextIndex(): Promise<BuildResult> {
     const { components, totalInFile, truncated } = processComponentNodes(
       componentsRawResult.nodes,
       componentsRawResult.pageMetaByNodeId,
+      { componentLimit: opts?.componentLimit },
     );
     return assembleFromParts(tokens, components, totalInFile, truncated);
   });
@@ -527,6 +534,7 @@ export async function buildDsContextIndexRulesOnly(): Promise<BuildResult> {
 /** Wizard step: fresh tokens/styles + component scan in parallel (same data as full index; split only for wizard UX). Updates plugin cache. */
 export async function buildDsContextIndexComponentsMerge(opts?: {
   onPageProgress?: (payload: { pageName: string; pageIndex: number; pageTotal: number; scanned: number }) => void;
+  componentLimit?: number;
 }): Promise<BuildResult> {
   return withFastTraversal(async () => {
     const [tokens, componentsRawResult] = await Promise.all([
@@ -537,6 +545,7 @@ export async function buildDsContextIndexComponentsMerge(opts?: {
     const { components, totalInFile, truncated } = processComponentNodes(
       componentsRawResult.nodes,
       componentsRawResult.pageMetaByNodeId,
+      { componentLimit: opts?.componentLimit },
     );
     const r = await assembleFromParts(tokens, components, totalInFile, truncated);
     cache = toCachedBuildResult(r);
@@ -590,27 +599,38 @@ export async function initDsContextIndexLifecycle(): Promise<void> {
  */
 export async function resolveDsContextIndexForRequest(options?: {
   reuseCached?: boolean;
+  componentLimit?: number;
 }): Promise<DsContextIndexPayload> {
-  if (options?.reuseCached !== false && isIndexCacheFresh()) {
+  const requestedLimit =
+    typeof options?.componentLimit === 'number' && Number.isFinite(options.componentLimit)
+      ? Math.max(0, Math.floor(options.componentLimit))
+      : MAX_COMPONENTS_IN_INDEX;
+  const canReuseDefaultCache = requestedLimit === MAX_COMPONENTS_IN_INDEX;
+  if (options?.reuseCached !== false && canReuseDefaultCache && isIndexCacheFresh()) {
     return cache!.index;
   }
-  return buildAndCacheDsContextIndex();
+  return buildAndCacheDsContextIndex({ componentLimit: requestedLimit, writeCache: canReuseDefaultCache });
 }
 
 /**
  * Fresh build (cancels pending debounced run), updates cache. Use for explicit UI requests.
  */
-export async function buildAndCacheDsContextIndex(): Promise<DsContextIndexPayload> {
+export async function buildAndCacheDsContextIndex(opts?: {
+  componentLimit?: number;
+  writeCache?: boolean;
+}): Promise<DsContextIndexPayload> {
   if (debounceTimer != null) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
   for (;;) {
     const e0 = docEpoch;
-    const r = await buildDsContextIndex();
+    const r = await buildDsContextIndex({ componentLimit: opts?.componentLimit });
     if (docEpoch === e0) {
-      cache = toCachedBuildResult(r);
-      cacheBuiltAtEpoch = e0;
+      if (opts?.writeCache !== false) {
+        cache = toCachedBuildResult(r);
+        cacheBuiltAtEpoch = e0;
+      }
       return r.index;
     }
     await yieldToMain();

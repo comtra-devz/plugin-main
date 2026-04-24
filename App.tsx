@@ -1656,18 +1656,19 @@ export default function AppTest() {
       const timeoutMs =
         typeof opts?.timeoutMs === 'number' && opts.timeoutMs > 0 ? opts.timeoutMs : 30000;
       const phase = opts?.phase;
+      const componentLimit = plan === 'PRO' || useInfiniteCreditsForTest ? 0 : 300;
       return new Promise<{ index: object | null; hash: string | null; error?: string }>((resolve) => {
         const requestId = `dsc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
         dsContextIndexWaitersRef.current.set(requestId, resolve);
         if (opts?.onProgress) dsContextIndexProgressRef.current.set(requestId, opts.onProgress);
         if (phase === 'rules' || phase === 'tokens' || phase === 'components') {
           window.parent.postMessage(
-            { pluginMessage: { type: 'get-ds-context-index-phase', requestId, phase } },
+            { pluginMessage: { type: 'get-ds-context-index-phase', requestId, phase, componentLimit } },
             '*',
           );
         } else {
           window.parent.postMessage(
-            { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached } },
+            { pluginMessage: { type: 'get-ds-context-index', requestId, reuseCached, componentLimit } },
             '*',
           );
         }
@@ -1680,7 +1681,7 @@ export default function AppTest() {
         }, timeoutMs);
       });
     },
-    [],
+    [plan, useInfiniteCreditsForTest],
   );
 
   const fetchDsImportContextSnapshot = useCallback(
