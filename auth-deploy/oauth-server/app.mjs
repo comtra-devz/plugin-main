@@ -46,7 +46,12 @@ import {
   inferFocusedScreenTypeWithPack,
   loadPatternsPayload,
 } from './design-intelligence.mjs';
-import { buildDsSlimIndex, buildPromptScopedDsIndex } from './ds-context-retrieval.mjs';
+import { buildPromptScopedDsIndex } from './ds-context-retrieval.mjs';
+import {
+  generationSpecSearchText,
+  generationSpecToPromptBlock,
+  runGenerationSpecResolver,
+} from './generation-spec-resolver.mjs';
 import { runKimiContentDefaultsEnrichment } from './kimi-content-enrichment.mjs';
 import { buildDesignIntelligenceExecutorHints } from './design-intelligence-executor-hints.mjs';
 
@@ -1921,6 +1926,13 @@ const KIMI_GENERATE_MODEL_B =
   process.env.KIMI_MODEL_ALT ||
   process.env.KIMI_MODEL_B ||
   '';
+const KIMI_GENERATION_SPEC_MODEL =
+  process.env.KIMI_GENERATION_SPEC_MODEL ||
+  process.env.KIMI_GENERATE_SPEC_MODEL ||
+  process.env.KIMI_GENERATE_MODEL_A ||
+  process.env.KIMI_MODEL_PRIMARY ||
+  process.env.KIMI_MODEL ||
+  'kimi-k2-0905-preview';
 
 function resolveGenerateChatModel(abVariant) {
   const primary = String(KIMI_GENERATE_MODEL_A || '').trim() || 'kimi-k2-0905-preview';
@@ -3162,11 +3174,22 @@ function ensureCreateModeHasCreateFrameAction(actionPlan, mode) {
   return plan;
 }
 
+function isMobilePrompt(prompt) {
+  return /\b(mobile|iphone|android|phone|cellulare|smartphone)\b/i.test(String(prompt || ''));
+}
+
+function isHeroPrompt(prompt, archetype) {
+  return (
+    String(archetype || '') === 'hero' ||
+    /\b(hero|banner|landing|above[-\s]?the[-\s]?fold|marketing\s+section|headline\s+section)\b/i.test(String(prompt || ''))
+  );
+}
+
 function ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt) {
   if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
   const modeNorm = String(mode || '').toLowerCase();
   if (modeNorm !== 'create' && modeNorm !== 'screenshot') return actionPlan;
-  if (!/\bdesktop\b/i.test(String(prompt || ''))) return actionPlan;
+  if (isMobilePrompt(prompt)) return actionPlan;
   const plan = actionPlan;
   if (!Array.isArray(plan.actions)) plan.actions = [];
 
@@ -3301,6 +3324,14 @@ function validateCustomDsIndexReadiness(mode, dsSource, dsIndexForValidation) {
 }
 
 const SLOT_BLUEPRINTS = {
+  hero: [
+    { id: 'eyebrow', required: false, hints: ['eyebrow', 'kicker', 'badge', 'label', 'tag'] },
+    { id: 'title_block', required: false, hints: ['title', 'heading', 'headline', 'hero title', 'h1'] },
+    { id: 'description_block', required: false, hints: ['description', 'subtitle', 'subheading', 'body', 'paragraph'] },
+    { id: 'primary_cta', required: true, hints: ['button', 'cta', 'primary', 'action', 'start', 'get started'] },
+    { id: 'secondary_cta', required: false, hints: ['button', 'cta', 'secondary', 'link', 'learn more'] },
+    { id: 'visual', required: false, hints: ['image', 'illustration', 'media', 'preview', 'card', 'mockup'] },
+  ],
   login: [
     { id: 'brand_logo', required: false, hints: ['logo', 'brand', 'wordmark', 'logotype'] },
     { id: 'title_block', required: false, hints: ['title', 'heading', 'headline', 'hero title', 'h1', 'welcome'] },
@@ -3409,6 +3440,72 @@ function buildSlotCandidatePack(dsIndexForValidation, archetype, prompt) {
     }
   }
   return out.length ? { archetype, slots: out } : null;
+}
+
+function buildSlotCandidatePackFromGenerationSpec(dsIndexForValidation, generationSpec, prompt) {
+  if (!generationSpec || typeof generationSpec !== 'object') return null;
+  if (!dsIndexForValidation || typeof dsIndexForValidation !== 'object') return null;
+  const components = Array.isArray(dsIndexForValidation.components) ? dsIndexForValidation.components : [];
+  if (!components.length) return null;
+  const specSlots = [
+    ...(Array.isArray(generationSpec.required_slots) ? generationSpec.required_slots : []),
+    ...(Array.isArray(generationSpec.optional_slots) ? generationSpec.optional_slots : []),
+  ];
+  if (!specSlots.length) return null;
+  const promptTokens = [
+    ...String(prompt || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/g)
+      .filter(Boolean),
+    ...(Array.isArray(generationSpec.ds_search_terms)
+      ? generationSpec.ds_search_terms.map((x) => String(x || '').toLowerCase())
+      : []),
+  ];
+
+  const out = [];
+  for (const slot of specSlots) {
+    if (!slot || typeof slot !== 'object') continue;
+    const slotId = String(slot.id || '').trim();
+    if (!slotId) continue;
+    const hints = [
+      slotId,
+      String(slot.label || ''),
+      String(slot.kind || ''),
+      ...(Array.isArray(slot.component_search_terms) ? slot.component_search_terms : []),
+    ]
+      .map((x) => String(x || '').trim().toLowerCase())
+      .filter(Boolean);
+    const ranked = components
+      .map((c) => ({
+        c,
+        score: componentScoreForSlot(
+          c?.name,
+          hints,
+          promptTokens,
+          slotId,
+          c?.pageName,
+          c?.pageOrder,
+        ),
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map((x) => ({
+        id: String(x.c?.id || ''),
+        componentKey: String(x.c?.componentKey || x.c?.component_key || ''),
+        name: String(x.c?.name || ''),
+        pageName: String(x.c?.pageName || ''),
+        pageOrder: Number(x.c?.pageOrder) || null,
+      }));
+    out.push({
+      id: slotId,
+      required: Boolean(slot.required) && ranked.length > 0,
+      hints,
+      kind: String(slot.kind || 'generic'),
+      candidates: ranked,
+    });
+  }
+  return out.length ? { archetype: generationSpec.archetype_id || 'kimi_spec', source: 'generation_spec', slots: out } : null;
 }
 
 function formatSlotCandidateBlock(pack) {
@@ -3613,27 +3710,48 @@ function validateSlotCoverage(actionPlan, slotPack) {
   return { valid: true, errors: [] };
 }
 
-function validateLayoutQualityContract(actionPlan, prompt, mode, dsSource, dsIndexForValidation, slotPack) {
+function validateLayoutQualityContract(actionPlan, prompt, mode, dsSource, dsIndexForValidation, slotPack, generationSpec = null) {
   const modeNorm = String(mode || '').toLowerCase();
   if (modeNorm !== 'create' && modeNorm !== 'screenshot') return { valid: true, errors: [] };
   if (!actionPlan || typeof actionPlan !== 'object') return { valid: true, errors: [] };
   const actions = Array.isArray(actionPlan.actions) ? actionPlan.actions : [];
   if (!actions.length) return { valid: false, errors: ['Action plan has no actions.'] };
 
-  const isDesktop = /\bdesktop\b/i.test(String(prompt || ''));
+  const isDesktop = !isMobilePrompt(prompt);
+  const isHero = isHeroPrompt(prompt, slotPack?.archetype);
   const isCustom = isCustomDsSource(dsSource);
   const componentsInIndex = Array.isArray(dsIndexForValidation?.components) ? dsIndexForValidation.components.length : 0;
-  const minInstances = Number(process.env.GENERATE_QUALITY_MIN_INSTANCES || (isDesktop ? 3 : 2));
+  const minInstances = Number(process.env.GENERATE_QUALITY_MIN_INSTANCES || (isHero ? 1 : isDesktop ? 3 : 2));
   const minFrames = Number(process.env.GENERATE_QUALITY_MIN_FRAMES || (isDesktop ? 2 : 1));
 
   let instanceCount = 0;
   let frameCount = 0;
   let textCount = 0;
+  let hasSubstantialFrame = false;
+  let hasHeroNamedFrame = false;
+  let hasCtaLikeAction = false;
   for (const a of actions) {
     const t = String(a?.type || '').toUpperCase();
     if (t === 'INSTANCE_COMPONENT') instanceCount += 1;
     if (t === 'CREATE_FRAME') frameCount += 1;
     if (t === 'CREATE_TEXT') textCount += 1;
+    const nameLike = `${String(a?.name || '')} ${String(a?.ref || '')} ${String(a?.slot_id || '')}`.toLowerCase();
+    if (t === 'CREATE_FRAME') {
+      const w = Number(a?.width);
+      const h = Number(a?.height);
+      if (
+        Number.isFinite(w) &&
+        Number.isFinite(h) &&
+        w >= (isDesktop ? 720 : 300) &&
+        h >= (isHero ? (isDesktop ? 280 : 220) : isDesktop ? 240 : 160)
+      ) {
+        hasSubstantialFrame = true;
+      }
+      if (/\b(hero|banner|landing|above[-_\s]?fold)\b/i.test(nameLike)) hasHeroNamedFrame = true;
+    }
+    if (/\b(primary_cta|secondary_cta|cta|button|action|get started|start)\b/i.test(nameLike)) {
+      hasCtaLikeAction = true;
+    }
   }
 
   const errors = [];
@@ -3647,6 +3765,48 @@ function validateLayoutQualityContract(actionPlan, prompt, mode, dsSource, dsInd
   }
   if (textCount < 1) {
     errors.push('Layout contract: requires at least one CREATE_TEXT action for visible semantic content.');
+  }
+  if (isHero) {
+    if (!hasSubstantialFrame) {
+      errors.push('Hero contract: requires a substantial hero section frame; thin strips are not acceptable.');
+    }
+    if (!hasHeroNamedFrame) {
+      errors.push('Hero contract: requires a semantically named hero/banner frame or ref.');
+    }
+    if (textCount < 2) {
+      errors.push('Hero contract: requires at least headline and supporting copy text nodes.');
+    }
+    if (!hasCtaLikeAction) {
+      errors.push('Hero contract: requires a visible primary CTA action after the copy.');
+    }
+  }
+  if (generationSpec && Array.isArray(generationSpec.required_slots) && generationSpec.required_slots.length > 0) {
+    for (const slot of generationSpec.required_slots) {
+      if (!slot || typeof slot !== 'object') continue;
+      const id = String(slot.id || '').trim().toLowerCase();
+      if (!id) continue;
+      const label = String(slot.label || '').trim().toLowerCase();
+      const terms = [id, label, ...(Array.isArray(slot.component_search_terms) ? slot.component_search_terms : [])]
+        .map((x) => String(x || '').trim().toLowerCase())
+        .filter((x) => x.length >= 3);
+      const covered = actions.some((a) => {
+        if (!a || typeof a !== 'object') return false;
+        const hay = [
+          String(a.slot_id || a.slotId || ''),
+          String(a.name || ''),
+          String(a.ref || ''),
+          String(a.parent || ''),
+          String(a.parentId || ''),
+          String(a.text || ''),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return terms.some((term) => hay.includes(term));
+      });
+      if (!covered) {
+        errors.push(`Generation spec: required slot "${id}" is not represented in the action plan.`);
+      }
+    }
   }
 
   const requiredSlots = (slotPack?.slots || []).filter((s) => s.required).length;
@@ -3729,6 +3889,98 @@ function buildDeterministicFallbackPlan({
   if (!slotPack || !Array.isArray(slotPack.slots) || slotPack.slots.length === 0) return null;
   const components = Array.isArray(dsIndexForValidation?.components) ? dsIndexForValidation.components : [];
   if (!components.length) return null;
+
+  if (isHeroPrompt(prompt, inferredScreenArchetype)) {
+    const pickSlotCandidate = (slotId) => slotPack.slots.find((s) => s.id === slotId)?.candidates?.[0] || null;
+    const primaryCta = pickSlotCandidate('primary_cta');
+    const visual = pickSlotCandidate('visual');
+    const isMobile = isMobilePrompt(prompt);
+    const actions = [
+      {
+        type: 'CREATE_FRAME',
+        ref: 'hero_section',
+        parent: 'root',
+        name: 'Hero Banner',
+        layoutMode: isMobile ? 'VERTICAL' : 'HORIZONTAL',
+        width: isMobile ? 390 : 1200,
+        height: isMobile ? 520 : 440,
+        itemSpacing: 32,
+        paddingTop: 48,
+        paddingRight: 48,
+        paddingBottom: 48,
+        paddingLeft: 48,
+      },
+      {
+        type: 'CREATE_FRAME',
+        ref: 'hero_copy',
+        parentId: 'hero_section',
+        name: 'Hero Copy',
+        layoutMode: 'VERTICAL',
+        width: isMobile ? 294 : 560,
+        itemSpacing: 16,
+      },
+      {
+        type: 'CREATE_TEXT',
+        parent: 'hero_copy',
+        name: 'Hero Headline',
+        text: 'Build better product experiences',
+      },
+      {
+        type: 'CREATE_TEXT',
+        parent: 'hero_copy',
+        name: 'Hero Supporting Copy',
+        text: 'A focused hero section with clear hierarchy, concise copy, and a primary action.',
+      },
+    ];
+    if (primaryCta) {
+      actions.push({
+        type: 'INSTANCE_COMPONENT',
+        parent: 'hero_copy',
+        name: 'Primary CTA Button',
+        slot_id: 'primary_cta',
+        ...(primaryCta.componentKey ? { component_key: primaryCta.componentKey } : {}),
+        ...(primaryCta.id ? { component_node_id: primaryCta.id } : {}),
+      });
+    } else {
+      actions.push({
+        type: 'CREATE_RECT',
+        parent: 'hero_copy',
+        name: 'Primary CTA Button',
+        width: 160,
+        height: 48,
+      });
+      actions.push({
+        type: 'CREATE_TEXT',
+        parent: 'hero_copy',
+        name: 'Primary CTA Label',
+        text: 'Get started',
+      });
+    }
+    if (visual) {
+      actions.push({
+        type: 'INSTANCE_COMPONENT',
+        parent: 'hero_section',
+        name: 'Hero Visual',
+        slot_id: 'visual',
+        ...(visual.componentKey ? { component_key: visual.componentKey } : {}),
+        ...(visual.id ? { component_node_id: visual.id } : {}),
+      });
+    }
+    return {
+      frame: {
+        name: 'Hero Banner',
+        width: isMobile ? 390 : 1440,
+        height: isMobile ? 844 : 900,
+        layoutMode: 'VERTICAL',
+      },
+      actions,
+      metadata: {
+        ...(baseMetadata && typeof baseMetadata === 'object' ? baseMetadata : {}),
+        fallback_strategy: 'deterministic_hero_blueprint',
+        fallback_applied: true,
+      },
+    };
+  }
 
   const actions = [];
   actions.push({
@@ -4136,21 +4388,46 @@ app.post('/api/agents/generate', async (req, res) => {
         details: customDsIndexReadiness.errors,
       });
     }
-    const dsIndexSlim = dsIndexForValidation
-      ? buildDsSlimIndex(dsIndexForValidation, {
-          maxComponents: Number(process.env.GENERATE_DS_SLIM_COMPONENTS || 120),
-          maxVariables: Number(process.env.GENERATE_DS_SLIM_VARIABLES || 180),
-        })
-      : null;
+    const patternsPayload = loadPatternsPayload();
+    const { legacyScreenKey: inferredScreenArchetype, packV2ArchetypeId } = inferFocusedScreenTypeWithPack(
+      prompt,
+      patternsPayload,
+    );
+    let generationSpec = null;
+    let generationSpecUsed = false;
+    const callKimiSpec = (messages, maxTokens = 2200) => callKimi(messages, maxTokens, KIMI_GENERATION_SPEC_MODEL);
+    if (mode === 'create' || mode === 'screenshot') {
+      try {
+        const specRes = await runGenerationSpecResolver({
+          callKimi: callKimiSpec,
+          extractJsonFromContent,
+          userPrompt: prompt,
+          inferredScreenArchetype,
+          packV2ArchetypeId,
+          dsContextIndex: dsIndexForValidation,
+          patternsPayload,
+        });
+        if (specRes?.spec) {
+          generationSpec = specRes.spec;
+          generationSpecUsed = true;
+          totalInputTokens += specRes.usage.input;
+          totalOutputTokens += specRes.usage.output;
+        }
+      } catch (specErr) {
+        console.error('Generation spec resolver failed', specErr?.message || specErr);
+      }
+    }
+    const generationSpecBlock = generationSpecToPromptBlock(generationSpec);
+    const retrievalPrompt = [prompt, generationSpecSearchText(generationSpec)].filter(Boolean).join('\n');
     const isCustomSourceForPrompt = isCustomDsSource(dsSource);
     const promptTopKComponents = isCustomSourceForPrompt
-      ? Number(process.env.GENERATE_DS_PROMPT_COMPONENTS_CUSTOM || 18)
+      ? Number(process.env.GENERATE_DS_PROMPT_COMPONENTS_CUSTOM || 40)
       : Number(process.env.GENERATE_DS_PROMPT_COMPONENTS || 32);
     const promptTopKVariables = isCustomSourceForPrompt
-      ? Number(process.env.GENERATE_DS_PROMPT_VARIABLES_CUSTOM || 26)
+      ? Number(process.env.GENERATE_DS_PROMPT_VARIABLES_CUSTOM || 64)
       : Number(process.env.GENERATE_DS_PROMPT_VARIABLES || 48);
-    const dsIndexForPrompt = dsIndexSlim
-      ? buildPromptScopedDsIndex(dsIndexSlim, prompt, {
+    const dsIndexForPrompt = dsIndexForValidation
+      ? buildPromptScopedDsIndex(dsIndexForValidation, retrievalPrompt, {
           topKComponents: promptTopKComponents,
           topKVariables: promptTopKVariables,
         })
@@ -4169,12 +4446,9 @@ app.post('/api/agents/generate', async (req, res) => {
           `ds_cache_hash: ${dsIndexHashLine}`,
         ].join('\n')
       : '';
-    const patternsPayload = loadPatternsPayload();
-    const { legacyScreenKey: inferredScreenArchetype, packV2ArchetypeId } = inferFocusedScreenTypeWithPack(
-      prompt,
-      patternsPayload,
-    );
-    const slotCandidatePackBase = buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
+    const slotCandidatePackBase =
+      buildSlotCandidatePackFromGenerationSpec(dsIndexForValidation, generationSpec, prompt) ||
+      buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
     const slotCandidatePack = applyAssignmentOverridesToSlotPack(slotCandidatePackBase, assignmentOverrides);
     const slotCandidateBlock = formatSlotCandidateBlock(slotCandidatePack);
     const qualityContractLine =
@@ -4292,6 +4566,7 @@ app.post('/api/agents/generate', async (req, res) => {
       ...(semanticGuardrailLine ? [semanticGuardrailLine] : []),
       ...(qualityContractLine ? [qualityContractLine] : []),
       dsContextBlock,
+      generationSpecBlock,
       dsIndexBlock,
       slotCandidateBlock,
       designIntelBlock,
@@ -4313,8 +4588,8 @@ app.post('/api/agents/generate', async (req, res) => {
           actionPlanSystemPrompt: systemPrompt,
           screenshotDataUrl,
         });
-        totalInputTokens = dual.usage.input;
-        totalOutputTokens = dual.usage.output;
+        totalInputTokens += dual.usage.input;
+        totalOutputTokens += dual.usage.output;
         if (dual.actionPlan && typeof dual.actionPlan === 'object') {
           actionPlan = dual.actionPlan;
           dualPipelineSucceeded = true;
@@ -4377,6 +4652,7 @@ app.post('/api/agents/generate', async (req, res) => {
       dsSource,
       dsIndexForValidation,
       slotCandidatePack,
+      generationSpec,
     );
     const mustRepair =
       !schemaValidation.valid ||
@@ -4443,6 +4719,7 @@ app.post('/api/agents/generate', async (req, res) => {
             dsSource,
             dsIndexForValidation,
             slotCandidatePack,
+            generationSpec,
           );
         }
       }
@@ -4499,6 +4776,7 @@ app.post('/api/agents/generate', async (req, res) => {
           dsSource,
           dsIndexForValidation,
           slotCandidatePack,
+          generationSpec,
         );
       }
     }
@@ -4546,6 +4824,7 @@ app.post('/api/agents/generate', async (req, res) => {
           dsSource,
           dsIndexForValidation,
           slotCandidatePack,
+          generationSpec,
         );
       }
     }
@@ -4628,6 +4907,15 @@ app.post('/api/agents/generate', async (req, res) => {
     if (!String(actionPlan.metadata.prompt || '').trim()) actionPlan.metadata.prompt = prompt;
     actionPlan.metadata.inferred_screen_archetype = inferredScreenArchetype ?? null;
     actionPlan.metadata.inferred_pack_v2_archetype = packV2ArchetypeId ?? null;
+    actionPlan.metadata.generation_spec = generationSpec
+      ? {
+          archetype_id: generationSpec.archetype_id,
+          archetype_label: generationSpec.archetype_label,
+          confidence: generationSpec.confidence,
+          required_slots: (generationSpec.required_slots || []).map((s) => s.id),
+          optional_slots: (generationSpec.optional_slots || []).map((s) => s.id),
+        }
+      : null;
     actionPlan.metadata.kimi_content_enrichment_used = Boolean(kimiEnrichmentUsed);
     actionPlan.metadata.kimi_content_enrichment_cache_hit = Boolean(kimiEnrichmentCacheHit);
     const executorHints = buildDesignIntelligenceExecutorHints(patternsPayload, {
@@ -4638,7 +4926,7 @@ app.post('/api/agents/generate', async (req, res) => {
     actionPlan.metadata.generation_pipeline = generationPipeline;
     actionPlan.metadata.ds_source = dsSource;
     actionPlan.metadata.ds_id = dsPackage?.ds_id || resolvedDsId || null;
-    actionPlan.metadata.ds_context_strategy = dsIndexForPrompt ? 'slim_plus_prompt_retrieval' : 'none';
+    actionPlan.metadata.ds_context_strategy = dsIndexForPrompt ? 'full_index_prompt_retrieval' : 'none';
     if (dsIndexForPrompt?.components_retrieval) actionPlan.metadata.ds_components_retrieval = dsIndexForPrompt.components_retrieval;
     if (dsIndexForPrompt?.variable_names_retrieval) actionPlan.metadata.ds_variables_retrieval = dsIndexForPrompt.variable_names_retrieval;
     actionPlan.metadata.context_profile = contextProfile;
@@ -4689,6 +4977,12 @@ app.post('/api/agents/generate', async (req, res) => {
         input_tokens: totalInputTokens,
         output_tokens: totalOutputTokens,
       },
+      generation_spec: {
+        used: Boolean(generationSpecUsed),
+        model: KIMI_GENERATION_SPEC_MODEL,
+        archetype_id: generationSpec?.archetype_id || null,
+        confidence: generationSpec?.confidence ?? null,
+      },
       comtra_tov: { source: comtraTovSource },
     };
 
@@ -4726,6 +5020,13 @@ app.post('/api/agents/generate', async (req, res) => {
         pack_meta: patternsPayload?.meta && typeof patternsPayload.meta === 'object' ? patternsPayload.meta : null,
         inferred_screen_archetype: inferredScreenArchetype ?? null,
         inferred_pack_v2_archetype: packV2ArchetypeId ?? null,
+        generation_spec: generationSpec
+          ? {
+              archetype_id: generationSpec.archetype_id,
+              confidence: generationSpec.confidence,
+              required_slots: (generationSpec.required_slots || []).map((s) => s.id),
+            }
+          : null,
       });
       const ins = await dbSql`
         INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms, figma_file_key, ds_source, inferred_screen_archetype, inferred_pack_v2_archetype, kimi_enrichment_used, learning_snapshot, kimi_model, generation_route)

@@ -474,7 +474,8 @@ export function validateDesktopCreateStructure(actionPlan, userPrompt) {
   const mode = String(actionPlan.metadata?.mode || '').trim().toLowerCase();
   if (mode !== 'create' && mode !== 'screenshot') return { valid: true, errors: [] };
   const prompt = String(userPrompt || '').toLowerCase();
-  if (!/\bdesktop\b/i.test(prompt)) return { valid: true, errors: [] };
+  if (/\b(mobile|iphone|android|phone|cellulare|smartphone)\b/i.test(prompt)) return { valid: true, errors: [] };
+  const heroLike = /\b(hero|banner|landing|above[-\s]?the[-\s]?fold|marketing\s+section)\b/i.test(prompt);
 
   const frame = actionPlan.frame && typeof actionPlan.frame === 'object' ? actionPlan.frame : {};
   const fw = Number(frame.width);
@@ -498,13 +499,17 @@ export function validateDesktopCreateStructure(actionPlan, userPrompt) {
     if (parent !== 'root') continue;
     const w = Number(a.width);
     const h = Number(a.height);
-    if (Number.isFinite(w) && w >= 280 && Number.isFinite(h) && h >= 240) {
+    if (Number.isFinite(w) && w >= (heroLike ? 720 : 280) && Number.isFinite(h) && h >= (heroLike ? 280 : 240)) {
       sizableRootChildFrame = true;
       break;
     }
   }
   if (!sizableRootChildFrame) {
-    errors.push('Desktop layout requires at least one substantial CREATE_FRAME directly under root (min 280x240).');
+    errors.push(
+      heroLike
+        ? 'Hero layout requires at least one substantial CREATE_FRAME directly under root (min 720x280).'
+        : 'Desktop layout requires at least one substantial CREATE_FRAME directly under root (min 280x240).',
+    );
   }
   return { valid: errors.length === 0, errors };
 }

@@ -12,6 +12,7 @@ const DEFAULT_PATTERNS_PATH = path.join(__dirname, '..', 'design-intelligence', 
 
 /** Chiavi valide in `screen_checklists` (patterns 7.1). */
 export const SCREEN_ARCHETYPE_KEYS = new Set([
+  'hero',
   'login',
   'list',
   'form',
@@ -157,6 +158,7 @@ export function inferFocusedScreenType(prompt) {
   const rules = [
     ['error', [/404\b/, /500\b/, /error page/i, /not found/i, /something went wrong/i, /pagina errore/i]],
     ['login', [/login/i, /sign[\s-]?in/i, /log[\s-]?in/i, /\baccedi\b/i, /forgot password/i, /password dimenticata/i]],
+    ['hero', [/\bhero\b/i, /\bbanner\b/i, /landing/i, /above[-\s]?the[-\s]?fold/i, /\bmarketing\b/i, /\bheadline\b/i]],
     [
       'dashboard',
       [/dashboard/i, /\bkpi\b/i, /\banalytics\b/i, /metric cards?/i, /overview/i, /riepilogo/i],

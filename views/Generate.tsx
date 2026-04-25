@@ -397,11 +397,34 @@ export const Generate: React.FC<Props> = ({
   const [refinementEstimates, setRefinementEstimates] = useState<Record<string, number>>({});
   const [lastDiagLine, setLastDiagLine] = useState<string | null>(null);
   const [liveReasoningLines, setLiveReasoningLines] = useState<string[]>([]);
+  const liveReasoningTimersRef = useRef<number[]>([]);
+  const clearLiveReasoningTimers = useCallback(() => {
+    for (const timer of liveReasoningTimersRef.current) window.clearTimeout(timer);
+    liveReasoningTimersRef.current = [];
+  }, []);
   const pushLiveReasoning = useCallback((line: string) => {
     const next = String(line || '').trim();
     if (!next) return;
     setLiveReasoningLines((prev) => (prev.includes(next) ? prev : [...prev, next]));
   }, []);
+  const scheduleLiveReasoning = useCallback(
+    (lines: string[], opts?: { initialDelayMs?: number; stepDelayMs?: number }) => {
+      const initialDelayMs = Math.max(0, opts?.initialDelayMs ?? 0);
+      const stepDelayMs = Math.max(120, opts?.stepDelayMs ?? 650);
+      lines
+        .map((line) => String(line || '').trim())
+        .filter(Boolean)
+        .forEach((line, index) => {
+          const timer = window.setTimeout(() => {
+            pushLiveReasoning(line);
+            liveReasoningTimersRef.current = liveReasoningTimersRef.current.filter((t) => t !== timer);
+          }, initialDelayMs + index * stepDelayMs);
+          liveReasoningTimersRef.current.push(timer);
+        });
+    },
+    [pushLiveReasoning],
+  );
+  useEffect(() => () => clearLiveReasoningTimers(), [clearLiveReasoningTimers]);
   const pendingPreflightPromptRef = useRef<string | null>(null);
   const skippedPreflightHashRef = useRef<string | null>(null);
   const serverThreadIdRef = useRef<string | null>(null);
@@ -822,43 +845,6 @@ export const Generate: React.FC<Props> = ({
     if (showRefinementChips) setRefineChipsHiddenByComposer(false);
   }, [showRefinementChips]);
 
-  useEffect(() => {
-    if (!loading) return;
-    if (generateStep === 'context') {
-      pushLiveReasoning('I am validating file access and current DS scope...');
-      pushLiveReasoning(
-        usesFileDs
-          ? 'I will anchor generation to the imported Custom (Current) snapshot.'
-          : `I will use ${selectedSystem} as style reference.`,
-      );
-      if (hasSelection) pushLiveReasoning('Selection mode active: I will preserve structure and improve it.');
-      if (screenshotAttachment) pushLiveReasoning('Screenshot reference detected: extracting layout intent...');
-      return;
-    }
-    if (generateStep === 'ai') {
-      pushLiveReasoning('I am mapping your request to a concrete screen archetype...');
-      pushLiveReasoning('I am composing an action plan with constraints, hierarchy, and spacing intent...');
-      pushLiveReasoning('I am validating plan consistency before canvas apply...');
-      return;
-    }
-    if (generateStep === 'canvas') {
-      pushLiveReasoning('Applying actions on canvas in deterministic order...');
-      pushLiveReasoning('Resolving instances/variables and checking unresolved references...');
-      return;
-    }
-    if (generateStep === 'credits') {
-      pushLiveReasoning('Final quality check completed, confirming credit consumption...');
-    }
-  }, [
-    loading,
-    generateStep,
-    usesFileDs,
-    selectedSystem,
-    hasSelection,
-    screenshotAttachment,
-    pushLiveReasoning,
-  ]);
-
   const promptPlaceholder = hasSelection
     ? `> Modify "${selectedLayerName}": keep layout, improve hierarchy and spacing.`
     : screenshotAttachment
@@ -1148,10 +1134,20 @@ export const Generate: React.FC<Props> = ({
       lastActionPlanRef.current = null;
       setShowRefinementChips(false);
       setLastDiagLine(null);
-      setLiveReasoningLines([
-        'Understanding your request and preparing generation context...',
-        'I will keep this transparent and narrate each step live.',
-      ]);
+      clearLiveReasoningTimers();
+      setLiveReasoningLines([]);
+      scheduleLiveReasoning(
+        [
+          'Understanding the request and preparing generation context...',
+          usesFileDs
+            ? 'Checking the imported Custom (Current) design-system snapshot.'
+            : `Checking ${selectedSystem} as the active style reference.`,
+          hasSelection ? 'Selection detected: I will preserve structure and improve the selected layer.' : '',
+          screenshotAttachment ? 'Reference image detected: I will extract visual hierarchy before mapping components.' : '',
+          'Requesting file access and validating the current Figma document.',
+        ],
+        { stepDelayMs: 520 },
+      );
 
       void fetchGenerationPluginEvent?.({
         event_type: 'generate_chat_turn_started',
@@ -1164,6 +1160,8 @@ export const Generate: React.FC<Props> = ({
         pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
+        clearLiveReasoningTimers();
+        setLiveReasoningLines([]);
         return;
       }
 
@@ -1181,6 +1179,7 @@ export const Generate: React.FC<Props> = ({
         pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
+        clearLiveReasoningTimers();
         setLiveReasoningLines([]);
         const opts = getSystemToastOptions('file_link_unavailable');
         setGenError(opts.description ?? opts.title);
@@ -1191,7 +1190,18 @@ export const Generate: React.FC<Props> = ({
       const dsSource = usesFileDs ? 'custom' : selectedSystem;
 
       setGenerateStep('ai');
-      pushLiveReasoning('Generating action plan with DS constraints...');
+      scheduleLiveReasoning(
+        [
+          'File context is ready. Now I am classifying the screen archetype.',
+          'Asking Kimi to resolve a generation spec when the request needs pattern judgment.',
+          'Retrieving the prompt-scoped DS components and tokens that match this request.',
+          'Planning layout structure first: regions, hierarchy, spacing, and visible content.',
+          'Mapping planned slots to real DS components where the catalog has semantic matches.',
+          'Asking the model for a structured action plan, not free-form visual guesses.',
+          'Preparing validation checks so weak layouts do not reach the canvas.',
+        ],
+        { initialDelayMs: 150, stepDelayMs: 850 },
+      );
       try {
         const data = await fetchGenerate({
           file_key: fileKey,
@@ -1218,6 +1228,32 @@ export const Generate: React.FC<Props> = ({
         if (typeof totalMs === 'number' && Number.isFinite(totalMs)) {
           setLastDiagLine(`Last server round-trip ~${Math.round(totalMs / 1000)}s`);
         }
+        const shape = (actionPlan as {
+          metadata?: {
+            generation_diagnostics?: {
+              action_plan_shape?: {
+                actions_total?: number;
+                create_frame?: number;
+                create_text?: number;
+                instance_component?: number;
+              };
+              slot_candidates?: { archetype?: string | null; slots_total?: number; required_slots?: string[] };
+              validation_state_final?: Record<string, boolean>;
+            };
+          };
+        }).metadata?.generation_diagnostics;
+        const planShape = shape?.action_plan_shape;
+        const slots = shape?.slot_candidates;
+        scheduleLiveReasoning(
+          [
+            slots?.archetype ? `Archetype resolved as ${slots.archetype}; checking ${slots.slots_total ?? 0} DS slot group(s).` : 'Archetype resolved; checking layout quality and DS fit.',
+            planShape
+              ? `Action plan received: ${planShape.actions_total ?? 0} action(s), ${planShape.create_frame ?? 0} frame(s), ${planShape.instance_component ?? 0} DS instance(s), ${planShape.create_text ?? 0} text node(s).`
+              : 'Action plan received; validating structure before canvas apply.',
+            'Server validation passed: schema, visible content, DS references, and layout contract are coherent.',
+          ],
+          { stepDelayMs: 480 },
+        );
 
         lastActionPlanRef.current = actionPlan;
         const isModify = mode === 'modify';
@@ -1228,7 +1264,15 @@ export const Generate: React.FC<Props> = ({
         setFeedbackSent(false);
 
         setGenerateStep('canvas');
-        pushLiveReasoning('Applying layout to canvas...');
+        scheduleLiveReasoning(
+          [
+            'Applying the validated plan on the canvas.',
+            'Creating the root frame and nested auto-layout containers.',
+            'Resolving DS component instances and token references inside Figma.',
+            'Checking canvas apply result before I mark the turn complete.',
+          ],
+          { initialDelayMs: 120, stepDelayMs: 620 },
+        );
         const canvasResult = await runCanvasApply(actionPlan, {
           modifyMode: isModify,
           serverRequestId: data?.request_id ?? null,
@@ -1259,7 +1303,14 @@ export const Generate: React.FC<Props> = ({
         });
 
         setGenerateStep('credits');
-        pushLiveReasoning('Finalizing credits and wrapping up...');
+        scheduleLiveReasoning(
+          [
+            'Canvas apply succeeded. Now I am finalizing the credit transaction.',
+            'Saving diagnostics so this generation can be reviewed and improved.',
+            'Wrapping up the assistant response with what was generated.',
+          ],
+          { stepDelayMs: 420 },
+        );
         const meta = (actionPlan as { metadata?: { estimated_credits?: number } }).metadata;
         const creditsToConsume = meta?.estimated_credits ?? 3;
         let consumeActionType: string = mode === 'modify' ? 'wireframe_modified' : 'generate';
@@ -1320,6 +1371,7 @@ export const Generate: React.FC<Props> = ({
         pipelineUiLockRef.current = false;
         setLoading(false);
         setGenerateStep('idle');
+        clearLiveReasoningTimers();
         setLiveReasoningLines([]);
       }
     },
@@ -1341,7 +1393,8 @@ export const Generate: React.FC<Props> = ({
       abortOptimisticUserTurn,
       beginOptimisticUserTurn,
       clearComposerInput,
-      pushLiveReasoning,
+      clearLiveReasoningTimers,
+      scheduleLiveReasoning,
     ],
   );
 
@@ -1513,6 +1566,10 @@ export const Generate: React.FC<Props> = ({
       const basePrompt = String(prompt || '').trim();
       if (!basePrompt && action !== 'Start over') return;
       if (action.startsWith('Generate now') || action.startsWith('Apply change')) {
+        const existingUserTurn = [...conversationTurns]
+          .reverse()
+          .find((turn) => turn.role === 'user' && turn.body.trim() === basePrompt.slice(0, 1200).trim());
+        if (existingUserTurn) pendingOptimisticUserTurnIdRef.current = existingUserTurn.id;
         void runGeneratePipeline(basePrompt, { clearComposer: false });
         return;
       }
@@ -1540,7 +1597,7 @@ export const Generate: React.FC<Props> = ({
         ]);
       }
     },
-    [appendConversationTurns, contextSuggestions, handleNewConversation, runGeneratePipeline],
+    [appendConversationTurns, contextSuggestions, conversationTurns, handleNewConversation, runGeneratePipeline],
   );
 
   const handleSelectThread = useCallback(
@@ -2020,7 +2077,7 @@ export const Generate: React.FC<Props> = ({
                             {turn.body}
                           </div>
                           {turn.role === 'assistant' && turn.actions && turn.actions.length > 0 ? (
-                            <div className="mt-1.5 flex flex-wrap gap-1.5 pl-2">
+                            <div className="mt-2 flex flex-wrap gap-1.5">
                               {turn.actions.map((action) => {
                                 const m = action.match(/^(.*)\s+\(~\s*(\d+)\s*cr\)$/i);
                                 const baseAction = m ? m[1].trim() : action;
@@ -2033,14 +2090,14 @@ export const Generate: React.FC<Props> = ({
                                     onClick={() => handleIntentAction(action, turn.actionIntent, turn.actionPrompt)}
                                     className={`inline-flex min-h-9 items-center gap-1.5 border-2 border-black px-3 py-1 text-[10px] font-black ${
                                       isConfirm
-                                        ? 'relative bg-[#ffc900] pr-12 text-black shadow-[2px_2px_0_0_#000] hover:bg-yellow-300'
+                                        ? 'relative bg-black pr-12 text-white shadow-[3px_3px_0_0_#ff90e8] hover:bg-neutral-900'
                                         : 'bg-white hover:bg-[#ffc900]'
                                     }`}
                                   >
                                     <span>{baseAction}</span>
                                     {cost ? (
                                       isConfirm ? (
-                                        <span className="absolute right-1 top-1/2 -translate-y-1/2 border border-black bg-black px-1 py-0 leading-none text-[8px] text-[#ffc900]">
+                                        <span className="absolute right-1 top-1/2 -translate-y-1/2 border border-black bg-[#ffc900] px-1 py-0 leading-none text-[8px] text-black">
                                           {cost}CR
                                         </span>
                                       ) : (
@@ -2074,7 +2131,9 @@ export const Generate: React.FC<Props> = ({
                           <p className="mb-1 font-black uppercase">Live reasoning</p>
                           <div className="space-y-0.5">
                             {liveReasoningLines.map((line, idx) => (
-                              <p key={`lr-${idx}`}>- {line}</p>
+                              <p key={`lr-${idx}`} className={idx === liveReasoningLines.length - 1 ? 'animate-pulse' : undefined}>
+                                - {line}
+                              </p>
                             ))}
                           </div>
                         </div>

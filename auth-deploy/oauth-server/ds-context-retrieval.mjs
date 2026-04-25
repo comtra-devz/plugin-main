@@ -15,6 +15,33 @@ function tokenize(text) {
   return parts.filter((t) => t.length >= 2 && !STOPWORDS.has(t));
 }
 
+function expandQueryTokens(prompt, tokens) {
+  const text = String(prompt || '').toLowerCase();
+  const out = new Set(tokens);
+  const add = (items) => {
+    for (const item of items) out.add(item);
+  };
+  if (/\b(hero|banner|landing|above[-\s]?the[-\s]?fold|marketing)\b/i.test(text)) {
+    add(['hero', 'banner', 'headline', 'heading', 'title', 'subtitle', 'description', 'button', 'cta', 'primary', 'image', 'media', 'preview', 'card', 'badge', 'nav', 'header']);
+  }
+  if (/\b(login|sign[\s-]?in|auth|password|email)\b/i.test(text)) {
+    add(['logo', 'brand', 'title', 'input', 'field', 'email', 'password', 'button', 'cta', 'link']);
+  }
+  if (/\b(dashboard|kpi|analytics|overview|metric)\b/i.test(text)) {
+    add(['card', 'metric', 'stat', 'chart', 'table', 'filter', 'button']);
+  }
+  if (/\b(form|checkout|survey|wizard|multi[-\s]?step)\b/i.test(text)) {
+    add(['input', 'field', 'select', 'dropdown', 'checkbox', 'radio', 'button', 'cta']);
+  }
+  if (/\b(list|table|catalog|feed|results)\b/i.test(text)) {
+    add(['list', 'row', 'item', 'card', 'search', 'filter', 'table']);
+  }
+  if (/\b(settings|preferences)\b/i.test(text)) {
+    add(['row', 'toggle', 'switch', 'input', 'section', 'button']);
+  }
+  return [...out];
+}
+
 function overlapScore(querySet, haystackTokens) {
   if (!haystackTokens.length) return 0;
   let hits = 0;
@@ -34,8 +61,10 @@ function topByScore(items, scoreFn, k) {
 function normalizeComponent(c) {
   return {
     id: String(c?.id || ''),
+    componentKey: String(c?.componentKey || c?.component_key || ''),
     name: String(c?.name || ''),
     type: String(c?.type || ''),
+    pageName: String(c?.pageName || ''),
     variantAxes: Array.isArray(c?.variantAxes) ? c.variantAxes.slice(0, 8) : undefined,
     propertyKeys: Array.isArray(c?.propertyKeys) ? c.propertyKeys.slice(0, 8) : undefined,
     slotHints: Array.isArray(c?.slotHints) ? c.slotHints.slice(0, 8) : undefined,
@@ -72,7 +101,7 @@ export function buildDsSlimIndex(dsIndex, opts = {}) {
 
 export function buildPromptScopedDsIndex(dsIndex, prompt, opts = {}) {
   if (!dsIndex || typeof dsIndex !== 'object') return null;
-  const queryTokens = tokenize(prompt);
+  const queryTokens = expandQueryTokens(prompt, tokenize(prompt));
   const querySet = new Set(queryTokens);
   const components = Array.isArray(dsIndex.components) ? dsIndex.components : [];
   const variableNames = Array.isArray(dsIndex.variable_names) ? dsIndex.variable_names : [];
@@ -84,6 +113,7 @@ export function buildPromptScopedDsIndex(dsIndex, prompt, opts = {}) {
     (c) => {
       const bag = [
         String(c?.name || ''),
+        String(c?.pageName || ''),
         ...(Array.isArray(c?.variantAxes) ? c.variantAxes : []),
         ...(Array.isArray(c?.propertyKeys) ? c.propertyKeys : []),
         ...(Array.isArray(c?.slotHints) ? c.slotHints : []),

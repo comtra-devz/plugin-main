@@ -45,6 +45,28 @@
     }
   ],
   "screen_checklists": {
+    "hero": {
+      "must_have": [
+        "One dominant headline with clear value proposition",
+        "Supporting body copy or subheadline directly below the headline",
+        "Primary CTA placed after the copy",
+        "Substantial hero section height, not a thin strip",
+        "Clear visual hierarchy before secondary actions"
+      ],
+      "should_have": [
+        "Secondary CTA only if it supports the primary action",
+        "Optional media, illustration, product preview, or proof point area",
+        "Eyebrow/kicker text for context when useful",
+        "Desktop layout can use two columns; mobile stacks content vertically"
+      ],
+      "avoid": [
+        "Tiny button clusters without headline hierarchy",
+        "Hero content compressed into a short horizontal bar",
+        "More than two primary-looking actions",
+        "Generic placeholder copy when the prompt gives intent"
+      ],
+      "layout_hint": "Full-width section with generous padding. Desktop default: 1440px frame, hero content width 960-1200px, section height 360-640px. Structure: optional eyebrow -> headline -> subcopy -> CTA row, plus optional visual/proof area."
+    },
     "login": {
       "must_have": [
         "Brand mark or logo in top section",
