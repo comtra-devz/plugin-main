@@ -1337,7 +1337,7 @@ export default function AppTest() {
             upgradeUrl: typeof data.upgradeUrl === 'string' && data.upgradeUrl.trim() ? data.upgradeUrl.trim() : null,
           });
         }
-        const msg = data.error || `Sync scan failed (${r.status})`;
+        const msg = data.message || data.error || `Sync scan failed (${r.status})`;
         throw new Error(msg);
       }
       return data;
@@ -1354,8 +1354,17 @@ export default function AppTest() {
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return { ok: false as const, error: (data.error as string) || 'Check failed' };
-    return { ok: data.ok === true, error: data.error as string | undefined };
-  }, [user?.authToken]);
+    return {
+      ok: data.ok === true,
+      error: data.error as string | undefined,
+      endpointPath: typeof data.endpointPath === 'string' ? data.endpointPath : undefined,
+      endpointUrl: typeof data.endpointUrl === 'string' ? data.endpointUrl : undefined,
+      entryCount: typeof data.entryCount === 'number' ? data.entryCount : undefined,
+      storyCount: typeof data.storyCount === 'number' ? data.storyCount : undefined,
+      componentCount: typeof data.componentCount === 'number' ? data.componentCount : undefined,
+      checkedVia: 'backend' as const,
+    };
+  }, [user?.authToken, AUTH_BACKEND_URL]);
 
   const fetchCodeGen = React.useCallback(
     async (body: {

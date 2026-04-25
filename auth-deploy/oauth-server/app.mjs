@@ -4440,7 +4440,7 @@ app.post('/api/agents/generate', async (req, res) => {
       ? [
           '',
           '[DS CONTEXT INDEX]',
-          'Prompt-scoped DS index retrieved from a slim local snapshot. For file-scoped DS, use only component ids/keys and token paths that appear in this JSON.',
+          'Prompt-scoped DS index retrieved from the imported file catalog. For file-scoped DS, use only component ids/keys and variable names that appear in this JSON.',
           JSON.stringify(dsIndexForPrompt),
           '[END DS CONTEXT INDEX]',
           `ds_cache_hash: ${dsIndexHashLine}`,
@@ -4561,7 +4561,9 @@ app.post('/api/agents/generate', async (req, res) => {
       `Resolved DS id: ${resolvedDsId || 'none'}.`,
       `Context profile: platform=${contextProfile.platform}, density=${contextProfile.density}, input_mode=${contextProfile.input_mode}, selection_type=${contextProfile.selection_type}.`,
       `File has ${pageCount} page(s).`,
-      'Use only variable references (no raw hex/px).',
+      isCustomSourceForPrompt
+        ? 'Use only variable references that appear in [DS CONTEXT INDEX].variable_names. If no exact variable fits, omit the style property instead of inventing a token.'
+        : 'Use only variable references from the bundled DS package (no raw hex/px).',
       ...(primaryCustomDsSuccessLine ? [primaryCustomDsSuccessLine] : []),
       ...(semanticGuardrailLine ? [semanticGuardrailLine] : []),
       ...(qualityContractLine ? [qualityContractLine] : []),
@@ -4654,6 +4656,7 @@ app.post('/api/agents/generate', async (req, res) => {
       slotCandidatePack,
       generationSpec,
     );
+    let fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
     const mustRepair =
       !schemaValidation.valid ||
       !dsValidation.valid ||
@@ -4663,7 +4666,8 @@ app.post('/api/agents/generate', async (req, res) => {
       !semanticFitValidation.valid ||
       !desktopStructureValidation.valid ||
       !slotCoverageValidation.valid ||
-      !qualityContractValidation.valid;
+      !qualityContractValidation.valid ||
+      (!fileIndexValidation.skipped && !fileIndexValidation.valid);
     if (mustRepair) {
       const structuralErrors = [
         ...schemaValidation.errors.map((e) => `schema: ${e}`),
@@ -4677,6 +4681,7 @@ app.post('/api/agents/generate', async (req, res) => {
         ...semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`),
         ...slotCoverageValidation.errors.map((e) => `slot_coverage: ${e}`),
         ...qualityContractValidation.errors.map((e) => `quality_contract: ${e}`),
+        ...(!fileIndexValidation.skipped ? fileIndexValidation.errors.map((e) => `file_index: ${e}`) : []),
       ];
       const repairPasses = [structuralErrors, dsErrors].filter((errs) => errs.length > 0);
       for (let pass = 0; pass < repairPasses.length; pass++) {
@@ -4721,6 +4726,7 @@ app.post('/api/agents/generate', async (req, res) => {
             slotCandidatePack,
             generationSpec,
           );
+          fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
         }
       }
     }
@@ -4778,6 +4784,7 @@ app.post('/api/agents/generate', async (req, res) => {
           slotCandidatePack,
           generationSpec,
         );
+        fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
       }
     }
 
@@ -4786,7 +4793,8 @@ app.post('/api/agents/generate', async (req, res) => {
       !customDsInstanceValidation.valid ||
       !semanticFitValidation.valid ||
       !slotCoverageValidation.valid ||
-      !qualityContractValidation.valid;
+      !qualityContractValidation.valid ||
+      (!fileIndexValidation.skipped && !fileIndexValidation.valid);
     if (fallbackNeeded) {
       const deterministicFallback = buildDeterministicFallbackPlan({
         prompt,
@@ -4826,6 +4834,7 @@ app.post('/api/agents/generate', async (req, res) => {
           slotCandidatePack,
           generationSpec,
         );
+        fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
       }
     }
 
@@ -4894,7 +4903,6 @@ app.post('/api/agents/generate', async (req, res) => {
       });
     }
 
-    const fileIndexValidation = validateActionPlanAgainstFileDsIndex(actionPlan, dsIndexForValidation);
     if (!fileIndexValidation.skipped && !fileIndexValidation.valid) {
       return res.status(422).json({
         error: 'Action plan violates file DS context index',
@@ -5773,7 +5781,7 @@ app.post('/api/agents/ux-audit', async (req, res) => {
 });
 
 // --- Sync: check Storybook URL (verifica che esponga /api/stories o equivalente)
-const { runSyncScan, runSyncScanFromSnapshot, fetchStorybookMetadata } = await import('./sync-scan-engine.mjs');
+const { runSyncScanFromSnapshot, fetchStorybookMetadata } = await import('./sync-scan-engine.mjs');
 
 app.post('/api/agents/sync-check-storybook', async (req, res) => {
   const userId = getUserIdFromToken(req);
@@ -5785,7 +5793,14 @@ app.post('/api/agents/sync-check-storybook', async (req, res) => {
   try {
     const result = await fetchStorybookMetadata(storybookUrl, storybookToken);
     if (result.connectionStatus === 'ok') {
-      return res.json({ ok: true });
+      return res.json({
+        ok: true,
+        endpointPath: result.endpointPath,
+        endpointUrl: result.endpointUrl,
+        entryCount: result.entryCount ?? 0,
+        storyCount: result.storyCount ?? 0,
+        componentCount: result.componentCount ?? 0,
+      });
     }
     return res.json({ ok: false, error: result.error || 'Stories API not found at this URL.' });
   } catch (err) {
@@ -5809,42 +5824,23 @@ app.post('/api/agents/sync-scan', async (req, res) => {
     const syncSnapshot =
       rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap) ? rawSnap : null;
     const comps = syncSnapshot?.components;
+    const instances = syncSnapshot?.instances;
     const hasValidSnapshot =
       syncSnapshot &&
-      Array.isArray(comps) &&
-      comps.length > 0 &&
+      ((Array.isArray(comps) && comps.length > 0) || (Array.isArray(instances) && instances.length > 0)) &&
       typeof syncSnapshot.fileKey === 'string';
 
-    let result;
-    if (hasValidSnapshot) {
-      result = await runSyncScanFromSnapshot(syncSnapshot, storybookUrl, storybookToken);
-    } else {
-      if (rawSnap) {
-        console.warn('[sync-scan] sync_snapshot malformed, falling back to REST — check plugin version');
-      } else {
-        console.warn('[sync-scan] sync_snapshot missing, falling back to REST — check plugin version');
-      }
-      let fileJson;
-      try {
-        const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
-        fileJson = resolved.fileJson;
-      } catch (resolveErr) {
-        if (resolveErr?.code === 'FIGMA_RATE_LIMITED') {
-          return res.status(429).json({
-            error: 'rate_limited',
-            retryAfterSec: resolveErr.retryAfterSec ?? null,
-            upgradeUrl: resolveErr.upgradeUrl ?? null,
-          });
-        }
-        const status = Number(resolveErr?.status) || 400;
-        const code = resolveErr?.code;
-        const msg = resolveErr?.message || 'Invalid design source';
-        if (code) return res.status(status).json({ error: msg, code });
-        return res.status(status).json({ error: msg });
-      }
-
-      result = await runSyncScan(fileJson, storybookUrl, storybookToken);
+    if (!hasValidSnapshot) {
+      const reason = rawSnap ? 'malformed' : 'missing';
+      console.warn(`[sync-scan] sync_snapshot ${reason}; refusing REST fallback — reload plugin`);
+      return res.status(400).json({
+        error: 'sync_snapshot_required',
+        code: 'SYNC_SNAPSHOT_REQUIRED',
+        message: 'Sync requires the latest plugin snapshot. Reload the plugin and run Scan again.',
+      });
     }
+
+    const result = await runSyncScanFromSnapshot(syncSnapshot, storybookUrl, storybookToken);
 
     if (result.connectionStatus === 'unreachable' && result.error) {
       return res.status(400).json({ error: result.error, connectionStatus: 'unreachable' });

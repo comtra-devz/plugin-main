@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { SyncTabProps, BRUTAL, COLORS } from '../types';
+import { SyncTabProps, BRUTAL, COLORS, type StorybookConnectionInfo } from '../types';
 import { Button } from '../../../components/ui/Button';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 import {
@@ -65,7 +65,8 @@ function isStorybookListResponse(data: unknown): boolean {
   if (Array.isArray(data)) return true;
   if (d.entries && typeof d.entries === 'object' && !Array.isArray(d.entries)) return Object.keys(d.entries as object).length > 0;
   if (d.stories && typeof d.stories === 'object' && !Array.isArray(d.stories)) return true;
-  if (d.v2?.entries && typeof (d.v2 as Record<string, unknown>).entries === 'object') return true;
+  const v2 = d.v2 && typeof d.v2 === 'object' ? (d.v2 as Record<string, unknown>) : null;
+  if (v2?.entries && typeof v2.entries === 'object') return true;
   return false;
 }
 
@@ -73,9 +74,9 @@ function isStorybookListResponse(data: unknown): boolean {
 async function checkStorybookFromClient(
   baseUrl: string,
   token?: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (token?.trim()) headers['Authorization'] = `Bearer ${token.trim()}`;
+  if (token?.trim()) headers['Authorization'] = /^bearer\s+/i.test(token.trim()) ? token.trim() : `Bearer ${token.trim()}`;
 
   for (const path of STORYBOOK_LIST_PATHS) {
     try {
@@ -85,7 +86,30 @@ async function checkStorybookFromClient(
       clearTimeout(timeoutId);
       if (!res.ok) continue;
       const data = await res.json();
-      if (isStorybookListResponse(data)) return { ok: true };
+      if (isStorybookListResponse(data)) {
+        const d = data as Record<string, unknown>;
+        const storyCount = Array.isArray(d.stories)
+          ? d.stories.length
+          : d.stories && typeof d.stories === 'object' && !Array.isArray(d.stories)
+            ? Object.keys(d.stories as object).length
+            : d.entries && typeof d.entries === 'object' && !Array.isArray(d.entries)
+              ? Object.keys(d.entries as object).length
+              : Array.isArray(data)
+                ? data.length
+                : d.v2 && typeof d.v2 === 'object' && (d.v2 as Record<string, unknown>).entries && typeof (d.v2 as Record<string, unknown>).entries === 'object'
+                  ? Object.keys((d.v2 as { entries: object }).entries).length
+                  : 0;
+        const componentCount = Array.isArray(d.components) ? d.components.length : 0;
+        return {
+          ok: true,
+          endpointPath: path,
+          endpointUrl: baseUrl + path,
+          entryCount: storyCount + componentCount,
+          storyCount,
+          componentCount,
+          checkedVia: 'client',
+        };
+      }
     } catch {
       // CORS, network, timeout: try next URL
     }
@@ -101,6 +125,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   isSbConnected,
   storybookUrl,
   storybookToken,
+  storybookConnectionInfo,
   handleConnectSb,
   fetchCheckStorybook,
   onDisconnectSb,
@@ -117,6 +142,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   layerSelectionFeedback,
   handleSyncItem,
   handleSyncAll,
+  onConnectSourceProvider,
   lastSyncAllDate
 }) => {
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
@@ -128,6 +154,13 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [isPresetOpen, setIsPresetOpen] = useState(false);
 
   const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
+
+  const getDriftBadgeClass = (status: string) => {
+    if (status === 'POTENTIAL_MATCH') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    if (status === 'NAME_MISMATCH') return 'bg-blue-100 text-blue-700 border-blue-200';
+    if (status === 'VARIANT_MISMATCH') return 'bg-purple-100 text-purple-700 border-purple-200';
+    return 'bg-red-100 text-red-600 border-red-200';
+  };
 
   const handleScanClick = () => {
     handleSyncScan();
@@ -141,23 +174,23 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     setConnectError(null);
     setIsConnecting(true);
     try {
-      let result: { ok: boolean; error?: string };
+      let result: ({ ok: boolean; error?: string } & StorybookConnectionInfo);
       let origin: string;
       try {
         origin = new URL(url).origin;
       } catch {
         origin = '';
       }
-      const canFetchFromClient = CLIENT_ALLOWED_STORYBOOK_ORIGINS.has(origin);
+      const canFetchFromClient = !token && CLIENT_ALLOWED_STORYBOOK_ORIGINS.has(origin);
       if (canFetchFromClient) {
-        result = await checkStorybookFromClient(url, token);
+        result = await checkStorybookFromClient(url);
         if (!result.ok && fetchCheckStorybook) result = await fetchCheckStorybook(url, token);
       } else {
-        // URL custom: il dominio non è in manifest → solo backend (il server fa fetch allo Storybook)
+        // URL custom o token privato: solo backend. I token non passano mai dal browser/plugin fetch.
         result = fetchCheckStorybook ? await fetchCheckStorybook(url, token) : { ok: false, error: 'Backend not available.' };
       }
       if (result.ok) {
-        handleConnectSb(url, token);
+        handleConnectSb(url, token, result);
         if (url !== raw) setConnectInput(url);
       } else {
         setConnectError(result.error || 'Connection failed.');
@@ -278,7 +311,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         onChange={(e) => setTokenInput(e.target.value)}
                         className="w-full border-2 border-black px-3 py-2 text-xs font-mono placeholder:text-gray-400 outline-none"
                       />
-                      <p className="text-[9px] text-gray-400 mt-0.5">Sent as <code className="bg-gray-100 px-0.5">Authorization: Bearer &lt;token&gt;</code> when fetching stories.</p>
+                      <p className="text-[9px] text-gray-400 mt-0.5">Paste either the raw token or <code className="bg-gray-100 px-0.5">Bearer &lt;token&gt;</code>. Private checks run through the backend only.</p>
                     </div>
                   )}
                   <p className="text-[10px] text-gray-500">If your build doesn’t expose GET /api/stories yet, add <strong>storybook-api</strong> to your project (same URL will then work). Use ngrok for local.</p>
@@ -317,15 +350,23 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               ) : (
                 <div>
                   {storybookUrl && (
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-[10px] text-gray-500 font-mono truncate flex-1" title={storybookUrl}>
-                        Connected: {storybookUrl}
-                      </p>
+                    <div className="mb-2">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] text-gray-500 font-mono truncate flex-1" title={storybookUrl}>
+                          Connected: {storybookUrl}
+                        </p>
                       {onDisconnectSb && (
                         <button onClick={onDisconnectSb} className="text-[10px] font-bold underline hover:text-[#ff90e8] ml-1">
                           Change
                         </button>
                       )}
+                      </div>
+                      {storybookConnectionInfo?.endpointPath ? (
+                        <p className="mt-1 text-[9px] font-bold uppercase text-gray-500">
+                          Found {storybookConnectionInfo.entryCount ?? 0} entries from <code className="bg-gray-100 px-1">{storybookConnectionInfo.endpointPath}</code>
+                          {storybookConnectionInfo.checkedVia ? ` via ${storybookConnectionInfo.checkedVia}` : ''}
+                        </p>
+                      ) : null}
                     </div>
                   )}
                   {syncScanError && (
@@ -406,7 +447,9 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                     <div className="flex items-center gap-2">
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-[8px] bg-red-100 text-red-600 px-1 font-bold border border-red-200 uppercase">DRIFT</span>
+                                                <span className={`text-[8px] px-1 font-bold border uppercase ${getDriftBadgeClass(item.status)}`}>
+                                                  {item.status.replace(/_/g, ' ')}
+                                                </span>
                                                 <span className="font-bold text-xs">{item.name}</span>
                                             </div>
                                             <div className="text-[10px] text-gray-500 font-mono">Last Edit: {item.lastEdited}</div>
@@ -420,6 +463,24 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                         <p className="text-xs font-medium mb-4 leading-relaxed">
                                             Issue: {item.desc}.<br/>Action: Sync to resolve drift.
                                         </p>
+                                        <div className="mb-3 space-y-1 border border-dashed border-gray-300 bg-gray-50 p-2 text-[10px] text-gray-600">
+                                          {item.reason ? <p><strong>Why:</strong> {item.reason}</p> : null}
+                                          {item.confidence ? <p><strong>Confidence:</strong> {item.confidence}</p> : null}
+                                          {item.figmaName ? <p><strong>Figma:</strong> {item.figmaName}</p> : null}
+                                          {item.storybookName ? <p><strong>Storybook:</strong> {item.storybookName}</p> : null}
+                                          {item.suggestedAction ? <p><strong>Suggested:</strong> {item.suggestedAction}</p> : null}
+                                          {item.storybookUrl ? (
+                                            <a
+                                              href={item.storybookUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="block font-bold underline hover:text-[#ff90e8]"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              Open Storybook story
+                                            </a>
+                                          ) : null}
+                                        </div>
                                         <div className="flex gap-2">
                                             <button 
                                                 onClick={(e) => handleSelectLayer(item.id, item.layerId ?? null, e)}
@@ -432,11 +493,14 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                                 variant="primary"
                                                 layout="row"
                                                 size="sm"
-                                                onClick={(e) => handleSyncItem(item.id, e)}
+                                                onClick={(e) => handleSyncItem(item, e)}
+                                                disabled={!item.syncAction}
                                                 className="flex-1 h-12 relative"
                                             >
-                                                Sync Fix
-                                                <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-5 Credits</span>
+                                                {item.syncAction ? 'Apply in Figma' : 'Manual Review'}
+                                                {item.syncAction ? (
+                                                  <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-5 Credits</span>
+                                                ) : null}
                                             </Button>
                                         </div>
                                     </div>
@@ -449,19 +513,24 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
                       {syncItems.length > 0 && (
                         <>
-                          <p className="text-[10px] text-gray-600 mb-2 px-1">
-                            To push changes to your code, connect a Git repository (GitHub or Bitbucket). Don&apos;t have a repo? Create one and link your Storybook to it.
-                          </p>
+                          <div className="mb-2 space-y-1 border border-dashed border-gray-300 bg-gray-50 p-2 text-[10px] text-gray-600">
+                            <p>
+                              <strong>Sync All needs the source repo.</strong> Storybook tells us what is live, but code changes must be applied to the repository or source that builds it.
+                            </p>
+                            <p>
+                              Connect GitHub, Bitbucket, GitLab or a custom source, then we can push fixes on the right side.
+                            </p>
+                          </div>
                           <Button
                             variant="primary"
                             fullWidth
                             layout="row"
-                            onClick={handleSyncAll}
+                            onClick={onConnectSourceProvider ?? handleSyncAll}
                             className="relative h-12"
                           >
                             <span>Sync All</span>
                             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
-                               -{syncItems.length * 5} Credits
+                              Connect Source
                             </span>
                           </Button>
                         </>

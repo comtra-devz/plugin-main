@@ -2556,6 +2556,97 @@ figma.ui.onmessage = async (raw: any) => {
     }
   }
 
+  if (msg.type === 'apply-sync-drift-action') {
+    const requestId = String(msg.requestId || '');
+    const itemId = String(msg.itemId || '');
+    const action = msg.action && typeof msg.action === 'object' ? msg.action : null;
+    const reply = (ok: boolean, payload: Record<string, unknown> = {}) => {
+      figma.ui.postMessage({
+        type: 'sync-drift-action-result',
+        requestId,
+        itemId,
+        ok,
+        ...payload,
+      });
+    };
+
+    try {
+      if (!action) {
+        reply(false, { error: 'No sync action available for this drift.' });
+        return;
+      }
+
+      if (action.kind === 'rename_figma') {
+        const layerId = typeof action.layerId === 'string' ? action.layerId.trim() : '';
+        const targetName = typeof action.targetName === 'string' ? action.targetName.trim() : '';
+        if (!layerId || !targetName) {
+          reply(false, { error: 'Missing layer or target name.' });
+          return;
+        }
+        const node = await figma.getNodeByIdAsync(layerId);
+        if (!node || !('name' in node)) {
+          reply(false, { error: 'Figma layer not found.' });
+          return;
+        }
+        const oldName = node.name;
+        node.name = targetName;
+        await selectLayerAndReveal(layerId);
+        figma.notify(`Renamed "${oldName}" → "${targetName}"`);
+        reply(true, { removeItem: true, message: 'Figma layer renamed.' });
+        return;
+      }
+
+      if (action.kind === 'create_figma_placeholder') {
+        const targetName = typeof action.targetName === 'string' ? action.targetName.trim() : '';
+        const storybookUrl = typeof action.storybookUrl === 'string' ? action.storybookUrl.trim() : '';
+        if (!targetName) {
+          reply(false, { error: 'Missing component name.' });
+          return;
+        }
+
+        const component = figma.createComponent();
+        component.name = targetName;
+        component.resizeWithoutConstraints(180, 80);
+        component.x = figma.viewport.center.x - 90;
+        component.y = figma.viewport.center.y - 40;
+        component.fills = [{ type: 'SOLID', color: { r: 1, g: 0.788, b: 0 } }];
+        component.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+        component.strokeWeight = 2;
+        if ('description' in component) {
+          component.description = storybookUrl
+            ? `Placeholder generated from Storybook drift: ${storybookUrl}`
+            : 'Placeholder generated from Storybook drift.';
+        }
+
+        try {
+          await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+          const label = figma.createText();
+          label.characters = targetName;
+          label.fontName = { family: 'Inter', style: 'Bold' };
+          label.fontSize = 12;
+          label.fills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+          label.x = 12;
+          label.y = 30;
+          component.appendChild(label);
+        } catch {
+          // Component placeholder is still useful without a label.
+        }
+
+        figma.currentPage.appendChild(component);
+        await selectLayerAndReveal(component.id);
+        figma.notify(`Created Figma placeholder "${targetName}"`);
+        reply(true, { removeItem: true, layerId: component.id, message: 'Figma placeholder created.' });
+        return;
+      }
+
+      reply(false, { error: 'Unsupported sync action.' });
+    } catch (e) {
+      console.error('[apply-sync-drift-action]', e);
+      reply(false, { error: e instanceof Error ? e.message : String(e) });
+    }
+    return;
+  }
+
   if (msg.type === 'get-contrast-fix-preview') {
     const layerId = msg.layerId;
     if (layerId) {

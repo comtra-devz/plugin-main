@@ -15,6 +15,7 @@ import {
 import { getSystemToastOptions } from '../lib/errorCopy';
 import { SyncScanRateLimitedError } from '../lib/syncScanRateLimitedError';
 import type { SyncSnapshot } from '../types';
+import type { StorybookConnectionInfo, SyncDriftItem } from './Code/types';
 import { collectSubtreeNodeIds, exportLocalDeepCode } from '../services/localDeepCodeExport';
 
 interface Props {
@@ -36,8 +37,11 @@ interface Props {
     scope?: string;
     page_id?: string;
     page_ids?: string[];
-  }) => Promise<{ items: Array<{ id: string; name: string; status: string; lastEdited: string; desc: string; layerId?: string | null }>; connectionStatus?: string }>;
-  fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string }>;
+  }) => Promise<{
+    items: SyncDriftItem[];
+    connectionStatus?: string;
+  }>;
+  fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo>;
   /** POST /api/agents/code-gen — subtree from plugin + format → code */
   fetchCodeGen?: (body: {
     format: string;
@@ -109,6 +113,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [isSbConnected, setIsSbConnected] = useState(false);
   const [storybookUrl, setStorybookUrl] = useState<string | null>(null);
   const [storybookToken, setStorybookToken] = useState<string | null>(null);
+  const [storybookConnectionInfo, setStorybookConnectionInfo] = useState<StorybookConnectionInfo | null>(null);
   const [isSyncScanning, setIsSyncScanning] = useState(false);
   const [syncItems, setSyncItems] = useState<typeof SYNC_ITEMS_MOCK>([]);
   const [syncScanError, setSyncScanError] = useState<string | null>(null);
@@ -126,6 +131,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
   // Sync scan: waiting for sync-snapshot-result from plugin
   const pendingSyncScanRef = useRef(false);
+  const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
   const isPro = plan === 'PRO';
@@ -179,6 +185,21 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         return;
       }
 
+      if (msg.type === 'sync-drift-action-result') {
+        const requestId = String(msg.requestId || '');
+        const cb = pendingSyncActionRef.current.get(requestId);
+        if (cb) {
+          pendingSyncActionRef.current.delete(requestId);
+          cb({
+            ok: msg.ok === true,
+            itemId: msg.itemId ? String(msg.itemId) : undefined,
+            error: msg.error ? String(msg.error) : undefined,
+            message: msg.message ? String(msg.message) : undefined,
+          });
+        }
+        return;
+      }
+
       // --- Sync Scan: plugin-built sync_snapshot (no full file JSON, no backend Figma REST) ---
       if (msg.type === 'sync-snapshot-result' && pendingSyncScanRef.current) {
         pendingSyncScanRef.current = false;
@@ -190,7 +211,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           return;
         }
         const snap = msg.sync_snapshot as SyncSnapshot | undefined;
-        if (!snap || !Array.isArray(snap.components) || snap.components.length === 0) {
+        const hasDesignEntries =
+          (Array.isArray(snap?.components) && snap.components.length > 0) ||
+          (Array.isArray(snap?.instances) && snap.instances.length > 0);
+        if (!snap || !hasDesignEntries) {
           const opts = getSystemToastOptions('file_link_unavailable');
           setSyncScanError(opts.description ?? opts.title);
           setSyncScanUpgradeUrl(null);
@@ -312,6 +336,25 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         resolve(v);
       };
       window.parent.postMessage({ pluginMessage: { type: 'get-code-gen-subtree' } }, '*');
+    });
+
+  const requestSyncDriftAction = (item: SyncDriftItem) =>
+    new Promise<{ ok: boolean; itemId?: string; error?: string; message?: string }>((resolve) => {
+      const requestId = `sync-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      pendingSyncActionRef.current.set(requestId, resolve);
+      window.parent.postMessage({
+        pluginMessage: {
+          type: 'apply-sync-drift-action',
+          requestId,
+          itemId: item.id,
+          action: item.syncAction ?? null,
+        },
+      }, '*');
+      window.setTimeout(() => {
+        if (!pendingSyncActionRef.current.has(requestId)) return;
+        pendingSyncActionRef.current.delete(requestId);
+        resolve({ ok: false, itemId: item.id, error: 'Timeout applying sync action.' });
+      }, 20000);
     });
 
   const getRawCss = () => {
@@ -543,9 +586,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   // Sync Logic
-  const handleConnectSb = (url: string, token?: string) => {
+  const handleConnectSb = (url: string, token?: string, info?: StorybookConnectionInfo | null) => {
     setStorybookUrl(url);
     setStorybookToken(token ?? null);
+    setStorybookConnectionInfo(info ?? null);
     setIsSbConnected(true);
     setSyncScanError(null);
     setSyncScanUpgradeUrl(null);
@@ -555,6 +599,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setIsSbConnected(false);
     setStorybookUrl(null);
     setStorybookToken(null);
+    setStorybookConnectionInfo(null);
     setSyncScanError(null);
     setSyncScanUpgradeUrl(null);
     setHasSyncScanned(false);
@@ -605,7 +650,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     }
   };
 
-  const handleSyncItem = async (id: string, e?: React.MouseEvent) => {
+  const handleSyncItem = async (item: SyncDriftItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!isPro && !useInfiniteCreditsForTest) {
       onUnlockRequest();
@@ -616,16 +661,29 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       onUnlockRequest();
       return;
     }
+    if (!item.syncAction) {
+      setSyncScanError('This drift needs manual review before it can be applied.');
+      setSyncScanUpgradeUrl(null);
+      return;
+    }
     const result = await consumeCredits({ action_type: 'sync_fix', credits_consumed: cost });
     if (result.error) {
       if (result.error === 'Insufficient credits') onUnlockRequest();
       return;
     }
-    setSyncItems((prev) => prev.filter((i) => i.id !== id));
+    const applied = await requestSyncDriftAction(item);
+    if (!applied.ok) {
+      setSyncScanError(applied.error || 'Could not apply sync fix.');
+      setSyncScanUpgradeUrl(null);
+      return;
+    }
+    setSyncScanError(null);
+    setSyncItems((prev) => prev.filter((i) => i.id !== item.id));
   };
 
   const handleSyncAll = async () => {
-    const count = syncItems.length;
+    const actionableItems = syncItems.filter((item) => item.syncAction);
+    const count = actionableItems.length;
     if (count === 0) return;
     if (!isPro && !useInfiniteCreditsForTest) {
       onUnlockRequest();
@@ -641,10 +699,27 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       if (result.error === 'Insufficient credits') onUnlockRequest();
       return;
     }
-    setSyncItems([]);
+    const appliedIds: string[] = [];
+    for (const item of actionableItems) {
+      const applied = await requestSyncDriftAction(item);
+      if (applied.ok) appliedIds.push(item.id);
+    }
+    if (appliedIds.length === 0) {
+      setSyncScanError('No safe Figma fixes could be applied.');
+      setSyncScanUpgradeUrl(null);
+      return;
+    }
+    setSyncScanError(null);
+    setSyncItems((prev) => prev.filter((item) => !appliedIds.includes(item.id)));
     setLastSyncAllDate(new Date());
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), 2000);
+  };
+
+  const handleConnectSourceProvider = () => {
+    // Internal repo-source wizard is the required next step for code-side Sync All.
+    setSyncScanError('Connect Source wizard is coming next: choose GitHub, Bitbucket, GitLab, or a custom source for the Storybook repository.');
+    setSyncScanUpgradeUrl(null);
   };
 
   return (
@@ -751,6 +826,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             isSbConnected={isSbConnected}
             storybookUrl={storybookUrl}
             storybookToken={storybookToken}
+            storybookConnectionInfo={storybookConnectionInfo}
             handleConnectSb={handleConnectSb}
             fetchCheckStorybook={fetchCheckStorybook}
             onDisconnectSb={handleDisconnectSb}
@@ -767,6 +843,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             layerSelectionFeedback={layerSelectionFeedback}
             handleSyncItem={handleSyncItem}
             handleSyncAll={handleSyncAll}
+            onConnectSourceProvider={handleConnectSourceProvider}
             lastSyncAllDate={lastSyncAllDate}
         />
       )}

@@ -1846,6 +1846,7 @@ export const Generate: React.FC<Props> = ({
     showPreflight,
     showRefinementChips,
     refineChipsHiddenByComposer,
+    liveReasoningLines,
   ]);
 
   /** Solo mentre aspettiamo contesto/modello — non durante canvas/crediti (altrimenti puntini “fantasma” col messaggio già pronto). */
@@ -1933,11 +1934,6 @@ export const Generate: React.FC<Props> = ({
                     <span className="text-gray-500">Design system</span>
                     <span aria-hidden>·</span>
                     <span className="truncate">{selectedSystemDisplayName}</span>
-                    {usesFileDs ? (
-                      <span className="shrink-0 border border-black bg-[#ffc900] px-1 py-0.5 text-[8px] leading-none text-black">
-                        Current
-                      </span>
-                    ) : null}
                   </span>
                   <span className="flex h-full items-center leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
