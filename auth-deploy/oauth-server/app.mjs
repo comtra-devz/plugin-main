@@ -468,6 +468,13 @@ function getFlowStore() {
 
 const app = express();
 app.use(cookieParser());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Key, X-Requested-With, Accept');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  return next();
+});
 // JWT in header (no credentialed cookies) → `origin: *` is safe. Include PATCH for profile / Vercel.
 // Figma plugin UI us `Origin: null` (data: URL); * risolve il preflight.
 app.use(

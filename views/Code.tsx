@@ -131,6 +131,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
   // Sync scan: waiting for sync-snapshot-result from plugin
   const pendingSyncScanRef = useRef(false);
+  const pendingSyncScanTimeoutRef = useRef<number | null>(null);
   const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
@@ -203,6 +204,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       // --- Sync Scan: plugin-built sync_snapshot (no full file JSON, no backend Figma REST) ---
       if (msg.type === 'sync-snapshot-result' && pendingSyncScanRef.current) {
         pendingSyncScanRef.current = false;
+        clearPendingSyncScanTimeout();
         if (msg.error) {
           setSyncScanError(String(msg.error));
           setSyncScanUpgradeUrl(null);
@@ -223,7 +225,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           return;
         }
         (async () => {
-          if (!fetchSyncScan || !storybookUrl) return;
+          if (!fetchSyncScan || !storybookUrl) {
+            setIsSyncScanning(false);
+            return;
+          }
           try {
             const result = await fetchSyncScan({
               sync_snapshot: snap,
@@ -308,6 +313,12 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   const startCooldown = (key: string) => {
     setCooldowns(prev => ({ ...prev, [key]: Date.now() + COOLDOWN_MS }));
+  };
+
+  const clearPendingSyncScanTimeout = () => {
+    if (pendingSyncScanTimeoutRef.current == null) return;
+    window.clearTimeout(pendingSyncScanTimeoutRef.current);
+    pendingSyncScanTimeoutRef.current = null;
   };
 
   const handleAction = (action: () => void, requiresCredit = false) => {
@@ -600,6 +611,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setStorybookUrl(null);
     setStorybookToken(null);
     setStorybookConnectionInfo(null);
+    clearPendingSyncScanTimeout();
+    pendingSyncScanRef.current = false;
+    setIsSyncScanning(false);
     setSyncScanError(null);
     setSyncScanUpgradeUrl(null);
     setHasSyncScanned(false);
@@ -641,8 +655,19 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
         return;
       }
+      clearPendingSyncScanTimeout();
+      pendingSyncScanTimeoutRef.current = window.setTimeout(() => {
+        if (!pendingSyncScanRef.current) return;
+        pendingSyncScanRef.current = false;
+        pendingSyncScanTimeoutRef.current = null;
+        setIsSyncScanning(false);
+        setSyncItems([]);
+        setSyncScanUpgradeUrl(null);
+        setSyncScanError('Sync scan timed out while reading Figma. Try again, or reduce the file scope if the file is very large.');
+      }, 45000);
       window.parent.postMessage({ pluginMessage: { type: 'get-sync-snapshot' } }, '*');
     } catch (err) {
+      clearPendingSyncScanTimeout();
       setSyncScanError(err instanceof Error ? err.message : 'Scan failed');
       setSyncScanUpgradeUrl(null);
       setIsSyncScanning(false);

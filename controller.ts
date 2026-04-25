@@ -2202,7 +2202,7 @@ figma.ui.onmessage = async (raw: any) => {
             const description =
               'description' in node &&
               typeof (node as { description?: unknown }).description === 'string'
-                ? String((node as { description: string }).description)
+                ? String((node as { description: string }).description).slice(0, 240)
                 : '';
             const parent = node.parent;
             const inSet = parent && parent.type === 'COMPONENT_SET';
@@ -2219,41 +2219,23 @@ figma.ui.onmessage = async (raw: any) => {
             });
           }
 
-          const instanceNodes = figma.root.findAllWithCriteria({ types: ['INSTANCE'] }) as InstanceNode[];
-          const INSTANCE_MAIN_BATCH = 24;
           const instances: Array<{ id: string; name: string; mainComponentName: string | null }> = [];
-          for (let b = 0; b < instanceNodes.length; b += INSTANCE_MAIN_BATCH) {
-            const slice = instanceNodes.slice(b, b + INSTANCE_MAIN_BATCH);
-            const batch = await Promise.all(
-              slice.map(async (inst) => {
-                const main = await getMainComponentSafe(inst);
-                return {
-                  id: inst.id,
-                  name: inst.name,
-                  mainComponentName: main ? main.name : null,
-                };
-              }),
-            );
-            instances.push(...batch);
+          if (components.length === 0) {
+            // Fallback for files that only consume library instances. Avoid getMainComponentAsync for every
+            // instance here: it can stall large files under dynamic-page access.
+            const instanceNodes = figma.root.findAllWithCriteria({ types: ['INSTANCE'] }) as InstanceNode[];
+            for (const inst of instanceNodes.slice(0, 500)) {
+              instances.push({
+                id: inst.id,
+                name: inst.name,
+                mainComponentName: null,
+              });
+            }
           }
 
+          // Not used by the current Storybook drift matcher. Keep empty to avoid large POST bodies
+          // that can be rejected before CORS headers are added by the backend platform.
           const styles: Array<{ key: string; name: string; type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID' }> = [];
-          const pushStyle = (s: BaseStyle, type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID') => {
-            const k = 'key' in s && typeof (s as BaseStyle & { key?: string }).key === 'string' && (s as { key: string }).key
-              ? (s as { key: string }).key
-              : s.id;
-            styles.push({ key: k, name: s.name, type });
-          };
-          const [paintStyles, textStyles, effectStyles, gridStyles] = await Promise.all([
-            figma.getLocalPaintStylesAsync(),
-            figma.getLocalTextStylesAsync(),
-            figma.getLocalEffectStylesAsync(),
-            figma.getLocalGridStylesAsync(),
-          ]);
-          for (const s of paintStyles) pushStyle(s, 'FILL');
-          for (const s of textStyles) pushStyle(s, 'TEXT');
-          for (const s of effectStyles) pushStyle(s, 'EFFECT');
-          for (const s of gridStyles) pushStyle(s, 'GRID');
 
           figma.ui.postMessage({
             type: 'sync-snapshot-result',

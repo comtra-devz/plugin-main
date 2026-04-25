@@ -1313,9 +1313,25 @@ export default function AppTest() {
     }) => {
       if (!user?.authToken) return { items: [], connectionStatus: 'ok' };
       const base = { storybook_url: body.storybook_url, storybook_token: body.storybook_token };
+      const slimSyncSnapshot = body.sync_snapshot
+        ? {
+            fileKey: body.sync_snapshot.fileKey,
+            fileName: body.sync_snapshot.fileName,
+            pages: body.sync_snapshot.pages,
+            components: (body.sync_snapshot.components || []).map((c) => ({
+              key: c.key,
+              name: c.name,
+              pageId: c.pageId,
+              variantProperties: c.variantProperties,
+              description: c.description ? c.description.slice(0, 240) : '',
+            })),
+            instances: (body.sync_snapshot.instances || []).slice(0, 500),
+            styles: [],
+          }
+        : undefined;
       const payload =
-        body.sync_snapshot && typeof body.sync_snapshot === 'object'
-          ? { ...base, sync_snapshot: body.sync_snapshot }
+        slimSyncSnapshot && typeof slimSyncSnapshot === 'object'
+          ? { ...base, sync_snapshot: slimSyncSnapshot }
           : body.file_json
             ? { ...base, file_json: body.file_json }
             : { ...base, file_key: body.file_key, scope: body.scope, page_id: body.page_id, page_ids: body.page_ids };
