@@ -458,6 +458,15 @@ export const Generate: React.FC<Props> = ({
   const dsGateBlocked = usesFileDs && (!catalogReady || dsImportBusy);
   /** Custom (Current): hide the full composer until the step-by-step DS import is done. */
   const showGenerateComposer = !usesFileDs || catalogReady;
+  const isFileDesignSystemOption = useCallback(
+    (system: string) => system === availableSystems[0],
+    [availableSystems],
+  );
+  const displaySystemName = useCallback(
+    (system: string) => (isFileDesignSystemOption(system) ? (genFileName?.trim() || 'Custom') : system),
+    [genFileName, isFileDesignSystemOption],
+  );
+  const selectedSystemDisplayName = displaySystemName(selectedSystem);
 
   const runCanvasApply = useCallback(
     async (actionPlan: object, opts?: { modifyMode?: boolean }) => {
@@ -863,11 +872,11 @@ export const Generate: React.FC<Props> = ({
     ? [
         `Keep "${selectedLayerName}" structure but improve spacing and typography hierarchy.`,
         `Adapt "${selectedLayerName}" for mobile while preserving content priority.`,
-        `Create two stronger variants for "${selectedLayerName}" aligned to ${selectedSystem}.`,
+        `Create two stronger variants for "${selectedLayerName}" aligned to ${selectedSystemDisplayName}.`,
       ]
     : screenshotAttachment
       ? [
-          `Recreate this screenshot using ${selectedSystem} tokens and components.`,
+          `Recreate this screenshot using ${selectedSystemDisplayName} tokens and components.`,
           'Keep layout intent, but simplify visual density and improve contrast.',
           userTier === 'PRO'
             ? 'Generate two alternatives: one safe and one exploratory.'
@@ -905,11 +914,11 @@ export const Generate: React.FC<Props> = ({
       return [
         `Goal: ${base}`,
         context,
-        `DS: ${selectedSystem} (Comtra applies the catalog during Generate — add only screen-specific detail here).`,
+        `DS: ${selectedSystemDisplayName}${usesFileDs ? ' — current file catalog' : ''}. Comtra applies the catalog during Generate — add only screen-specific detail here.`,
         'Add if missing: viewport, must-have sections/components, copy tone, edge states (empty/error). Skip generic “use DS / WCAG / spacing” advice.',
       ].join('\n');
     },
-    [hasSelection, selectedLayerName, selectedNode?.type, screenshotAttachment, selectedSystem]
+    [hasSelection, selectedLayerName, selectedNode?.type, screenshotAttachment, selectedSystemDisplayName, usesFileDs]
   );
 
   /** After Enhance, if DS/context changes, rewrite the terminal without mixing versions. */
@@ -1141,7 +1150,7 @@ export const Generate: React.FC<Props> = ({
           'Understanding the request and preparing generation context...',
           usesFileDs
             ? 'Checking the imported Custom (Current) design-system snapshot.'
-            : `Checking ${selectedSystem} as the active style reference.`,
+            : `Checking ${selectedSystemDisplayName} as the active style reference.`,
           hasSelection ? 'Selection detected: I will preserve structure and improve the selected layer.' : '',
           screenshotAttachment ? 'Reference image detected: I will extract visual hierarchy before mapping components.' : '',
           'Requesting file access and validating the current Figma document.',
@@ -1385,6 +1394,7 @@ export const Generate: React.FC<Props> = ({
       screenshotAttachment,
       fetchGenerate,
       selectedSystem,
+      selectedSystemDisplayName,
       runCanvasApply,
       completeGenerateTurn,
       consumeCredits,
@@ -1782,7 +1792,10 @@ export const Generate: React.FC<Props> = ({
   };
 
   // Filter Design Systems
-  const filteredSystems = availableSystems.filter(s => s.toLowerCase().includes(systemSearch.toLowerCase()));
+  const filteredSystems = availableSystems.filter((s) => {
+    const query = systemSearch.toLowerCase();
+    return s.toLowerCase().includes(query) || displaySystemName(s).toLowerCase().includes(query);
+  });
 
   const dsCardHeaderRight =
     usesFileDs && genFileName ? (
@@ -1916,8 +1929,15 @@ export const Generate: React.FC<Props> = ({
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
                   className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 text-left text-xs font-black uppercase"
                 >
-                  <span className="flex h-full min-w-0 items-center truncate leading-none">
-                    <span className="text-gray-500">Design system</span> · {selectedSystem}
+                  <span className="flex h-full min-w-0 items-center gap-1.5 truncate leading-none">
+                    <span className="text-gray-500">Design system</span>
+                    <span aria-hidden>·</span>
+                    <span className="truncate">{selectedSystemDisplayName}</span>
+                    {usesFileDs ? (
+                      <span className="shrink-0 border border-black bg-[#ffc900] px-1 py-0.5 text-[8px] leading-none text-black">
+                        Current
+                      </span>
+                    ) : null}
                   </span>
                   <span className="flex h-full items-center leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
@@ -1945,9 +1965,14 @@ export const Generate: React.FC<Props> = ({
                         setIsSystemOpen(false);
                         setSystemSearch('');
                       }}
-                      className={`${brutalSelectOptionRowClass} ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                      className={`${brutalSelectOptionRowClass} flex items-center justify-between gap-2 ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
                     >
-                      {sys}
+                      <span className="min-w-0 truncate">{displaySystemName(sys)}</span>
+                      {isFileDesignSystemOption(sys) ? (
+                        <span className="ml-2 shrink-0 border border-current px-1 py-0.5 text-[8px] leading-none">
+                          Current
+                        </span>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -2373,7 +2398,7 @@ export const Generate: React.FC<Props> = ({
                 <div className="space-y-3">
                     <div className="flex items-start gap-2">
                         <span className="text-green-500 font-bold">✓</span>
-                        <p className="text-[10px] text-gray-600">Generated using <strong>{selectedSystem}</strong> conventions.</p>
+                        <p className="text-[10px] text-gray-600">Generated using <strong>{selectedSystemDisplayName}</strong> conventions.</p>
                     </div>
                     <div className="flex items-start gap-2">
                         <span className="text-green-500 font-bold">✓</span>

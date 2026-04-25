@@ -29,7 +29,10 @@ export type IntentResult = {
 };
 
 export function classifyIntent(input: string): IntentResult {
-  const t = input
+  const raw = String(input || '');
+  const goalLine = raw.match(/^\s*goal\s*:\s*([^\n]+)/i)?.[1];
+  const intentInput = goalLine && goalLine.trim().length > 0 ? goalLine : raw;
+  const t = intentInput
     .toLowerCase()
     .replace(/[!?.,;:]+/g, ' ')
     .replace(/\s+/g, ' ')
