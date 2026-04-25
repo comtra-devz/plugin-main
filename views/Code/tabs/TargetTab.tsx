@@ -32,11 +32,11 @@ export const TargetTab: React.FC<TargetTabProps> = ({
   setLastSyncedComp,
   isPro,
   onUnlockRequest,
-  isSbConnected,
-  proCodeGenAiCredits
+  isSbConnected
 }) => {
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
-  const [showProAiInfo, setShowProAiInfo] = useState(false);
+  const [showAiInfo, setShowAiInfo] = useState(false);
+  const [aiPowered, setAiPowered] = useState(false);
 
   return (
     <div className="flex flex-col gap-4 animate-in slide-in-from-right-2">
@@ -98,31 +98,55 @@ export const TargetTab: React.FC<TargetTabProps> = ({
             </div>
 
             <div className="border-t border-black/10 pt-3 flex flex-col gap-2">
+              {isPro ? (
+                <div className="rounded border border-black/15 bg-gray-50 px-2 py-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-gray-700">AI Powered</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAiInfo(true)}
+                      className="w-4 h-4 rounded-full border border-gray-500 text-[10px] leading-none font-bold text-gray-600 hover:bg-white"
+                      aria-label="What AI Powered does"
+                    >
+                      i
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiPowered((prev) => !prev);
+                      setGeneratedCode(null);
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full border-2 border-black transition-colors ${
+                      aiPowered ? 'bg-[#ff90e8]' : 'bg-white'
+                    }`}
+                    aria-pressed={aiPowered}
+                    aria-label="Toggle AI Powered"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${
+                        aiPowered ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              ) : null}
+
               <Button
                 variant="primary"
                 fullWidth
                 layout="row"
-                onClick={handleGenerate}
+                onClick={() => handleGenerate({ aiPowered })}
                 disabled={isGenerating}
+                className="relative"
               >
-                {isGenerating ? 'Generating...' : 'Generate code'}
+                <span>{isGenerating ? 'Generating...' : 'Generate code'}</span>
+                {aiPowered && !isGenerating ? (
+                  <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">
+                    -3 Credits
+                  </span>
+                ) : null}
               </Button>
-              {isPro ? (
-                <div className="rounded border border-black/15 bg-gray-50 p-2 text-[9px] text-gray-600 leading-snug">
-                  <span className="text-gray-500">PRO export uses Kimi on the server</span>
-                  {proCodeGenAiCredits != null ? (
-                    <span className="text-[#b45309] font-bold"> · ~{proCodeGenAiCredits} credits</span>
-                  ) : null}
-                  <span className="text-gray-400"> · Optional Storybook hints when Sync layers match your selection.</span>
-                  <button
-                    type="button"
-                    className="mt-1 block text-left text-[9px] font-bold uppercase text-[#ff90e8] underline"
-                    onClick={() => setShowProAiInfo(true)}
-                  >
-                    How it works
-                  </button>
-                </div>
-              ) : null}
             </div>
           </>
         )}
@@ -190,17 +214,18 @@ export const TargetTab: React.FC<TargetTabProps> = ({
         </div>
       )}
 
-      {showProAiInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowProAiInfo(false)}>
+      {showAiInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAiInfo(false)}>
           <div className={`${BRUTAL.card} bg-white max-w-md w-full mx-4 p-4`} onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-black uppercase text-sm mb-2">PRO · Target export</h3>
-            <ul className="list-disc list-inside space-y-2 text-[11px] text-gray-700">
-              <li>Uses <strong>Kimi</strong> on Comtra servers to turn your <strong>full selection subtree</strong> into code.</li>
-              <li>Consumes credits per run (see estimate above). Connect Storybook in <strong>Sync</strong> first for better naming when layer IDs match.</li>
-              <li>Free tier instead uses a <strong>local deterministic</strong> exporter (no AI), still walking the whole tree.</li>
-            </ul>
+            <h3 className="font-black uppercase text-sm mb-2">AI Powered export</h3>
+            <p className="text-[11px] text-gray-700 leading-relaxed">
+              Get cleaner, more production-ready code in one click. AI Powered improves naming, organizes the output better, and helps shape a structure that is easier to read, edit, and ship faster.
+            </p>
+            <p className="mt-2 text-[11px] text-gray-700">
+              Cost: <strong>3 credits</strong> per generation.
+            </p>
             <div className="flex justify-end mt-4">
-              <Button variant="secondary" onClick={() => setShowProAiInfo(false)} className="text-xs">
+              <Button variant="secondary" onClick={() => setShowAiInfo(false)} className="text-xs">
                 Close
               </Button>
             </div>

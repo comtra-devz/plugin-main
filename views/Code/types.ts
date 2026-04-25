@@ -35,7 +35,7 @@ export interface TargetTabProps {
   setGeneratedCode: (code: string | null) => void;
   copied: boolean;
   isGenerating: boolean;
-  handleGenerate: () => void;
+  handleGenerate: (opts?: { aiPowered?: boolean }) => void;
   handleCopy: () => void;
   handleSyncComp: (target: 'SB' | 'GH' | 'BB') => void;
   isSyncingComp: boolean;
@@ -45,8 +45,6 @@ export interface TargetTabProps {
   isPro: boolean;
   onUnlockRequest: () => void;
   isSbConnected: boolean;
-  /** Stima crediti per export PRO AI (Kimi), da GET estimate code_gen_ai */
-  proCodeGenAiCredits: number | null;
 }
 
 export interface StorybookConnectionInfo {

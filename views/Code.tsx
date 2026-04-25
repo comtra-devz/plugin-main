@@ -83,7 +83,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setGeneratedCode(null);
   }, [selectedNode?.id]);
   const [lang, setLang] = useState('REACT');
-  const [proCodeGenAiCredits, setProCodeGenAiCredits] = useState<number | null>(null);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -147,21 +146,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // If Storybook date is newer or equal to CSS/JSON date, we are synced.
   const isTokensSynced = lastSyncedStorybookDate && lastGeneratedCssDate && lastSyncedStorybookDate >= lastGeneratedCssDate;
   const isJsonSynced = lastSyncedStorybookDate && lastGeneratedJsonDate && lastSyncedStorybookDate >= lastGeneratedJsonDate;
-
-  useEffect(() => {
-    if (!isPro || activeTab !== 'TARGET') return;
-    let cancelled = false;
-    estimateCredits({ action_type: 'code_gen_ai' })
-      .then((r) => {
-        if (!cancelled) setProCodeGenAiCredits(r.estimated_credits ?? 40);
-      })
-      .catch(() => {
-        if (!cancelled) setProCodeGenAiCredits(40);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isPro, activeTab, estimateCredits]);
 
   // Timer Tick
   useEffect(() => {
@@ -398,7 +382,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   /** FREE: export locale ricorsivo. PRO: Kimi (code_gen_ai) + hint Storybook se disponibili. */
   const CODE_GEN_AI = 'code_gen_ai';
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (opts?: { aiPowered?: boolean }) => {
     if (!canUseFeature) {
       onUnlockRequest();
       return;
@@ -416,7 +400,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         return;
       }
 
-      if (!isPro) {
+      const aiPowered = !!opts?.aiPowered && isPro;
+      if (!aiPowered) {
         try {
           if (logFreeAction) await logFreeAction('code_gen_free');
         } catch {
@@ -431,8 +416,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         return;
       }
 
-      const { estimated_credits } = await estimateCredits({ action_type: CODE_GEN_AI });
-      const cost = estimated_credits ?? 40;
+      const cost = 3;
       if (!useInfiniteCreditsForTest && creditsRemaining !== null && creditsRemaining < cost) {
         onUnlockRequest();
         return;
@@ -837,7 +821,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             isPro={isPro}
             onUnlockRequest={onUnlockRequest}
             isSbConnected={isSbConnected}
-            proCodeGenAiCredits={proCodeGenAiCredits}
         />
       )}
 
