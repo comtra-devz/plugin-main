@@ -1,6 +1,15 @@
 
-import React, { useState } from 'react';
-import { SyncTabProps, BRUTAL, COLORS, type StorybookConnectionInfo } from '../types';
+import React, { useMemo, useState } from 'react';
+import {
+  SyncTabProps,
+  BRUTAL,
+  COLORS,
+  type SourceConnectionInput,
+  type SourceProvider,
+  type SourceScanResult,
+  type StorybookConnectionInfo,
+  type SyncDriftItem,
+} from '../types';
 import { Button } from '../../../components/ui/Button';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 import {
@@ -55,6 +64,95 @@ const STORYBOOK_LIST_PATHS = [
   '/storybook/index.json',
   '/api/storybook/stories',
 ];
+
+type SyncCategoryId = 'ALL' | 'MISSING' | 'NAMING' | 'VARIANTS' | 'SOURCE' | 'AUTO_FIXABLE' | 'MANUAL';
+type SourceWizardStep = 0 | 1 | 2 | 3 | 4 | 5;
+
+const SOURCE_PROVIDER_LABELS: Record<SourceProvider, string> = {
+  github: 'GitHub',
+  bitbucket: 'Bitbucket',
+  gitlab: 'GitLab',
+  custom: 'Custom source',
+};
+
+const SOURCE_WIZARD_STEPS = [
+  { title: 'Why', body: 'Storybook is read-only metadata. Sync All needs the source repository that builds it.' },
+  { title: 'Provider', body: 'Choose where the Storybook source repository lives.' },
+  { title: 'Auth', body: 'Connect provider permissions for repository scan. Write permissions come later for PRs.' },
+  { title: 'Repository', body: 'Add the repo URL, branch, and Storybook path used to build this deployment.' },
+  { title: 'Detect', body: 'Scan the source for Storybook config, stories, package manager, and component paths.' },
+  { title: 'Review', body: 'Confirm the source connection before running code-side sync.' },
+] as const;
+
+const SYNC_CATEGORY_META: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, { label: string; desc: string; tone: string }> = {
+  MISSING: {
+    label: 'Missing Coverage',
+    desc: 'Components or stories exist only on one side.',
+    tone: 'bg-red-50 border-red-200 text-red-700',
+  },
+  NAMING: {
+    label: 'Naming & Mapping',
+    desc: 'Likely matches need naming alignment or confirmation.',
+    tone: 'bg-blue-50 border-blue-200 text-blue-700',
+  },
+  VARIANTS: {
+    label: 'Variants & States',
+    desc: 'Variant values, states or story args do not line up.',
+    tone: 'bg-purple-50 border-purple-200 text-purple-700',
+  },
+  SOURCE: {
+    label: 'Source Setup',
+    desc: 'Repository/source connection required for code-side sync.',
+    tone: 'bg-yellow-50 border-yellow-300 text-yellow-800',
+  },
+};
+
+const FILTER_LABELS: Record<SyncCategoryId, string> = {
+  ALL: 'All',
+  MISSING: 'Missing',
+  NAMING: 'Naming',
+  VARIANTS: 'Variants',
+  SOURCE: 'Source',
+  AUTO_FIXABLE: 'Auto-fixable',
+  MANUAL: 'Manual',
+};
+
+const MAX_ITEMS_PER_SECTION = 80;
+
+function getSyncCategory(item: SyncDriftItem): Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'> {
+  if (item.status === 'NAME_MISMATCH' || item.status === 'POTENTIAL_MATCH') return 'NAMING';
+  if (item.status === 'VARIANT_MISMATCH') return 'VARIANTS';
+  return 'MISSING';
+}
+
+function getSyncHealthScore(items: SyncDriftItem[]): number {
+  if (items.length === 0) return 100;
+  const penalty = Math.min(95, Math.round(Math.log10(items.length + 1) * 28));
+  return Math.max(5, 100 - penalty);
+}
+
+function SourceWizardStepper({ currentStep }: { currentStep: SourceWizardStep }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 px-3 py-3 sm:grid-cols-6" role="navigation" aria-label="Connect source steps">
+      {SOURCE_WIZARD_STEPS.map((step, index) => {
+        const active = index === currentStep;
+        const complete = index < currentStep;
+        return (
+          <div key={step.title} className="flex flex-col items-center gap-1 text-center">
+            <div
+              className={`flex size-9 items-center justify-center border-2 border-black text-xs font-black shadow-[3px_3px_0_0_#000] ${
+                active ? 'bg-[#ff90e8]' : complete ? 'bg-[#ffc900]' : 'bg-white'
+              }`}
+            >
+              {index + 1}
+            </div>
+            <span className="text-[9px] font-black uppercase leading-tight">{step.title}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Verifica se il JSON di risposta contiene una lista stories/componenti in formato riconosciuto. */
 function isStorybookListResponse(data: unknown): boolean {
@@ -142,7 +240,16 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   layerSelectionFeedback,
   handleSyncItem,
   handleSyncAll,
-  onConnectSourceProvider,
+  sourceConnection,
+  sourceConnectionLoading,
+  sourceConnectionSaving,
+  sourceConnectionError,
+  sourceAuthStartUrl,
+  onLoadSourceConnection,
+  onSaveSourceConnection,
+  onDeleteSourceConnection,
+  onScanSourceConnection,
+  onStartSourceAuth,
   lastSyncAllDate
 }) => {
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
@@ -152,10 +259,82 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [isPresetOpen, setIsPresetOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<SyncCategoryId>('ALL');
+  const [sourceWizardOpen, setSourceWizardOpen] = useState(false);
+  const [sourceWizardStep, setSourceWizardStep] = useState<SourceWizardStep>(0);
+  const [sourceProvider, setSourceProvider] = useState<SourceProvider>('github');
+  const [sourceRepoUrl, setSourceRepoUrl] = useState('');
+  const [sourceBranch, setSourceBranch] = useState('main');
+  const [sourceStorybookPath, setSourceStorybookPath] = useState('');
+  const [sourceScanDraft, setSourceScanDraft] = useState<SourceScanResult | null>(null);
+  const [sourceWizardError, setSourceWizardError] = useState<string | null>(null);
 
   const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
+  const syncOverview = useMemo(() => {
+    const sections: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]> = {
+      MISSING: [],
+      NAMING: [],
+      VARIANTS: [],
+      SOURCE: [],
+    };
+    for (const item of syncItems) sections[getSyncCategory(item)].push(item);
+    if (syncItems.length > 0 && !sourceConnection) {
+      sections.SOURCE.push({
+        id: 'source-setup-required',
+        name: 'Connect source repository',
+        status: 'SOURCE_REQUIRED',
+        lastEdited: '—',
+        desc: 'Sync All requires the repository or source that builds this Storybook.',
+        reason: 'Storybook is read-only metadata. Code changes must be pushed to the source repository/provider.',
+        confidence: 'high',
+        suggestedAction: 'Connect GitHub, Bitbucket, GitLab, or a custom source before running Sync All.',
+        layerId: null,
+        syncAction: null,
+      });
+    } else if (syncItems.length > 0 && sourceConnection.status !== 'ready') {
+      sections.SOURCE.push({
+        id: 'source-setup-attention',
+        name: 'Source needs attention',
+        status: 'SOURCE_REQUIRED',
+        lastEdited: '—',
+        desc: 'The source repository is connected, but detection is not fully ready yet.',
+        reason: sourceConnection.scan?.issues?.[0] || 'Run source detection or review manual setup before code-side Sync All.',
+        confidence: sourceConnection.scan?.confidence || 'medium',
+        suggestedAction: 'Open Connect Source, run detection again, or confirm the Storybook path manually.',
+        layerId: null,
+        syncAction: null,
+      });
+    }
+    const autoFixable = syncItems.filter((item) => item.syncAction).length;
+    const manual = syncItems.length - autoFixable;
+    const score = getSyncHealthScore(syncItems);
+    return {
+      sections,
+      autoFixable,
+      manual,
+      score,
+      total: syncItems.length,
+    };
+  }, [syncItems, sourceConnection]);
+
+  const visibleSections = useMemo(() => {
+    const entries = Object.entries(syncOverview.sections) as Array<[Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]]>;
+    if (activeFilter === 'ALL') return entries.filter(([, items]) => items.length > 0);
+    if (activeFilter === 'AUTO_FIXABLE') {
+      return entries
+        .map(([id, items]) => [id, items.filter((item) => item.syncAction)] as const)
+        .filter(([, items]) => items.length > 0);
+    }
+    if (activeFilter === 'MANUAL') {
+      return entries
+        .map(([id, items]) => [id, items.filter((item) => !item.syncAction)] as const)
+        .filter(([, items]) => items.length > 0);
+    }
+    return [[activeFilter, syncOverview.sections[activeFilter]] as const].filter(([, items]) => items.length > 0);
+  }, [activeFilter, syncOverview]);
 
   const getDriftBadgeClass = (status: string) => {
+    if (status === 'SOURCE_REQUIRED') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
     if (status === 'POTENTIAL_MATCH') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
     if (status === 'NAME_MISMATCH') return 'bg-blue-100 text-blue-700 border-blue-200';
     if (status === 'VARIANT_MISMATCH') return 'bg-purple-100 text-purple-700 border-purple-200';
@@ -164,6 +343,65 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
   const handleScanClick = () => {
     handleSyncScan();
+  };
+
+  const resetSourceWizard = () => {
+    setSourceWizardStep(0);
+    setSourceProvider('github');
+    setSourceRepoUrl('');
+    setSourceBranch('main');
+    setSourceStorybookPath('');
+    setSourceScanDraft(null);
+    setSourceWizardError(null);
+  };
+
+  const openSourceWizard = () => {
+    if (sourceConnection) {
+      setSourceProvider(sourceConnection.provider);
+      setSourceRepoUrl(sourceConnection.repoUrl);
+      setSourceBranch(sourceConnection.branch);
+      setSourceStorybookPath(sourceConnection.storybookPath);
+      setSourceScanDraft(sourceConnection.scan ?? null);
+    }
+    setSourceWizardStep(0);
+    setSourceWizardError(null);
+    setSourceWizardOpen(true);
+  };
+
+  const sourceInput: SourceConnectionInput = {
+    provider: sourceProvider,
+    repoUrl: sourceRepoUrl.trim(),
+    branch: sourceBranch.trim() || 'main',
+    storybookPath: sourceStorybookPath.trim(),
+  };
+
+  const canContinueSourceWizard =
+    sourceWizardStep === 0 ||
+    sourceWizardStep === 1 ||
+    sourceWizardStep === 2 ||
+    (sourceWizardStep === 3 && sourceRepoUrl.trim().length > 0 && sourceBranch.trim().length > 0) ||
+    sourceWizardStep === 4 ||
+    sourceWizardStep === 5;
+
+  const runSourceDetection = async () => {
+    setSourceWizardError(null);
+    const scan = await onScanSourceConnection(sourceInput);
+    setSourceScanDraft(scan);
+    if (scan?.status === 'failed') {
+      setSourceWizardError(scan.issues?.[0] || 'Source detection failed.');
+    }
+    return scan;
+  };
+
+  const completeSourceWizard = async () => {
+    setSourceWizardError(null);
+    const saved = await onSaveSourceConnection(sourceInput);
+    if (!saved) {
+      setSourceWizardError('Could not save source connection.');
+      return;
+    }
+    setSourceScanDraft(saved.scan ?? sourceScanDraft);
+    setSourceWizardOpen(false);
   };
 
   const handleConnectClick = async () => {
@@ -418,11 +656,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   ) : (
                     <div>
-                      <div className="flex justify-between items-end mb-3">
-                        <span className="text-xs font-bold uppercase">Drift Detected</span>
-                        <span className="text-[10px] font-bold bg-[#ffc900] text-black px-1.5 py-0.5 rounded-sm border border-black">{syncItems.length} Violations</span>
-                      </div>
-                      
                       {syncItems.length === 0 ? (
                         <div className="text-center py-4 bg-green-50 border-2 border-green-200 border-dashed mb-4">
                           <span className="text-2xl block mb-1">🙌</span>
@@ -434,81 +667,147 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           )}
                         </div>
                       ) : (
-                        <div className="space-y-2 mb-4 max-h-[220px] overflow-y-auto">
-                          {syncItems.map(item => {
-                            const isExpanded = expandedDriftId === item.id;
-                            return (
-                              <div 
-                                key={item.id} 
-                                onClick={() => setExpandedDriftId(isExpanded ? null : item.id)}
-                                className={`${BRUTAL.card} p-3 transition-all ${isExpanded ? 'shadow-[6px_6px_0_0_#000] border-black' : 'bg-white hover:shadow-[6px_6px_0_0_#000] cursor-pointer'}`}
-                              >
-                                <div className="flex justify-between items-start">
-                                    <div className="flex items-center gap-2">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className={`text-[8px] px-1 font-bold border uppercase ${getDriftBadgeClass(item.status)}`}>
-                                                  {item.status.replace(/_/g, ' ')}
-                                                </span>
-                                                <span className="font-bold text-xs">{item.name}</span>
-                                            </div>
-                                            <div className="text-[10px] text-gray-500 font-mono">Last Edit: {item.lastEdited}</div>
-                                        </div>
-                                    </div>
-                                    <span className="text-[10px] font-bold underline hover:text-[#ff90e8]">{isExpanded ? 'CLOSE' : 'VIEW'}</span>
-                                </div>
+                        <>
+                          <div className="mb-3 grid grid-cols-2 gap-2">
+                            <div className={`${BRUTAL.card} bg-[#ffc900] p-2`}>
+                              <div className="text-[9px] font-black uppercase">Sync Health</div>
+                              <div className="text-2xl font-black leading-none">{syncOverview.score}</div>
+                            </div>
+                            <div className={`${BRUTAL.card} p-2`}>
+                              <div className="text-[9px] font-black uppercase text-gray-500">Total Drift</div>
+                              <div className="text-2xl font-black leading-none">{syncOverview.total}</div>
+                            </div>
+                            <div className={`${BRUTAL.card} p-2`}>
+                              <div className="text-[9px] font-black uppercase text-gray-500">Auto-fixable</div>
+                              <div className="text-xl font-black leading-none">{syncOverview.autoFixable}</div>
+                            </div>
+                            <div className={`${BRUTAL.card} p-2`}>
+                              <div className="text-[9px] font-black uppercase text-gray-500">Manual Review</div>
+                              <div className="text-xl font-black leading-none">{syncOverview.manual}</div>
+                            </div>
+                          </div>
 
-                                {isExpanded && (
-                                    <div className="mt-4 pt-3 border-t-2 border-dashed border-black animate-in slide-in-from-top-1">
-                                        <p className="text-xs font-medium mb-4 leading-relaxed">
-                                            Issue: {item.desc}.<br/>Action: Sync to resolve drift.
-                                        </p>
-                                        <div className="mb-3 space-y-1 border border-dashed border-gray-300 bg-gray-50 p-2 text-[10px] text-gray-600">
-                                          {item.reason ? <p><strong>Why:</strong> {item.reason}</p> : null}
-                                          {item.confidence ? <p><strong>Confidence:</strong> {item.confidence}</p> : null}
-                                          {item.figmaName ? <p><strong>Figma:</strong> {item.figmaName}</p> : null}
-                                          {item.storybookName ? <p><strong>Storybook:</strong> {item.storybookName}</p> : null}
-                                          {item.suggestedAction ? <p><strong>Suggested:</strong> {item.suggestedAction}</p> : null}
-                                          {item.storybookUrl ? (
-                                            <a
-                                              href={item.storybookUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="block font-bold underline hover:text-[#ff90e8]"
-                                              onClick={(e) => e.stopPropagation()}
-                                            >
-                                              Open Storybook story
-                                            </a>
-                                          ) : null}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button 
-                                                onClick={(e) => handleSelectLayer(item.id, item.layerId ?? null, e)}
-                                                disabled={!item.layerId}
-                                                className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === item.id ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                                            >
-                                                {layerSelectionFeedback === item.id ? 'SELECTED!' : item.layerId ? 'Select Layer' : 'No layer'}
-                                            </button>
-                                            <Button
-                                                variant="primary"
-                                                layout="row"
-                                                size="sm"
-                                                onClick={(e) => handleSyncItem(item, e)}
-                                                disabled={!item.syncAction}
-                                                className="flex-1 h-12 relative"
-                                            >
-                                                {item.syncAction ? 'Apply in Figma' : 'Manual Review'}
-                                                {item.syncAction ? (
-                                                  <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-5 Credits</span>
-                                                ) : null}
-                                            </Button>
-                                        </div>
+                          <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+                            {(Object.keys(FILTER_LABELS) as SyncCategoryId[]).map((filter) => {
+                              const count =
+                                filter === 'ALL'
+                                  ? syncOverview.total
+                                  : filter === 'AUTO_FIXABLE'
+                                    ? syncOverview.autoFixable
+                                    : filter === 'MANUAL'
+                                      ? syncOverview.manual + syncOverview.sections.SOURCE.length
+                                      : syncOverview.sections[filter].length;
+                              return (
+                                <button
+                                  key={filter}
+                                  type="button"
+                                  onClick={() => setActiveFilter(filter)}
+                                  className={`shrink-0 border-2 border-black px-2 py-1 text-[9px] font-black uppercase ${activeFilter === filter ? 'bg-[#ff90e8]' : 'bg-white hover:bg-[#ffc900]'}`}
+                                >
+                                  {FILTER_LABELS[filter]} <span className="font-mono">{count}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="space-y-3 mb-4 max-h-[360px] overflow-y-auto pr-1">
+                            {visibleSections.map(([categoryId, items]) => {
+                              const meta = SYNC_CATEGORY_META[categoryId];
+                              const visibleItems = items.slice(0, MAX_ITEMS_PER_SECTION);
+                              const hiddenCount = Math.max(0, items.length - visibleItems.length);
+                              return (
+                                <section key={categoryId} className="border-2 border-black bg-white">
+                                  <div className={`border-b-2 border-black px-2 py-2 ${meta.tone}`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[10px] font-black uppercase">{meta.label}</span>
+                                      <span className="border border-black bg-white px-1.5 py-0.5 text-[9px] font-black text-black">{items.length}</span>
                                     </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+                                    <p className="mt-1 text-[9px] font-bold leading-snug opacity-80">{meta.desc}</p>
+                                  </div>
+
+                                  <div className="space-y-2 p-2">
+                                    {visibleItems.map(item => {
+                                      const isExpanded = expandedDriftId === item.id;
+                                      return (
+                                        <div
+                                          key={item.id}
+                                          onClick={() => setExpandedDriftId(isExpanded ? null : item.id)}
+                                          className={`${BRUTAL.card} p-3 transition-all ${isExpanded ? 'shadow-[6px_6px_0_0_#000] border-black' : 'bg-white hover:shadow-[6px_6px_0_0_#000] cursor-pointer'}`}
+                                        >
+                                          <div className="flex justify-between items-start gap-2">
+                                              <div className="min-w-0">
+                                                  <div className="flex items-center gap-2 mb-1">
+                                                      <span className={`text-[8px] px-1 font-bold border uppercase ${getDriftBadgeClass(item.status)}`}>
+                                                        {item.status.replace(/_/g, ' ')}
+                                                      </span>
+                                                      <span className="font-bold text-xs truncate">{item.name}</span>
+                                                  </div>
+                                                  <div className="text-[10px] text-gray-500 font-mono">Last Edit: {item.lastEdited}</div>
+                                              </div>
+                                              <span className="text-[10px] font-bold underline hover:text-[#ff90e8]">{isExpanded ? 'CLOSE' : 'VIEW'}</span>
+                                          </div>
+
+                                          {isExpanded && (
+                                              <div className="mt-4 pt-3 border-t-2 border-dashed border-black animate-in slide-in-from-top-1">
+                                                  <p className="text-xs font-medium mb-4 leading-relaxed">
+                                                      Issue: {item.desc}.<br/>Action: Sync to resolve drift.
+                                                  </p>
+                                                  <div className="mb-3 space-y-1 border border-dashed border-gray-300 bg-gray-50 p-2 text-[10px] text-gray-600">
+                                                    {item.reason ? <p><strong>Why:</strong> {item.reason}</p> : null}
+                                                    {item.confidence ? <p><strong>Confidence:</strong> {item.confidence}</p> : null}
+                                                    {item.figmaName ? <p><strong>Figma:</strong> {item.figmaName}</p> : null}
+                                                    {item.storybookName ? <p><strong>Storybook:</strong> {item.storybookName}</p> : null}
+                                                    {item.suggestedAction ? <p><strong>Suggested:</strong> {item.suggestedAction}</p> : null}
+                                                    {item.storybookUrl ? (
+                                                      <a
+                                                        href={item.storybookUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block font-bold underline hover:text-[#ff90e8]"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      >
+                                                        Open Storybook story
+                                                      </a>
+                                                    ) : null}
+                                                  </div>
+                                                  <div className="flex gap-2">
+                                                      <button
+                                                          onClick={(e) => handleSelectLayer(item.id, item.layerId ?? null, e)}
+                                                          disabled={!item.layerId}
+                                                          className={`flex-1 border-2 border-black text-[10px] font-bold uppercase py-2 transition-colors ${layerSelectionFeedback === item.id ? 'bg-white text-black' : 'bg-white hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                      >
+                                                          {layerSelectionFeedback === item.id ? 'SELECTED!' : item.layerId ? 'Select Layer' : 'No layer'}
+                                                      </button>
+                                                      <Button
+                                                          variant="primary"
+                                                          layout="row"
+                                                          size="sm"
+                                                          onClick={(e) => handleSyncItem(item, e)}
+                                                          disabled={!item.syncAction}
+                                                          className="flex-1 h-12 relative"
+                                                      >
+                                                          {item.syncAction ? 'Apply in Figma' : 'Manual Review'}
+                                                          {item.syncAction ? (
+                                                            <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-5 Credits</span>
+                                                          ) : null}
+                                                      </Button>
+                                                  </div>
+                                              </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {hiddenCount > 0 ? (
+                                      <div className="border border-dashed border-gray-300 bg-gray-50 p-2 text-center text-[10px] font-bold uppercase text-gray-500">
+                                        +{hiddenCount} more in this category
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </section>
+                              );
+                            })}
+                          </div>
+                        </>
                       )}
 
                       {syncItems.length > 0 && (
@@ -517,20 +816,54 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             <p>
                               <strong>Sync All needs the source repo.</strong> Storybook tells us what is live, but code changes must be applied to the repository or source that builds it.
                             </p>
-                            <p>
-                              Connect GitHub, Bitbucket, GitLab or a custom source, then we can push fixes on the right side.
-                            </p>
+                            {sourceConnection ? (
+                              <div className="space-y-1">
+                                <p>
+                                  Source connected: <strong>{SOURCE_PROVIDER_LABELS[sourceConnection.provider]}</strong> ·{' '}
+                                  <span className="font-mono">{sourceConnection.branch}</span> ·{' '}
+                                  <span className="font-black uppercase">{sourceConnection.status}</span>
+                                </p>
+                                {sourceConnection.scan ? (
+                                  <p>
+                                    Detection: <strong>{sourceConnection.scan.status}</strong>
+                                    {sourceConnection.scan.storybookConfigPath ? ` · ${sourceConnection.scan.storybookConfigPath}` : ''}
+                                  </p>
+                                ) : null}
+                                <div className="flex gap-2 pt-1">
+                                  <button type="button" className="font-black uppercase underline" onClick={openSourceWizard}>
+                                    Edit source
+                                  </button>
+                                  <button type="button" className="font-black uppercase underline" onClick={() => void onLoadSourceConnection()}>
+                                    Refresh
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="font-black uppercase underline text-red-700"
+                                    onClick={() => void onDeleteSourceConnection()}
+                                  >
+                                    Disconnect
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p>
+                                {sourceConnectionLoading
+                                  ? 'Loading source connection…'
+                                  : 'Connect GitHub, Bitbucket, GitLab or a custom source, then we can push fixes on the right side.'}
+                              </p>
+                            )}
+                            {sourceConnectionError ? <p className="font-bold text-red-700">{sourceConnectionError}</p> : null}
                           </div>
                           <Button
                             variant="primary"
                             fullWidth
                             layout="row"
-                            onClick={onConnectSourceProvider ?? handleSyncAll}
+                            onClick={sourceConnection ? handleSyncAll : openSourceWizard}
                             className="relative h-12"
                           >
                             <span>Sync All</span>
                             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
-                              Connect Source
+                              {sourceConnection ? 'Source Connected' : 'Connect Source'}
                             </span>
                           </Button>
                         </>
@@ -573,6 +906,288 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               <Button variant="secondary" fullWidth disabled className="bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed">
                 Connect Bitbucket (Soon)
               </Button>
+            </div>
+          )}
+
+          {sourceWizardOpen && (
+            <div
+              className="fixed inset-0 z-[300] flex flex-col bg-[#fdfdfd] text-black"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sync-source-title"
+            >
+              <header className="shrink-0 border-b-2 border-black bg-white shadow-[0_2px_0_0_#000] flex items-center justify-between gap-2 px-3 py-3">
+                <div className="min-w-0">
+                  <h2 id="sync-source-title" className="text-xs font-black uppercase tracking-wide truncate pr-2">
+                    Connect source for Sync All
+                  </h2>
+                  <p className="text-[10px] font-bold text-gray-500 truncate">
+                    {storybookUrl || 'Storybook source'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 size-9 border-2 border-black bg-white font-black text-sm shadow-[3px_3px_0_0_#000] hover:bg-gray-100 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_0_#000]"
+                  aria-label="Close source wizard"
+                  onClick={() => {
+                    setSourceWizardOpen(false);
+                    if (!sourceConnection) resetSourceWizard();
+                  }}
+                >
+                  x
+                </button>
+              </header>
+
+              <div className="shrink-0 border-b-2 border-black bg-neutral-100">
+                <SourceWizardStepper currentStep={sourceWizardStep} />
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4">
+                <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
+                  <div className={`${BRUTAL.card} bg-white p-3`}>
+                    <h3 className="font-black uppercase text-base leading-tight">
+                      {SOURCE_WIZARD_STEPS[sourceWizardStep].title}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-800 leading-relaxed">
+                      {SOURCE_WIZARD_STEPS[sourceWizardStep].body}
+                    </p>
+                  </div>
+
+                  {(sourceWizardError || sourceConnectionError) && (
+                    <div className="border-2 border-red-500 bg-red-50 p-3 text-xs font-bold text-red-800">
+                      {sourceWizardError || sourceConnectionError}
+                    </div>
+                  )}
+
+                  {sourceWizardStep === 0 && (
+                    <div className={`${BRUTAL.card} bg-[#fff8e7] p-3 space-y-2`}>
+                      <p className="text-sm font-bold leading-relaxed">
+                        `Sync All` cannot push changes to Storybook directly. Storybook tells us what is live, but the
+                        changes must land in the repository that builds it.
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="border-2 border-black bg-white p-2">
+                          <p className="text-[9px] font-black uppercase text-gray-500">1. Read</p>
+                          <p className="text-xs font-black">Storybook</p>
+                        </div>
+                        <div className="border-2 border-black bg-white p-2">
+                          <p className="text-[9px] font-black uppercase text-gray-500">2. Detect</p>
+                          <p className="text-xs font-black">Drift</p>
+                        </div>
+                        <div className="border-2 border-black bg-white p-2">
+                          <p className="text-[9px] font-black uppercase text-gray-500">3. Prepare</p>
+                          <p className="text-xs font-black">Code sync</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {sourceWizardStep === 1 && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {(Object.keys(SOURCE_PROVIDER_LABELS) as SourceProvider[]).map((provider) => (
+                        <button
+                          key={provider}
+                          type="button"
+                          onClick={() => setSourceProvider(provider)}
+                          className={`border-2 border-black p-3 text-left shadow-[3px_3px_0_0_#000] ${
+                            sourceProvider === provider ? 'bg-[#ff90e8]' : 'bg-white hover:bg-[#ffc900]'
+                          }`}
+                        >
+                          <span className="block text-xs font-black uppercase">{SOURCE_PROVIDER_LABELS[provider]}</span>
+                          <span className="mt-1 block text-[10px] font-bold text-gray-600">
+                            {provider === 'custom' ? 'Enterprise API or other Git host' : 'Repository provider'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {sourceWizardStep === 2 && (
+                    <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-black uppercase">{SOURCE_PROVIDER_LABELS[sourceProvider]}</p>
+                          <p className="mt-1 text-[10px] text-gray-600 leading-snug">
+                            Provider auth is used to read repository contents. PR/write permissions will be requested only when patch sync is enabled.
+                          </p>
+                        </div>
+                        <span className="shrink-0 border-2 border-black bg-yellow-100 px-2 py-1 text-[9px] font-black uppercase">
+                          {sourceProvider === 'custom' ? 'Manual' : 'Needs auth'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`${BRUTAL.btn} w-full bg-black text-white`}
+                        onClick={async () => {
+                          const result = await onStartSourceAuth(sourceProvider);
+                          if (!result.ok && result.error) setSourceWizardError(result.error);
+                          if (result.ok && !result.url) setSourceWizardError(null);
+                        }}
+                      >
+                        {sourceProvider === 'custom' ? 'Use Manual Setup' : `Connect ${SOURCE_PROVIDER_LABELS[sourceProvider]}`}
+                      </button>
+                      {sourceAuthStartUrl ? (
+                        <a
+                          href={sourceAuthStartUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-[10px] font-bold underline"
+                        >
+                          Open provider install page
+                        </a>
+                      ) : null}
+                      <p className="text-[10px] text-gray-500 leading-snug">
+                        You can continue with manual details now; provider OAuth can be completed later from this wizard.
+                      </p>
+                    </div>
+                  )}
+
+                  {sourceWizardStep === 3 && (
+                    <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-gray-600 mb-1">Repository URL</label>
+                        <input
+                          type="url"
+                          value={sourceRepoUrl}
+                          onChange={(e) => setSourceRepoUrl(e.target.value)}
+                          placeholder="https://github.com/org/repo"
+                          className="w-full border-2 border-black px-3 py-2 text-xs font-mono outline-none"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase text-gray-600 mb-1">Branch</label>
+                          <input
+                            type="text"
+                            value={sourceBranch}
+                            onChange={(e) => setSourceBranch(e.target.value)}
+                            placeholder="main"
+                            className="w-full border-2 border-black px-3 py-2 text-xs font-mono outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black uppercase text-gray-600 mb-1">Storybook path</label>
+                          <input
+                            type="text"
+                            value={sourceStorybookPath}
+                            onChange={(e) => setSourceStorybookPath(e.target.value)}
+                            placeholder="apps/docs"
+                            className="w-full border-2 border-black px-3 py-2 text-xs font-mono outline-none"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-snug">
+                        In monorepos, set the Storybook package path, for example `apps/docs` or `packages/ui`.
+                      </p>
+                    </div>
+                  )}
+
+                  {sourceWizardStep === 4 && (
+                    <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
+                      <button
+                        type="button"
+                        className={`${BRUTAL.btn} w-full bg-[#ffc900] text-black disabled:bg-gray-200`}
+                        disabled={sourceConnectionSaving || !sourceRepoUrl.trim()}
+                        onClick={runSourceDetection}
+                      >
+                        {sourceConnectionSaving ? 'Detecting…' : 'Detect Storybook Source'}
+                      </button>
+                      {sourceScanDraft ? (
+                        <div className="space-y-2 border-2 border-black bg-neutral-50 p-3 text-[10px]">
+                          <div className="flex justify-between gap-2">
+                            <strong>Status</strong>
+                            <span className="font-black uppercase">{sourceScanDraft.status}</span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <strong>Config</strong>
+                            <span className="font-mono text-right">{sourceScanDraft.storybookConfigPath || 'Not found'}</span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <strong>Stories</strong>
+                            <span>{sourceScanDraft.storiesCount ?? 'Unknown'}</span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <strong>Package manager</strong>
+                            <span>{sourceScanDraft.packageManager || 'Unknown'}</span>
+                          </div>
+                          {sourceScanDraft.issues?.length ? (
+                            <div className="border-t border-dashed border-gray-400 pt-2 text-gray-600">
+                              {sourceScanDraft.issues.slice(0, 3).map((issue, i) => (
+                                <p key={`source-issue-${i}`}>- {issue}</p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-gray-500 leading-snug">
+                          Detection checks branch, Storybook config, stories, package manager, and likely component paths.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {sourceWizardStep === 5 && (
+                    <div className={`${BRUTAL.card} bg-[#fff8e7] p-3 space-y-2`}>
+                      <div className="flex justify-between gap-3 border-b border-dashed border-gray-400 pb-2">
+                        <span className="text-[10px] font-black uppercase text-gray-600">Provider</span>
+                        <span className="text-xs font-black">{SOURCE_PROVIDER_LABELS[sourceProvider]}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 border-b border-dashed border-gray-400 pb-2">
+                        <span className="text-[10px] font-black uppercase text-gray-600">Repo</span>
+                        <span className="text-[10px] font-mono text-right break-all">{sourceRepoUrl || 'Missing'}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 border-b border-dashed border-gray-400 pb-2">
+                        <span className="text-[10px] font-black uppercase text-gray-600">Branch</span>
+                        <span className="text-xs font-mono">{sourceBranch || 'main'}</span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-[10px] font-black uppercase text-gray-600">Storybook path</span>
+                        <span className="text-xs font-mono">{sourceStorybookPath || 'root'}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 border-t border-dashed border-gray-400 pt-2">
+                        <span className="text-[10px] font-black uppercase text-gray-600">Detection</span>
+                        <span className="text-xs font-black uppercase">{sourceScanDraft?.status || 'not run'}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <footer className="shrink-0 border-t-2 border-black bg-white p-3">
+                <div className="mx-auto flex w-full max-w-lg gap-2">
+                  <button
+                    type="button"
+                    className={`${BRUTAL.btn} flex-1 bg-white text-black border-black hover:bg-gray-100`}
+                    onClick={() => {
+                      if (sourceWizardStep === 0) {
+                        setSourceWizardOpen(false);
+                        if (!sourceConnection) resetSourceWizard();
+                      } else {
+                        setSourceWizardStep((prev) => Math.max(0, prev - 1) as SourceWizardStep);
+                      }
+                    }}
+                  >
+                    {sourceWizardStep === 0 ? 'Cancel' : 'Back'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${BRUTAL.btn} flex-1 bg-[#ff90e8] text-black disabled:bg-gray-200 disabled:cursor-not-allowed`}
+                    disabled={!canContinueSourceWizard || sourceConnectionSaving}
+                    onClick={async () => {
+                      if (sourceWizardStep === 4 && !sourceScanDraft) {
+                        await runSourceDetection();
+                      }
+                      if (sourceWizardStep < 5) {
+                        setSourceWizardStep((prev) => Math.min(5, prev + 1) as SourceWizardStep);
+                      } else {
+                        await completeSourceWizard();
+                      }
+                    }}
+                  >
+                    {sourceWizardStep === 5 ? (sourceConnectionSaving ? 'Saving…' : 'Save Source') : 'Continue'}
+                  </button>
+                </div>
+              </footer>
             </div>
           )}
 

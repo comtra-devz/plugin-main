@@ -20,6 +20,12 @@ import { ProfileSheet } from './components/ProfileSheet';
 import { useToast } from './contexts/ToastContext';
 import { ViewState, User, Trophy } from './types';
 import type { SyncSnapshot } from './types';
+import type {
+  SourceConnection,
+  SourceConnectionInput,
+  SourceProvider,
+  SourceScanResult,
+} from './views/Code/types';
 import { SyncScanRateLimitedError } from './lib/syncScanRateLimitedError';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
@@ -1382,6 +1388,106 @@ export default function AppTest() {
     };
   }, [user?.authToken, AUTH_BACKEND_URL]);
 
+  const fetchSourceConnection = React.useCallback(
+    async (q: { figmaFileKey: string; storybookUrl: string }): Promise<SourceConnection | null> => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const u = new URL(`${AUTH_BACKEND_URL}/api/sync/source-connection`);
+      u.searchParams.set('figma_file_key', q.figmaFileKey);
+      u.searchParams.set('storybook_url', q.storybookUrl);
+      const r = await fetch(u.toString(), {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Could not load source connection');
+      return (data.connection ?? null) as SourceConnection | null;
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
+  const scanSourceConnection = React.useCallback(
+    async (body: SourceConnectionInput): Promise<SourceScanResult> => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          provider: body.provider,
+          repo_url: body.repoUrl,
+          branch: body.branch,
+          storybook_path: body.storybookPath,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok && !data.scan) throw new Error(data.error || 'Source scan failed');
+      return (data.scan ?? {
+        status: 'failed',
+        provider: body.provider,
+        defaultBranch: body.branch,
+        confidence: 'low',
+        issues: [data.error || 'Source scan failed'],
+      }) as SourceScanResult;
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
+  const saveSourceConnection = React.useCallback(
+    async (body: SourceConnectionInput & {
+      figmaFileKey: string;
+      storybookUrl: string;
+      scan?: SourceScanResult | null;
+    }): Promise<SourceConnection> => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          figma_file_key: body.figmaFileKey,
+          storybook_url: body.storybookUrl,
+          provider: body.provider,
+          repo_url: body.repoUrl,
+          branch: body.branch,
+          storybook_path: body.storybookPath,
+          scan: body.scan ?? null,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.connection) throw new Error(data.error || 'Could not save source connection');
+      return data.connection as SourceConnection;
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
+  const deleteSourceConnection = React.useCallback(
+    async (q: { figmaFileKey: string; storybookUrl: string }): Promise<boolean> => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({ figma_file_key: q.figmaFileKey, storybook_url: q.storybookUrl }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Could not disconnect source');
+      return data.ok === true;
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
+  const startSourceAuth = React.useCallback(
+    async (provider: SourceProvider): Promise<{ ok: boolean; url?: string | null; error?: string }> => {
+      if (!user?.authToken) return { ok: false, error: 'Unauthorized' };
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-auth/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({ provider }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: data.error || 'Provider auth is not configured yet.' };
+      return { ok: data.ok === true, url: data.url || null, error: data.error };
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
   const fetchCodeGen = React.useCallback(
     async (body: {
       format: string;
@@ -2221,6 +2327,11 @@ export default function AppTest() {
             logFreeAction={logFreeAction}
             fetchSyncScan={fetchSyncScan}
             fetchCheckStorybook={fetchCheckStorybook}
+            fetchSourceConnection={fetchSourceConnection}
+            saveSourceConnection={saveSourceConnection}
+            deleteSourceConnection={deleteSourceConnection}
+            scanSourceConnection={scanSourceConnection}
+            startSourceAuth={startSourceAuth}
             fetchCodeGen={fetchCodeGen}
             onNavigateToStats={() => setView(ViewState.ANALYTICS)}
             selectedNode={selectedNode}

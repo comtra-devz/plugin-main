@@ -15,7 +15,14 @@ import {
 import { getSystemToastOptions } from '../lib/errorCopy';
 import { SyncScanRateLimitedError } from '../lib/syncScanRateLimitedError';
 import type { SyncSnapshot } from '../types';
-import type { StorybookConnectionInfo, SyncDriftItem } from './Code/types';
+import type {
+  SourceConnection,
+  SourceConnectionInput,
+  SourceProvider,
+  SourceScanResult,
+  StorybookConnectionInfo,
+  SyncDriftItem,
+} from './Code/types';
 import { collectSubtreeNodeIds, exportLocalDeepCode } from '../services/localDeepCodeExport';
 
 interface Props {
@@ -42,6 +49,15 @@ interface Props {
     connectionStatus?: string;
   }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo>;
+  fetchSourceConnection?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<SourceConnection | null>;
+  saveSourceConnection?: (body: SourceConnectionInput & {
+    figmaFileKey: string;
+    storybookUrl: string;
+    scan?: SourceScanResult | null;
+  }) => Promise<SourceConnection>;
+  deleteSourceConnection?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<boolean>;
+  scanSourceConnection?: (body: SourceConnectionInput) => Promise<SourceScanResult>;
+  startSourceAuth?: (provider: SourceProvider) => Promise<{ ok: boolean; url?: string | null; error?: string }>;
   /** POST /api/agents/code-gen — subtree from plugin + format → code */
   fetchCodeGen?: (body: {
     format: string;
@@ -67,7 +83,7 @@ const COOLDOWN_MS = 120000; // 2 Minutes
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchCodeGen, onNavigateToStats, selectedNode }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchSourceConnection, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -118,6 +134,12 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [syncScanError, setSyncScanError] = useState<string | null>(null);
   const [syncScanUpgradeUrl, setSyncScanUpgradeUrl] = useState<string | null>(null);
   const [hasSyncScanned, setHasSyncScanned] = useState(false);
+  const [syncFileKey, setSyncFileKey] = useState<string | null>(null);
+  const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
+  const [sourceConnectionLoading, setSourceConnectionLoading] = useState(false);
+  const [sourceConnectionSaving, setSourceConnectionSaving] = useState(false);
+  const [sourceConnectionError, setSourceConnectionError] = useState<string | null>(null);
+  const [sourceAuthStartUrl, setSourceAuthStartUrl] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [lastSyncAllDate, setLastSyncAllDate] = useState<Date | null>(null);
   const [expandedDriftId, setExpandedDriftId] = useState<string | null>(null);
@@ -208,6 +230,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           setIsSyncScanning(false);
           return;
         }
+        setSyncFileKey(typeof snap.fileKey === 'string' && snap.fileKey.trim() ? snap.fileKey.trim() : null);
         (async () => {
           if (!fetchSyncScan || !storybookUrl) {
             setIsSyncScanning(false);
@@ -588,6 +611,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setIsSbConnected(true);
     setSyncScanError(null);
     setSyncScanUpgradeUrl(null);
+    setSourceConnectionError(null);
   };
 
   const handleDisconnectSb = () => {
@@ -601,7 +625,121 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setSyncScanError(null);
     setSyncScanUpgradeUrl(null);
     setHasSyncScanned(false);
+    setSyncFileKey(null);
     setSyncItems([]);
+    setSourceConnection(null);
+    setSourceConnectionError(null);
+    setSourceAuthStartUrl(null);
+  };
+
+  const loadSourceConnection = React.useCallback(async () => {
+    if (!fetchSourceConnection || !syncFileKey || !storybookUrl) return;
+    setSourceConnectionLoading(true);
+    setSourceConnectionError(null);
+    try {
+      const connection = await fetchSourceConnection({ figmaFileKey: syncFileKey, storybookUrl });
+      setSourceConnection(connection);
+    } catch (err) {
+      setSourceConnectionError(err instanceof Error ? err.message : 'Could not load source connection.');
+    } finally {
+      setSourceConnectionLoading(false);
+    }
+  }, [fetchSourceConnection, syncFileKey, storybookUrl]);
+
+  useEffect(() => {
+    if (!syncFileKey || !storybookUrl) {
+      setSourceConnection(null);
+      return;
+    }
+    void loadSourceConnection();
+  }, [syncFileKey, storybookUrl, loadSourceConnection]);
+
+  const handleScanSourceConnection = async (input: SourceConnectionInput): Promise<SourceScanResult | null> => {
+    if (!scanSourceConnection) {
+      return {
+        status: 'partial',
+        provider: input.provider,
+        defaultBranch: input.branch,
+        confidence: 'low',
+        issues: ['Source scan backend is not available in this build.'],
+        detectedAt: new Date().toISOString(),
+      };
+    }
+    setSourceConnectionSaving(true);
+    setSourceConnectionError(null);
+    try {
+      return await scanSourceConnection(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Source scan failed.';
+      setSourceConnectionError(message);
+      return {
+        status: 'failed',
+        provider: input.provider,
+        defaultBranch: input.branch,
+        confidence: 'low',
+        issues: [message],
+        detectedAt: new Date().toISOString(),
+      };
+    } finally {
+      setSourceConnectionSaving(false);
+    }
+  };
+
+  const handleSaveSourceConnection = async (input: SourceConnectionInput): Promise<SourceConnection | null> => {
+    if (!syncFileKey || !storybookUrl) {
+      setSourceConnectionError('Run a Storybook sync scan before saving the source connection.');
+      return null;
+    }
+    if (!saveSourceConnection) {
+      setSourceConnectionError('Source connection backend is not available in this build.');
+      return null;
+    }
+    setSourceConnectionSaving(true);
+    setSourceConnectionError(null);
+    try {
+      const scan = await handleScanSourceConnection(input);
+      const saved = await saveSourceConnection({ ...input, figmaFileKey: syncFileKey, storybookUrl, scan });
+      setSourceConnection(saved);
+      return saved;
+    } catch (err) {
+      setSourceConnectionError(err instanceof Error ? err.message : 'Could not save source connection.');
+      return null;
+    } finally {
+      setSourceConnectionSaving(false);
+    }
+  };
+
+  const handleDeleteSourceConnection = async (): Promise<boolean> => {
+    if (!syncFileKey || !storybookUrl || !deleteSourceConnection) return false;
+    setSourceConnectionSaving(true);
+    setSourceConnectionError(null);
+    try {
+      const ok = await deleteSourceConnection({ figmaFileKey: syncFileKey, storybookUrl });
+      if (ok) setSourceConnection(null);
+      return ok;
+    } catch (err) {
+      setSourceConnectionError(err instanceof Error ? err.message : 'Could not disconnect source.');
+      return false;
+    } finally {
+      setSourceConnectionSaving(false);
+    }
+  };
+
+  const handleStartSourceAuth = async (provider: SourceProvider) => {
+    if (!startSourceAuth) return { ok: false, error: 'Provider auth backend is not available.' };
+    setSourceConnectionError(null);
+    setSourceAuthStartUrl(null);
+    try {
+      const result = await startSourceAuth(provider);
+      if (result.url) setSourceAuthStartUrl(result.url);
+      if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer');
+      if (!result.ok && result.error) setSourceConnectionError(result.error);
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Could not start provider auth.';
+      setSourceConnectionError(error);
+      return { ok: false, error };
+    }
   };
 
   const handleSyncScan = async () => {
@@ -691,44 +829,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   const handleSyncAll = async () => {
-    const actionableItems = syncItems.filter((item) => item.syncAction);
-    const count = actionableItems.length;
-    if (count === 0) return;
-    if (!isPro && !useInfiniteCreditsForTest) {
-      onUnlockRequest();
-      return;
-    }
-    const cost = count * 5;
-    if (!useInfiniteCreditsForTest && !isPro && creditsRemaining !== null && creditsRemaining < cost) {
-      onUnlockRequest();
-      return;
-    }
-    const result = await consumeCredits({ action_type: 'sync_storybook', credits_consumed: cost });
-    if (result.error) {
-      if (result.error === 'Insufficient credits') onUnlockRequest();
-      return;
-    }
-    const appliedIds: string[] = [];
-    for (const item of actionableItems) {
-      const applied = await requestSyncDriftAction(item);
-      if (applied.ok) appliedIds.push(item.id);
-    }
-    if (appliedIds.length === 0) {
-      setSyncScanError('No safe Figma fixes could be applied.');
-      setSyncScanUpgradeUrl(null);
-      return;
-    }
-    setSyncScanError(null);
-    setSyncItems((prev) => prev.filter((item) => !appliedIds.includes(item.id)));
-    setLastSyncAllDate(new Date());
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 2000);
-  };
-
-  const handleConnectSourceProvider = () => {
-    // Internal repo-source wizard is the required next step for code-side Sync All.
-    setSyncScanError('Connect Source wizard is coming next: choose GitHub, Bitbucket, GitLab, or a custom source for the Storybook repository.');
+    setSyncScanError('Source connected. Next step: generate a code-side sync plan/patch for the Storybook repository.');
     setSyncScanUpgradeUrl(null);
+    setLastSyncAllDate(new Date());
   };
 
   return (
@@ -851,7 +954,16 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             layerSelectionFeedback={layerSelectionFeedback}
             handleSyncItem={handleSyncItem}
             handleSyncAll={handleSyncAll}
-            onConnectSourceProvider={handleConnectSourceProvider}
+            sourceConnection={sourceConnection}
+            sourceConnectionLoading={sourceConnectionLoading}
+            sourceConnectionSaving={sourceConnectionSaving}
+            sourceConnectionError={sourceConnectionError}
+            sourceAuthStartUrl={sourceAuthStartUrl}
+            onLoadSourceConnection={loadSourceConnection}
+            onSaveSourceConnection={handleSaveSourceConnection}
+            onDeleteSourceConnection={handleDeleteSourceConnection}
+            onScanSourceConnection={handleScanSourceConnection}
+            onStartSourceAuth={handleStartSourceAuth}
             lastSyncAllDate={lastSyncAllDate}
         />
       )}

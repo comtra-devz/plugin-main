@@ -1928,14 +1928,14 @@ export const Generate: React.FC<Props> = ({
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 text-left text-xs font-black uppercase leading-none"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 py-0 text-left text-xs font-black uppercase leading-none"
                 >
-                  <span className="flex h-full min-w-0 translate-y-[1px] items-center gap-1.5 truncate leading-none">
-                    <span className="text-gray-500">Design system</span>
-                    <span aria-hidden>·</span>
-                    <span className="truncate">{selectedSystemDisplayName}</span>
+                  <span className="flex h-full min-w-0 items-center gap-1.5 truncate leading-none">
+                    <span className="flex h-full items-center text-gray-500">Design system</span>
+                    <span className="flex h-full items-center" aria-hidden>·</span>
+                    <span className="flex h-full min-w-0 items-center truncate">{selectedSystemDisplayName}</span>
                   </span>
-                  <span className="flex h-full translate-y-[1px] items-center leading-none" aria-hidden>
+                  <span className="flex h-full items-center leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
                   </span>
                 </button>
@@ -1961,11 +1961,15 @@ export const Generate: React.FC<Props> = ({
                         setIsSystemOpen(false);
                         setSystemSearch('');
                       }}
-                      className={`${brutalSelectOptionRowClass} flex min-h-10 items-center justify-between gap-2 leading-none ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                      className={`${brutalSelectOptionRowClass} flex h-10 !px-2 !py-0 items-center justify-between gap-2 leading-none ${
+                        selectedSystem === sys
+                          ? '!bg-[#ffc900] !text-black hover:!bg-[#ffc900] hover:!text-black'
+                          : ''
+                      }`.trim()}
                     >
-                      <span className="min-w-0 translate-y-[1px] truncate">{displaySystemName(sys)}</span>
+                      <span className="flex h-full min-w-0 items-center truncate">{displaySystemName(sys)}</span>
                       {isFileDesignSystemOption(sys) ? (
-                        <span className="ml-2 shrink-0 translate-y-[1px] border border-current px-1 py-0.5 text-[8px] leading-none">
+                        <span className="ml-2 flex h-5 shrink-0 items-center border border-current px-1 text-[8px] leading-none">
                           Current
                         </span>
                       ) : null}

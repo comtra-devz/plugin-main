@@ -5339,6 +5339,201 @@ app.put('/api/admin/design-systems/external', async (req, res) => {
   }
 });
 
+const SOURCE_PROVIDERS = new Set(['github', 'bitbucket', 'gitlab', 'custom']);
+const SOURCE_STATUSES = new Set(['draft', 'needs_auth', 'connected_manual', 'scan_failed', 'ready']);
+
+function normalizeSourceProvider(v) {
+  const provider = String(v || '').trim().toLowerCase();
+  return SOURCE_PROVIDERS.has(provider) ? provider : null;
+}
+
+function normalizeRepoUrl(v) {
+  return String(v || '').trim().replace(/\.git$/i, '').slice(0, 1200);
+}
+
+function normalizeSourcePath(v) {
+  return String(v || '').trim().replace(/^\/+|\/+$/g, '').slice(0, 500);
+}
+
+function rowToSourceConnection(row) {
+  if (!row) return null;
+  return {
+    provider: row.provider,
+    repoUrl: row.repo_url,
+    branch: row.default_branch || 'main',
+    storybookPath: row.storybook_path || '',
+    storybookUrl: row.storybook_url,
+    figmaFileKey: row.figma_file_key,
+    status: row.status || 'draft',
+    authStatus: row.auth_status || 'needs_auth',
+    scan: row.scan_result || null,
+    lastScannedAt: row.last_scanned_at ? new Date(row.last_scanned_at).toISOString() : null,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+  };
+}
+
+function parseGitHubRepoUrl(repoUrl) {
+  const ssh = String(repoUrl || '').match(/^git@github\.com:([^/]+)\/(.+)$/i);
+  if (ssh) return { owner: ssh[1], repo: ssh[2].replace(/\.git$/i, '') };
+  try {
+    const u = new URL(repoUrl);
+    if (!/github\.com$/i.test(u.hostname)) return null;
+    const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/');
+    if (parts.length < 2) return null;
+    return { owner: parts[0], repo: parts[1].replace(/\.git$/i, '') };
+  } catch {
+    return null;
+  }
+}
+
+function parseBitbucketRepoUrl(repoUrl) {
+  try {
+    const u = new URL(repoUrl);
+    if (!/bitbucket\.org$/i.test(u.hostname)) return null;
+    const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/');
+    if (parts.length < 2) return null;
+    return { workspace: parts[0], repo: parts[1].replace(/\.git$/i, '') };
+  } catch {
+    return null;
+  }
+}
+
+function parseGitLabRepoUrl(repoUrl) {
+  try {
+    const u = new URL(repoUrl);
+    if (!/gitlab\.com$/i.test(u.hostname)) return null;
+    const projectPath = u.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+    return projectPath ? { projectPath } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchJson(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Comtra-Source-Scan/1.0',
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = data?.message || data?.error || `HTTP ${res.status}`;
+    throw Object.assign(new Error(msg), { status: res.status });
+  }
+  return data;
+}
+
+async function listSourceFiles({ provider, repoUrl, branch }) {
+  if (provider === 'github') {
+    const parsed = parseGitHubRepoUrl(repoUrl);
+    if (!parsed) throw new Error('Invalid GitHub repository URL.');
+    const data = await fetchJson(
+      `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    );
+    const files = Array.isArray(data?.tree)
+      ? data.tree.filter((x) => x?.type === 'blob' && typeof x.path === 'string').map((x) => x.path)
+      : [];
+    return files;
+  }
+  if (provider === 'bitbucket') {
+    const parsed = parseBitbucketRepoUrl(repoUrl);
+    if (!parsed) throw new Error('Invalid Bitbucket repository URL.');
+    const files = [];
+    let url = `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(parsed.workspace)}/${encodeURIComponent(parsed.repo)}/src/${encodeURIComponent(branch)}/?pagelen=100`;
+    for (let i = 0; i < 8 && url; i++) {
+      const data = await fetchJson(url);
+      for (const v of data?.values || []) {
+        if (v?.type === 'commit_file' && typeof v.path === 'string') files.push(v.path);
+      }
+      url = typeof data?.next === 'string' ? data.next : '';
+    }
+    return files;
+  }
+  if (provider === 'gitlab') {
+    const parsed = parseGitLabRepoUrl(repoUrl);
+    if (!parsed) throw new Error('Invalid GitLab repository URL.');
+    const project = encodeURIComponent(parsed.projectPath);
+    const data = await fetchJson(
+      `https://gitlab.com/api/v4/projects/${project}/repository/tree?ref=${encodeURIComponent(branch)}&recursive=true&per_page=100`,
+    );
+    return Array.isArray(data)
+      ? data.filter((x) => x?.type === 'blob' && typeof x.path === 'string').map((x) => x.path)
+      : [];
+  }
+  throw new Error('Custom sources require manual setup until provider auth is configured.');
+}
+
+function inferSourceScan({ provider, files, storybookPath }) {
+  const base = normalizeSourcePath(storybookPath);
+  const inBase = (p) => !base || p === base || p.startsWith(`${base}/`);
+  const storybookConfigs = files.filter((p) =>
+    inBase(p) && /(^|\/)\.storybook\/main\.(js|cjs|mjs|ts|tsx)$/i.test(p),
+  );
+  const stories = files.filter((p) =>
+    inBase(p) && /\.(stories|story)\.(js|jsx|ts|tsx|mdx|vue|svelte)$/i.test(p),
+  );
+  const components = files.filter((p) =>
+    inBase(p) && /(^|\/)(components|ui|src)\/.+\.(jsx|tsx|vue|svelte)$/i.test(p) && !/\.(stories|story)\./i.test(p),
+  );
+  const hasPnpm = files.some((p) => inBase(p) && /(^|\/)pnpm-lock\.yaml$/i.test(p));
+  const hasYarn = files.some((p) => inBase(p) && /(^|\/)yarn\.lock$/i.test(p));
+  const hasNpm = files.some((p) => inBase(p) && /(^|\/)package-lock\.json$/i.test(p));
+  const packageManager = hasPnpm ? 'pnpm' : hasYarn ? 'yarn' : hasNpm ? 'npm' : null;
+  const detectedFramework =
+    files.some((p) => /\.(tsx|jsx)$/i.test(p)) ? 'react' :
+      files.some((p) => /\.vue$/i.test(p)) ? 'vue' :
+        files.some((p) => /\.svelte$/i.test(p)) ? 'svelte' :
+          null;
+  const issues = [];
+  if (storybookConfigs.length === 0) issues.push('No .storybook/main config found in the selected path.');
+  if (stories.length === 0) issues.push('No Storybook stories found in the selected path.');
+  const status = storybookConfigs.length > 0 && stories.length > 0 ? 'ready' : files.length > 0 ? 'partial' : 'failed';
+  return {
+    status,
+    provider,
+    packageManager,
+    detectedFramework,
+    storybookConfigPath: storybookConfigs[0] || null,
+    storiesCount: stories.length,
+    componentsCount: components.length,
+    confidence: status === 'ready' ? 'high' : status === 'partial' ? 'medium' : 'low',
+    issues,
+    detectedAt: new Date().toISOString(),
+  };
+}
+
+async function runSourceScan(input) {
+  const provider = normalizeSourceProvider(input.provider);
+  const repoUrl = normalizeRepoUrl(input.repoUrl || input.repo_url);
+  const branch = String(input.branch || input.default_branch || 'main').trim().slice(0, 200) || 'main';
+  const storybookPath = normalizeSourcePath(input.storybookPath || input.storybook_path);
+  if (!provider) throw new Error('provider required');
+  if (!repoUrl) throw new Error('repo_url required');
+  if (provider === 'custom') {
+    return {
+      status: 'partial',
+      provider,
+      defaultBranch: branch,
+      packageManager: null,
+      detectedFramework: null,
+      storybookConfigPath: storybookPath ? `${storybookPath}/.storybook/main.*` : '.storybook/main.*',
+      storiesCount: null,
+      componentsCount: null,
+      confidence: 'low',
+      issues: ['Custom source saved. Automatic scanning requires a provider integration or custom API connector.'],
+      detectedAt: new Date().toISOString(),
+    };
+  }
+  const files = await listSourceFiles({ provider, repoUrl, branch });
+  return {
+    ...inferSourceScan({ provider, files, storybookPath }),
+    defaultBranch: branch,
+  };
+}
+
 // --- User DS imports (Generate: custom file DS — persist context index for performance)
 app.get('/api/user/ds-imports', async (req, res) => {
   const authCtx = getUserAuthContext(req);
@@ -5458,6 +5653,155 @@ app.put('/api/user/ds-imports', async (req, res) => {
     console.error('PUT /api/user/ds-imports', err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// --- Storybook Sync: source repository connection
+app.get('/api/sync/source-connection', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const figmaFileKey = String(req.query.figma_file_key || req.query.file_key || req.query.fileKey || '').trim();
+  const storybookUrl = String(req.query.storybook_url || req.query.storybookUrl || '').trim();
+  if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
+  if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
+  try {
+    const sel = await dbSql`
+      SELECT provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
+             status, auth_status, scan_result, last_scanned_at, updated_at
+      FROM user_source_connections
+      WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+      LIMIT 1
+    `;
+    const row = sel?.rows?.[0];
+    if (!row) return res.json({ connection: null });
+    res.json({ connection: rowToSourceConnection(row) });
+  } catch (err) {
+    console.error('GET /api/sync/source-connection', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/sync/source-connection', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const figmaFileKey = String(body.figma_file_key || body.file_key || body.fileKey || '').trim();
+  const storybookUrl = String(body.storybook_url || body.storybookUrl || '').trim();
+  const provider = normalizeSourceProvider(body.provider);
+  const repoUrl = normalizeRepoUrl(body.repo_url || body.repoUrl);
+  const defaultBranch = String(body.default_branch || body.branch || 'main').trim().slice(0, 200) || 'main';
+  const storybookPath = normalizeSourcePath(body.storybook_path || body.storybookPath);
+  const scanResult = body.scan_result ?? body.scan;
+  const authStatus = provider === 'custom' ? 'not_configured' : 'needs_auth';
+  const status =
+    scanResult?.status === 'ready' ? 'ready' :
+      scanResult?.status === 'partial' ? 'connected_manual' :
+        provider === 'custom' ? 'connected_manual' : 'needs_auth';
+  if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
+  if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
+  if (!provider) return res.status(400).json({ error: 'provider required' });
+  if (!repoUrl) return res.status(400).json({ error: 'repo_url required' });
+  try {
+    const scanJson = scanResult && typeof scanResult === 'object' ? JSON.stringify(scanResult) : null;
+    const ins = await dbSql`
+      INSERT INTO user_source_connections (
+        user_id, figma_file_key, storybook_url, provider, repo_url, default_branch, storybook_path,
+        status, auth_status, scan_result, last_scanned_at, updated_at
+      )
+      VALUES (
+        ${userId}, ${figmaFileKey}, ${storybookUrl}, ${provider}, ${repoUrl}, ${defaultBranch}, ${storybookPath},
+        ${status}, ${authStatus}, ${scanJson}::jsonb,
+        ${scanJson ? new Date().toISOString() : null}, NOW()
+      )
+      ON CONFLICT (user_id, figma_file_key, storybook_url) DO UPDATE SET
+        provider = EXCLUDED.provider,
+        repo_url = EXCLUDED.repo_url,
+        default_branch = EXCLUDED.default_branch,
+        storybook_path = EXCLUDED.storybook_path,
+        status = EXCLUDED.status,
+        auth_status = EXCLUDED.auth_status,
+        scan_result = EXCLUDED.scan_result,
+        last_scanned_at = EXCLUDED.last_scanned_at,
+        updated_at = NOW()
+      RETURNING provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
+                status, auth_status, scan_result, last_scanned_at, updated_at
+    `;
+    res.json({ ok: true, connection: rowToSourceConnection(ins?.rows?.[0]) });
+  } catch (err) {
+    console.error('PUT /api/sync/source-connection', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/sync/source-connection', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const figmaFileKey = String(body.figma_file_key || body.file_key || req.query.figma_file_key || req.query.fileKey || '').trim();
+  const storybookUrl = String(body.storybook_url || body.storybookUrl || req.query.storybook_url || req.query.storybookUrl || '').trim();
+  if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
+  if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
+  try {
+    await dbSql`
+      DELETE FROM user_source_connections
+      WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+    `;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('DELETE /api/sync/source-connection', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/sync/source-connection/scan', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  const body = req.body || {};
+  try {
+    const scan = await runSourceScan(body);
+    res.json({ ok: true, scan });
+  } catch (err) {
+    const message = err?.message || 'Source scan failed';
+    res.status(err?.status === 404 ? 404 : 400).json({
+      ok: false,
+      error: message,
+      scan: {
+        status: 'failed',
+        provider: normalizeSourceProvider(body.provider) || undefined,
+        defaultBranch: String(body.branch || body.default_branch || 'main'),
+        confidence: 'low',
+        issues: [message],
+        detectedAt: new Date().toISOString(),
+      },
+    });
+  }
+});
+
+app.post('/api/sync/source-auth/start', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  const provider = normalizeSourceProvider(req.body?.provider);
+  if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
+  if (provider === 'custom') {
+    return res.json({ ok: true, status: 'not_configured', message: 'Custom sources use manual setup.' });
+  }
+  if (provider === 'github' && process.env.GITHUB_APP_INSTALL_URL) {
+    const url = new URL(process.env.GITHUB_APP_INSTALL_URL);
+    url.searchParams.set('state', Buffer.from(JSON.stringify({ userId, ts: Date.now() })).toString('base64url'));
+    return res.json({ ok: true, status: 'needs_auth', url: url.toString() });
+  }
+  return res.status(501).json({
+    ok: false,
+    status: 'not_configured',
+    error: `${provider} provider auth is not configured on this backend yet.`,
+  });
 });
 
 // --- Generate conversational UX: threads + messages (plugin sync)

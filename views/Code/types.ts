@@ -77,6 +77,50 @@ export interface SyncDriftItem {
   syncAction?: SyncDriftAction;
 }
 
+export type SourceProvider = 'github' | 'bitbucket' | 'gitlab' | 'custom';
+
+export type SourceConnectionStatus =
+  | 'draft'
+  | 'needs_auth'
+  | 'connected_manual'
+  | 'scan_failed'
+  | 'ready';
+
+export interface SourceScanResult {
+  status: 'ready' | 'partial' | 'failed';
+  provider?: SourceProvider;
+  defaultBranch?: string | null;
+  packageManager?: string | null;
+  detectedFramework?: string | null;
+  storybookConfigPath?: string | null;
+  storiesCount?: number | null;
+  componentsCount?: number | null;
+  confidence?: 'high' | 'medium' | 'low';
+  issues?: string[];
+  detectedAt?: string | null;
+}
+
+export interface SourceConnection {
+  provider: SourceProvider;
+  repoUrl: string;
+  branch: string;
+  storybookPath: string;
+  storybookUrl: string;
+  figmaFileKey: string;
+  status: SourceConnectionStatus;
+  authStatus?: 'not_configured' | 'needs_auth' | 'connected';
+  scan?: SourceScanResult | null;
+  lastScannedAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface SourceConnectionInput {
+  provider: SourceProvider;
+  repoUrl: string;
+  branch: string;
+  storybookPath: string;
+}
+
 export interface SyncTabProps {
   isPro: boolean;
   onUnlockRequest: () => void;
@@ -103,6 +147,15 @@ export interface SyncTabProps {
   layerSelectionFeedback: string | null;
   handleSyncItem: (item: SyncDriftItem, e?: React.MouseEvent) => void;
   handleSyncAll: () => void;
-  onConnectSourceProvider?: () => void;
+  sourceConnection: SourceConnection | null;
+  sourceConnectionLoading: boolean;
+  sourceConnectionSaving: boolean;
+  sourceConnectionError: string | null;
+  sourceAuthStartUrl: string | null;
+  onLoadSourceConnection: () => Promise<void>;
+  onSaveSourceConnection: (input: SourceConnectionInput) => Promise<SourceConnection | null>;
+  onDeleteSourceConnection: () => Promise<boolean>;
+  onScanSourceConnection: (input: SourceConnectionInput) => Promise<SourceScanResult | null>;
+  onStartSourceAuth: (provider: SourceProvider) => Promise<{ ok: boolean; url?: string | null; error?: string }>;
   lastSyncAllDate: Date | null;
 }
