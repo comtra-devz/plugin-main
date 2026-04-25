@@ -491,15 +491,13 @@ const SPACING_COLLECTION_HINT = /spacing|space|layout|grid|sizing|dimension|scal
 /** FLOAT names that are almost never spacing tokens (avoid radius/opacity/etc. false positives) */
 const FLOAT_SPACING_EXCLUDE = /radius|radii|corner|opacity|alpha|blur|spread|shadow|elevation|font|leading|line-?height|letter|tracking|stroke|border-?width|icon|avatar|breakpoint|z-?index|duration|delay|easing|rotation|angle|perspective/i;
 
+/** dynamic-page / documentAccess: must not read `instance.mainComponent` synchronously — use async API only. */
 async function getMainComponentSafe(inst: InstanceNode): Promise<ComponentNode | null> {
-  const anyInst = inst as any;
-  if (typeof anyInst.getMainComponentAsync === 'function') {
-    try {
-      const c = await anyInst.getMainComponentAsync();
-      if (c) return c;
-    } catch (_) { /* fall through */ }
+  try {
+    return await inst.getMainComponentAsync();
+  } catch {
+    return null;
   }
-  return inst.mainComponent ?? null;
 }
 
 async function resolveFloatVariableValue(variableId: string, depth = 0): Promise<number | null> {
@@ -2222,11 +2220,22 @@ figma.ui.onmessage = async (raw: any) => {
           }
 
           const instanceNodes = figma.root.findAllWithCriteria({ types: ['INSTANCE'] }) as InstanceNode[];
-          const instances = instanceNodes.map((i) => ({
-            id: i.id,
-            name: i.name,
-            mainComponentName: i.mainComponent ? i.mainComponent.name : null,
-          }));
+          const INSTANCE_MAIN_BATCH = 24;
+          const instances: Array<{ id: string; name: string; mainComponentName: string | null }> = [];
+          for (let b = 0; b < instanceNodes.length; b += INSTANCE_MAIN_BATCH) {
+            const slice = instanceNodes.slice(b, b + INSTANCE_MAIN_BATCH);
+            const batch = await Promise.all(
+              slice.map(async (inst) => {
+                const main = await getMainComponentSafe(inst);
+                return {
+                  id: inst.id,
+                  name: inst.name,
+                  mainComponentName: main ? main.name : null,
+                };
+              }),
+            );
+            instances.push(...batch);
+          }
 
           const styles: Array<{ key: string; name: string; type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID' }> = [];
           const pushStyle = (s: BaseStyle, type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID') => {
@@ -2235,15 +2244,16 @@ figma.ui.onmessage = async (raw: any) => {
               : s.id;
             styles.push({ key: k, name: s.name, type });
           };
-          for (const s of figma.getLocalPaintStyles()) pushStyle(s, 'FILL');
-          for (const s of figma.getLocalTextStyles()) pushStyle(s, 'TEXT');
-          for (const s of figma.getLocalEffectStyles()) pushStyle(s, 'EFFECT');
-          const getGrid = (figma as { getLocalGridStyles?: () => readonly BaseStyle[] }).getLocalGridStyles;
-          if (typeof getGrid === 'function') {
-            for (const s of getGrid.call(figma)) {
-              pushStyle(s, 'GRID');
-            }
-          }
+          const [paintStyles, textStyles, effectStyles, gridStyles] = await Promise.all([
+            figma.getLocalPaintStylesAsync(),
+            figma.getLocalTextStylesAsync(),
+            figma.getLocalEffectStylesAsync(),
+            figma.getLocalGridStylesAsync(),
+          ]);
+          for (const s of paintStyles) pushStyle(s, 'FILL');
+          for (const s of textStyles) pushStyle(s, 'TEXT');
+          for (const s of effectStyles) pushStyle(s, 'EFFECT');
+          for (const s of gridStyles) pushStyle(s, 'GRID');
 
           figma.ui.postMessage({
             type: 'sync-snapshot-result',

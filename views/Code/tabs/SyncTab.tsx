@@ -171,6 +171,12 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
   return (
     <div className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] relative overflow-hidden animate-in slide-in-from-right-2">
+      <style>{`
+        @keyframes fill-cta-bar {
+          0% { width: 0%; }
+          100% { width: 100%; }
+        }
+      `}</style>
       <div className="p-3 border-b-2 border-black bg-black text-white flex justify-between items-center">
         <h3 className="font-bold uppercase text-xs">Deep Sync</h3>
       </div>
@@ -346,10 +352,27 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         layout="row"
                         onClick={handleScanClick}
                         disabled={isSyncScanning || !!getRemainingTime('scan_sync')}
-                        className="relative"
+                        className={
+                          `relative overflow-hidden${isSyncScanning ? ' disabled:!bg-[#ffc900] disabled:!text-black disabled:hover:!bg-[#ffb700] disabled:cursor-wait' : ''}`
+                        }
                       >
-                        {isSyncScanning ? 'Scanning Drift...' : getRemainingTime('scan_sync') ? `Wait ${getRemainingTime('scan_sync')}` : `Scan Project`}
-                        {(!getRemainingTime('scan_sync')) && <span className="absolute bottom-0.5 right-1 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">-15 Credits</span>}
+                        {isSyncScanning ? (
+                          <span className="absolute inset-0">
+                            <span
+                              className="absolute inset-y-0 left-0 bg-yellow-300"
+                              style={{ animation: 'fill-cta-bar 1600ms linear infinite' }}
+                              aria-hidden
+                            />
+                          </span>
+                        ) : null}
+                        <span className="relative z-10">
+                          {isSyncScanning ? 'Scanning Drift...' : getRemainingTime('scan_sync') ? `Wait ${getRemainingTime('scan_sync')}` : `Scan Project`}
+                        </span>
+                        {!getRemainingTime('scan_sync') && (
+                          <span className="absolute bottom-0.5 right-1 z-10 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">
+                            -15 Credits
+                          </span>
+                        )}
                       </Button>
                     </div>
                   ) : (

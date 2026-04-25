@@ -720,11 +720,6 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         role: 'assistant',
         text: 'Quick one-time setup: we read tokens, styles, and components so generated screens stay consistent with your system.',
       },
-      {
-        id: nextFeedId(),
-        role: 'assistant',
-        text: 'No uploads needed. We read directly from this live Figma session.',
-      },
     ]);
     setWizardOpen(true);
   }, [fileKey, isPro, onUnlockRequest]);

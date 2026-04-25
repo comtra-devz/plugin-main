@@ -441,23 +441,23 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
                 ></div>
           </div>
           
-          {/* Discount Reward Text */}
+          {/* Discount reward row: single 24px-tall hit target (text + arrow) */}
           {discountPercent > 0 ? (
-              <div className="mt-2 pt-1 text-[9px] font-bold uppercase text-[#ffc900] relative z-[1] flex items-start justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleOpenRewardModal}
+                className="mt-2 pt-1 min-h-[24px] w-full text-left text-[9px] font-bold uppercase text-[#ffc900] relative z-[1] flex items-center justify-start gap-1.5 hover:opacity-90 active:opacity-80"
+                title="Show discount code"
+                aria-label={`Current reward ${discountPercent}% off annual plan — show code`}
+              >
                   <span className="leading-tight">Current Reward: {discountPercent}% OFF Annual Plan</span>
-                  <button
-                    type="button"
-                    onClick={handleOpenRewardModal}
-                    className="w-6 h-6 -mt-1 -mr-1 shrink-0 inline-flex items-center justify-center text-[#ffc900] hover:text-white transition-colors"
-                    title="Show discount code"
-                    aria-label="Show discount code"
-                  >
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden>
                     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none">
                       <path d="M7 17L17 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" />
                       <path d="M9 7H17V15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" />
                     </svg>
-                  </button>
-              </div>
+                  </span>
+              </button>
           ) : (
               <div className="mt-2 text-[9px] font-bold uppercase text-gray-500 relative z-[1]">
                   Reach Level 5 to unlock Annual Plan discounts.

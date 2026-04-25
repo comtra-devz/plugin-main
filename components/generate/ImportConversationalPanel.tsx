@@ -64,7 +64,7 @@ export const ImportConversationalPanel: React.FC<{
 
   return (
     <div
-      className={`${BRUTAL.infoPanel} flex max-h-[min(42vh,320px)] min-h-0 flex-col gap-3 overflow-y-auto pt-3 pb-5`}
+      className={`${BRUTAL.infoPanel} flex max-h-[min(42vh,320px)] min-h-0 flex-col gap-3 overflow-y-auto py-3`}
       data-component="ImportConversationalPanel"
     >
       {items.map((item) => {

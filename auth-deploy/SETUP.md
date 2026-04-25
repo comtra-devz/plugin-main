@@ -124,6 +124,8 @@ Documentazione flusso e riferimenti codice: **[../docs/AFFILIATE.md](../docs/AFF
    - formato share URL UUID (consigliato): **`LEMON_CHECKOUT_URL_1W`**, **`LEMON_CHECKOUT_URL_1M`**, **`LEMON_CHECKOUT_URL_6M`**, **`LEMON_CHECKOUT_URL_1Y`** (hanno priorita` sui variant ID)
 5. **Codici sconto livello (gamification)**: con **`LEMON_SQUEEZY_API_KEY`** e **`LEMON_SQUEEZY_STORE_ID`** il backend crea un codice sconto univoco per utente quando raggiunge livello 5, 10, 15 o 20 (5%–20% sul piano Annual). Al passaggio di livello superiore il codice precedente viene eliminato via API. Tabella DB: `user_level_discounts` (vedi `schema.sql`). Senza queste variabili il level up funziona ma il codice non viene creato.
 
+6. **`auth.comtra.dev` sul progetto Vercel `plugin-login`**: se il dominio punta a **`plugin-login`** e la **Root Directory** del progetto è la **root del monorepo** (non la sottocartella `auth-deploy`), le route OAuth “piene” stanno comunque sul deploy **`auth-deploy`**. In quel caso il file **`api/discounts/me.mjs`** nella root del repo fa da **proxy** verso l’upstream (default `https://auth-deploy-ten.vercel.app`). Opzionale: env **`COMTRA_AUTH_UPSTREAM_URL`** = base senza slash finale dell’istanza che espone `app.mjs` (stesso `JWT_SECRET` / stesso DB dell’upstream). Se invece la Root Directory di `plugin-login` è **`auth-deploy`**, non serve il proxy: basta il rewrite in `auth-deploy/vercel.json` e un deploy aggiornato di quel progetto.
+
 ---
 
 ## 4bis. Far comparire una nuova route (es. Verifica token)

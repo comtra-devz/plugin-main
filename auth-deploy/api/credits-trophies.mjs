@@ -73,6 +73,12 @@ export default function handler(req, res) {
     return app(req, res);
   }
 
+  if (service === 'discounts') {
+    if (req.method !== 'GET') return res.status(405).end();
+    req.url = '/api/discounts/me' + qs;
+    return app(req, res);
+  }
+
   if (service === 'feedback' && sub === 'generate') {
     if (req.method !== 'POST') return res.status(405).end();
     req.url = '/api/feedback/generate';
@@ -161,6 +167,6 @@ export default function handler(req, res) {
 
   return res.status(400).json({
     error:
-      'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|feedback|generation|admin|support|ds-catalog|user-ds-imports|generate-chat',
+      'Missing or invalid service=credits|trophies|history|report-throttle|throttle-discount|discounts|feedback|generation|admin|support|ds-catalog|user-ds-imports|generate-chat',
   });
 }
