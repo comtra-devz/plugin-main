@@ -161,12 +161,16 @@ export interface SyncSnapshot {
     pageId: string;
     variantProperties: Record<string, string> | null;
     description: string;
+    width?: number;
+    height?: number;
   }>;
   /** Canvas instances — used with `components` so drift names match the previous document walk. */
   instances: Array<{
     id: string;
     name: string;
     mainComponentName: string | null;
+    width?: number;
+    height?: number;
   }>;
   styles: Array<{
     key: string;

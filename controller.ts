@@ -2194,6 +2194,8 @@ figma.ui.onmessage = async (raw: any) => {
             pageId: string;
             variantProperties: Record<string, string> | null;
             description: string;
+            width?: number;
+            height?: number;
           }> = [];
 
           for (const node of compAndSets) {
@@ -2216,10 +2218,12 @@ figma.ui.onmessage = async (raw: any) => {
               pageId,
               variantProperties,
               description,
+              width: typeof node.width === 'number' ? node.width : undefined,
+              height: typeof node.height === 'number' ? node.height : undefined,
             });
           }
 
-          const instances: Array<{ id: string; name: string; mainComponentName: string | null }> = [];
+          const instances: Array<{ id: string; name: string; mainComponentName: string | null; width?: number; height?: number }> = [];
           if (components.length === 0) {
             // Fallback for files that only consume library instances. Avoid getMainComponentAsync for every
             // instance here: it can stall large files under dynamic-page access.
@@ -2229,6 +2233,8 @@ figma.ui.onmessage = async (raw: any) => {
                 id: inst.id,
                 name: inst.name,
                 mainComponentName: null,
+                width: typeof inst.width === 'number' ? inst.width : undefined,
+                height: typeof inst.height === 'number' ? inst.height : undefined,
               });
             }
           }

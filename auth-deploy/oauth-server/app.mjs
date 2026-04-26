@@ -5419,6 +5419,18 @@ function normalizeSourcePath(v) {
   return String(v || '').trim().replace(/^\/+|\/+$/g, '').slice(0, 500);
 }
 
+function normalizeStorybookUrl(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    const pathname = u.pathname.replace(/\/+$/g, '');
+    return `${u.origin}${pathname}`.slice(0, 1200);
+  } catch {
+    return raw.replace(/\/+$/g, '').slice(0, 1200);
+  }
+}
+
 function rowToSourceConnection(row) {
   if (!row) return null;
   return {
@@ -5732,7 +5744,7 @@ app.get('/api/sync/source-connection', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
   if (!dbSql) return res.status(503).json({ error: 'Database required' });
   const figmaFileKey = String(req.query.figma_file_key || req.query.file_key || req.query.fileKey || '').trim();
-  const storybookUrl = String(req.query.storybook_url || req.query.storybookUrl || '').trim();
+  const storybookUrl = normalizeStorybookUrl(req.query.storybook_url || req.query.storybookUrl);
   if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
   if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
   try {
@@ -5740,7 +5752,12 @@ app.get('/api/sync/source-connection', async (req, res) => {
       SELECT provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
              status, auth_status, source_access_token, scan_result, last_scanned_at, updated_at
       FROM user_source_connections
-      WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+      WHERE user_id = ${userId}
+        AND figma_file_key = ${figmaFileKey}
+        AND (
+          storybook_url = ${storybookUrl}
+          OR regexp_replace(storybook_url, '/+$', '') = ${storybookUrl}
+        )
       LIMIT 1
     `;
     const row = sel?.rows?.[0];
@@ -5759,7 +5776,7 @@ app.put('/api/sync/source-connection', async (req, res) => {
   if (!dbSql) return res.status(503).json({ error: 'Database required' });
   const body = req.body || {};
   const figmaFileKey = String(body.figma_file_key || body.file_key || body.fileKey || '').trim();
-  const storybookUrl = String(body.storybook_url || body.storybookUrl || '').trim();
+  const storybookUrl = normalizeStorybookUrl(body.storybook_url || body.storybookUrl);
   const provider = normalizeSourceProvider(body.provider);
   const repoUrl = normalizeRepoUrl(body.repo_url || body.repoUrl);
   const defaultBranch = String(body.default_branch || body.branch || 'main').trim().slice(0, 200) || 'main';
@@ -5803,7 +5820,22 @@ app.put('/api/sync/source-connection', async (req, res) => {
       RETURNING provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
                 status, auth_status, source_access_token, scan_result, last_scanned_at, updated_at
     `;
-    res.json({ ok: true, connection: rowToSourceConnection(ins?.rows?.[0]) });
+    let row = ins?.rows?.[0];
+    if (!row) {
+      const again = await dbSql`
+        SELECT provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
+               status, auth_status, source_access_token, scan_result, last_scanned_at, updated_at
+        FROM user_source_connections
+        WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+        LIMIT 1
+      `;
+      row = again?.rows?.[0];
+    }
+    const connection = rowToSourceConnection(row);
+    if (!connection) {
+      return res.status(500).json({ error: 'Save did not return a connection row' });
+    }
+    res.json({ ok: true, connection });
   } catch (err) {
     console.error('PUT /api/sync/source-connection', err);
     res.status(500).json({ error: 'Server error' });
@@ -5817,13 +5849,18 @@ app.delete('/api/sync/source-connection', async (req, res) => {
   if (!dbSql) return res.status(503).json({ error: 'Database required' });
   const body = req.body || {};
   const figmaFileKey = String(body.figma_file_key || body.file_key || req.query.figma_file_key || req.query.fileKey || '').trim();
-  const storybookUrl = String(body.storybook_url || body.storybookUrl || req.query.storybook_url || req.query.storybookUrl || '').trim();
+  const storybookUrl = normalizeStorybookUrl(body.storybook_url || body.storybookUrl || req.query.storybook_url || req.query.storybookUrl);
   if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
   if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
   try {
     await dbSql`
       DELETE FROM user_source_connections
-      WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+      WHERE user_id = ${userId}
+        AND figma_file_key = ${figmaFileKey}
+        AND (
+          storybook_url = ${storybookUrl}
+          OR regexp_replace(storybook_url, '/+$', '') = ${storybookUrl}
+        )
     `;
     res.json({ ok: true });
   } catch (err) {
@@ -5844,12 +5881,17 @@ app.post('/api/sync/source-connection/scan', async (req, res) => {
     let effectiveInput = body;
     if (!sourceToken && dbSql) {
       const figmaFileKey = String(body.figma_file_key || body.file_key || '').trim();
-      const storybookUrl = String(body.storybook_url || '').trim();
+      const storybookUrl = normalizeStorybookUrl(body.storybook_url || '');
       if (figmaFileKey && storybookUrl) {
         const sel = await dbSql`
           SELECT source_access_token
           FROM user_source_connections
-          WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+          WHERE user_id = ${userId}
+            AND figma_file_key = ${figmaFileKey}
+            AND (
+              storybook_url = ${storybookUrl}
+              OR regexp_replace(storybook_url, '/+$', '') = ${storybookUrl}
+            )
           LIMIT 1
         `;
         const tokenFromDb = sel?.rows?.[0]?.source_access_token;

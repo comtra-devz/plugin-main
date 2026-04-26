@@ -234,6 +234,47 @@ function buildNameAliases(values) {
   return aliases;
 }
 
+const ICON_LIKE_NAME_RE = /\b(icon|icons|glyph|pictogram|symbol|avatar|logo|badge)\b/i;
+const CHART_LIKE_NAME_RE = /\b(chart|graph|histogram|bar|line|pie|donut|area|sparkline)\b/i;
+
+function parsePositiveNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function inferKindFromName(name) {
+  const raw = asCleanString(name);
+  if (!raw) return 'generic';
+  if (ICON_LIKE_NAME_RE.test(raw)) return 'icon';
+  if (CHART_LIKE_NAME_RE.test(raw)) return 'chart';
+  return 'generic';
+}
+
+function inferFigmaKind(entry) {
+  const explicit = inferKindFromName(entry.rawName);
+  if (explicit !== 'generic') return explicit;
+  const w = parsePositiveNumber(entry.width);
+  const h = parsePositiveNumber(entry.height);
+  // Small square-ish assets are very likely icon glyphs.
+  if (w != null && h != null && w <= 40 && h <= 40 && Math.abs(w - h) <= 8) return 'icon';
+  return 'generic';
+}
+
+function inferStorybookKind(entry) {
+  if (!entry) return 'generic';
+  const checks = [entry.rawName, entry.title, entry.name, entry.id];
+  for (const c of checks) {
+    const k = inferKindFromName(c);
+    if (k !== 'generic') return k;
+  }
+  return 'generic';
+}
+
+function kindsAreCompatible(figmaKind, storyKind) {
+  if (figmaKind === 'generic' || storyKind === 'generic') return true;
+  return figmaKind === storyKind;
+}
+
 function levenshtein(a, b) {
   if (a === b) return 0;
   if (!a) return b.length;
@@ -369,7 +410,7 @@ function extractStorybookEntries(sbData) {
 
 function buildFigmaEntries(figma) {
   const byAlias = new Map();
-  const add = (name, id, variantProperties) => {
+  const add = (name, id, variantProperties, width, height) => {
     const rawName = asCleanString(name);
     if (!rawName) return;
     const aliases = buildNameAliases([rawName]);
@@ -386,12 +427,21 @@ function buildFigmaEntries(figma) {
       const existing = byAlias.get(key);
       for (const v of variantValues) existing.variantValues.add(v);
       if (!existing.layerId && id) existing.layerId = id;
+      if (existing.width == null && parsePositiveNumber(width) != null) existing.width = parsePositiveNumber(width);
+      if (existing.height == null && parsePositiveNumber(height) != null) existing.height = parsePositiveNumber(height);
       return;
     }
-    byAlias.set(key, { rawName, layerId: id || null, aliases, variantValues });
+    byAlias.set(key, {
+      rawName,
+      layerId: id || null,
+      aliases,
+      variantValues,
+      width: parsePositiveNumber(width),
+      height: parsePositiveNumber(height),
+    });
   };
-  for (const c of figma.components) add(c.name, c.id, c.variantProperties);
-  for (const inst of figma.instances) add(inst.mainName || inst.name, inst.id, null);
+  for (const c of figma.components) add(c.name, c.id, c.variantProperties, c.width, c.height);
+  for (const inst of figma.instances) add(inst.mainName || inst.name, inst.id, null, inst.width, inst.height);
   return [...byAlias.values()];
 }
 
@@ -407,16 +457,21 @@ function indexStorybookEntries(entries) {
 }
 
 function findStorybookMatch(figmaEntry, aliasIndex) {
+  const figmaKind = inferFigmaKind(figmaEntry);
   for (const alias of figmaEntry.aliases) {
     const matches = aliasIndex.get(alias);
-    if (matches?.length) return { entry: matches[0], alias };
+    if (!matches?.length) continue;
+    const compatible = matches.filter((m) => kindsAreCompatible(figmaKind, inferStorybookKind(m)));
+    if (compatible.length) return { entry: compatible[0], alias };
   }
   return null;
 }
 
 function findPotentialStorybookMatch(figmaEntry, entries) {
+  const figmaKind = inferFigmaKind(figmaEntry);
   let best = null;
   for (const entry of entries) {
+    if (!kindsAreCompatible(figmaKind, inferStorybookKind(entry))) continue;
     const score = similarity(figmaEntry.rawName, entry.rawName);
     if (!best || score > best.score) best = { entry, score };
   }
@@ -439,7 +494,7 @@ function missingVariantValues(figmaEntry, storyEntry) {
 
 /**
  * @param {any} snapshot - sync_snapshot from plugin
- * @returns {{ components: Array<{name: string, id: string}>, instances: Array<{name: string, id: string, mainName?: string}> }}
+ * @returns {{ components: Array<{name: string, id: string, width?: number, height?: number}>, instances: Array<{name: string, id: string, mainName?: string, width?: number, height?: number}> }}
  */
 function figmaExtractFromSyncSnapshot(snapshot) {
   const components = [];
@@ -457,7 +512,9 @@ function figmaExtractFromSyncSnapshot(snapshot) {
       c && c.variantProperties && typeof c.variantProperties === 'object' && !Array.isArray(c.variantProperties)
         ? c.variantProperties
         : null;
-    if (name) components.push({ name, id: layerId || name, variantProperties });
+    const width = parsePositiveNumber(c?.width);
+    const height = parsePositiveNumber(c?.height);
+    if (name) components.push({ name, id: layerId || name, variantProperties, width, height });
   }
   const instList = Array.isArray(snapshot?.instances) ? snapshot.instances : [];
   for (const i of instList) {
@@ -468,7 +525,13 @@ function figmaExtractFromSyncSnapshot(snapshot) {
         ? i.mainComponentName.trim()
         : null;
     if (!id && !name) continue;
-    instances.push({ name, id: id || name, mainName: mainName || undefined });
+    instances.push({
+      name,
+      id: id || name,
+      mainName: mainName || undefined,
+      width: parsePositiveNumber(i?.width),
+      height: parsePositiveNumber(i?.height),
+    });
   }
   return { components, instances };
 }

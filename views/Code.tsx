@@ -83,14 +83,66 @@ const SYNC_ITEMS_MOCK = [
 
 const COOLDOWN_MS = 120000; // 2 Minutes
 const SYNC_LINKED_FILES_KEY = 'comtra-sync-linked-files-v1';
+const SYNC_LAST_SCAN_BY_FILE_KEY = 'comtra-sync-last-scan-by-file-v1';
 
 type SyncCachedResult = {
   syncItems: SyncDriftItem[];
   scannedAt: string;
 };
 
+const canonicalStorybookUrl = (url: string) => String(url || '').trim().replace(/\/+$/g, '').toLowerCase();
+
 const buildSyncCacheKey = (fileKey: string, storybookUrl: string) =>
-  `comtra-sync-scan-cache:${fileKey}:${storybookUrl.toLowerCase()}`;
+  `comtra-sync-scan-cache:${fileKey}:${canonicalStorybookUrl(storybookUrl)}`;
+
+const buildLegacySyncCacheKey = (fileKey: string, storybookUrl: string) =>
+  `comtra-sync-scan-cache:${fileKey}:${String(storybookUrl || '').trim()}`;
+
+const readSyncCachePayload = (
+  fileKey: string,
+  storybookUrl: string,
+): SyncCachedResult | null => {
+  const keys = [
+    buildSyncCacheKey(fileKey, storybookUrl),
+    buildLegacySyncCacheKey(fileKey, storybookUrl),
+    buildLegacySyncCacheKey(fileKey, `${storybookUrl}/`),
+  ];
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as SyncCachedResult;
+      if (Array.isArray(parsed?.syncItems)) return parsed;
+    } catch {
+      // continue
+    }
+  }
+  return null;
+};
+
+const writeLastScanByFile = (fileKey: string, storybookUrl: string, payload: SyncCachedResult) => {
+  try {
+    const raw = localStorage.getItem(SYNC_LAST_SCAN_BY_FILE_KEY);
+    const obj = raw ? (JSON.parse(raw) as Record<string, { storybookUrl: string; payload: SyncCachedResult }>) : {};
+    obj[fileKey] = { storybookUrl: canonicalStorybookUrl(storybookUrl), payload };
+    localStorage.setItem(SYNC_LAST_SCAN_BY_FILE_KEY, JSON.stringify(obj));
+  } catch {
+    // noop
+  }
+};
+
+const readLastScanByFile = (fileKey: string): { storybookUrl: string; payload: SyncCachedResult } | null => {
+  try {
+    const raw = localStorage.getItem(SYNC_LAST_SCAN_BY_FILE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw) as Record<string, { storybookUrl: string; payload: SyncCachedResult }>;
+    const hit = obj[fileKey];
+    if (!hit || !Array.isArray(hit?.payload?.syncItems)) return null;
+    return hit;
+  } catch {
+    return null;
+  }
+};
 
 const readSyncLinkedFiles = (): SyncLinkedFileOption[] => {
   try {
@@ -122,9 +174,13 @@ const writeSyncLinkedFiles = (items: SyncLinkedFileOption[]) => {
 
 const upsertSyncLinkedFile = (item: SyncLinkedFileOption) => {
   const list = readSyncLinkedFiles();
+  const nextItem = {
+    ...item,
+    storybookUrl: canonicalStorybookUrl(item.storybookUrl),
+  };
   const next = [
-    item,
-    ...list.filter((x) => !(x.fileKey === item.fileKey && x.storybookUrl === item.storybookUrl)),
+    nextItem,
+    ...list.filter((x) => !(x.fileKey === nextItem.fileKey && canonicalStorybookUrl(x.storybookUrl) === nextItem.storybookUrl)),
   ];
   writeSyncLinkedFiles(next);
   return next;
@@ -186,6 +242,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [syncFileKey, setSyncFileKey] = useState<string | null>(null);
   const [syncFileName, setSyncFileName] = useState<string | null>(null);
   const [syncLinkedFiles, setSyncLinkedFiles] = useState<SyncLinkedFileOption[]>(() => readSyncLinkedFiles());
+  const [rememberedStorybooksForFile, setRememberedStorybooksForFile] = useState<string[]>([]);
   const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
   const [sourceConnectionLoading, setSourceConnectionLoading] = useState(false);
   const [sourceConnectionSaving, setSourceConnectionSaving] = useState(false);
@@ -205,6 +262,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const pendingSyncScanRef = useRef(false);
   const pendingSyncScanTimeoutRef = useRef<number | null>(null);
   const pendingFileContextRef = useRef<((v: { fileKey: string | null; fileName: string | null }) => void) | null>(null);
+  const pendingSnapshotFileRef = useRef<((v: { fileKey: string | null; fileName: string | null }) => void) | null>(null);
   const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
@@ -249,6 +307,16 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         cb({
           fileKey: msg.fileKey ? String(msg.fileKey) : null,
           fileName: msg.fileName ? String(msg.fileName) : null,
+        });
+        return;
+      }
+      if (msg.type === 'sync-snapshot-result' && pendingSnapshotFileRef.current && !pendingSyncScanRef.current) {
+        const cb = pendingSnapshotFileRef.current;
+        pendingSnapshotFileRef.current = null;
+        const snap = msg.sync_snapshot as SyncSnapshot | undefined;
+        cb({
+          fileKey: snap?.fileKey ? String(snap.fileKey) : null,
+          fileName: snap?.fileName ? String(snap.fileName) : null,
         });
         return;
       }
@@ -311,6 +379,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
               try {
                 const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
                 localStorage.setItem(buildSyncCacheKey(String(snap.fileKey), storybookUrl), JSON.stringify(payload));
+                writeLastScanByFile(String(snap.fileKey), storybookUrl, payload);
               } catch {
                 /* noop */
               }
@@ -396,42 +465,87 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       window.parent.postMessage({ pluginMessage: { type: 'get-file-context', scope: 'all' } }, '*');
     });
 
+  const requestFileFromSyncSnapshot = () =>
+    new Promise<{ fileKey: string | null; fileName: string | null }>((resolve) => {
+      let settled = false;
+      const t = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        pendingSnapshotFileRef.current = null;
+        resolve({ fileKey: null, fileName: null });
+      }, 12000);
+      pendingSnapshotFileRef.current = (v) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(t);
+        resolve(v);
+      };
+      window.parent.postMessage({ pluginMessage: { type: 'get-sync-snapshot' } }, '*');
+    });
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ctx = await requestCurrentFileContext();
+      let ctx = await requestCurrentFileContext();
+      if (!ctx.fileKey) {
+        const fromSnapshot = await requestFileFromSyncSnapshot();
+        if (fromSnapshot.fileKey) ctx = fromSnapshot;
+      }
       if (cancelled) return;
       setSyncFileKey(ctx.fileKey);
       setSyncFileName(ctx.fileName);
+      // Auto-restore last Storybook used on this exact Figma file (Generate-like behavior).
+      if (!ctx.fileKey || isSbConnected) return;
+      const allLinked = readSyncLinkedFiles();
+      const candidates = allLinked
+        .filter((x) => x.fileKey === ctx.fileKey && x.storybookUrl)
+        .sort((a, b) => String(b.lastUsedAt || '').localeCompare(String(a.lastUsedAt || '')));
+      const latest = candidates[0];
+      if (latest?.storybookUrl) {
+        setStorybookUrl(latest.storybookUrl);
+        setIsSbConnected(true);
+        setStorybookToken(null);
+        setStorybookConnectionInfo(null);
+        setSyncScanError(null);
+        setSyncScanUpgradeUrl(null);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isSbConnected]);
+
+  useEffect(() => {
+    if (!syncFileKey) {
+      setRememberedStorybooksForFile([]);
+      return;
+    }
+    const urls = readSyncLinkedFiles()
+      .filter((x) => x.fileKey === syncFileKey && x.storybookUrl)
+      .sort((a, b) => String(b.lastUsedAt || '').localeCompare(String(a.lastUsedAt || '')))
+      .map((x) => canonicalStorybookUrl(x.storybookUrl));
+    setRememberedStorybooksForFile(Array.from(new Set(urls)));
+  }, [syncFileKey, isSbConnected]);
 
   useEffect(() => {
     if (!storybookUrl || !syncFileKey) return;
-    const related = readSyncLinkedFiles().filter((x) => x.storybookUrl === storybookUrl);
+    const storybookKey = canonicalStorybookUrl(storybookUrl);
+    const related = readSyncLinkedFiles().filter((x) => canonicalStorybookUrl(x.storybookUrl) === storybookKey);
     setSyncLinkedFiles(related);
-    try {
-      const raw = localStorage.getItem(buildSyncCacheKey(syncFileKey, storybookUrl));
-      if (!raw) {
-        setHasSyncScanned(false);
-        setSyncItems([]);
-        return;
-      }
-      const parsed = JSON.parse(raw) as SyncCachedResult;
-      if (Array.isArray(parsed?.syncItems)) {
-        setSyncItems(parsed.syncItems);
-        setHasSyncScanned(true);
-      } else {
-        setHasSyncScanned(false);
-        setSyncItems([]);
-      }
-    } catch {
-      setHasSyncScanned(false);
-      setSyncItems([]);
+    const exact = readSyncCachePayload(syncFileKey, storybookKey);
+    if (Array.isArray(exact?.syncItems)) {
+      setSyncItems(exact.syncItems);
+      setHasSyncScanned(true);
+      return;
     }
+    const lastByFile = readLastScanByFile(syncFileKey);
+    if (Array.isArray(lastByFile?.payload?.syncItems) && canonicalStorybookUrl(lastByFile.storybookUrl) === storybookKey) {
+      setSyncItems(lastByFile.payload.syncItems);
+      setHasSyncScanned(true);
+      return;
+    }
+    setHasSyncScanned(false);
+    setSyncItems([]);
   }, [storybookUrl, syncFileKey]);
 
   const getRemainingTime = (key: string) => {
@@ -730,7 +844,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   // Sync Logic
   const handleConnectSb = (url: string, token?: string, info?: StorybookConnectionInfo | null) => {
-    setStorybookUrl(url);
+    const normalizedUrl = canonicalStorybookUrl(url);
+    setStorybookUrl(normalizedUrl);
     setStorybookToken(token ?? null);
     setStorybookConnectionInfo(info ?? null);
     setIsSbConnected(true);
@@ -741,9 +856,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       const next = upsertSyncLinkedFile({
         fileKey: syncFileKey,
         fileName: syncFileName || 'Untitled file',
-        storybookUrl: url,
+        storybookUrl: normalizedUrl,
         lastUsedAt: new Date().toISOString(),
-      }).filter((x) => x.storybookUrl === url);
+      }).filter((x) => canonicalStorybookUrl(x.storybookUrl) === normalizedUrl);
       setSyncLinkedFiles(next);
     }
   };
@@ -1114,6 +1229,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             activeSyncFileKey={syncFileKey}
             activeSyncFileName={syncFileName}
             syncLinkedFiles={syncLinkedFiles}
+            rememberedStorybooksForFile={rememberedStorybooksForFile}
+            onRestoreStorybookForFile={(url) => handleConnectSb(url, undefined, null)}
             onSelectSyncFile={handleSelectSyncFile}
             onLoadSourceConnection={loadSourceConnection}
             onSaveSourceConnection={handleSaveSourceConnection}

@@ -164,6 +164,8 @@ export interface SyncTabProps {
   activeSyncFileKey: string | null;
   activeSyncFileName: string | null;
   syncLinkedFiles: SyncLinkedFileOption[];
+  rememberedStorybooksForFile?: string[];
+  onRestoreStorybookForFile?: (url: string) => void;
   onSelectSyncFile: (fileKey: string) => void;
   onLoadSourceConnection: () => Promise<void>;
   onSaveSourceConnection: (input: SourceConnectionInput) => Promise<SourceConnection | null>;

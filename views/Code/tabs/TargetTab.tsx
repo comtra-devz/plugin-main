@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TargetTabProps, BRUTAL } from '../types';
 import { Button } from '../../../components/ui/Button';
 import { BrutalSelect } from '../../../components/ui/BrutalSelect';
+import { BrutalToggle } from '../../../components/ui/BrutalToggle';
 
 const LANGUAGES = [
   { id: 'REACT', label: 'React + Tailwind' },
@@ -111,24 +112,14 @@ export const TargetTab: React.FC<TargetTabProps> = ({
                       i
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAiPowered((prev) => !prev);
+                  <BrutalToggle
+                    pressed={aiPowered}
+                    onPressedChange={(next) => {
+                      setAiPowered(next);
                       setGeneratedCode(null);
                     }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full border-2 border-black transition-colors ${
-                      aiPowered ? 'bg-[#ff90e8]' : 'bg-white'
-                    }`}
-                    aria-pressed={aiPowered}
                     aria-label="Toggle AI Powered"
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${
-                        aiPowered ? 'translate-x-5' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+                  />
                 </div>
               ) : null}
 

@@ -3,7 +3,6 @@ import React, { useMemo, useState } from 'react';
 import {
   SyncTabProps,
   BRUTAL,
-  COLORS,
   type SourceConnectionInput,
   type SourceProvider,
   type SourceScanResult,
@@ -11,6 +10,7 @@ import {
   type SyncDriftItem,
 } from '../types';
 import { Button } from '../../../components/ui/Button';
+import { BrutalToggle } from '../../../components/ui/BrutalToggle';
 import { SyncStorybookGuideModal } from '../../../components/SyncStorybookGuideModal';
 import {
   BrutalDropdown,
@@ -66,7 +66,7 @@ const STORYBOOK_LIST_PATHS = [
 ];
 
 type SyncCategoryId = 'ALL' | 'MISSING' | 'NAMING' | 'VARIANTS' | 'SOURCE' | 'AUTO_FIXABLE' | 'MANUAL';
-type SourceWizardStep = 0 | 1 | 2 | 3;
+type SourceWizardStep = 0 | 1 | 2;
 
 const SOURCE_PROVIDER_LABELS: Record<SourceProvider, string> = {
   github: 'GitHub',
@@ -76,7 +76,6 @@ const SOURCE_PROVIDER_LABELS: Record<SourceProvider, string> = {
 };
 
 const SOURCE_WIZARD_STEPS = [
-  { title: 'Why', body: 'We need a quick source setup so analysis can be accurate and suggestions are tied to the real codebase.' },
   { title: 'Source', body: 'Choose provider, connect auth, then configure repository details in the same step.' },
   { title: 'Detect', body: 'Scan the source for Storybook config, stories, package manager, and component paths.' },
   { title: 'Review', body: 'Confirm the source connection before running code-side sync.' },
@@ -287,6 +286,8 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   activeSyncFileKey,
   activeSyncFileName,
   syncLinkedFiles,
+  rememberedStorybooksForFile,
+  onRestoreStorybookForFile,
   onSelectSyncFile,
   onLoadSourceConnection,
   onSaveSourceConnection,
@@ -302,7 +303,9 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [isPresetOpen, setIsPresetOpen] = useState(false);
+  const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<SyncCategoryId>('ALL');
+  const [sourceWhyDialogOpen, setSourceWhyDialogOpen] = useState(false);
   const [sourceWizardOpen, setSourceWizardOpen] = useState(false);
   const [sourceWizardStep, setSourceWizardStep] = useState<SourceWizardStep>(0);
   const [sourceProvider, setSourceProvider] = useState<SourceProvider>('github');
@@ -312,8 +315,19 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [sourceTokenInput, setSourceTokenInput] = useState('');
   const [sourceScanDraft, setSourceScanDraft] = useState<SourceScanResult | null>(null);
   const [sourceWizardError, setSourceWizardError] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<
+    Partial<Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, boolean>>
+  >({});
 
   const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
+  const quickPickOptions = useMemo(() => {
+    const recent = (rememberedStorybooksForFile || []).map((u) => ({
+      label: `Recent for this file: ${u}`,
+      value: u,
+    }));
+    const preset = PRESET_STORYBOOKS.filter((p) => !recent.some((r) => r.value === p.value));
+    return [...recent, ...preset];
+  }, [rememberedStorybooksForFile]);
   const syncOverview = useMemo(() => {
     const sections: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]> = {
       MISSING: [],
@@ -335,7 +349,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
         layerId: null,
         syncAction: null,
       });
-    } else if (syncItems.length > 0 && sourceConnection.status !== 'ready') {
+    } else if (syncItems.length > 0 && sourceConnection?.status !== 'ready') {
       sections.SOURCE.push({
         id: 'source-setup-attention',
         name: 'Source needs attention',
@@ -400,18 +414,36 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     setSourceWizardError(null);
   };
 
-  const openSourceWizard = () => {
-    if (sourceConnection) {
+  const openSourceWizardImmediate = (opts?: { editExisting: boolean }) => {
+    const edit = opts?.editExisting === true;
+    if (edit && sourceConnection) {
       setSourceProvider(sourceConnection.provider);
       setSourceRepoUrl(sourceConnection.repoUrl);
       setSourceBranch(sourceConnection.branch);
       setSourceStorybookPath(sourceConnection.storybookPath);
       setSourceTokenInput('');
       setSourceScanDraft(sourceConnection.scan ?? null);
+    } else if (!edit) {
+      resetSourceWizard();
     }
-    setSourceWizardStep(0);
     setSourceWizardError(null);
+    setSourceWhyDialogOpen(false);
+    setSourceWizardStep(0);
     setSourceWizardOpen(true);
+  };
+
+  /** New connection: show Why dialog first; edit: go straight into the wizard at Source. */
+  const openSourceWizardFromEntry = () => {
+    if (sourceConnection) {
+      openSourceWizardImmediate({ editExisting: true });
+      return;
+    }
+    setSourceWhyDialogOpen(true);
+  };
+
+  const confirmSourceWhyDialog = () => {
+    setSourceWhyDialogOpen(false);
+    openSourceWizardImmediate({ editExisting: false });
   };
 
   const sourceInput: SourceConnectionInput = {
@@ -423,10 +455,9 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   };
 
   const canContinueSourceWizard =
-    sourceWizardStep === 0 ||
-    (sourceWizardStep === 1 && sourceRepoUrl.trim().length > 0 && sourceBranch.trim().length > 0) ||
-    sourceWizardStep === 2 ||
-    sourceWizardStep === 3;
+    (sourceWizardStep === 0 && sourceRepoUrl.trim().length > 0 && sourceBranch.trim().length > 0) ||
+    sourceWizardStep === 1 ||
+    sourceWizardStep === 2;
 
   const runSourceDetection = async () => {
     setSourceWizardError(null);
@@ -547,7 +578,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         </button>
                       }
                     >
-                      {PRESET_STORYBOOKS.map((p) => (
+                      {quickPickOptions.map((p) => (
                         <div
                           key={p.value || 'custom'}
                           role="option"
@@ -561,6 +592,22 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         </div>
                       ))}
                     </BrutalDropdown>
+                    {rememberedStorybooksForFile && rememberedStorybooksForFile.length > 0 ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {rememberedStorybooksForFile.slice(0, 3).map((url) => (
+                          <button
+                            key={url}
+                            type="button"
+                            className="border border-black bg-neutral-100 px-1.5 py-0.5 text-[9px] font-bold hover:bg-[#ff90e8]"
+                            onClick={() => {
+                              onRestoreStorybookForFile?.(url);
+                            }}
+                          >
+                            Reopen {url}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     <label className="text-[10px] font-bold uppercase text-gray-600">Or paste URL</label>
                     <input
                       type="text"
@@ -576,13 +623,11 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   </div>
                   <div className="flex items-center justify-between gap-2 border border-dashed border-gray-400 bg-gray-50 p-2">
                     <span className="text-[10px] font-bold uppercase text-gray-700">Private Storybook (use access token)</span>
-                    <button
-                      type="button"
-                      onClick={() => setUsePrivateToken(!usePrivateToken)}
-                      className={`text-[10px] font-bold uppercase px-2 py-1 border-2 border-black shrink-0 ${usePrivateToken ? `bg-[${COLORS.primary}] text-black` : 'bg-white text-gray-600'}`}
-                    >
-                      {usePrivateToken ? 'ON' : 'OFF'}
-                    </button>
+                    <BrutalToggle
+                      pressed={usePrivateToken}
+                      onPressedChange={setUsePrivateToken}
+                      aria-label="Use private Storybook access token"
+                    />
                   </div>
                   {usePrivateToken && (
                     <div>
@@ -604,14 +649,16 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   )}
                   <Button
-                    variant="secondary"
+                    variant="primary"
                     fullWidth
                     onClick={handleConnectClick}
                     disabled={!connectInput.trim() || isConnecting}
-                    className="bg-pink-100 hover:bg-pink-200 relative"
+                    className="relative"
                   >
                     {isConnecting ? 'Checking…' : 'Connect Storybook'}
-                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
+                    {!isPro ? (
+                      <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">PRO</span>
+                    ) : null}
                   </Button>
                   <div className="pt-2 mt-2 border-t border-gray-200">
                     <p className="text-[9px] text-gray-500 leading-relaxed">
@@ -653,21 +700,21 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       <div className="mt-2">
                         <label className="mb-1 block text-[10px] font-black uppercase text-gray-600">Figma file</label>
                         <BrutalDropdown
-                          open={isPresetOpen}
-                          onOpenChange={setIsPresetOpen}
+                          open={isFilePickerOpen}
+                          onOpenChange={setIsFilePickerOpen}
                           className="w-full"
                           maxHeightClassName="max-h-44"
                           trigger={
                             <button
                               type="button"
-                              onClick={() => setIsPresetOpen(!isPresetOpen)}
+                              onClick={() => setIsFilePickerOpen(!isFilePickerOpen)}
                               className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2 text-left`}
                             >
                               <span className="text-xs font-bold uppercase truncate min-w-0" title={activeSyncFileName || 'Current file'}>
                                 {activeSyncFileName || 'Current file'}
                               </span>
                               <span className="shrink-0 text-[10px]" aria-hidden>
-                                {isPresetOpen ? '▲' : '▼'}
+                                {isFilePickerOpen ? '▲' : '▼'}
                               </span>
                             </button>
                           }
@@ -683,7 +730,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               role="option"
                               onClick={() => {
                                 onSelectSyncFile(f.fileKey);
-                                setIsPresetOpen(false);
+                                setIsFilePickerOpen(false);
                               }}
                               className={`${brutalSelectOptionRowClass} ${f.fileKey === activeSyncFileKey ? brutalSelectOptionSelectedClass : ''}`.trim()}
                             >
@@ -718,7 +765,9 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   )}
                   {!hasSyncScanned ? (
                     <div className="text-center">
-                      {sourceConnection ? (
+                      {sourceConnectionLoading ? (
+                        <p className="text-[10px] text-gray-500 mb-2">Checking existing source connection…</p>
+                      ) : sourceConnection ? (
                         <>
                           <p className="text-[10px] text-gray-500 mb-2">Source connected. Start analysis.</p>
                           <Button
@@ -753,7 +802,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       ) : (
                         <>
                           <p className="text-[10px] text-gray-500 mb-2">Step required before analysis: connect source.</p>
-                          <Button variant="primary" fullWidth layout="row" onClick={openSourceWizard} className="relative">
+                          <Button variant="primary" fullWidth layout="row" onClick={openSourceWizardFromEntry} className="relative">
                             <span>Open Connect Source Wizard</span>
                             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
                               Required
@@ -823,17 +872,28 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               const meta = SYNC_CATEGORY_META[categoryId];
                               const visibleItems = items.slice(0, MAX_ITEMS_PER_SECTION);
                               const hiddenCount = Math.max(0, items.length - visibleItems.length);
+                              const collapsed = collapsedSections[categoryId] === true;
                               return (
                                 <section key={categoryId} className="border-2 border-black bg-white">
                                   <div className={`border-b-2 border-black px-2 py-2 ${meta.tone}`}>
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="text-[10px] font-black uppercase">{meta.label}</span>
-                                      <span className="border border-black bg-white px-1.5 py-0.5 text-[9px] font-black text-black">{items.length}</span>
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 border border-black bg-white px-1.5 py-0.5 text-[9px] font-black text-black hover:bg-neutral-100"
+                                        aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${meta.label}`}
+                                        onClick={() =>
+                                          setCollapsedSections((prev) => ({ ...prev, [categoryId]: !collapsed }))
+                                        }
+                                      >
+                                        <span>{items.length}</span>
+                                        <span aria-hidden>{collapsed ? '▼' : '▲'}</span>
+                                      </button>
                                     </div>
                                     <p className="mt-1 text-[9px] font-bold leading-snug opacity-80">{meta.desc}</p>
                                   </div>
 
-                                  <div className="space-y-2 p-2">
+                                  {!collapsed ? <div className="space-y-2 p-2">
                                     {visibleItems.map(item => {
                                       const isExpanded = expandedDriftId === item.id;
                                       return (
@@ -910,7 +970,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                         +{hiddenCount} more in this category
                                       </div>
                                     ) : null}
-                                  </div>
+                                  </div> : null}
                                 </section>
                               );
                             })}
@@ -938,7 +998,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                   </p>
                                 ) : null}
                                 <div className="flex gap-2 pt-1">
-                                  <button type="button" className="font-black uppercase underline" onClick={openSourceWizard}>
+                                  <button type="button" className="font-black uppercase underline" onClick={openSourceWizardFromEntry}>
                                     Edit source
                                   </button>
                                   <button type="button" className="font-black uppercase underline" onClick={() => void onLoadSourceConnection()}>
@@ -966,7 +1026,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             variant="primary"
                             fullWidth
                             layout="row"
-                            onClick={sourceConnection ? handleSyncAll : openSourceWizard}
+                            onClick={sourceConnection ? handleSyncAll : openSourceWizardFromEntry}
                             className="relative h-12"
                           >
                             <span>Fix All</span>
@@ -1017,6 +1077,41 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             </div>
           )}
 
+          {sourceWhyDialogOpen && (
+            <div
+              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/45 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sync-source-why-title"
+              onClick={() => setSourceWhyDialogOpen(false)}
+            >
+              <div
+                className={`${BRUTAL.card} max-w-md w-full border-2 border-black bg-white p-4 shadow-[6px_6px_0_0_#000]`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="sync-source-why-title" className="text-sm font-black uppercase leading-tight">
+                  Why connect source?
+                </h3>
+                <p className="mt-2 text-sm font-bold leading-relaxed text-neutral-800">
+                  We ask for this setup to avoid wrong comparisons and broken links. Storybook shows the final result, but
+                  real changes happen in the source repository.
+                </p>
+                <p className="mt-2 text-[11px] leading-snug text-gray-600">
+                  Once connected, Comtra can read what is live, compare it with your Figma file, and suggest concrete fixes in
+                  the right place.
+                </p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button variant="secondary" className="min-h-[40px] text-xs font-black uppercase" onClick={() => setSourceWhyDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" className="min-h-[40px] text-xs font-black uppercase" onClick={confirmSourceWhyDialog}>
+                    Continue
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {sourceWizardOpen && (
             <div
               className="fixed inset-0 z-[300] flex flex-col bg-[#fdfdfd] text-black"
@@ -1038,6 +1133,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   className="shrink-0 size-9 border-2 border-black bg-white font-black text-sm shadow-[3px_3px_0_0_#000] hover:bg-gray-100 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_0_#000]"
                   aria-label="Close source wizard"
                   onClick={() => {
+                    setSourceWhyDialogOpen(false);
                     setSourceWizardOpen(false);
                     if (!sourceConnection) resetSourceWizard();
                   }}
@@ -1068,18 +1164,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   )}
 
                   {sourceWizardStep === 0 && (
-                    <div className={`${BRUTAL.card} bg-[#fff8e7] p-3 space-y-2`}>
-                      <p className="text-sm font-bold leading-relaxed">
-                        We ask for this setup to avoid wrong comparisons and broken links.
-                        Storybook shows the final result, but real changes happen in the source repository.
-                      </p>
-                      <p className="text-[11px] text-gray-700 leading-snug">
-                        Once connected, Comtra can read what is live, compare it with your Figma file, and suggest concrete fixes in the right place.
-                      </p>
-                    </div>
-                  )}
-
-                  {sourceWizardStep === 1 && (
                     <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
                       <div className="grid grid-cols-2 gap-2">
                         {(Object.keys(SOURCE_PROVIDER_LABELS) as SourceProvider[]).map((provider) => (
@@ -1187,7 +1271,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   )}
 
-                  {sourceWizardStep === 2 && (
+                  {sourceWizardStep === 1 && (
                     <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
                       <Button
                         variant="secondary"
@@ -1232,7 +1316,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   )}
 
-                  {sourceWizardStep === 3 && (
+                  {sourceWizardStep === 2 && (
                     <div className={`${BRUTAL.card} bg-[#fff8e7] p-3 space-y-2`}>
                       <div className="flex justify-between gap-3 border-b border-dashed border-gray-400 pb-2">
                         <span className="text-[10px] font-black uppercase text-gray-600">Provider</span>
@@ -1272,6 +1356,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     className="flex-1 min-h-[44px] text-xs font-black py-3"
                     onClick={() => {
                       if (sourceWizardStep === 0) {
+                        setSourceWhyDialogOpen(false);
                         setSourceWizardOpen(false);
                         if (!sourceConnection) resetSourceWizard();
                       } else {
@@ -1286,18 +1371,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     className="flex-1 min-h-[44px] text-xs font-black py-3"
                     disabled={!canContinueSourceWizard || sourceConnectionSaving}
                     onClick={async () => {
-                      if (sourceWizardStep === 2) {
+                      if (sourceWizardStep === 1) {
                         const scan = sourceScanDraft ?? await runSourceDetection();
                         if (!scan || scan.status === 'failed') return;
                       }
-                      if (sourceWizardStep < 3) {
-                        setSourceWizardStep((prev) => Math.min(3, prev + 1) as SourceWizardStep);
+                      if (sourceWizardStep < 2) {
+                        setSourceWizardStep((prev) => Math.min(2, prev + 1) as SourceWizardStep);
                       } else {
                         await completeSourceWizard();
                       }
                     }}
                   >
-                    {sourceWizardStep === 3 ? (sourceConnectionSaving ? 'Saving…' : 'Save Source') : 'Continue'}
+                    {sourceWizardStep === 2 ? (sourceConnectionSaving ? 'Saving…' : 'Save Source') : 'Continue'}
                   </Button>
                 </div>
               </footer>

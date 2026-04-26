@@ -1333,8 +1333,16 @@ export default function AppTest() {
               pageId: c.pageId,
               variantProperties: c.variantProperties,
               description: c.description ? c.description.slice(0, 240) : '',
+              width: typeof c.width === 'number' ? c.width : undefined,
+              height: typeof c.height === 'number' ? c.height : undefined,
             })),
-            instances: (body.sync_snapshot.instances || []).slice(0, 500),
+            instances: (body.sync_snapshot.instances || []).slice(0, 500).map((i) => ({
+              id: i.id,
+              name: i.name,
+              mainComponentName: i.mainComponentName,
+              width: typeof i.width === 'number' ? i.width : undefined,
+              height: typeof i.height === 'number' ? i.height : undefined,
+            })),
             styles: [],
           }
         : undefined;
@@ -1661,6 +1669,27 @@ export default function AppTest() {
       scan?: SourceScanResult | null;
     }): Promise<SourceConnection> => {
       if (!user?.authToken) throw new Error('Unauthorized');
+      const localFallback = (): SourceConnection => {
+        const scan = body.scan ?? null;
+        const status: SourceConnection['status'] =
+          scan?.status === 'ready' ? 'ready' :
+            scan?.status === 'partial' ? 'connected_manual' :
+              'draft';
+        return {
+          provider: body.provider,
+          repoUrl: body.repoUrl,
+          branch: body.branch || 'main',
+          storybookPath: body.storybookPath || '',
+          storybookUrl: body.storybookUrl,
+          figmaFileKey: body.figmaFileKey,
+          status,
+          authStatus: 'needs_auth',
+          hasToken: !!(body.sourceToken && String(body.sourceToken).trim()),
+          scan,
+          lastScannedAt: scan?.detectedAt ?? new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      };
       try {
         const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection`, {
           method: 'PUT',
@@ -1677,22 +1706,17 @@ export default function AppTest() {
           }),
         });
         const data = await r.json().catch(() => ({}));
+        const scanUsable = body.scan?.status === 'ready' || body.scan?.status === 'partial';
+        const serverFailed = !r.ok && r.status >= 500;
+        const missingConnection = r.ok && !data.connection;
+        if (scanUsable && (serverFailed || missingConnection)) {
+          return localFallback();
+        }
         if (!r.ok || !data.connection) throw new Error(data.error || 'Could not save source connection');
         return data.connection as SourceConnection;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed request';
         if (isLikelyNetworkOrCorsFetchFailure(err)) {
-          const now = new Date().toISOString();
-          return {
-            provider: body.provider,
-            repoUrl: body.repoUrl,
-            branch: body.branch,
-            storybookPath: body.storybookPath,
-            sourceToken: body.sourceToken || null,
-            scanResult: body.scan ?? null,
-            createdAt: now,
-            updatedAt: now,
-          } as SourceConnection;
+          return localFallback();
         }
         throw err;
       }
