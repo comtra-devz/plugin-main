@@ -338,6 +338,8 @@ export const Generate: React.FC<Props> = ({
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
+  const [composerDockHeight, setComposerDockHeight] = useState(132);
   /** After Enhance: button stays off until the user edits the terminal (avoids nested enhance). */
   const [enhanceLocked, setEnhanceLocked] = useState(false);
   /** Clean goal text used to rebuild the block when DS or context changes. */
@@ -1823,6 +1825,23 @@ export const Generate: React.FC<Props> = ({
   const showChatComposerShell = generateComposerTab === 'chat';
 
   useEffect(() => {
+    const dock = composerDockRef.current;
+    if (!dock || !showChatComposerShell) return;
+    const update = () => {
+      const h = Math.ceil(dock.getBoundingClientRect().height);
+      if (Number.isFinite(h) && h > 0) setComposerDockHeight(h);
+    };
+    update();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    ro?.observe(dock);
+    window.addEventListener('resize', update);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [showChatComposerShell, composerAttachments.length, hasContent, promptText, composerFocused]);
+
+  useEffect(() => {
     if (!showGenerateComposer || showReport || conversationTurns.length > 0 || !showChatComposerShell) return;
     setShowIntroTyping(true);
     const t = setTimeout(() => {
@@ -1847,6 +1866,7 @@ export const Generate: React.FC<Props> = ({
     showRefinementChips,
     refineChipsHiddenByComposer,
     liveReasoningLines,
+    composerDockHeight,
   ]);
 
   /** Solo mentre aspettiamo contesto/modello — non durante canvas/crediti (altrimenti puntini “fantasma” col messaggio già pronto). */
@@ -1861,7 +1881,7 @@ export const Generate: React.FC<Props> = ({
   return (
     <div
       data-component="Generate: View Container"
-      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-28 sm:gap-2 sm:p-4"
+      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-0 sm:gap-2 sm:p-4 sm:pb-0"
     >
       <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
         <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
@@ -1928,14 +1948,15 @@ export const Generate: React.FC<Props> = ({
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 py-0 text-left text-xs font-black uppercase leading-none"
+                  className="grid h-10 w-full cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_24px_auto] items-center bg-white px-3 py-0 text-left text-xs font-black uppercase leading-none"
                 >
-                  <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-hidden leading-none">
-                    <span className="flex h-full shrink-0 items-center whitespace-nowrap text-gray-500">Design system</span>
-                    <span className="flex h-full items-center" aria-hidden>·</span>
-                    <span className="flex h-full min-w-0 items-center truncate">{selectedSystemDisplayName}</span>
+                  <span className="flex h-full shrink-0 items-center whitespace-nowrap text-gray-500">Design system</span>
+                  <span className="flex h-full items-center justify-center px-1.5" aria-hidden>·</span>
+                  <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={selectedSystemDisplayName}>
+                    {selectedSystemDisplayName}
                   </span>
-                  <span className="ml-6 flex h-full shrink-0 items-center leading-none" aria-hidden>
+                  <span aria-hidden />
+                  <span className="flex h-full shrink-0 items-center justify-end leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
                   </span>
                 </button>
@@ -2034,7 +2055,10 @@ export const Generate: React.FC<Props> = ({
                 >
                   <div className="flex h-full min-h-full flex-1 flex-col">
                     <div className="flex-1" aria-hidden />
-                    <div className="flex w-full flex-col gap-2 p-2">
+                    <div
+                      className="flex w-full flex-col gap-2 p-2"
+                      style={{ paddingBottom: `${composerDockHeight + 12}px` }}
+                    >
                     {showPreflight ? (
                       <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
                         <p className="text-[10px] font-black uppercase">
@@ -2206,6 +2230,7 @@ export const Generate: React.FC<Props> = ({
               </div>
 
               <div
+                ref={composerDockRef}
                 data-component="Generate: Composer dock"
                 className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-0 py-0"
                 style={{ bottom: 'calc(3.5rem + 5px)' }}

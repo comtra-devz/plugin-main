@@ -3161,7 +3161,8 @@ function normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource } = {}
 
 function ensureCreateModeHasCreateFrameAction(actionPlan, mode) {
   if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
-  if (String(mode || '').toLowerCase() !== 'create') return actionPlan;
+  const modeNorm = String(mode || '').toLowerCase();
+  if (modeNorm !== 'create' && modeNorm !== 'screenshot') return actionPlan;
   const plan = actionPlan;
   if (!Array.isArray(plan.actions)) plan.actions = [];
   const hasCreateFrame = plan.actions.some(
@@ -3190,6 +3191,49 @@ function ensureCreateModeHasCreateFrameAction(actionPlan, mode) {
     height: 800,
     itemSpacing: 16,
   });
+  return plan;
+}
+
+function ensureMinimumCreateModeStructureFrames(actionPlan, mode, prompt) {
+  if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
+  const modeNorm = String(mode || '').toLowerCase();
+  if (modeNorm !== 'create' && modeNorm !== 'screenshot') return actionPlan;
+  if (isMobilePrompt(prompt)) return actionPlan;
+  const plan = actionPlan;
+  if (!Array.isArray(plan.actions)) plan.actions = [];
+  const frames = plan.actions.filter(
+    (a) => a && typeof a === 'object' && String(a.type || '').toUpperCase() === 'CREATE_FRAME',
+  );
+  if (frames.length >= 2) return plan;
+
+  const parentFrame = frames[0] || null;
+  const parentRef =
+    parentFrame && typeof parentFrame.ref === 'string' && parentFrame.ref.trim()
+      ? parentFrame.ref.trim()
+      : 'content_root';
+  if (parentFrame && (!parentFrame.ref || typeof parentFrame.ref !== 'string')) parentFrame.ref = parentRef;
+  const sectionRef = 'content_section';
+  const alreadyHasSection = plan.actions.some((a) => a && typeof a === 'object' && a.ref === sectionRef);
+  if (!alreadyHasSection) {
+    const insertAt = parentFrame ? Math.max(0, plan.actions.indexOf(parentFrame)) + 1 : 0;
+    plan.actions.splice(insertAt, 0, {
+      type: 'CREATE_FRAME',
+      ref: sectionRef,
+      parentId: parentRef,
+      name: 'Content Section',
+      layoutMode: 'VERTICAL',
+      width: 960,
+      itemSpacing: 16,
+    });
+  }
+
+  for (const action of plan.actions) {
+    if (!action || typeof action !== 'object') continue;
+    if (action.ref === sectionRef) continue;
+    if (String(action.type || '').toUpperCase() === 'CREATE_FRAME') continue;
+    const parent = String(action.parentId || action.parent || 'root').trim();
+    if (parent === 'root') action.parentId = sectionRef;
+  }
   return plan;
 }
 
@@ -4650,6 +4694,7 @@ app.post('/api/agents/generate', async (req, res) => {
 
     actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
     actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+    actionPlan = ensureMinimumCreateModeStructureFrames(actionPlan, mode, prompt);
     actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
     actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
     actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
@@ -4721,6 +4766,7 @@ app.post('/api/agents/generate', async (req, res) => {
           actionPlan = repaired;
           actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
           actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+          actionPlan = ensureMinimumCreateModeStructureFrames(actionPlan, mode, prompt);
           actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
           actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
           actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
@@ -4780,6 +4826,7 @@ app.post('/api/agents/generate', async (req, res) => {
         actionPlan = repairedSemantic;
         actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
         actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+        actionPlan = ensureMinimumCreateModeStructureFrames(actionPlan, mode, prompt);
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
         actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
@@ -4831,6 +4878,7 @@ app.post('/api/agents/generate', async (req, res) => {
         actionPlan = deterministicFallback;
         actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
         actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
+        actionPlan = ensureMinimumCreateModeStructureFrames(actionPlan, mode, prompt);
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
         actionPlan = enforceSlotCandidateBinding(actionPlan, slotCandidatePack);
