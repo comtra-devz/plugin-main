@@ -284,6 +284,10 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   sourceConnectionSaving,
   sourceConnectionError,
   sourceAuthStartUrl,
+  activeSyncFileKey,
+  activeSyncFileName,
+  syncLinkedFiles,
+  onSelectSyncFile,
   onLoadSourceConnection,
   onSaveSourceConnection,
   onDeleteSourceConnection,
@@ -471,7 +475,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       if (result.ok) {
         handleConnectSb(url, token, result);
         if (url !== raw) setConnectInput(url);
-        if (!sourceConnection) openSourceWizard();
       } else {
         setConnectError(result.error || 'Connection failed.');
       }
@@ -647,6 +650,55 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           {storybookConnectionInfo.checkedVia ? ` via ${storybookConnectionInfo.checkedVia}` : ''}
                         </p>
                       ) : null}
+                      <div className="mt-2">
+                        <label className="mb-1 block text-[10px] font-black uppercase text-gray-600">Figma file</label>
+                        <BrutalDropdown
+                          open={isPresetOpen}
+                          onOpenChange={setIsPresetOpen}
+                          className="w-full"
+                          maxHeightClassName="max-h-44"
+                          trigger={
+                            <button
+                              type="button"
+                              onClick={() => setIsPresetOpen(!isPresetOpen)}
+                              className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2 text-left`}
+                            >
+                              <span className="text-xs font-bold uppercase truncate min-w-0" title={activeSyncFileName || 'Current file'}>
+                                {activeSyncFileName || 'Current file'}
+                              </span>
+                              <span className="shrink-0 text-[10px]" aria-hidden>
+                                {isPresetOpen ? '▲' : '▼'}
+                              </span>
+                            </button>
+                          }
+                        >
+                          {(syncLinkedFiles.length > 0 ? syncLinkedFiles : [{
+                            fileKey: activeSyncFileKey || 'current',
+                            fileName: activeSyncFileName || 'Current file',
+                            storybookUrl: storybookUrl || '',
+                            lastUsedAt: new Date().toISOString(),
+                          }]).map((f) => (
+                            <div
+                              key={`${f.fileKey}-${f.storybookUrl}`}
+                              role="option"
+                              onClick={() => {
+                                onSelectSyncFile(f.fileKey);
+                                setIsPresetOpen(false);
+                              }}
+                              className={`${brutalSelectOptionRowClass} ${f.fileKey === activeSyncFileKey ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                            >
+                              <div className="flex w-full items-center justify-between gap-2">
+                                <span className="truncate">{f.fileName || f.fileKey}</span>
+                                {f.fileKey === activeSyncFileKey ? (
+                                  <span className="shrink-0 border border-black bg-black px-1 text-[8px] font-black uppercase text-white">
+                                    current
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </BrutalDropdown>
+                      </div>
                     </div>
                   )}
                   {syncScanError && (

@@ -20,6 +20,7 @@ import type {
   SourceConnectionInput,
   SourceProvider,
   SourceScanResult,
+  SyncLinkedFileOption,
   StorybookConnectionInfo,
   SyncDriftItem,
 } from './Code/types';
@@ -80,6 +81,53 @@ const SYNC_ITEMS_MOCK = [
 ];
 
 const COOLDOWN_MS = 120000; // 2 Minutes
+const SYNC_LINKED_FILES_KEY = 'comtra-sync-linked-files-v1';
+
+type SyncCachedResult = {
+  syncItems: SyncDriftItem[];
+  scannedAt: string;
+};
+
+const buildSyncCacheKey = (fileKey: string, storybookUrl: string) =>
+  `comtra-sync-scan-cache:${fileKey}:${storybookUrl.toLowerCase()}`;
+
+const readSyncLinkedFiles = (): SyncLinkedFileOption[] => {
+  try {
+    const raw = localStorage.getItem(SYNC_LINKED_FILES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x) => x && typeof x === 'object')
+      .map((x) => ({
+        fileKey: String((x as any).fileKey || ''),
+        fileName: String((x as any).fileName || 'Untitled file'),
+        storybookUrl: String((x as any).storybookUrl || ''),
+        lastUsedAt: String((x as any).lastUsedAt || new Date().toISOString()),
+      }))
+      .filter((x) => x.fileKey && x.storybookUrl);
+  } catch {
+    return [];
+  }
+};
+
+const writeSyncLinkedFiles = (items: SyncLinkedFileOption[]) => {
+  try {
+    localStorage.setItem(SYNC_LINKED_FILES_KEY, JSON.stringify(items.slice(0, 40)));
+  } catch {
+    /* noop */
+  }
+};
+
+const upsertSyncLinkedFile = (item: SyncLinkedFileOption) => {
+  const list = readSyncLinkedFiles();
+  const next = [
+    item,
+    ...list.filter((x) => !(x.fileKey === item.fileKey && x.storybookUrl === item.storybookUrl)),
+  ];
+  writeSyncLinkedFiles(next);
+  return next;
+};
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
@@ -135,6 +183,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [syncScanUpgradeUrl, setSyncScanUpgradeUrl] = useState<string | null>(null);
   const [hasSyncScanned, setHasSyncScanned] = useState(false);
   const [syncFileKey, setSyncFileKey] = useState<string | null>(null);
+  const [syncFileName, setSyncFileName] = useState<string | null>(null);
+  const [syncLinkedFiles, setSyncLinkedFiles] = useState<SyncLinkedFileOption[]>(() => readSyncLinkedFiles());
   const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
   const [sourceConnectionLoading, setSourceConnectionLoading] = useState(false);
   const [sourceConnectionSaving, setSourceConnectionSaving] = useState(false);
@@ -153,6 +203,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   // Sync scan: waiting for sync-snapshot-result from plugin
   const pendingSyncScanRef = useRef(false);
   const pendingSyncScanTimeoutRef = useRef<number | null>(null);
+  const pendingFileContextRef = useRef<((v: { fileKey: string | null; fileName: string | null }) => void) | null>(null);
   const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
@@ -188,6 +239,15 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           root: msg.root,
           error: msg.error != null ? String(msg.error) : undefined,
           fileKey: msg.fileKey != null ? msg.fileKey : null,
+        });
+        return;
+      }
+      if (msg.type === 'file-context-result' && pendingFileContextRef.current) {
+        const cb = pendingFileContextRef.current;
+        pendingFileContextRef.current = null;
+        cb({
+          fileKey: msg.fileKey ? String(msg.fileKey) : null,
+          fileName: msg.fileName ? String(msg.fileName) : null,
         });
         return;
       }
@@ -246,6 +306,14 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             setHasSyncScanned(true);
             setSyncScanError(null);
             setSyncScanUpgradeUrl(null);
+            if (snap.fileKey && storybookUrl) {
+              try {
+                const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
+                localStorage.setItem(buildSyncCacheKey(String(snap.fileKey), storybookUrl), JSON.stringify(payload));
+              } catch {
+                /* noop */
+              }
+            }
             startCooldown('scan_sync');
             setShowLevelUp(true);
           } catch (err) {
@@ -308,6 +376,62 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, [storybookUrl, storybookToken, fetchSyncScan]);
+
+  const requestCurrentFileContext = () =>
+    new Promise<{ fileKey: string | null; fileName: string | null }>((resolve) => {
+      let settled = false;
+      const t = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        pendingFileContextRef.current = null;
+        resolve({ fileKey: null, fileName: null });
+      }, 12000);
+      pendingFileContextRef.current = (v) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(t);
+        resolve(v);
+      };
+      window.parent.postMessage({ pluginMessage: { type: 'get-file-context', scope: 'all' } }, '*');
+    });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const ctx = await requestCurrentFileContext();
+      if (cancelled) return;
+      setSyncFileKey(ctx.fileKey);
+      setSyncFileName(ctx.fileName);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!storybookUrl || !syncFileKey) return;
+    const related = readSyncLinkedFiles().filter((x) => x.storybookUrl === storybookUrl);
+    setSyncLinkedFiles(related);
+    try {
+      const raw = localStorage.getItem(buildSyncCacheKey(syncFileKey, storybookUrl));
+      if (!raw) {
+        setHasSyncScanned(false);
+        setSyncItems([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as SyncCachedResult;
+      if (Array.isArray(parsed?.syncItems)) {
+        setSyncItems(parsed.syncItems);
+        setHasSyncScanned(true);
+      } else {
+        setHasSyncScanned(false);
+        setSyncItems([]);
+      }
+    } catch {
+      setHasSyncScanned(false);
+      setSyncItems([]);
+    }
+  }, [storybookUrl, syncFileKey]);
 
   const getRemainingTime = (key: string) => {
     const end = cooldowns[key];
@@ -612,6 +736,15 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setSyncScanError(null);
     setSyncScanUpgradeUrl(null);
     setSourceConnectionError(null);
+    if (syncFileKey) {
+      const next = upsertSyncLinkedFile({
+        fileKey: syncFileKey,
+        fileName: syncFileName || 'Untitled file',
+        storybookUrl: url,
+        lastUsedAt: new Date().toISOString(),
+      }).filter((x) => x.storybookUrl === url);
+      setSyncLinkedFiles(next);
+    }
   };
 
   const handleDisconnectSb = () => {
@@ -630,6 +763,13 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setSourceConnection(null);
     setSourceConnectionError(null);
     setSourceAuthStartUrl(null);
+  };
+
+  const handleSelectSyncFile = (fileKey: string) => {
+    setSyncFileKey(fileKey);
+    const hit = syncLinkedFiles.find((x) => x.fileKey === fileKey);
+    if (hit) setSyncFileName(hit.fileName);
+    setSourceConnection(null);
   };
 
   const normalizeSourceError = (err: unknown, fallback: string): string => {
@@ -970,6 +1110,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             sourceConnectionSaving={sourceConnectionSaving}
             sourceConnectionError={sourceConnectionError}
             sourceAuthStartUrl={sourceAuthStartUrl}
+            activeSyncFileKey={syncFileKey}
+            activeSyncFileName={syncFileName}
+            syncLinkedFiles={syncLinkedFiles}
+            onSelectSyncFile={handleSelectSyncFile}
             onLoadSourceConnection={loadSourceConnection}
             onSaveSourceConnection={handleSaveSourceConnection}
             onDeleteSourceConnection={handleDeleteSourceConnection}

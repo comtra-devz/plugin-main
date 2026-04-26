@@ -1412,6 +1412,198 @@ export default function AppTest() {
     [user?.authToken, AUTH_BACKEND_URL],
   );
 
+  const runPublicSourceScan = React.useCallback(
+    async (body: SourceConnectionInput): Promise<SourceScanResult> => {
+      const repoUrl = String(body.repoUrl || '').trim();
+      const requestedBranch = String(body.branch || '').trim();
+      const storybookPath = String(body.storybookPath || '').trim().replace(/^\/+|\/+$/g, '');
+      const fallbackBranches = ['main', 'master', 'trunk', 'develop'];
+
+      const analyzeFiles = (provider: SourceProvider, files: string[], branch: string): SourceScanResult => {
+        const inBase = (p: string) => !storybookPath || p === storybookPath || p.startsWith(`${storybookPath}/`);
+        const storybookConfigs = files.filter((p) => inBase(p) && /(^|\/)\.storybook\/main\.(js|cjs|mjs|ts|tsx)$/i.test(p));
+        const stories = files.filter((p) => inBase(p) && /\.(stories|story)\.(js|jsx|ts|tsx|mdx|vue|svelte)$/i.test(p));
+        const components = files.filter(
+          (p) => inBase(p) && /(^|\/)(components|ui|src)\/.+\.(jsx|tsx|vue|svelte)$/i.test(p) && !/\.(stories|story)\./i.test(p),
+        );
+        const hasPnpm = files.some((p) => inBase(p) && /(^|\/)pnpm-lock\.yaml$/i.test(p));
+        const hasYarn = files.some((p) => inBase(p) && /(^|\/)yarn\.lock$/i.test(p));
+        const hasNpm = files.some((p) => inBase(p) && /(^|\/)package-lock\.json$/i.test(p));
+        const packageManager = hasPnpm ? 'pnpm' : hasYarn ? 'yarn' : hasNpm ? 'npm' : null;
+        const detectedFramework =
+          files.some((p) => /\.(tsx|jsx)$/i.test(p)) ? 'react' :
+            files.some((p) => /\.vue$/i.test(p)) ? 'vue' :
+              files.some((p) => /\.svelte$/i.test(p)) ? 'svelte' :
+                null;
+        const issues: string[] = [];
+        if (storybookConfigs.length === 0) issues.push('No .storybook/main config found in the selected path.');
+        if (stories.length === 0) issues.push('No Storybook stories found in the selected path.');
+        const status: SourceScanResult['status'] =
+          storybookConfigs.length > 0 && stories.length > 0 ? 'ready' : files.length > 0 ? 'partial' : 'failed';
+
+        return {
+          status,
+          provider,
+          defaultBranch: branch || null,
+          packageManager,
+          detectedFramework,
+          storybookConfigPath: storybookConfigs[0] || null,
+          storiesCount: stories.length,
+          componentsCount: components.length,
+          confidence: status === 'ready' ? 'high' : status === 'partial' ? 'medium' : 'low',
+          issues,
+          detectedAt: new Date().toISOString(),
+        };
+      };
+
+      const parseGithub = () => {
+        const ssh = repoUrl.match(/^git@github\.com:([^/]+)\/(.+)$/i);
+        if (ssh) return { owner: ssh[1], repo: ssh[2].replace(/\.git$/i, '') };
+        try {
+          const u = new URL(repoUrl);
+          if (!/github\.com$/i.test(u.hostname)) return null;
+          const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/');
+          if (parts.length < 2) return null;
+          return { owner: parts[0], repo: parts[1].replace(/\.git$/i, '') };
+        } catch {
+          return null;
+        }
+      };
+
+      const parseGitlab = () => {
+        const ssh = repoUrl.match(/^git@gitlab\.com:([^/]+(?:\/[^/]+)*)\/(.+)$/i);
+        if (ssh) return `${ssh[1]}/${ssh[2].replace(/\.git$/i, '')}`;
+        try {
+          const u = new URL(repoUrl);
+          if (!/gitlab\.com$/i.test(u.hostname)) return null;
+          const path = u.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+          return path || null;
+        } catch {
+          return null;
+        }
+      };
+
+      const parseBitbucket = () => {
+        const ssh = repoUrl.match(/^git@bitbucket\.org:([^/]+)\/(.+)$/i);
+        if (ssh) return { workspace: ssh[1], repo: ssh[2].replace(/\.git$/i, '') };
+        try {
+          const u = new URL(repoUrl);
+          if (!/bitbucket\.org$/i.test(u.hostname)) return null;
+          const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/');
+          if (parts.length < 2) return null;
+          return { workspace: parts[0], repo: parts[1].replace(/\.git$/i, '') };
+        } catch {
+          return null;
+        }
+      };
+
+      if (body.provider === 'github') {
+        const parsed = parseGithub();
+        if (!parsed) throw new Error('Invalid GitHub repository URL.');
+        const repoMetaRes = await fetch(
+          `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`,
+          { headers: { Accept: 'application/vnd.github+json' } },
+        );
+        const repoMeta = await repoMetaRes.json().catch(() => ({}));
+        const defaultBranch = typeof repoMeta?.default_branch === 'string' ? repoMeta.default_branch : '';
+        const branches = Array.from(new Set([requestedBranch, defaultBranch, ...fallbackBranches].filter(Boolean)));
+        let lastError = '';
+        for (const branch of branches) {
+          const treeRes = await fetch(
+            `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+            { headers: { Accept: 'application/vnd.github+json' } },
+          );
+          const treeData = await treeRes.json().catch(() => ({}));
+          if (!treeRes.ok) {
+            lastError = String(treeData?.message || `GitHub tree lookup failed (${treeRes.status}).`);
+            continue;
+          }
+          const files: string[] = Array.isArray(treeData?.tree)
+            ? treeData.tree.filter((x: any) => x?.type === 'blob' && typeof x.path === 'string').map((x: any) => String(x.path))
+            : [];
+          if (files.length > 0) return analyzeFiles('github', files, branch);
+        }
+        throw new Error(lastError || 'Unable to read GitHub repository tree.');
+      }
+
+      if (body.provider === 'gitlab') {
+        const projectPath = parseGitlab();
+        if (!projectPath) throw new Error('Invalid GitLab repository URL.');
+        const projectId = encodeURIComponent(projectPath);
+        const projectMetaRes = await fetch(`https://gitlab.com/api/v4/projects/${projectId}`);
+        const projectMeta = await projectMetaRes.json().catch(() => ({}));
+        const defaultBranch = typeof projectMeta?.default_branch === 'string' ? projectMeta.default_branch : '';
+        const branches = Array.from(new Set([requestedBranch, defaultBranch, ...fallbackBranches].filter(Boolean)));
+        let lastError = '';
+        for (const branch of branches) {
+          let page = 1;
+          let files: string[] = [];
+          while (page <= 10) {
+            const treeRes = await fetch(
+              `https://gitlab.com/api/v4/projects/${projectId}/repository/tree?ref=${encodeURIComponent(branch)}&recursive=true&per_page=100&page=${page}`,
+            );
+            const treeData = await treeRes.json().catch(() => ([]));
+            if (!treeRes.ok) {
+              lastError = typeof (treeData as any)?.message === 'string'
+                ? (treeData as any).message
+                : `GitLab tree lookup failed (${treeRes.status}).`;
+              files = [];
+              break;
+            }
+            const pageFiles = Array.isArray(treeData)
+              ? treeData.filter((x: any) => x?.type === 'blob' && typeof x.path === 'string').map((x: any) => String(x.path))
+              : [];
+            files = files.concat(pageFiles);
+            if (pageFiles.length < 100) break;
+            page += 1;
+          }
+          if (files.length > 0) return analyzeFiles('gitlab', files, branch);
+        }
+        throw new Error(lastError || 'Unable to read GitLab repository tree.');
+      }
+
+      if (body.provider === 'bitbucket') {
+        const parsed = parseBitbucket();
+        if (!parsed) throw new Error('Invalid Bitbucket repository URL.');
+        const repoMetaRes = await fetch(
+          `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(parsed.workspace)}/${encodeURIComponent(parsed.repo)}`,
+        );
+        const repoMeta = await repoMetaRes.json().catch(() => ({}));
+        const defaultBranch = typeof repoMeta?.mainbranch?.name === 'string' ? repoMeta.mainbranch.name : '';
+        const branches = Array.from(new Set([requestedBranch, defaultBranch, ...fallbackBranches].filter(Boolean)));
+        let lastError = '';
+        for (const branch of branches) {
+          let nextUrl: string | null =
+            `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(parsed.workspace)}/${encodeURIComponent(parsed.repo)}/src/${encodeURIComponent(branch)}?pagelen=100`;
+          let files: string[] = [];
+          let guard = 0;
+          while (nextUrl && guard < 20) {
+            const treeRes = await fetch(nextUrl);
+            const treeData = await treeRes.json().catch(() => ({}));
+            if (!treeRes.ok) {
+              lastError = String((treeData as any)?.error?.message || `Bitbucket tree lookup failed (${treeRes.status}).`);
+              files = [];
+              break;
+            }
+            const pageFiles = Array.isArray((treeData as any)?.values)
+              ? (treeData as any).values
+                  .filter((x: any) => (x?.type === 'commit_file' || x?.type === 'file') && typeof x.path === 'string')
+                  .map((x: any) => String(x.path))
+              : [];
+            files = files.concat(pageFiles);
+            nextUrl = typeof (treeData as any)?.next === 'string' ? (treeData as any).next : null;
+            guard += 1;
+          }
+          if (files.length > 0) return analyzeFiles('bitbucket', files, branch);
+        }
+        throw new Error(lastError || 'Unable to read Bitbucket repository tree.');
+      }
+
+      throw new Error('Public fallback scan is available for GitHub, GitLab and Bitbucket only.');
+    },
+    [],
+  );
+
   const scanSourceConnection = React.useCallback(
     async (body: SourceConnectionInput): Promise<SourceScanResult> => {
       if (!user?.authToken) throw new Error('Unauthorized');
@@ -1438,10 +1630,14 @@ export default function AppTest() {
         }) as SourceScanResult;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed request';
+        // Fallback: public providers should still work when auth backend is unavailable/CORS blocked.
+        if (/failed to fetch/i.test(msg) && body.provider !== 'custom') {
+          return runPublicSourceScan(body);
+        }
         throw new Error(/failed to fetch/i.test(msg) ? 'Source scan unavailable. Verify backend deployment/CORS.' : msg);
       }
     },
-    [user?.authToken, AUTH_BACKEND_URL],
+    [user?.authToken, AUTH_BACKEND_URL, runPublicSourceScan],
   );
 
   const saveSourceConnection = React.useCallback(
@@ -1451,23 +1647,41 @@ export default function AppTest() {
       scan?: SourceScanResult | null;
     }): Promise<SourceConnection> => {
       if (!user?.authToken) throw new Error('Unauthorized');
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify({
-          figma_file_key: body.figmaFileKey,
-          storybook_url: body.storybookUrl,
-          provider: body.provider,
-          repo_url: body.repoUrl,
-          branch: body.branch,
-          storybook_path: body.storybookPath,
-          source_token: body.sourceToken || undefined,
-          scan: body.scan ?? null,
-        }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.connection) throw new Error(data.error || 'Could not save source connection');
-      return data.connection as SourceConnection;
+      try {
+        const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          body: JSON.stringify({
+            figma_file_key: body.figmaFileKey,
+            storybook_url: body.storybookUrl,
+            provider: body.provider,
+            repo_url: body.repoUrl,
+            branch: body.branch,
+            storybook_path: body.storybookPath,
+            source_token: body.sourceToken || undefined,
+            scan: body.scan ?? null,
+          }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.connection) throw new Error(data.error || 'Could not save source connection');
+        return data.connection as SourceConnection;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed request';
+        if (/failed to fetch/i.test(msg)) {
+          const now = new Date().toISOString();
+          return {
+            provider: body.provider,
+            repoUrl: body.repoUrl,
+            branch: body.branch,
+            storybookPath: body.storybookPath,
+            sourceToken: body.sourceToken || null,
+            scanResult: body.scan ?? null,
+            createdAt: now,
+            updatedAt: now,
+          } as SourceConnection;
+        }
+        throw err;
+      }
     },
     [user?.authToken, AUTH_BACKEND_URL],
   );

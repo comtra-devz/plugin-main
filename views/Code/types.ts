@@ -123,6 +123,13 @@ export interface SourceConnectionInput {
   sourceToken?: string;
 }
 
+export interface SyncLinkedFileOption {
+  fileKey: string;
+  fileName: string;
+  storybookUrl: string;
+  lastUsedAt: string;
+}
+
 export interface SyncTabProps {
   isPro: boolean;
   onUnlockRequest: () => void;
@@ -154,6 +161,10 @@ export interface SyncTabProps {
   sourceConnectionSaving: boolean;
   sourceConnectionError: string | null;
   sourceAuthStartUrl: string | null;
+  activeSyncFileKey: string | null;
+  activeSyncFileName: string | null;
+  syncLinkedFiles: SyncLinkedFileOption[];
+  onSelectSyncFile: (fileKey: string) => void;
   onLoadSourceConnection: () => Promise<void>;
   onSaveSourceConnection: (input: SourceConnectionInput) => Promise<SourceConnection | null>;
   onDeleteSourceConnection: () => Promise<boolean>;
