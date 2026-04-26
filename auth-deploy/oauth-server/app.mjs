@@ -5430,6 +5430,7 @@ function rowToSourceConnection(row) {
     figmaFileKey: row.figma_file_key,
     status: row.status || 'draft',
     authStatus: row.auth_status || 'needs_auth',
+    hasToken: !!(row.source_access_token && String(row.source_access_token).trim()),
     scan: row.scan_result || null,
     lastScannedAt: row.last_scanned_at ? new Date(row.last_scanned_at).toISOString() : null,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
@@ -5490,12 +5491,15 @@ async function fetchJson(url, opts = {}) {
   return data;
 }
 
-async function listSourceFiles({ provider, repoUrl, branch }) {
+async function listSourceFiles({ provider, repoUrl, branch, sourceToken }) {
+  const token = typeof sourceToken === 'string' && sourceToken.trim() ? sourceToken.trim() : '';
+  const authHeaders = token ? { Authorization: /^bearer\s+/i.test(token) ? token : `Bearer ${token}` } : {};
   if (provider === 'github') {
     const parsed = parseGitHubRepoUrl(repoUrl);
     if (!parsed) throw new Error('Invalid GitHub repository URL.');
     const data = await fetchJson(
       `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      { headers: authHeaders },
     );
     const files = Array.isArray(data?.tree)
       ? data.tree.filter((x) => x?.type === 'blob' && typeof x.path === 'string').map((x) => x.path)
@@ -5508,7 +5512,7 @@ async function listSourceFiles({ provider, repoUrl, branch }) {
     const files = [];
     let url = `https://api.bitbucket.org/2.0/repositories/${encodeURIComponent(parsed.workspace)}/${encodeURIComponent(parsed.repo)}/src/${encodeURIComponent(branch)}/?pagelen=100`;
     for (let i = 0; i < 8 && url; i++) {
-      const data = await fetchJson(url);
+      const data = await fetchJson(url, { headers: authHeaders });
       for (const v of data?.values || []) {
         if (v?.type === 'commit_file' && typeof v.path === 'string') files.push(v.path);
       }
@@ -5522,6 +5526,7 @@ async function listSourceFiles({ provider, repoUrl, branch }) {
     const project = encodeURIComponent(parsed.projectPath);
     const data = await fetchJson(
       `https://gitlab.com/api/v4/projects/${project}/repository/tree?ref=${encodeURIComponent(branch)}&recursive=true&per_page=100`,
+      { headers: authHeaders },
     );
     return Array.isArray(data)
       ? data.filter((x) => x?.type === 'blob' && typeof x.path === 'string').map((x) => x.path)
@@ -5574,6 +5579,7 @@ async function runSourceScan(input) {
   const repoUrl = normalizeRepoUrl(input.repoUrl || input.repo_url);
   const branch = String(input.branch || input.default_branch || 'main').trim().slice(0, 200) || 'main';
   const storybookPath = normalizeSourcePath(input.storybookPath || input.storybook_path);
+  const sourceToken = typeof input.sourceToken === 'string' ? input.sourceToken : typeof input.source_token === 'string' ? input.source_token : '';
   if (!provider) throw new Error('provider required');
   if (!repoUrl) throw new Error('repo_url required');
   if (provider === 'custom') {
@@ -5591,7 +5597,7 @@ async function runSourceScan(input) {
       detectedAt: new Date().toISOString(),
     };
   }
-  const files = await listSourceFiles({ provider, repoUrl, branch });
+  const files = await listSourceFiles({ provider, repoUrl, branch, sourceToken });
   return {
     ...inferSourceScan({ provider, files, storybookPath }),
     defaultBranch: branch,
@@ -5732,7 +5738,7 @@ app.get('/api/sync/source-connection', async (req, res) => {
   try {
     const sel = await dbSql`
       SELECT provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
-             status, auth_status, scan_result, last_scanned_at, updated_at
+             status, auth_status, source_access_token, scan_result, last_scanned_at, updated_at
       FROM user_source_connections
       WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
       LIMIT 1
@@ -5758,6 +5764,9 @@ app.put('/api/sync/source-connection', async (req, res) => {
   const repoUrl = normalizeRepoUrl(body.repo_url || body.repoUrl);
   const defaultBranch = String(body.default_branch || body.branch || 'main').trim().slice(0, 200) || 'main';
   const storybookPath = normalizeSourcePath(body.storybook_path || body.storybookPath);
+  const sourceToken = typeof body.source_token === 'string' && body.source_token.trim()
+    ? body.source_token.trim().slice(0, 4000)
+    : '';
   const scanResult = body.scan_result ?? body.scan;
   const authStatus = provider === 'custom' ? 'not_configured' : 'needs_auth';
   const status =
@@ -5773,11 +5782,11 @@ app.put('/api/sync/source-connection', async (req, res) => {
     const ins = await dbSql`
       INSERT INTO user_source_connections (
         user_id, figma_file_key, storybook_url, provider, repo_url, default_branch, storybook_path,
-        status, auth_status, scan_result, last_scanned_at, updated_at
+        status, auth_status, source_access_token, scan_result, last_scanned_at, updated_at
       )
       VALUES (
         ${userId}, ${figmaFileKey}, ${storybookUrl}, ${provider}, ${repoUrl}, ${defaultBranch}, ${storybookPath},
-        ${status}, ${authStatus}, ${scanJson}::jsonb,
+        ${status}, ${authStatus}, ${sourceToken || null}, ${scanJson}::jsonb,
         ${scanJson ? new Date().toISOString() : null}, NOW()
       )
       ON CONFLICT (user_id, figma_file_key, storybook_url) DO UPDATE SET
@@ -5787,11 +5796,12 @@ app.put('/api/sync/source-connection', async (req, res) => {
         storybook_path = EXCLUDED.storybook_path,
         status = EXCLUDED.status,
         auth_status = EXCLUDED.auth_status,
+        source_access_token = COALESCE(NULLIF(EXCLUDED.source_access_token, ''), user_source_connections.source_access_token),
         scan_result = EXCLUDED.scan_result,
         last_scanned_at = EXCLUDED.last_scanned_at,
         updated_at = NOW()
       RETURNING provider, repo_url, default_branch, storybook_path, storybook_url, figma_file_key,
-                status, auth_status, scan_result, last_scanned_at, updated_at
+                status, auth_status, source_access_token, scan_result, last_scanned_at, updated_at
     `;
     res.json({ ok: true, connection: rowToSourceConnection(ins?.rows?.[0]) });
   } catch (err) {
@@ -5827,8 +5837,28 @@ app.post('/api/sync/source-connection/scan', async (req, res) => {
   const userId = authCtx.userId;
   if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
   const body = req.body || {};
+  const sourceToken = typeof body.source_token === 'string' && body.source_token.trim()
+    ? body.source_token.trim().slice(0, 4000)
+    : '';
   try {
-    const scan = await runSourceScan(body);
+    let effectiveInput = body;
+    if (!sourceToken && dbSql) {
+      const figmaFileKey = String(body.figma_file_key || body.file_key || '').trim();
+      const storybookUrl = String(body.storybook_url || '').trim();
+      if (figmaFileKey && storybookUrl) {
+        const sel = await dbSql`
+          SELECT source_access_token
+          FROM user_source_connections
+          WHERE user_id = ${userId} AND figma_file_key = ${figmaFileKey} AND storybook_url = ${storybookUrl}
+          LIMIT 1
+        `;
+        const tokenFromDb = sel?.rows?.[0]?.source_access_token;
+        if (typeof tokenFromDb === 'string' && tokenFromDb.trim()) {
+          effectiveInput = { ...body, source_token: tokenFromDb };
+        }
+      }
+    }
+    const scan = await runSourceScan(effectiveInput);
     res.json({ ok: true, scan });
   } catch (err) {
     const message = err?.message || 'Source scan failed';
@@ -5853,19 +5883,59 @@ app.post('/api/sync/source-auth/start', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
   const provider = normalizeSourceProvider(req.body?.provider);
   if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
+  const state = Buffer.from(JSON.stringify({ userId, provider, ts: Date.now() })).toString('base64url');
   if (provider === 'custom') {
-    return res.json({ ok: true, status: 'not_configured', message: 'Custom sources use manual setup.' });
+    return res.json({ ok: true, status: 'connected_manual', url: null, message: 'Custom source uses manual setup.' });
   }
-  if (provider === 'github' && process.env.GITHUB_APP_INSTALL_URL) {
-    const url = new URL(process.env.GITHUB_APP_INSTALL_URL);
-    url.searchParams.set('state', Buffer.from(JSON.stringify({ userId, ts: Date.now() })).toString('base64url'));
+  if (provider === 'github') {
+    const installUrl = String(process.env.GITHUB_APP_INSTALL_URL || '').trim();
+    if (installUrl) {
+      const url = new URL(installUrl);
+      url.searchParams.set('state', state);
+      return res.json({ ok: true, status: 'needs_auth', url: url.toString() });
+    }
+    const clientId = String(process.env.GITHUB_OAUTH_CLIENT_ID || '').trim();
+    const redirectUri = String(process.env.GITHUB_OAUTH_REDIRECT_URI || `${BASE_URL}/auth/source/github/callback`).trim();
+    if (clientId) {
+      const url = new URL('https://github.com/login/oauth/authorize');
+      url.searchParams.set('client_id', clientId);
+      url.searchParams.set('redirect_uri', redirectUri);
+      url.searchParams.set('scope', 'read:user repo');
+      url.searchParams.set('state', state);
+      return res.json({ ok: true, status: 'needs_auth', url: url.toString() });
+    }
+    return res.status(400).json({ ok: false, status: 'needs_auth', error: 'GitHub auth is missing configuration (set GITHUB_APP_INSTALL_URL or GITHUB_OAUTH_CLIENT_ID).' });
+  }
+  if (provider === 'bitbucket') {
+    const authBase = String(process.env.BITBUCKET_OAUTH_AUTHORIZE_URL || 'https://bitbucket.org/site/oauth2/authorize').trim();
+    const clientId = String(process.env.BITBUCKET_OAUTH_CLIENT_ID || '').trim();
+    const redirectUri = String(process.env.BITBUCKET_OAUTH_REDIRECT_URI || `${BASE_URL}/auth/source/bitbucket/callback`).trim();
+    if (!clientId) {
+      return res.status(400).json({ ok: false, status: 'needs_auth', error: 'Bitbucket auth is missing configuration (set BITBUCKET_OAUTH_CLIENT_ID).' });
+    }
+    const url = new URL(authBase);
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('state', state);
     return res.json({ ok: true, status: 'needs_auth', url: url.toString() });
   }
-  return res.status(501).json({
-    ok: false,
-    status: 'not_configured',
-    error: `${provider} provider auth is not configured on this backend yet.`,
-  });
+  if (provider === 'gitlab') {
+    const authBase = String(process.env.GITLAB_OAUTH_AUTHORIZE_URL || 'https://gitlab.com/oauth/authorize').trim();
+    const clientId = String(process.env.GITLAB_OAUTH_CLIENT_ID || '').trim();
+    const redirectUri = String(process.env.GITLAB_OAUTH_REDIRECT_URI || `${BASE_URL}/auth/source/gitlab/callback`).trim();
+    if (!clientId) {
+      return res.status(400).json({ ok: false, status: 'needs_auth', error: 'GitLab auth is missing configuration (set GITLAB_OAUTH_CLIENT_ID).' });
+    }
+    const url = new URL(authBase);
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'read_user read_api read_repository');
+    url.searchParams.set('state', state);
+    return res.json({ ok: true, status: 'needs_auth', url: url.toString() });
+  }
+  return res.status(400).json({ ok: false, status: 'needs_auth', error: `Unsupported source provider: ${provider}` });
 });
 
 // --- Generate conversational UX: threads + messages (plugin sync)

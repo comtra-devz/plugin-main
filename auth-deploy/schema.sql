@@ -332,6 +332,7 @@ CREATE TABLE IF NOT EXISTS user_source_connections (
   storybook_path TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'needs_auth', 'connected_manual', 'scan_failed', 'ready')),
   auth_status TEXT NOT NULL DEFAULT 'needs_auth' CHECK (auth_status IN ('not_configured', 'needs_auth', 'connected')),
+  source_access_token TEXT,
   scan_result JSONB,
   last_scanned_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

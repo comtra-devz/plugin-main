@@ -109,6 +109,7 @@ export interface SourceConnection {
   figmaFileKey: string;
   status: SourceConnectionStatus;
   authStatus?: 'not_configured' | 'needs_auth' | 'connected';
+  hasToken?: boolean;
   scan?: SourceScanResult | null;
   lastScannedAt?: string | null;
   updatedAt?: string | null;
@@ -119,6 +120,7 @@ export interface SourceConnectionInput {
   repoUrl: string;
   branch: string;
   storybookPath: string;
+  sourceToken?: string;
 }
 
 export interface SyncTabProps {

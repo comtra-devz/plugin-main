@@ -632,15 +632,24 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setSourceAuthStartUrl(null);
   };
 
+  const normalizeSourceError = (err: unknown, fallback: string): string => {
+    const raw = err instanceof Error ? err.message : String(err || fallback);
+    if (/failed to fetch/i.test(raw)) {
+      return 'Network/backend unavailable. Check deployment, CORS, or auth backend URL.';
+    }
+    return raw || fallback;
+  };
+
   const loadSourceConnection = React.useCallback(async () => {
     if (!fetchSourceConnection || !syncFileKey || !storybookUrl) return;
     setSourceConnectionLoading(true);
-    setSourceConnectionError(null);
     try {
       const connection = await fetchSourceConnection({ figmaFileKey: syncFileKey, storybookUrl });
       setSourceConnection(connection);
     } catch (err) {
-      setSourceConnectionError(err instanceof Error ? err.message : 'Could not load source connection.');
+      // Do not block the wizard on background prefetch failures.
+      // Users can still continue with manual source setup/auth.
+      setSourceConnection(null);
     } finally {
       setSourceConnectionLoading(false);
     }
@@ -670,7 +679,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     try {
       return await scanSourceConnection(input);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Source scan failed.';
+      const message = normalizeSourceError(err, 'Source scan failed.');
       setSourceConnectionError(message);
       return {
         status: 'failed',
@@ -702,7 +711,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       setSourceConnection(saved);
       return saved;
     } catch (err) {
-      setSourceConnectionError(err instanceof Error ? err.message : 'Could not save source connection.');
+      setSourceConnectionError(normalizeSourceError(err, 'Could not save source connection.'));
       return null;
     } finally {
       setSourceConnectionSaving(false);
@@ -718,7 +727,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       if (ok) setSourceConnection(null);
       return ok;
     } catch (err) {
-      setSourceConnectionError(err instanceof Error ? err.message : 'Could not disconnect source.');
+      setSourceConnectionError(normalizeSourceError(err, 'Could not disconnect source.'));
       return false;
     } finally {
       setSourceConnectionSaving(false);
@@ -732,11 +741,13 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     try {
       const result = await startSourceAuth(provider);
       if (result.url) setSourceAuthStartUrl(result.url);
-      if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer');
+      if (result.url) {
+        window.parent.postMessage({ pluginMessage: { type: 'open-oauth-url', authUrl: result.url } }, '*');
+      }
       if (!result.ok && result.error) setSourceConnectionError(result.error);
       return result;
     } catch (err) {
-      const error = err instanceof Error ? err.message : 'Could not start provider auth.';
+      const error = normalizeSourceError(err, 'Could not start provider auth.');
       setSourceConnectionError(error);
       return { ok: false, error };
     }

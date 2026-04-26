@@ -66,7 +66,7 @@ const STORYBOOK_LIST_PATHS = [
 ];
 
 type SyncCategoryId = 'ALL' | 'MISSING' | 'NAMING' | 'VARIANTS' | 'SOURCE' | 'AUTO_FIXABLE' | 'MANUAL';
-type SourceWizardStep = 0 | 1 | 2 | 3 | 4 | 5;
+type SourceWizardStep = 0 | 1 | 2 | 3;
 
 const SOURCE_PROVIDER_LABELS: Record<SourceProvider, string> = {
   github: 'GitHub',
@@ -76,10 +76,8 @@ const SOURCE_PROVIDER_LABELS: Record<SourceProvider, string> = {
 };
 
 const SOURCE_WIZARD_STEPS = [
-  { title: 'Why', body: 'Storybook is read-only metadata. Sync All needs the source repository that builds it.' },
-  { title: 'Provider', body: 'Choose where the Storybook source repository lives.' },
-  { title: 'Auth', body: 'Connect provider permissions for repository scan. Write permissions come later for PRs.' },
-  { title: 'Repository', body: 'Add the repo URL, branch, and Storybook path used to build this deployment.' },
+  { title: 'Why', body: 'We need a quick source setup so analysis can be accurate and suggestions are tied to the real codebase.' },
+  { title: 'Source', body: 'Choose provider, connect auth, then configure repository details in the same step.' },
   { title: 'Detect', body: 'Scan the source for Storybook config, stories, package manager, and component paths.' },
   { title: 'Review', body: 'Confirm the source connection before running code-side sync.' },
 ] as const;
@@ -307,6 +305,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [sourceRepoUrl, setSourceRepoUrl] = useState('');
   const [sourceBranch, setSourceBranch] = useState('main');
   const [sourceStorybookPath, setSourceStorybookPath] = useState('');
+  const [sourceTokenInput, setSourceTokenInput] = useState('');
   const [sourceScanDraft, setSourceScanDraft] = useState<SourceScanResult | null>(null);
   const [sourceWizardError, setSourceWizardError] = useState<string | null>(null);
 
@@ -392,6 +391,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     setSourceRepoUrl('');
     setSourceBranch('main');
     setSourceStorybookPath('');
+    setSourceTokenInput('');
     setSourceScanDraft(null);
     setSourceWizardError(null);
   };
@@ -402,6 +402,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       setSourceRepoUrl(sourceConnection.repoUrl);
       setSourceBranch(sourceConnection.branch);
       setSourceStorybookPath(sourceConnection.storybookPath);
+      setSourceTokenInput('');
       setSourceScanDraft(sourceConnection.scan ?? null);
     }
     setSourceWizardStep(0);
@@ -414,15 +415,14 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     repoUrl: sourceRepoUrl.trim(),
     branch: sourceBranch.trim() || 'main',
     storybookPath: sourceStorybookPath.trim(),
+    sourceToken: sourceTokenInput.trim() || undefined,
   };
 
   const canContinueSourceWizard =
     sourceWizardStep === 0 ||
-    sourceWizardStep === 1 ||
+    (sourceWizardStep === 1 && sourceRepoUrl.trim().length > 0 && sourceBranch.trim().length > 0) ||
     sourceWizardStep === 2 ||
-    (sourceWizardStep === 3 && sourceRepoUrl.trim().length > 0 && sourceBranch.trim().length > 0) ||
-    sourceWizardStep === 4 ||
-    sourceWizardStep === 5;
+    sourceWizardStep === 3;
 
   const runSourceDetection = async () => {
     setSourceWizardError(null);
@@ -994,7 +994,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                 </button>
               </header>
 
-              <div className="shrink-0 border-b-2 border-black bg-neutral-100">
+              <div className="shrink-0 border-b-2 border-black bg-neutral-100 pt-4 pb-0">
                 <SourceWizardStepper currentStep={sourceWizardStep} />
               </div>
 
@@ -1018,48 +1018,34 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   {sourceWizardStep === 0 && (
                     <div className={`${BRUTAL.card} bg-[#fff8e7] p-3 space-y-2`}>
                       <p className="text-sm font-bold leading-relaxed">
-                        `Sync All` cannot push changes to Storybook directly. Storybook tells us what is live, but the
-                        changes must land in the repository that builds it.
+                        We ask for this setup to avoid wrong comparisons and broken links.
+                        Storybook shows the final result, but real changes happen in the source repository.
                       </p>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="border-2 border-black bg-white p-2">
-                          <p className="text-[9px] font-black uppercase text-gray-500">1. Read</p>
-                          <p className="text-xs font-black">Storybook</p>
-                        </div>
-                        <div className="border-2 border-black bg-white p-2">
-                          <p className="text-[9px] font-black uppercase text-gray-500">2. Detect</p>
-                          <p className="text-xs font-black">Drift</p>
-                        </div>
-                        <div className="border-2 border-black bg-white p-2">
-                          <p className="text-[9px] font-black uppercase text-gray-500">3. Prepare</p>
-                          <p className="text-xs font-black">Code sync</p>
-                        </div>
-                      </div>
+                      <p className="text-[11px] text-gray-700 leading-snug">
+                        Once connected, Comtra can read what is live, compare it with your Figma file, and suggest concrete fixes in the right place.
+                      </p>
                     </div>
                   )}
 
                   {sourceWizardStep === 1 && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {(Object.keys(SOURCE_PROVIDER_LABELS) as SourceProvider[]).map((provider) => (
-                        <button
-                          key={provider}
-                          type="button"
-                          onClick={() => setSourceProvider(provider)}
-                          className={`border-2 border-black p-3 text-left shadow-[3px_3px_0_0_#000] ${
-                            sourceProvider === provider ? 'bg-[#ff90e8]' : 'bg-white hover:bg-[#ffc900]'
-                          }`}
-                        >
-                          <span className="block text-xs font-black uppercase">{SOURCE_PROVIDER_LABELS[provider]}</span>
-                          <span className="mt-1 block text-[10px] font-bold text-gray-600">
-                            {provider === 'custom' ? 'Enterprise API or other Git host' : 'Repository provider'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {sourceWizardStep === 2 && (
                     <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(Object.keys(SOURCE_PROVIDER_LABELS) as SourceProvider[]).map((provider) => (
+                          <button
+                            key={provider}
+                            type="button"
+                            onClick={() => setSourceProvider(provider)}
+                            className={`border-2 border-black p-3 text-left shadow-[3px_3px_0_0_#000] ${
+                              sourceProvider === provider ? 'bg-[#ff90e8]' : 'bg-white hover:bg-[#ffc900]'
+                            }`}
+                          >
+                            <span className="block text-xs font-black uppercase">{SOURCE_PROVIDER_LABELS[provider]}</span>
+                            <span className="mt-1 block text-[10px] font-bold text-gray-600">
+                              {provider === 'custom' ? 'Enterprise API or other Git host' : 'Repository provider'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase">{SOURCE_PROVIDER_LABELS[sourceProvider]}</p>
@@ -1094,13 +1080,23 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         </a>
                       ) : null}
                       <p className="text-[10px] text-gray-500 leading-snug">
-                        You can continue with manual details now; provider OAuth can be completed later from this wizard.
+                        The selected provider opens external OAuth (browser). After completing access, return here and continue.
                       </p>
-                    </div>
-                  )}
-
-                  {sourceWizardStep === 3 && (
-                    <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase text-gray-600 mb-1">
+                          Token / app password (for private repos)
+                        </label>
+                        <input
+                          type="password"
+                          value={sourceTokenInput}
+                          onChange={(e) => setSourceTokenInput(e.target.value)}
+                          placeholder="ghp_... / glpat-... / bitbucket app password"
+                          className="w-full border-2 border-black px-3 py-2 text-xs font-mono outline-none"
+                        />
+                        <p className="mt-1 text-[10px] text-gray-500 leading-snug">
+                          Optional for public repos. Required for private repos. Saved server-side and never shown again here.
+                        </p>
+                      </div>
                       <div>
                         <label className="block text-[10px] font-black uppercase text-gray-600 mb-1">Repository URL</label>
                         <input
@@ -1139,7 +1135,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   )}
 
-                  {sourceWizardStep === 4 && (
+                  {sourceWizardStep === 2 && (
                     <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
                       <Button
                         variant="secondary"
@@ -1184,7 +1180,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   )}
 
-                  {sourceWizardStep === 5 && (
+                  {sourceWizardStep === 3 && (
                     <div className={`${BRUTAL.card} bg-[#fff8e7] p-3 space-y-2`}>
                       <div className="flex justify-between gap-3 border-b border-dashed border-gray-400 pb-2">
                         <span className="text-[10px] font-black uppercase text-gray-600">Provider</span>
@@ -1205,6 +1201,12 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       <div className="flex justify-between gap-3 border-t border-dashed border-gray-400 pt-2">
                         <span className="text-[10px] font-black uppercase text-gray-600">Detection</span>
                         <span className="text-xs font-black uppercase">{sourceScanDraft?.status || 'not run'}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 border-t border-dashed border-gray-400 pt-2">
+                        <span className="text-[10px] font-black uppercase text-gray-600">Token</span>
+                        <span className="text-xs font-black uppercase">
+                          {sourceTokenInput.trim() ? 'Provided' : sourceConnection?.hasToken ? 'Saved on server' : 'Not provided'}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -1232,17 +1234,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     className="flex-1 min-h-[44px] text-xs font-black py-3"
                     disabled={!canContinueSourceWizard || sourceConnectionSaving}
                     onClick={async () => {
-                      if (sourceWizardStep === 4 && !sourceScanDraft) {
-                        await runSourceDetection();
+                      if (sourceWizardStep === 2) {
+                        const scan = sourceScanDraft ?? await runSourceDetection();
+                        if (!scan || scan.status === 'failed') return;
                       }
-                      if (sourceWizardStep < 5) {
-                        setSourceWizardStep((prev) => Math.min(5, prev + 1) as SourceWizardStep);
+                      if (sourceWizardStep < 3) {
+                        setSourceWizardStep((prev) => Math.min(3, prev + 1) as SourceWizardStep);
                       } else {
                         await completeSourceWizard();
                       }
                     }}
                   >
-                    {sourceWizardStep === 5 ? (sourceConnectionSaving ? 'Saving…' : 'Save Source') : 'Continue'}
+                    {sourceWizardStep === 3 ? (sourceConnectionSaving ? 'Saving…' : 'Save Source') : 'Continue'}
                   </Button>
                 </div>
               </footer>

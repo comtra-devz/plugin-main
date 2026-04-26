@@ -1424,6 +1424,7 @@ export default function AppTest() {
             repo_url: body.repoUrl,
             branch: body.branch,
             storybook_path: body.storybookPath,
+            source_token: body.sourceToken || undefined,
           }),
         });
         const data = await r.json().catch(() => ({}));
@@ -1460,6 +1461,7 @@ export default function AppTest() {
           repo_url: body.repoUrl,
           branch: body.branch,
           storybook_path: body.storybookPath,
+          source_token: body.sourceToken || undefined,
           scan: body.scan ?? null,
         }),
       });
@@ -1487,15 +1489,36 @@ export default function AppTest() {
 
   const startSourceAuth = React.useCallback(
     async (provider: SourceProvider): Promise<{ ok: boolean; url?: string | null; error?: string }> => {
-      if (!user?.authToken) return { ok: false, error: 'Unauthorized' };
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-auth/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify({ provider }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) return { ok: false, error: data.error || 'Provider auth is not configured yet.' };
-      return { ok: data.ok === true, url: data.url || null, error: data.error };
+      const fallbackAuthUrlByProvider: Record<SourceProvider, string | null> = {
+        github: 'https://github.com/settings/tokens?type=beta',
+        bitbucket: 'https://bitbucket.org/account/settings/app-passwords/',
+        gitlab: 'https://gitlab.com/-/profile/personal_access_tokens',
+        custom: null,
+      };
+
+      if (!user?.authToken) {
+        const fallback = fallbackAuthUrlByProvider[provider];
+        if (fallback) return { ok: true, url: fallback };
+        return { ok: true, url: null };
+      }
+      try {
+        const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-auth/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          body: JSON.stringify({ provider }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && (data.ok === true || data.url)) {
+          return { ok: true, url: data.url || fallbackAuthUrlByProvider[provider] || null, error: data.error };
+        }
+        const fallback = fallbackAuthUrlByProvider[provider];
+        if (fallback) return { ok: true, url: fallback, error: data.error };
+        return { ok: true, url: null, error: data.error };
+      } catch {
+        const fallback = fallbackAuthUrlByProvider[provider];
+        if (fallback) return { ok: true, url: fallback };
+        return { ok: true, url: null };
+      }
     },
     [user?.authToken, AUTH_BACKEND_URL],
   );
