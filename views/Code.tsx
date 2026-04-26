@@ -14,6 +14,7 @@ import {
 } from '../services/tokenGeneration';
 import { getSystemToastOptions } from '../lib/errorCopy';
 import { SyncScanRateLimitedError } from '../lib/syncScanRateLimitedError';
+import { isLikelyNetworkOrCorsFetchFailure } from '../lib/pluginFetchErrors';
 import type { SyncSnapshot } from '../types';
 import type {
   SourceConnection,
@@ -774,8 +775,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   const normalizeSourceError = (err: unknown, fallback: string): string => {
     const raw = err instanceof Error ? err.message : String(err || fallback);
-    if (/failed to fetch/i.test(raw)) {
-      return 'Network/backend unavailable. Check deployment, CORS, or auth backend URL.';
+    if (isLikelyNetworkOrCorsFetchFailure(err)) {
+      return 'Network/backend unavailable. Check deployment, CORS, auth backend URL, and that the plugin manifest allows your Git host (e.g. api.github.com) for offline detect.';
     }
     return raw || fallback;
   };

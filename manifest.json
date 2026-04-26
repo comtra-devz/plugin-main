@@ -21,9 +21,12 @@
       "https://sap.github.io",
       "https://developers.grafana.com",
       "https://gitlab-org.gitlab.io",
-      "https://chromatic.com"
+      "https://chromatic.com",
+      "https://api.github.com",
+      "https://gitlab.com",
+      "https://api.bitbucket.org"
     ],
-    "reasoning": "Uses Google Gemini API for AI-powered design system analysis, wireframe generation and code export",
+    "reasoning": "Gemini/Figma APIs, Comtra auth backend, fonts, public Storybook demos, and Git provider APIs for Deep Sync source detect when backend is unreachable",
     "devAllowedDomains": ["http://localhost:3000","http://localhost:3456"]
   }
 }

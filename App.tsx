@@ -27,6 +27,7 @@ import type {
   SourceScanResult,
 } from './views/Code/types';
 import { SyncScanRateLimitedError } from './lib/syncScanRateLimitedError';
+import { isLikelyNetworkOrCorsFetchFailure } from './lib/pluginFetchErrors';
 import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
 import { replaceDsImportsFromServer } from './lib/dsImportsStorage';
@@ -1406,7 +1407,9 @@ export default function AppTest() {
         return (data.connection ?? null) as SourceConnection | null;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed request';
-        throw new Error(/failed to fetch/i.test(msg) ? 'Connection check unavailable. Verify backend deployment/CORS.' : msg);
+        throw new Error(
+          isLikelyNetworkOrCorsFetchFailure(err) ? 'Connection check unavailable. Verify backend deployment/CORS.' : msg,
+        );
       }
     },
     [user?.authToken, AUTH_BACKEND_URL],
@@ -1630,11 +1633,22 @@ export default function AppTest() {
         }) as SourceScanResult;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed request';
-        // Fallback: public providers should still work when auth backend is unavailable/CORS blocked.
-        if (/failed to fetch/i.test(msg) && body.provider !== 'custom') {
-          return runPublicSourceScan(body);
+        const tryPublic = body.provider !== 'custom' && isLikelyNetworkOrCorsFetchFailure(err);
+        if (tryPublic) {
+          try {
+            return await runPublicSourceScan(body);
+          } catch (fallbackErr) {
+            if (isLikelyNetworkOrCorsFetchFailure(fallbackErr)) {
+              throw new Error(
+                'Could not reach the scan API or the Git provider from the plugin (network/CORS). Reload after updating the plugin manifest to allow your Git host (e.g. https://api.github.com), or fix CORS on the auth backend.',
+              );
+            }
+            throw fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr));
+          }
         }
-        throw new Error(/failed to fetch/i.test(msg) ? 'Source scan unavailable. Verify backend deployment/CORS.' : msg);
+        throw new Error(
+          isLikelyNetworkOrCorsFetchFailure(err) ? 'Source scan unavailable. Verify backend deployment/CORS.' : msg,
+        );
       }
     },
     [user?.authToken, AUTH_BACKEND_URL, runPublicSourceScan],
@@ -1667,7 +1681,7 @@ export default function AppTest() {
         return data.connection as SourceConnection;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed request';
-        if (/failed to fetch/i.test(msg)) {
+        if (isLikelyNetworkOrCorsFetchFailure(err)) {
           const now = new Date().toISOString();
           return {
             provider: body.provider,
