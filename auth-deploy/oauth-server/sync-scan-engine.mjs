@@ -320,14 +320,31 @@ function storybookEntryFromRecord(record) {
 function storybookStoryUrl(baseUrl, entry) {
   if (!entry) return null;
   const base = normalizeStorybookBaseUrl(baseUrl);
-  if (entry.path) {
+  const rawPath = asCleanString(entry.path);
+  if (rawPath) {
+    const p = rawPath.trim();
+    // Common Storybook payloads return either absolute URLs, iframe URLs, or logical paths like /story/foo--bar.
+    if (/^https?:\/\//i.test(p)) return p;
+    if (p.startsWith('/iframe.html') || p.startsWith('iframe.html')) {
+      try {
+        return new URL(p.startsWith('/') ? p : `/${p}`, base).toString();
+      } catch {
+        return null;
+      }
+    }
+    if (p.startsWith('/story/') || p.startsWith('/docs/')) {
+      return `${base}/?path=${encodeURIComponent(p)}`;
+    }
+    // Some hosts expose `path` already as `?path=/story/...`.
+    if (p.startsWith('?path=')) return `${base}/${p}`;
+    // Fallback for relative filesystem-like paths.
     try {
-      return new URL(entry.path, base).toString();
+      return new URL(p.startsWith('/') ? p : `/${p}`, base).toString();
     } catch {
       return null;
     }
   }
-  if (entry.id) return `${base}/?path=/story/${encodeURIComponent(entry.id)}`;
+  if (entry.id) return `${base}/?path=/story/${entry.id}`;
   return null;
 }
 

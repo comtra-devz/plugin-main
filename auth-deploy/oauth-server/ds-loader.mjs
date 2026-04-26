@@ -281,7 +281,8 @@ export function validateActionPlanSchema(actionPlan) {
     return { valid: false, errors: ['Action plan must be a JSON object'], warnings };
   }
   if (String(actionPlan.version || '').trim() !== '1.0') {
-    errors.push('version must be "1.0".');
+    actionPlan.version = '1.0';
+    warnings.push('version was normalized to "1.0".');
   }
   if (!isPlainObject(actionPlan.metadata)) {
     errors.push('metadata must be an object.');

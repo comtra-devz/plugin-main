@@ -1916,7 +1916,7 @@ export const Generate: React.FC<Props> = ({
       )}
 
       {showGenerateComposer && !showReport && (
-        <div className={`${FULL_BLEED_OUT} shrink-0 flex flex-col`}>
+        <div className={`${FULL_BLEED_OUT} ${genError ? '' : '-mt-2'} shrink-0 flex flex-col`}>
           <div className={`${FULL_BLEED_IN} bg-white`}>
             <BrutalDropdown
               open={isSystemOpen}
@@ -1930,12 +1930,12 @@ export const Generate: React.FC<Props> = ({
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
                   className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 py-0 text-left text-xs font-black uppercase leading-none"
                 >
-                  <span className="flex h-full min-w-0 items-center gap-1.5 truncate leading-none">
-                    <span className="flex h-full items-center text-gray-500">Design system</span>
+                  <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-hidden leading-none">
+                    <span className="flex h-full shrink-0 items-center whitespace-nowrap text-gray-500">Design system</span>
                     <span className="flex h-full items-center" aria-hidden>·</span>
                     <span className="flex h-full min-w-0 items-center truncate">{selectedSystemDisplayName}</span>
                   </span>
-                  <span className="flex h-full items-center leading-none" aria-hidden>
+                  <span className="ml-6 flex h-full shrink-0 items-center leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
                   </span>
                 </button>
@@ -2032,9 +2032,9 @@ export const Generate: React.FC<Props> = ({
                   data-component="Generate: Chat scroll"
                   className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
                 >
-                  <div className="flex h-full min-h-full flex-1 flex-col pb-2">
+                  <div className="flex h-full min-h-full flex-1 flex-col">
                     <div className="flex-1" aria-hidden />
-                    <div className="flex w-full flex-col gap-2 px-1 pb-2 pt-1">
+                    <div className="flex w-full flex-col gap-2 p-2">
                     {showPreflight ? (
                       <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
                         <p className="text-[10px] font-black uppercase">
@@ -2085,7 +2085,7 @@ export const Generate: React.FC<Props> = ({
                     ) : null}
                     {showIntroBubble && conversationTurns.length === 0 ? (
                       <div className="flex justify-start">
-                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                        <div className="max-w-full border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
                           Hi — I am here to generate on the frame using your design system. Below you have three quick starters, or
                           type what you need: I reason step by step as we go.
                         </div>
@@ -2093,7 +2093,7 @@ export const Generate: React.FC<Props> = ({
                     ) : null}
                     {conversationTurns.map((turn) => (
                       <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className="max-w-[95%]">
+                        <div className="max-w-full">
                           <div
                             className={`border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
                               turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
@@ -2152,7 +2152,7 @@ export const Generate: React.FC<Props> = ({
                     ) : null}
                     {showLiveReasoning ? (
                       <div className="flex justify-start" aria-live="polite">
-                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                        <div className="max-w-full border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
                           <p className="mb-1 font-black uppercase">Live reasoning</p>
                           <div className="space-y-0.5">
                             {liveReasoningLines.map((line, idx) => (
@@ -2354,14 +2354,14 @@ export const Generate: React.FC<Props> = ({
               </div>
             </>
           ) : threadScopeReady ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 pt-2 pb-40">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 py-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
                 <p className="text-[10px] font-black uppercase">Threads</p>
                 <Button variant="secondary" type="button" className="text-[9px] uppercase" onClick={() => void handleNewConversation()}>
                   New chat
                 </Button>
               </div>
-              <div className="custom-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+              <div className="custom-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
                 {threadList.length === 0 ? (
                   <p className="text-[10px] text-gray-800">No threads yet. Send a message in Chat to start one.</p>
                 ) : (

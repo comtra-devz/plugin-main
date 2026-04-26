@@ -3147,6 +3147,18 @@ async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, prompt
   );
 }
 
+function normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource } = {}) {
+  if (!actionPlan || typeof actionPlan !== 'object' || Array.isArray(actionPlan)) return actionPlan;
+  const plan = actionPlan;
+  plan.version = '1.0';
+  if (!plan.metadata || typeof plan.metadata !== 'object' || Array.isArray(plan.metadata)) plan.metadata = {};
+  if (!String(plan.metadata.prompt || '').trim()) plan.metadata.prompt = String(prompt || '').trim();
+  if (!String(plan.metadata.mode || '').trim()) plan.metadata.mode = mode || 'create';
+  if (!String(plan.metadata.ds_source || '').trim()) plan.metadata.ds_source = dsSource || 'custom';
+  if (!Number.isFinite(Number(plan.metadata.estimated_credits ?? NaN))) plan.metadata.estimated_credits = 3;
+  return plan;
+}
+
 function ensureCreateModeHasCreateFrameAction(actionPlan, mode) {
   if (!actionPlan || typeof actionPlan !== 'object') return actionPlan;
   if (String(mode || '').toLowerCase() !== 'create') return actionPlan;
@@ -4636,6 +4648,7 @@ app.post('/api/agents/generate', async (req, res) => {
     const afterModelMs = Date.now();
     phaseTimers.model_ms = afterModelMs - startMs - (phaseTimers.resolve_source_ms || 0);
 
+    actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
     actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
     actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
     actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
@@ -4706,6 +4719,7 @@ app.post('/api/agents/generate', async (req, res) => {
         if (repaired && typeof repaired === 'object') {
           repairStats.repair_passes_with_valid_json += 1;
           actionPlan = repaired;
+          actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
           actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
           actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
           actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
@@ -4764,6 +4778,7 @@ app.post('/api/agents/generate', async (req, res) => {
       if (repairedSemantic && typeof repairedSemantic === 'object') {
         repairStats.semantic_escape_hatch_with_valid_json = true;
         actionPlan = repairedSemantic;
+        actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
         actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);
@@ -4814,6 +4829,7 @@ app.post('/api/agents/generate', async (req, res) => {
       });
       if (deterministicFallback && typeof deterministicFallback === 'object') {
         actionPlan = deterministicFallback;
+        actionPlan = normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource });
         actionPlan = ensureCreateModeHasCreateFrameAction(actionPlan, mode);
         actionPlan = ensureDesktopStructureHasSubstantialRootFrame(actionPlan, mode, prompt);
         actionPlan = enforceDeterministicSemanticComponentBinding(actionPlan, prompt, dsIndexForValidation);

@@ -829,7 +829,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   const handleSyncAll = async () => {
-    setSyncScanError('Source connected. Next step: generate a code-side sync plan/patch for the Storybook repository.');
+    setSyncScanError('Fix All will apply bulk actions in both directions (Figma and source code). Bulk execution is the next implementation step.');
     setSyncScanUpgradeUrl(null);
     setLastSyncAllDate(new Date());
   };

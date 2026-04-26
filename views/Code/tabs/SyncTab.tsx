@@ -84,6 +84,11 @@ const SOURCE_WIZARD_STEPS = [
   { title: 'Review', body: 'Confirm the source connection before running code-side sync.' },
 ] as const;
 
+const SOURCE_STEPPER_TOTAL = SOURCE_WIZARD_STEPS.length;
+const SOURCE_STEPPER_NODE_HALF = 20; // 40px node
+const SOURCE_STEPPER_RAIL_LEFT_PCT = 100 / (SOURCE_STEPPER_TOTAL * 2);
+const SOURCE_STEPPER_RAIL_WIDTH_PCT = 100 - SOURCE_STEPPER_RAIL_LEFT_PCT * 2;
+
 const SYNC_CATEGORY_META: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, { label: string; desc: string; tone: string }> = {
   MISSING: {
     label: 'Missing Coverage',
@@ -132,24 +137,60 @@ function getSyncHealthScore(items: SyncDriftItem[]): number {
 }
 
 function SourceWizardStepper({ currentStep }: { currentStep: SourceWizardStep }) {
+  const trackProgress = SOURCE_STEPPER_TOTAL > 1 ? currentStep / (SOURCE_STEPPER_TOTAL - 1) : 0;
+  const railTop = `${SOURCE_STEPPER_NODE_HALF}px`;
   return (
-    <div className="grid grid-cols-3 gap-2 px-3 py-3 sm:grid-cols-6" role="navigation" aria-label="Connect source steps">
-      {SOURCE_WIZARD_STEPS.map((step, index) => {
-        const active = index === currentStep;
-        const complete = index < currentStep;
-        return (
-          <div key={step.title} className="flex flex-col items-center gap-1 text-center">
-            <div
-              className={`flex size-9 items-center justify-center border-2 border-black text-xs font-black shadow-[3px_3px_0_0_#000] ${
-                active ? 'bg-[#ff90e8]' : complete ? 'bg-[#ffc900]' : 'bg-white'
-              }`}
-            >
-              {index + 1}
-            </div>
-            <span className="text-[9px] font-black uppercase leading-tight">{step.title}</span>
-          </div>
-        );
-      })}
+    <div className="w-full px-3" role="navigation" aria-label="Connect source steps">
+      <p className="sr-only">
+        Step {currentStep + 1} of {SOURCE_STEPPER_TOTAL}
+      </p>
+      <div className="relative py-0.5">
+        <div
+          className="pointer-events-none absolute z-0 h-1 rounded-full bg-gray-300"
+          style={{ left: `${SOURCE_STEPPER_RAIL_LEFT_PCT}%`, width: `${SOURCE_STEPPER_RAIL_WIDTH_PCT}%`, top: railTop }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute z-0 h-1 rounded-full bg-black transition-[width] duration-300 ease-out"
+          style={{
+            left: `${SOURCE_STEPPER_RAIL_LEFT_PCT}%`,
+            top: railTop,
+            width: `calc(${SOURCE_STEPPER_RAIL_WIDTH_PCT}% * ${trackProgress})`,
+          }}
+          aria-hidden
+        />
+        <div
+          className="relative z-10 grid w-full gap-0"
+          style={{ gridTemplateColumns: `repeat(${SOURCE_STEPPER_TOTAL}, minmax(0, 1fr))` }}
+        >
+          {SOURCE_WIZARD_STEPS.map((step, index) => {
+            const active = index === currentStep;
+            const completed = index < currentStep;
+            return (
+              <div key={step.title} className="flex min-h-[4.75rem] min-w-0 flex-col items-center justify-start gap-2 pt-0">
+                <div
+                  className={`flex size-10 shrink-0 items-center justify-center border-2 border-black text-xs font-black tabular-nums leading-none shadow-[3px_3px_0_0_#000] transition-transform duration-200 ${
+                    completed
+                      ? 'bg-black text-white'
+                      : active
+                        ? 'bg-[#ff90e8] text-black ring-2 ring-black ring-offset-2 ring-offset-neutral-100'
+                        : 'bg-white text-gray-400'
+                  } ${active ? 'z-20 scale-[1.02]' : ''}`}
+                >
+                  {completed ? <span className="text-base leading-none">✓</span> : index + 1}
+                </div>
+                <span
+                  className={`flex min-h-[2rem] w-full items-start justify-center px-1 text-center text-[12px] font-black uppercase leading-snug tracking-wide ${
+                    active ? 'text-black' : completed ? 'text-gray-800' : 'text-gray-400'
+                  }`}
+                >
+                  {step.title}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -430,6 +471,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       if (result.ok) {
         handleConnectSb(url, token, result);
         if (url !== raw) setConnectInput(url);
+        if (!sourceConnection) openSourceWizard();
       } else {
         setConnectError(result.error || 'Connection failed.');
       }
@@ -624,35 +666,49 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   )}
                   {!hasSyncScanned ? (
                     <div className="text-center">
-                      <p className="text-[10px] text-gray-500 mb-2">Ready to inspect.</p>
-                      <Button
-                        variant="black"
-                        fullWidth
-                        layout="row"
-                        onClick={handleScanClick}
-                        disabled={isSyncScanning || !!getRemainingTime('scan_sync')}
-                        className={
-                          `relative overflow-hidden${isSyncScanning ? ' disabled:!bg-[#ffc900] disabled:!text-black disabled:hover:!bg-[#ffb700] disabled:cursor-wait' : ''}`
-                        }
-                      >
-                        {isSyncScanning ? (
-                          <span className="absolute inset-0">
-                            <span
-                              className="absolute inset-y-0 left-0 bg-yellow-300"
-                              style={{ animation: 'fill-cta-bar 1600ms linear infinite' }}
-                              aria-hidden
-                            />
-                          </span>
-                        ) : null}
-                        <span className="relative z-10">
-                          {isSyncScanning ? 'Scanning Drift...' : getRemainingTime('scan_sync') ? `Wait ${getRemainingTime('scan_sync')}` : `Scan Project`}
-                        </span>
-                        {!getRemainingTime('scan_sync') && (
-                          <span className="absolute bottom-0.5 right-1 z-10 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">
-                            -15 Credits
-                          </span>
-                        )}
-                      </Button>
+                      {sourceConnection ? (
+                        <>
+                          <p className="text-[10px] text-gray-500 mb-2">Source connected. Start analysis.</p>
+                          <Button
+                            variant="black"
+                            fullWidth
+                            layout="row"
+                            onClick={handleScanClick}
+                            disabled={isSyncScanning || !!getRemainingTime('scan_sync')}
+                            className={
+                              `relative overflow-hidden${isSyncScanning ? ' disabled:!bg-[#ffc900] disabled:!text-black disabled:hover:!bg-[#ffb700] disabled:cursor-wait' : ''}`
+                            }
+                          >
+                            {isSyncScanning ? (
+                              <span className="absolute inset-0">
+                                <span
+                                  className="absolute inset-y-0 left-0 bg-yellow-300"
+                                  style={{ animation: 'fill-cta-bar 1600ms linear infinite' }}
+                                  aria-hidden
+                                />
+                              </span>
+                            ) : null}
+                            <span className="relative z-10">
+                              {isSyncScanning ? 'Analyzing Drift...' : getRemainingTime('scan_sync') ? `Wait ${getRemainingTime('scan_sync')}` : `Start Analysis`}
+                            </span>
+                            {!getRemainingTime('scan_sync') && (
+                              <span className="absolute bottom-0.5 right-1 z-10 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">
+                                -15 Credits
+                              </span>
+                            )}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[10px] text-gray-500 mb-2">Step required before analysis: connect source.</p>
+                          <Button variant="primary" fullWidth layout="row" onClick={openSourceWizard} className="relative">
+                            <span>Open Connect Source Wizard</span>
+                            <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
+                              Required
+                            </span>
+                          </Button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div>
@@ -814,7 +870,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         <>
                           <div className="mb-2 space-y-1 border border-dashed border-gray-300 bg-gray-50 p-2 text-[10px] text-gray-600">
                             <p>
-                              <strong>Sync All needs the source repo.</strong> Storybook tells us what is live, but code changes must be applied to the repository or source that builds it.
+                              <strong>Fix All needs source + analysis.</strong> Storybook tells us what is live, but bulk fixes must be applied either in Figma or in the repository that builds it.
                             </p>
                             {sourceConnection ? (
                               <div className="space-y-1">
@@ -861,7 +917,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             onClick={sourceConnection ? handleSyncAll : openSourceWizard}
                             className="relative h-12"
                           >
-                            <span>Sync All</span>
+                            <span>Fix All</span>
                             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
                               {sourceConnection ? 'Source Connected' : 'Connect Source'}
                             </span>
@@ -919,7 +975,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               <header className="shrink-0 border-b-2 border-black bg-white shadow-[0_2px_0_0_#000] flex items-center justify-between gap-2 px-3 py-3">
                 <div className="min-w-0">
                   <h2 id="sync-source-title" className="text-xs font-black uppercase tracking-wide truncate pr-2">
-                    Connect source for Sync All
+                    Connect source for Fix All
                   </h2>
                   <p className="text-[10px] font-bold text-gray-500 truncate">
                     {storybookUrl || 'Storybook source'}
@@ -1015,9 +1071,10 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           {sourceProvider === 'custom' ? 'Manual' : 'Needs auth'}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className={`${BRUTAL.btn} w-full bg-black text-white`}
+                      <Button
+                        variant="black"
+                        fullWidth
+                        className="min-h-[44px] text-xs font-black py-3"
                         onClick={async () => {
                           const result = await onStartSourceAuth(sourceProvider);
                           if (!result.ok && result.error) setSourceWizardError(result.error);
@@ -1025,7 +1082,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         }}
                       >
                         {sourceProvider === 'custom' ? 'Use Manual Setup' : `Connect ${SOURCE_PROVIDER_LABELS[sourceProvider]}`}
-                      </button>
+                      </Button>
                       {sourceAuthStartUrl ? (
                         <a
                           href={sourceAuthStartUrl}
@@ -1084,14 +1141,15 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
                   {sourceWizardStep === 4 && (
                     <div className={`${BRUTAL.card} bg-white p-3 space-y-3`}>
-                      <button
-                        type="button"
-                        className={`${BRUTAL.btn} w-full bg-[#ffc900] text-black disabled:bg-gray-200`}
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        className="min-h-[44px] text-xs font-black py-3 bg-[#ffc900] hover:bg-[#ffb700]"
                         disabled={sourceConnectionSaving || !sourceRepoUrl.trim()}
                         onClick={runSourceDetection}
                       >
                         {sourceConnectionSaving ? 'Detecting…' : 'Detect Storybook Source'}
-                      </button>
+                      </Button>
                       {sourceScanDraft ? (
                         <div className="space-y-2 border-2 border-black bg-neutral-50 p-3 text-[10px]">
                           <div className="flex justify-between gap-2">
@@ -1153,11 +1211,11 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                 </div>
               </div>
 
-              <footer className="shrink-0 border-t-2 border-black bg-white p-3">
-                <div className="mx-auto flex w-full max-w-lg gap-2">
-                  <button
-                    type="button"
-                    className={`${BRUTAL.btn} flex-1 bg-white text-black border-black hover:bg-gray-100`}
+              <footer className="shrink-0 border-t-2 border-black bg-white px-3 py-4 shadow-[0_-4px_0_0_rgba(0,0,0,0.06)]">
+                <div className="mx-auto flex w-full max-w-lg gap-2 items-stretch">
+                  <Button
+                    variant="secondary"
+                    className="flex-1 min-h-[44px] text-xs font-black py-3"
                     onClick={() => {
                       if (sourceWizardStep === 0) {
                         setSourceWizardOpen(false);
@@ -1168,10 +1226,10 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     }}
                   >
                     {sourceWizardStep === 0 ? 'Cancel' : 'Back'}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${BRUTAL.btn} flex-1 bg-[#ff90e8] text-black disabled:bg-gray-200 disabled:cursor-not-allowed`}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="flex-1 min-h-[44px] text-xs font-black py-3"
                     disabled={!canContinueSourceWizard || sourceConnectionSaving}
                     onClick={async () => {
                       if (sourceWizardStep === 4 && !sourceScanDraft) {
@@ -1185,7 +1243,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     }}
                   >
                     {sourceWizardStep === 5 ? (sourceConnectionSaving ? 'Saving…' : 'Save Source') : 'Continue'}
-                  </button>
+                  </Button>
                 </div>
               </footer>
             </div>

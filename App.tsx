@@ -1167,12 +1167,14 @@ export default function AppTest() {
     setUser(prev => prev && (data.current_level != null || data.total_xp != null)
       ? { ...prev, current_level: data.current_level ?? prev.current_level, total_xp: data.total_xp ?? prev.total_xp, xp_for_next_level: data.xp_for_next_level ?? prev.xp_for_next_level, xp_for_current_level_start: data.xp_for_current_level_start ?? prev.xp_for_current_level_start }
       : prev);
-    if (data.level_up && data.current_level != null) {
+    // Evita modal “retroattive” confuse: se la UI era già a un livello ≥ risposta consume, non mostrare level-up.
+    const uiLevelBeforeConsume = user?.current_level ?? 1;
+    if (data.level_up && data.current_level != null && data.current_level > uiLevelBeforeConsume) {
       const oldLevel = Math.max(
         1,
         typeof data.level_up_previous_level === 'number' && Number.isFinite(data.level_up_previous_level)
           ? data.level_up_previous_level
-          : (user?.current_level ?? 1)
+          : uiLevelBeforeConsume
       );
       const discount = Math.min(20, Math.floor((data.current_level ?? 1) / 5) * 5);
       setLevelUpData({
@@ -1391,16 +1393,21 @@ export default function AppTest() {
   const fetchSourceConnection = React.useCallback(
     async (q: { figmaFileKey: string; storybookUrl: string }): Promise<SourceConnection | null> => {
       if (!user?.authToken) throw new Error('Unauthorized');
-      const u = new URL(`${AUTH_BACKEND_URL}/api/sync/source-connection`);
-      u.searchParams.set('figma_file_key', q.figmaFileKey);
-      u.searchParams.set('storybook_url', q.storybookUrl);
-      const r = await fetch(u.toString(), {
-        cache: 'no-store',
-        headers: { Authorization: `Bearer ${user.authToken}` },
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || 'Could not load source connection');
-      return (data.connection ?? null) as SourceConnection | null;
+      try {
+        const u = new URL(`${AUTH_BACKEND_URL}/api/sync/source-connection`);
+        u.searchParams.set('figma_file_key', q.figmaFileKey);
+        u.searchParams.set('storybook_url', q.storybookUrl);
+        const r = await fetch(u.toString(), {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || 'Could not load source connection');
+        return (data.connection ?? null) as SourceConnection | null;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed request';
+        throw new Error(/failed to fetch/i.test(msg) ? 'Connection check unavailable. Verify backend deployment/CORS.' : msg);
+      }
     },
     [user?.authToken, AUTH_BACKEND_URL],
   );
@@ -1408,25 +1415,30 @@ export default function AppTest() {
   const scanSourceConnection = React.useCallback(
     async (body: SourceConnectionInput): Promise<SourceScanResult> => {
       if (!user?.authToken) throw new Error('Unauthorized');
-      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection/scan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify({
+      try {
+        const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/source-connection/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+          body: JSON.stringify({
+            provider: body.provider,
+            repo_url: body.repoUrl,
+            branch: body.branch,
+            storybook_path: body.storybookPath,
+          }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok && !data.scan) throw new Error(data.error || 'Source scan failed');
+        return (data.scan ?? {
+          status: 'failed',
           provider: body.provider,
-          repo_url: body.repoUrl,
-          branch: body.branch,
-          storybook_path: body.storybookPath,
-        }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok && !data.scan) throw new Error(data.error || 'Source scan failed');
-      return (data.scan ?? {
-        status: 'failed',
-        provider: body.provider,
-        defaultBranch: body.branch,
-        confidence: 'low',
-        issues: [data.error || 'Source scan failed'],
-      }) as SourceScanResult;
+          defaultBranch: body.branch,
+          confidence: 'low',
+          issues: [data.error || 'Source scan failed'],
+        }) as SourceScanResult;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed request';
+        throw new Error(/failed to fetch/i.test(msg) ? 'Source scan unavailable. Verify backend deployment/CORS.' : msg);
+      }
     },
     [user?.authToken, AUTH_BACKEND_URL],
   );
