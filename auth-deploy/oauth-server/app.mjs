@@ -6444,6 +6444,40 @@ app.get('/api/sync/scan-cache', async (req, res) => {
   }
 });
 
+app.get('/api/sync/scan-cache/latest', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+
+  const figmaFileKey = String(req.query.figma_file_key || req.query.file_key || req.query.fileKey || '').trim();
+  if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
+
+  try {
+    const sel = await dbSql`
+      SELECT storybook_url, items_json, last_scanned_at
+      FROM user_sync_scans
+      WHERE user_id = ${userId}
+        AND figma_file_key = ${figmaFileKey}
+      ORDER BY last_scanned_at DESC NULLS LAST, updated_at DESC NULLS LAST
+      LIMIT 1
+    `;
+    const row = sel?.rows?.[0];
+    if (!row) return res.json({ cache: null });
+    const items = Array.isArray(row.items_json) ? row.items_json : [];
+    res.json({
+      cache: {
+        storybookUrl: row.storybook_url ? String(row.storybook_url) : null,
+        items,
+        scannedAt: row.last_scanned_at ? new Date(row.last_scanned_at).toISOString() : null,
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/sync/scan-cache/latest', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- Code generation (Kimi): subtree JSON from plugin + format → source code
 const CODE_GEN_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'code-gen-system.md');
 

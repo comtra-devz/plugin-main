@@ -53,6 +53,7 @@ interface Props {
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo>;
   fetchSourceConnection?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<SourceConnection | null>;
   fetchSyncScanCache?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<{ items: SyncDriftItem[]; scannedAt?: string | null } | null>;
+  fetchLatestSyncScanCacheForFile?: (q: { figmaFileKey: string }) => Promise<{ storybookUrl: string | null; items: SyncDriftItem[]; scannedAt?: string | null } | null>;
   saveSourceConnection?: (body: SourceConnectionInput & {
     figmaFileKey: string;
     storybookUrl: string;
@@ -189,7 +190,7 @@ const upsertSyncLinkedFile = (item: SyncLinkedFileOption) => {
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchSourceConnection, fetchSyncScanCache, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchSourceConnection, fetchSyncScanCache, fetchLatestSyncScanCacheForFile, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -495,7 +496,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       if (cancelled) return;
       setSyncFileKey(ctx.fileKey);
       setSyncFileName(ctx.fileName);
-      // Auto-restore last Storybook used on this exact Figma file (Generate-like behavior).
+      // Auto-restore: first from local linked history, then from server latest scan cache.
       if (!ctx.fileKey || isSbConnected) return;
       const allLinked = readSyncLinkedFiles();
       const candidates = allLinked
@@ -509,12 +510,45 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         setStorybookConnectionInfo(null);
         setSyncScanError(null);
         setSyncScanUpgradeUrl(null);
+        return;
+      }
+
+      if (fetchLatestSyncScanCacheForFile) {
+        try {
+          const serverLatest = await fetchLatestSyncScanCacheForFile({ figmaFileKey: ctx.fileKey });
+          if (cancelled) return;
+          if (serverLatest?.storybookUrl) {
+            const normalizedUrl = canonicalStorybookUrl(serverLatest.storybookUrl);
+            setStorybookUrl(normalizedUrl);
+            setIsSbConnected(true);
+            setStorybookToken(null);
+            setStorybookConnectionInfo(null);
+            setSyncScanError(null);
+            setSyncScanUpgradeUrl(null);
+            if (Array.isArray(serverLatest.items)) {
+              const payload: SyncCachedResult = {
+                syncItems: serverLatest.items,
+                scannedAt: serverLatest.scannedAt || new Date().toISOString(),
+              };
+              try {
+                localStorage.setItem(buildSyncCacheKey(ctx.fileKey, normalizedUrl), JSON.stringify(payload));
+                writeLastScanByFile(ctx.fileKey, normalizedUrl, payload);
+              } catch {
+                // noop
+              }
+              setSyncItems(serverLatest.items);
+              setHasSyncScanned(true);
+            }
+          }
+        } catch {
+          // keep current behavior if backend is unreachable
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isSbConnected]);
+  }, [isSbConnected, fetchLatestSyncScanCacheForFile]);
 
   useEffect(() => {
     if (!syncFileKey) {
