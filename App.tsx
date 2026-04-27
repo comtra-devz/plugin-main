@@ -1423,6 +1423,35 @@ export default function AppTest() {
     [user?.authToken, AUTH_BACKEND_URL],
   );
 
+  const fetchSyncScanCache = React.useCallback(
+    async (q: { figmaFileKey: string; storybookUrl: string }): Promise<{ items: SyncDriftItem[]; scannedAt?: string | null } | null> => {
+      if (!user?.authToken) throw new Error('Unauthorized');
+      try {
+        const u = new URL(`${AUTH_BACKEND_URL}/api/sync/scan-cache`);
+        u.searchParams.set('figma_file_key', q.figmaFileKey);
+        u.searchParams.set('storybook_url', q.storybookUrl);
+        const r = await fetch(u.toString(), {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || 'Could not load scan cache');
+        const items = Array.isArray(data?.cache?.items) ? (data.cache.items as SyncDriftItem[]) : [];
+        if (!data?.cache) return null;
+        return {
+          items,
+          scannedAt: typeof data.cache.scannedAt === 'string' ? data.cache.scannedAt : null,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed request';
+        throw new Error(
+          isLikelyNetworkOrCorsFetchFailure(err) ? 'Scan cache unavailable. Verify backend deployment/CORS.' : msg,
+        );
+      }
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
   const runPublicSourceScan = React.useCallback(
     async (body: SourceConnectionInput): Promise<SourceScanResult> => {
       const repoUrl = String(body.repoUrl || '').trim();
@@ -2615,6 +2644,7 @@ export default function AppTest() {
             fetchSyncScan={fetchSyncScan}
             fetchCheckStorybook={fetchCheckStorybook}
             fetchSourceConnection={fetchSourceConnection}
+            fetchSyncScanCache={fetchSyncScanCache}
             saveSourceConnection={saveSourceConnection}
             deleteSourceConnection={deleteSourceConnection}
             scanSourceConnection={scanSourceConnection}

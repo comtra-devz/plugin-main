@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   SyncTabProps,
   BRUTAL,
@@ -261,7 +261,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   isSbConnected,
   storybookUrl,
   storybookToken,
-  storybookConnectionInfo,
   handleConnectSb,
   fetchCheckStorybook,
   onDisconnectSb,
@@ -318,6 +317,11 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [collapsedSections, setCollapsedSections] = useState<
     Partial<Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, boolean>>
   >({});
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const filtersRowRef = useRef<HTMLDivElement | null>(null);
+  const draggingFiltersRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartScrollRef = useRef(0);
 
   const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
   const quickPickOptions = useMemo(() => {
@@ -401,6 +405,38 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
   const handleScanClick = () => {
     handleSyncScan();
+  };
+
+  const requestDisconnect = () => setShowDisconnectConfirm(true);
+
+  const confirmDisconnect = async () => {
+    if (sourceConnection) {
+      await onDeleteSourceConnection();
+    }
+    onDisconnectSb?.();
+    setShowDisconnectConfirm(false);
+  };
+
+  const startFiltersDrag = (clientX: number) => {
+    const el = filtersRowRef.current;
+    if (!el) return;
+    draggingFiltersRef.current = true;
+    dragStartXRef.current = clientX;
+    dragStartScrollRef.current = el.scrollLeft;
+    el.style.cursor = 'grabbing';
+  };
+
+  const moveFiltersDrag = (clientX: number) => {
+    const el = filtersRowRef.current;
+    if (!el || !draggingFiltersRef.current) return;
+    const delta = clientX - dragStartXRef.current;
+    el.scrollLeft = dragStartScrollRef.current - delta;
+  };
+
+  const endFiltersDrag = () => {
+    draggingFiltersRef.current = false;
+    const el = filtersRowRef.current;
+    if (el) el.style.cursor = 'grab';
   };
 
   const resetSourceWizard = () => {
@@ -522,6 +558,13 @@ export const SyncTab: React.FC<SyncTabProps> = ({
         @keyframes fill-cta-bar {
           0% { width: 0%; }
           100% { width: 100%; }
+        }
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
         }
       `}</style>
       <div className="p-3 border-b-2 border-black bg-black text-white flex justify-between items-center">
@@ -681,22 +724,39 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                 <div>
                   {storybookUrl && (
                     <div className="mb-2">
-                      <div className="flex justify-between items-center">
-                        <p className="text-[10px] text-gray-500 font-mono truncate flex-1" title={storybookUrl}>
-                          Connected: {storybookUrl}
-                        </p>
-                      {onDisconnectSb && (
-                        <button onClick={onDisconnectSb} className="text-[10px] font-bold underline hover:text-[#ff90e8] ml-1">
-                          Change
-                        </button>
-                      )}
+                      <div className="space-y-1">
+                        <label htmlFor="storybook-connected-url" className="block text-[10px] font-black uppercase text-gray-600">
+                          Storybook Connected
+                        </label>
+                        <div className="flex items-center gap-4">
+                          <div
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-black bg-white text-[10px] font-black"
+                            aria-hidden
+                          >
+                            SB
+                          </div>
+                          <div className="flex h-10 min-w-0 flex-1 items-center border-2 border-black bg-white pr-1">
+                            <input
+                              id="storybook-connected-url"
+                              type="text"
+                              readOnly
+                              value={storybookUrl}
+                              title={storybookUrl}
+                              className="h-full min-w-0 flex-1 truncate bg-transparent px-2 text-xs font-mono outline-none"
+                            />
+                            {onDisconnectSb ? (
+                              <button
+                                type="button"
+                                onClick={requestDisconnect}
+                                className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-transparent text-sm font-black text-red-700 hover:border-black hover:bg-red-50"
+                                aria-label="Disconnect Storybook"
+                              >
+                                ×
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
-                      {storybookConnectionInfo?.endpointPath ? (
-                        <p className="mt-1 text-[9px] font-bold uppercase text-gray-500">
-                          Found {storybookConnectionInfo.entryCount ?? 0} entries from <code className="bg-gray-100 px-1">{storybookConnectionInfo.endpointPath}</code>
-                          {storybookConnectionInfo.checkedVia ? ` via ${storybookConnectionInfo.checkedVia}` : ''}
-                        </p>
-                      ) : null}
                       <div className="mt-2">
                         <label className="mb-1 block text-[10px] font-black uppercase text-gray-600">Figma file</label>
                         <BrutalDropdown
@@ -784,7 +844,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               <span className="absolute inset-0">
                                 <span
                                   className="absolute inset-y-0 left-0 bg-yellow-300"
-                                  style={{ animation: 'fill-cta-bar 1600ms linear infinite' }}
+                                  style={{ animation: 'fill-cta-bar 45000ms linear 1 forwards' }}
                                   aria-hidden
                                 />
                               </span>
@@ -844,7 +904,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             </div>
                           </div>
 
-                          <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+                          <div
+                            ref={filtersRowRef}
+                            className="hide-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1"
+                            style={{ cursor: 'grab' }}
+                            onMouseDown={(e) => startFiltersDrag(e.clientX)}
+                            onMouseMove={(e) => moveFiltersDrag(e.clientX)}
+                            onMouseUp={endFiltersDrag}
+                            onMouseLeave={endFiltersDrag}
+                            onTouchStart={(e) => startFiltersDrag(e.touches[0]?.clientX ?? 0)}
+                            onTouchMove={(e) => moveFiltersDrag(e.touches[0]?.clientX ?? 0)}
+                            onTouchEnd={endFiltersDrag}
+                          >
                             {(Object.keys(FILTER_LABELS) as SyncCategoryId[]).map((filter) => {
                               const count =
                                 filter === 'ALL'
@@ -980,48 +1051,15 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
                       {syncItems.length > 0 && (
                         <>
-                          <div className="mb-2 space-y-1 border border-dashed border-gray-300 bg-gray-50 p-2 text-[10px] text-gray-600">
-                            <p>
-                              <strong>Fix All needs source + analysis.</strong> Storybook tells us what is live, but bulk fixes must be applied either in Figma or in the repository that builds it.
-                            </p>
-                            {sourceConnection ? (
-                              <div className="space-y-1">
-                                <p>
-                                  Source connected: <strong>{SOURCE_PROVIDER_LABELS[sourceConnection.provider]}</strong> ·{' '}
-                                  <span className="font-mono">{sourceConnection.branch}</span> ·{' '}
-                                  <span className="font-black uppercase">{sourceConnection.status}</span>
-                                </p>
-                                {sourceConnection.scan ? (
-                                  <p>
-                                    Detection: <strong>{sourceConnection.scan.status}</strong>
-                                    {sourceConnection.scan.storybookConfigPath ? ` · ${sourceConnection.scan.storybookConfigPath}` : ''}
-                                  </p>
-                                ) : null}
-                                <div className="flex gap-2 pt-1">
-                                  <button type="button" className="font-black uppercase underline" onClick={openSourceWizardFromEntry}>
-                                    Edit source
-                                  </button>
-                                  <button type="button" className="font-black uppercase underline" onClick={() => void onLoadSourceConnection()}>
-                                    Refresh
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="font-black uppercase underline text-red-700"
-                                    onClick={() => void onDeleteSourceConnection()}
-                                  >
-                                    Disconnect
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <p>
-                                {sourceConnectionLoading
-                                  ? 'Loading source connection…'
-                                  : 'Connect GitHub, Bitbucket, GitLab or a custom source, then we can push fixes on the right side.'}
-                              </p>
-                            )}
-                            {sourceConnectionError ? <p className="font-bold text-red-700">{sourceConnectionError}</p> : null}
-                          </div>
+                          <Button
+                            variant="secondary"
+                            fullWidth
+                            layout="row"
+                            onClick={() => void onLoadSourceConnection()}
+                            className="mb-2 h-10"
+                          >
+                            Refresh
+                          </Button>
                           <Button
                             variant="primary"
                             fullWidth
@@ -1034,6 +1072,16 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               {sourceConnection ? 'Source Connected' : 'Connect Source'}
                             </span>
                           </Button>
+                          <button
+                            type="button"
+                            className="mt-3 block w-full text-center text-[10px] font-black uppercase text-red-700 underline"
+                            onClick={requestDisconnect}
+                          >
+                            Disconnect
+                          </button>
+                          {sourceConnectionError ? (
+                            <p className="mt-2 text-[10px] font-bold text-red-700">{sourceConnectionError}</p>
+                          ) : null}
                         </>
                       )}
 
@@ -1074,6 +1122,45 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               <Button variant="secondary" fullWidth disabled className="bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed">
                 Connect Bitbucket (Soon)
               </Button>
+            </div>
+          )}
+
+          {showDisconnectConfirm && (
+            <div
+              className="fixed inset-0 z-[320] flex items-center justify-center bg-black/45 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sync-disconnect-title"
+              onClick={() => setShowDisconnectConfirm(false)}
+            >
+              <div
+                className={`${BRUTAL.card} max-w-md w-full border-2 border-black bg-white p-4 shadow-[6px_6px_0_0_#000]`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="sync-disconnect-title" className="text-sm font-black uppercase leading-tight">
+                  Replace current sync connection?
+                </h3>
+                <p className="mt-2 text-[11px] leading-snug text-gray-700">
+                  If you continue, we will remove the current Storybook link and the source wizard data saved for this sync.
+                  You will need to reconnect and re-enter details manually.
+                </p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    variant="secondary"
+                    className="min-h-[40px] text-xs font-black uppercase"
+                    onClick={() => setShowDisconnectConfirm(false)}
+                  >
+                    Keep current
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="min-h-[40px] text-xs font-black uppercase !bg-red-600 !text-white hover:!bg-red-700"
+                    onClick={() => void confirmDisconnect()}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 

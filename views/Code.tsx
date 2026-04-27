@@ -52,6 +52,7 @@ interface Props {
   }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo>;
   fetchSourceConnection?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<SourceConnection | null>;
+  fetchSyncScanCache?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<{ items: SyncDriftItem[]; scannedAt?: string | null } | null>;
   saveSourceConnection?: (body: SourceConnectionInput & {
     figmaFileKey: string;
     storybookUrl: string;
@@ -188,7 +189,7 @@ const upsertSyncLinkedFile = (item: SyncLinkedFileOption) => {
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchSourceConnection, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchSourceConnection, fetchSyncScanCache, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -529,24 +530,58 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   useEffect(() => {
     if (!storybookUrl || !syncFileKey) return;
+    let cancelled = false;
     const storybookKey = canonicalStorybookUrl(storybookUrl);
     const related = readSyncLinkedFiles().filter((x) => canonicalStorybookUrl(x.storybookUrl) === storybookKey);
     setSyncLinkedFiles(related);
-    const exact = readSyncCachePayload(syncFileKey, storybookKey);
-    if (Array.isArray(exact?.syncItems)) {
-      setSyncItems(exact.syncItems);
-      setHasSyncScanned(true);
-      return;
-    }
-    const lastByFile = readLastScanByFile(syncFileKey);
-    if (Array.isArray(lastByFile?.payload?.syncItems) && canonicalStorybookUrl(lastByFile.storybookUrl) === storybookKey) {
-      setSyncItems(lastByFile.payload.syncItems);
-      setHasSyncScanned(true);
-      return;
-    }
-    setHasSyncScanned(false);
-    setSyncItems([]);
-  }, [storybookUrl, syncFileKey]);
+
+    (async () => {
+      const exact = readSyncCachePayload(syncFileKey, storybookKey);
+      if (Array.isArray(exact?.syncItems)) {
+        if (cancelled) return;
+        setSyncItems(exact.syncItems);
+        setHasSyncScanned(true);
+        return;
+      }
+      const lastByFile = readLastScanByFile(syncFileKey);
+      if (Array.isArray(lastByFile?.payload?.syncItems) && canonicalStorybookUrl(lastByFile.storybookUrl) === storybookKey) {
+        if (cancelled) return;
+        setSyncItems(lastByFile.payload.syncItems);
+        setHasSyncScanned(true);
+        return;
+      }
+      if (fetchSyncScanCache) {
+        try {
+          const serverCache = await fetchSyncScanCache({ figmaFileKey: syncFileKey, storybookUrl: storybookKey });
+          if (cancelled) return;
+          if (serverCache && Array.isArray(serverCache.items)) {
+            setSyncItems(serverCache.items);
+            setHasSyncScanned(true);
+            const payload: SyncCachedResult = {
+              syncItems: serverCache.items,
+              scannedAt: serverCache.scannedAt || new Date().toISOString(),
+            };
+            try {
+              localStorage.setItem(buildSyncCacheKey(syncFileKey, storybookKey), JSON.stringify(payload));
+              writeLastScanByFile(syncFileKey, storybookKey, payload);
+            } catch {
+              // noop
+            }
+            return;
+          }
+        } catch {
+          // keep local-first behavior on backend/cache failures
+        }
+      }
+      if (cancelled) return;
+      setHasSyncScanned(false);
+      setSyncItems([]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storybookUrl, syncFileKey, fetchSyncScanCache]);
 
   const getRemainingTime = (key: string) => {
     const end = cooldowns[key];

@@ -6373,12 +6373,73 @@ app.post('/api/agents/sync-scan', async (req, res) => {
       return res.status(400).json({ error: result.error, connectionStatus: 'unreachable' });
     }
 
+    const items = Array.isArray(result.items) ? result.items : [];
+    const normalizedStorybookUrl = normalizeStorybookUrl(storybookUrl);
+    const snapshotFileKey = String(syncSnapshot.fileKey || '').trim();
+
+    if (dbSql && snapshotFileKey && normalizedStorybookUrl) {
+      try {
+        await dbSql`
+          INSERT INTO user_sync_scans (
+            user_id, figma_file_key, storybook_url, items_json, last_scanned_at, updated_at
+          )
+          VALUES (
+            ${userId}, ${snapshotFileKey}, ${normalizedStorybookUrl}, ${JSON.stringify(items)}::jsonb, NOW(), NOW()
+          )
+          ON CONFLICT (user_id, figma_file_key, storybook_url) DO UPDATE SET
+            items_json = EXCLUDED.items_json,
+            last_scanned_at = EXCLUDED.last_scanned_at,
+            updated_at = NOW()
+        `;
+      } catch (cacheErr) {
+        console.warn('[sync-scan] could not persist scan cache', cacheErr?.message || cacheErr);
+      }
+    }
+
     res.json({
-      items: result.items || [],
+      items,
       connectionStatus: result.connectionStatus || 'ok',
     });
   } catch (err) {
     console.error('POST /api/agents/sync-scan', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/sync/scan-cache', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+
+  const figmaFileKey = String(req.query.figma_file_key || req.query.file_key || req.query.fileKey || '').trim();
+  const storybookUrl = normalizeStorybookUrl(req.query.storybook_url || req.query.storybookUrl);
+  if (!figmaFileKey) return res.status(400).json({ error: 'figma_file_key required' });
+  if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
+
+  try {
+    const sel = await dbSql`
+      SELECT items_json, last_scanned_at
+      FROM user_sync_scans
+      WHERE user_id = ${userId}
+        AND figma_file_key = ${figmaFileKey}
+        AND (
+          storybook_url = ${storybookUrl}
+          OR regexp_replace(storybook_url, '/+$', '') = ${storybookUrl}
+        )
+      LIMIT 1
+    `;
+    const row = sel?.rows?.[0];
+    if (!row) return res.json({ cache: null });
+    const items = Array.isArray(row.items_json) ? row.items_json : [];
+    res.json({
+      cache: {
+        items,
+        scannedAt: row.last_scanned_at ? new Date(row.last_scanned_at).toISOString() : null,
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/sync/scan-cache', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
