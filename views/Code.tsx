@@ -1,11 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { UserPlan } from '../types';
-import { Confetti } from '../components/Confetti.tsx';
 import { TokensTab } from './Code/tabs/TokensTab.tsx';
 import { TargetTab } from './Code/tabs/TargetTab.tsx';
 import { SyncTab } from './Code/tabs/SyncTab.tsx';
-import { LevelUpModal } from '../components/LevelUpModal.tsx';
 import {
   buildTokenForestFromFigmaPayload,
   tokenForestToCSS,
@@ -250,13 +248,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [sourceConnectionSaving, setSourceConnectionSaving] = useState(false);
   const [sourceConnectionError, setSourceConnectionError] = useState<string | null>(null);
   const [sourceAuthStartUrl, setSourceAuthStartUrl] = useState<string | null>(null);
-  const [showConfetti, setShowConfetti] = useState(false);
   const [lastSyncAllDate, setLastSyncAllDate] = useState<Date | null>(null);
   const [expandedDriftId, setExpandedDriftId] = useState<string | null>(null);
   const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
-
-  // Level Up State
-  const [showLevelUp, setShowLevelUp] = useState(false);
 
   // Token generation: pending request type for design-tokens-result handler
   const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
@@ -387,7 +381,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
               }
             }
             startCooldown('scan_sync');
-            setShowLevelUp(true);
+            // Do not show level-up modal from Deep Sync completion.
           } catch (err) {
             if (err instanceof SyncScanRateLimitedError) {
               const sec = err.retryAfterSec;
@@ -485,14 +479,32 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       window.parent.postMessage({ pluginMessage: { type: 'get-sync-snapshot' } }, '*');
     });
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+
+  const resolveFileContextWithRetries = async (): Promise<{ fileKey: string | null; fileName: string | null }> => {
+    const attempts = 3;
+    for (let i = 0; i < attempts; i += 1) {
       let ctx = await requestCurrentFileContext();
       if (!ctx.fileKey) {
         const fromSnapshot = await requestFileFromSyncSnapshot();
-        if (fromSnapshot.fileKey) ctx = fromSnapshot;
+        if (fromSnapshot.fileKey || fromSnapshot.fileName) ctx = fromSnapshot;
       }
+      if (ctx.fileKey || ctx.fileName) return ctx;
+      if (i < attempts - 1) {
+        // Figma plugin bridge can be late right after UI boot; retry before giving up.
+        await sleep(500 + i * 500);
+      }
+    }
+    return { fileKey: null, fileName: null };
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const ctx = await resolveFileContextWithRetries();
       if (cancelled) return;
       setSyncFileKey(ctx.fileKey);
       setSyncFileName(ctx.fileName);
@@ -510,6 +522,22 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         setStorybookConnectionInfo(null);
         setSyncScanError(null);
         setSyncScanUpgradeUrl(null);
+        return;
+      }
+
+      const localLast = readLastScanByFile(ctx.fileKey);
+      if (localLast?.storybookUrl) {
+        const normalizedUrl = canonicalStorybookUrl(localLast.storybookUrl);
+        setStorybookUrl(normalizedUrl);
+        setIsSbConnected(true);
+        setStorybookToken(null);
+        setStorybookConnectionInfo(null);
+        setSyncScanError(null);
+        setSyncScanUpgradeUrl(null);
+        if (Array.isArray(localLast.payload?.syncItems)) {
+          setSyncItems(localLast.payload.syncItems);
+          setHasSyncScanned(true);
+        }
         return;
       }
 
@@ -548,7 +576,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     return () => {
       cancelled = true;
     };
-  }, [isSbConnected, fetchLatestSyncScanCacheForFile]);
+  }, [activeTab, isSbConnected, fetchLatestSyncScanCacheForFile]);
 
   useEffect(() => {
     if (!syncFileKey) {
@@ -1172,20 +1200,6 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
 
   return (
     <div className="p-4 flex flex-col gap-4 pb-16 relative">
-      {showConfetti && <Confetti />}
-      {showLevelUp && (
-        <LevelUpModal
-          oldLevel={4}
-          newLevel={5}
-          discount={5}
-          onClose={() => setShowLevelUp(false)}
-          onViewStats={() => {
-            setShowLevelUp(false);
-            onNavigateToStats?.();
-          }}
-        />
-      )}
-      
       {/* Credit Banner */}
       <div className="flex justify-center mb-2">
         <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>

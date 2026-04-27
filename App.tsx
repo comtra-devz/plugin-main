@@ -1456,7 +1456,7 @@ export default function AppTest() {
     async (q: { figmaFileKey: string }): Promise<{ storybookUrl: string | null; items: SyncDriftItem[]; scannedAt?: string | null } | null> => {
       if (!user?.authToken) throw new Error('Unauthorized');
       try {
-        const u = new URL(`${AUTH_BACKEND_URL}/api/sync/scan-cache/latest`);
+        const u = new URL(`${AUTH_BACKEND_URL}/api/sync/latest-scan-cache`);
         u.searchParams.set('figma_file_key', q.figmaFileKey);
         const r = await fetch(u.toString(), {
           cache: 'no-store',

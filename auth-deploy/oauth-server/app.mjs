@@ -6444,7 +6444,7 @@ app.get('/api/sync/scan-cache', async (req, res) => {
   }
 });
 
-app.get('/api/sync/scan-cache/latest', async (req, res) => {
+app.get('/api/sync/latest-scan-cache', async (req, res) => {
   const authCtx = getUserAuthContext(req);
   const userId = authCtx.userId;
   if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
@@ -6473,7 +6473,7 @@ app.get('/api/sync/scan-cache/latest', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /api/sync/scan-cache/latest', err);
+    console.error('GET /api/sync/latest-scan-cache', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
