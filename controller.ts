@@ -24,6 +24,7 @@ setTimeout(() => {
 
 const SESSION_DAYS = 30; // Durata sessione in giorni; 0 = nessuna scadenza (solo logout manuale)
 const DS_IMPORT_META_STORAGE_KEY = 'comtra-ds-import-meta-v1';
+const SYNC_RESTORE_STORAGE_KEY = 'comtra-sync-restore-state-v1';
 
 type DsImportMetaRow = {
   fileKey: string;
@@ -33,6 +34,31 @@ type DsImportMetaRow = {
   tokenCount: number;
   name: string;
 };
+
+type SyncRestoreRow = {
+  fileKey: string;
+  fileName: string;
+  storybookUrl: string;
+  syncItems: unknown[];
+  scannedAt: string;
+};
+
+async function readSyncRestoreMap(): Promise<Record<string, SyncRestoreRow>> {
+  try {
+    const raw = await figma.clientStorage.getAsync(SYNC_RESTORE_STORAGE_KEY);
+    if (!raw || typeof raw !== 'object') return {};
+    return raw as Record<string, SyncRestoreRow>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeSyncRestoreRow(row: SyncRestoreRow): Promise<void> {
+  if (!row.fileKey || !row.storybookUrl) return;
+  const map = await readSyncRestoreMap();
+  map[row.fileKey] = row;
+  await figma.clientStorage.setAsync(SYNC_RESTORE_STORAGE_KEY, map);
+}
 
 async function readDsImportMetaMap(): Promise<Record<string, DsImportMetaRow>> {
   try {
@@ -1584,6 +1610,43 @@ function collectSubtreeTextMetrics(node: SceneNode): { textNodes: number; charCo
 
 figma.ui.onmessage = async (raw: any) => {
   const msg = raw?.pluginMessage ?? raw;
+  if (msg.type === 'get-sync-restore-state') {
+    const requestId = String(msg.requestId || '');
+    const fileKey = String(msg.fileKey || figma.fileKey || '').trim();
+    const fileName = figma.root.name || '';
+    const map = await readSyncRestoreMap();
+    figma.ui.postMessage({
+      type: 'sync-restore-state-result',
+      requestId,
+      fileKey: fileKey || null,
+      fileName: fileName || null,
+      restore: fileKey ? map[fileKey] ?? null : null,
+    });
+    return;
+  }
+
+  if (msg.type === 'set-sync-restore-state') {
+    const fileKey = String(msg.fileKey || figma.fileKey || '').trim();
+    const fileName = String(msg.fileName || figma.root.name || '').trim();
+    const storybookUrl = String(msg.storybookUrl || '').trim();
+    const syncItems = Array.isArray(msg.syncItems) ? msg.syncItems.slice(0, 1000) : [];
+    if (fileKey && storybookUrl) {
+      await writeSyncRestoreRow({
+        fileKey,
+        fileName,
+        storybookUrl,
+        syncItems,
+        scannedAt: new Date().toISOString(),
+      });
+    }
+    figma.ui.postMessage({
+      type: 'sync-restore-state-saved',
+      fileKey: fileKey || null,
+      ok: !!(fileKey && storybookUrl),
+    });
+    return;
+  }
+
   if (msg.type === 'resize-window') {
     figma.ui.resize(msg.width, msg.height);
   }

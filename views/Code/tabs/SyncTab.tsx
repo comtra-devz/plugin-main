@@ -332,6 +332,20 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     const preset = PRESET_STORYBOOKS.filter((p) => !recent.some((r) => r.value === p.value));
     return [...recent, ...preset];
   }, [rememberedStorybooksForFile]);
+  const syncFileOptions = useMemo(
+    () =>
+      syncLinkedFiles.length > 0
+        ? syncLinkedFiles
+        : [
+            {
+              fileKey: activeSyncFileKey || 'current',
+              fileName: activeSyncFileName || 'Current file',
+              storybookUrl: storybookUrl || '',
+              lastUsedAt: new Date().toISOString(),
+            },
+          ],
+    [activeSyncFileKey, activeSyncFileName, storybookUrl, syncLinkedFiles],
+  );
   const syncOverview = useMemo(() => {
     const sections: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]> = {
       MISSING: [],
@@ -728,13 +742,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         <label htmlFor="storybook-connected-url" className="block text-[10px] font-black uppercase text-gray-600">
                           Storybook Connected
                         </label>
-                        <div className="flex items-center gap-4">
-                          <div
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-black bg-white text-[10px] font-black"
-                            aria-hidden
-                          >
-                            SB
-                          </div>
+                        <div className="flex items-center">
                           <div className="flex h-10 min-w-0 flex-1 items-center border-2 border-black bg-white pr-1">
                             <input
                               id="storybook-connected-url"
@@ -759,52 +767,55 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                       </div>
                       <div className="mt-2">
                         <label className="mb-1 block text-[10px] font-black uppercase text-gray-600">Figma file</label>
-                        <BrutalDropdown
-                          open={isFilePickerOpen}
-                          onOpenChange={setIsFilePickerOpen}
-                          className="w-full"
-                          maxHeightClassName="max-h-44"
-                          trigger={
-                            <button
-                              type="button"
-                              onClick={() => setIsFilePickerOpen(!isFilePickerOpen)}
-                              className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2 text-left`}
-                            >
-                              <span className="text-xs font-bold uppercase truncate min-w-0" title={activeSyncFileName || 'Current file'}>
-                                {activeSyncFileName || 'Current file'}
-                              </span>
-                              <span className="shrink-0 text-[10px]" aria-hidden>
-                                {isFilePickerOpen ? '▲' : '▼'}
-                              </span>
-                            </button>
-                          }
-                        >
-                          {(syncLinkedFiles.length > 0 ? syncLinkedFiles : [{
-                            fileKey: activeSyncFileKey || 'current',
-                            fileName: activeSyncFileName || 'Current file',
-                            storybookUrl: storybookUrl || '',
-                            lastUsedAt: new Date().toISOString(),
-                          }]).map((f) => (
-                            <div
-                              key={`${f.fileKey}-${f.storybookUrl}`}
-                              role="option"
-                              onClick={() => {
-                                onSelectSyncFile(f.fileKey);
-                                setIsFilePickerOpen(false);
-                              }}
-                              className={`${brutalSelectOptionRowClass} ${f.fileKey === activeSyncFileKey ? brutalSelectOptionSelectedClass : ''}`.trim()}
-                            >
-                              <div className="flex w-full items-center justify-between gap-2">
-                                <span className="truncate">{f.fileName || f.fileKey}</span>
-                                {f.fileKey === activeSyncFileKey ? (
-                                  <span className="shrink-0 border border-black bg-black px-1 text-[8px] font-black uppercase text-white">
-                                    current
-                                  </span>
-                                ) : null}
+                        {syncFileOptions.length <= 1 ? (
+                          <div className={`${BRUTAL.input} flex h-10 w-full items-center bg-white px-3 py-2`}>
+                            <span className="min-w-0 truncate text-xs font-bold uppercase" title={activeSyncFileName || syncFileOptions[0]?.fileName || 'Current file'}>
+                              {activeSyncFileName || syncFileOptions[0]?.fileName || 'Current file'}
+                            </span>
+                          </div>
+                        ) : (
+                          <BrutalDropdown
+                            open={isFilePickerOpen}
+                            onOpenChange={setIsFilePickerOpen}
+                            className="w-full"
+                            maxHeightClassName="max-h-44"
+                            trigger={
+                              <button
+                                type="button"
+                                onClick={() => setIsFilePickerOpen(!isFilePickerOpen)}
+                                className={`${BRUTAL.input} w-full flex justify-between items-center gap-2 cursor-pointer h-10 bg-white px-3 py-2 text-left`}
+                              >
+                                <span className="text-xs font-bold uppercase truncate min-w-0" title={activeSyncFileName || 'Current file'}>
+                                  {activeSyncFileName || 'Current file'}
+                                </span>
+                                <span className="shrink-0 text-[10px]" aria-hidden>
+                                  {isFilePickerOpen ? '▲' : '▼'}
+                                </span>
+                              </button>
+                            }
+                          >
+                            {syncFileOptions.map((f) => (
+                              <div
+                                key={`${f.fileKey}-${f.storybookUrl}`}
+                                role="option"
+                                onClick={() => {
+                                  onSelectSyncFile(f.fileKey);
+                                  setIsFilePickerOpen(false);
+                                }}
+                                className={`${brutalSelectOptionRowClass} ${f.fileKey === activeSyncFileKey ? brutalSelectOptionSelectedClass : ''}`.trim()}
+                              >
+                                <div className="flex w-full items-center justify-between gap-2">
+                                  <span className="truncate">{f.fileName || f.fileKey}</span>
+                                  {f.fileKey === activeSyncFileKey ? (
+                                    <span className="shrink-0 border border-black bg-black px-1 text-[8px] font-black uppercase text-white">
+                                      current
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </BrutalDropdown>
+                            ))}
+                          </BrutalDropdown>
+                        )}
                       </div>
                     </div>
                   )}
@@ -852,9 +863,9 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             <span className="relative z-10">
                               {isSyncScanning ? 'Analyzing Drift...' : getRemainingTime('scan_sync') ? `Wait ${getRemainingTime('scan_sync')}` : `Start Analysis`}
                             </span>
-                            {!getRemainingTime('scan_sync') && (
+                            {!isSyncScanning && !getRemainingTime('scan_sync') && (
                               <span className="absolute bottom-0.5 right-1 z-10 text-[8px] bg-[#ff90e8] text-black px-1 font-bold rounded-sm">
-                                -15 Credits
+                                {isPro ? 'Included' : '-15 Credits'}
                               </span>
                             )}
                           </Button>
@@ -874,15 +885,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   ) : (
                     <div>
                       {syncItems.length === 0 ? (
-                        <div className="text-center py-4 bg-green-50 border-2 border-green-200 border-dashed mb-4">
-                          <span className="text-2xl block mb-1">🙌</span>
-                          <span className="text-xs font-bold text-green-700 uppercase">Everything Synchronized</span>
-                          {lastSyncAllDate && (
-                            <span className="text-[9px] font-mono text-gray-400 block mt-1">
-                                Last synced: {lastSyncAllDate.toLocaleTimeString()}
-                            </span>
-                          )}
-                        </div>
+                        null
                       ) : (
                         <>
                           <div className="mb-3 grid grid-cols-2 gap-2">
@@ -1087,18 +1090,38 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
                       {/* Rescan Button */}
                       {syncItems.length === 0 && (
-                          <button 
+                          <Button
+                            variant="primary"
+                            fullWidth
+                            layout="row"
                             onClick={handleScanClick}
-                            disabled={!!getRemainingTime('scan_sync')}
-                            className="w-full bg-black text-white border-2 border-black h-12 px-4 text-xs font-bold uppercase hover:bg-gray-800 flex justify-between items-center shadow-[4px_4px_0_0_rgba(0,0,0,0.2)] disabled:bg-gray-600 mt-2"
+                            disabled={isSyncScanning || !!getRemainingTime('scan_sync')}
+                            className={
+                              `mt-2 h-12 overflow-hidden${isSyncScanning ? ' disabled:!bg-[#ffc900] disabled:!text-black disabled:hover:!bg-[#ffb700] disabled:cursor-wait' : ''}`
+                            }
                           >
-                            <span>{getRemainingTime('scan_sync') ? `Cooldown ${getRemainingTime('scan_sync')}` : 'Start New Scan'}</span>
-                            {(!getRemainingTime('scan_sync')) && (
-                                <span className="text-[10px] bg-white text-black px-2 py-0.5 rounded-sm font-black">
-                                   -15 Credits
+                            {isSyncScanning ? (
+                              <span className="absolute inset-0">
+                                <span
+                                  className="absolute inset-y-0 left-0 bg-yellow-300"
+                                  style={{ animation: 'fill-cta-bar 45000ms linear 1 forwards' }}
+                                  aria-hidden
+                                />
+                              </span>
+                            ) : null}
+                            <span className="relative z-10">
+                              {isSyncScanning
+                                ? 'Analyzing Drift...'
+                                : getRemainingTime('scan_sync')
+                                  ? `Cooldown ${getRemainingTime('scan_sync')}`
+                                  : 'Start New Scan'}
+                            </span>
+                            {(!isSyncScanning && !getRemainingTime('scan_sync')) && (
+                                <span className="absolute bottom-0.5 right-1 z-10 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
+                                   {isPro ? 'Included' : '-15 Credits'}
                                 </span>
                             )}
-                          </button>
+                          </Button>
                       )}
                     </div>
                   )}

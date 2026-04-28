@@ -259,6 +259,11 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const pendingSyncScanTimeoutRef = useRef<number | null>(null);
   const pendingFileContextRef = useRef<((v: { fileKey: string | null; fileName: string | null }) => void) | null>(null);
   const pendingSnapshotFileRef = useRef<((v: { fileKey: string | null; fileName: string | null }) => void) | null>(null);
+  const pendingSyncRestoreRef = useRef<((v: {
+    fileKey: string | null;
+    fileName: string | null;
+    restore: { storybookUrl?: string; syncItems?: SyncDriftItem[]; scannedAt?: string } | null;
+  }) => void) | null>(null);
   const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
 
@@ -303,6 +308,16 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         cb({
           fileKey: msg.fileKey ? String(msg.fileKey) : null,
           fileName: msg.fileName ? String(msg.fileName) : null,
+        });
+        return;
+      }
+      if (msg.type === 'sync-restore-state-result' && pendingSyncRestoreRef.current) {
+        const cb = pendingSyncRestoreRef.current;
+        pendingSyncRestoreRef.current = null;
+        cb({
+          fileKey: msg.fileKey ? String(msg.fileKey) : null,
+          fileName: msg.fileName ? String(msg.fileName) : null,
+          restore: msg.restore && typeof msg.restore === 'object' ? msg.restore as any : null,
         });
         return;
       }
@@ -372,13 +387,22 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             setSyncScanError(null);
             setSyncScanUpgradeUrl(null);
             if (snap.fileKey && storybookUrl) {
+              const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
               try {
-                const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
                 localStorage.setItem(buildSyncCacheKey(String(snap.fileKey), storybookUrl), JSON.stringify(payload));
                 writeLastScanByFile(String(snap.fileKey), storybookUrl, payload);
               } catch {
                 /* noop */
               }
+              window.parent.postMessage({
+                pluginMessage: {
+                  type: 'set-sync-restore-state',
+                  fileKey: String(snap.fileKey),
+                  fileName: snap.fileName || syncFileName || '',
+                  storybookUrl,
+                  syncItems: result.items || [],
+                },
+              }, '*');
             }
             startCooldown('scan_sync');
             // Do not show level-up modal from Deep Sync completion.
@@ -479,6 +503,28 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       window.parent.postMessage({ pluginMessage: { type: 'get-sync-snapshot' } }, '*');
     });
 
+  const requestSyncRestoreState = () =>
+    new Promise<{
+      fileKey: string | null;
+      fileName: string | null;
+      restore: { storybookUrl?: string; syncItems?: SyncDriftItem[]; scannedAt?: string } | null;
+    }>((resolve) => {
+      let settled = false;
+      const t = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        pendingSyncRestoreRef.current = null;
+        resolve({ fileKey: null, fileName: null, restore: null });
+      }, 2500);
+      pendingSyncRestoreRef.current = (v) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(t);
+        resolve(v);
+      };
+      window.parent.postMessage({ pluginMessage: { type: 'get-sync-restore-state' } }, '*');
+    });
+
   const sleep = (ms: number) =>
     new Promise<void>((resolve) => {
       window.setTimeout(resolve, ms);
@@ -504,6 +550,37 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const controllerRestore = await requestSyncRestoreState();
+      if (cancelled) return;
+      if (!isSbConnected && controllerRestore.restore?.storybookUrl) {
+        const restoredUrl = canonicalStorybookUrl(controllerRestore.restore.storybookUrl);
+        const restoredItems = Array.isArray(controllerRestore.restore.syncItems)
+          ? controllerRestore.restore.syncItems
+          : [];
+        setSyncFileKey(controllerRestore.fileKey);
+        setSyncFileName(controllerRestore.fileName);
+        setStorybookUrl(restoredUrl);
+        setIsSbConnected(true);
+        setStorybookToken(null);
+        setStorybookConnectionInfo(null);
+        setSyncScanError(null);
+        setSyncScanUpgradeUrl(null);
+        setSyncItems(restoredItems);
+        setHasSyncScanned(true);
+        if (controllerRestore.fileKey) {
+          const payload: SyncCachedResult = {
+            syncItems: restoredItems,
+            scannedAt: controllerRestore.restore.scannedAt || new Date().toISOString(),
+          };
+          try {
+            localStorage.setItem(buildSyncCacheKey(controllerRestore.fileKey, restoredUrl), JSON.stringify(payload));
+            writeLastScanByFile(controllerRestore.fileKey, restoredUrl, payload);
+          } catch {
+            // noop
+          }
+        }
+        return;
+      }
       const ctx = await resolveFileContextWithRetries();
       if (cancelled) return;
       setSyncFileKey(ctx.fileKey);
@@ -1107,6 +1184,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   const handleSyncScan = async () => {
+    if (isSyncScanning || pendingSyncScanRef.current) return;
     if (getRemainingTime('scan_sync')) return;
     if (!storybookUrl || !fetchSyncScan) return;
     if (!isPro) {
@@ -1124,22 +1202,24 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     pendingSyncScanRef.current = true;
 
     try {
-      const { estimated_credits } = await estimateCredits({ action_type: 'scan_sync' });
-      const cost = estimated_credits ?? 15;
-      if (!useInfiniteCreditsForTest && !isPro && creditsRemaining !== null && creditsRemaining < cost) {
-        setSyncScanError('Insufficient credits');
-        setIsSyncScanning(false);
-        pendingSyncScanRef.current = false;
-        onUnlockRequest();
-        return;
-      }
-      const consumeResult = await consumeCredits({ action_type: 'scan_sync', credits_consumed: cost });
-      if (consumeResult.error) {
-        setSyncScanError(consumeResult.error === 'Insufficient credits' ? 'Insufficient credits' : consumeResult.error);
-        setIsSyncScanning(false);
-        pendingSyncScanRef.current = false;
-        if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
-        return;
+      if (!isPro && !useInfiniteCreditsForTest) {
+        const { estimated_credits } = await estimateCredits({ action_type: 'scan_sync' });
+        const cost = estimated_credits ?? 15;
+        if (creditsRemaining !== null && creditsRemaining < cost) {
+          setSyncScanError(null);
+          setIsSyncScanning(false);
+          pendingSyncScanRef.current = false;
+          onUnlockRequest();
+          return;
+        }
+        const consumeResult = await consumeCredits({ action_type: 'scan_sync', credits_consumed: cost });
+        if (consumeResult.error) {
+          setSyncScanError(consumeResult.error === 'Insufficient credits' ? null : consumeResult.error);
+          setIsSyncScanning(false);
+          pendingSyncScanRef.current = false;
+          if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
+          return;
+        }
       }
       clearPendingSyncScanTimeout();
       pendingSyncScanTimeoutRef.current = window.setTimeout(() => {

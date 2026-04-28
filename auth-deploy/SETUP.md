@@ -41,7 +41,7 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | *(alias)* `LEMON_STORE_ID` | Stesso valore dello store id | Stesso discorso al posto di `LEMON_SQUEEZY_STORE_ID`. |
 | `LEMON_VARIANT_1Y` | ID della **variant** del piano **Annual (1y)** in Lemon | Obbligatorio per legare gli sconti livello al prodotto giusto. Se hai solo nomi tipo `LEMON_VARIANT_SV` / `AZ` / `TZ` / `SN`, copia l’**ID numerico** della variant Annual da Lemon e incollalo qui (o aggiungi questa variabile accanto alle altre). |
 | `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
-| `KIMI_MODEL` | Nome modello (opzionale) | Default: `kimi-k2-turbo-preview`. Per **testing a basso costo** usa `kimi-k2-0905-preview` (input ~$0.40/M token, contesto 131K). |
+| `KIMI_MODEL` | Nome modello (opzionale) | Default backend: `kimi-k2.6`. Per **testing a basso costo** puoi impostare `kimi-k2-0905-preview` via env. |
 
 Dopo ogni modifica alle variabili: **Redeploy**.
 

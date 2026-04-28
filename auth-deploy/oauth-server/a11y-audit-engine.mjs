@@ -362,16 +362,29 @@ function collectFocusIssues(fileJson, issues, idGen) {
 }
 
 // --- 4. Alt (generic icon/image names)
+function isInComponentDefinitionContext(node, ancestors) {
+  const chain = Array.isArray(ancestors) ? ancestors : [];
+  const inInstance = chain.some((a) => a?.type === 'INSTANCE');
+  if (inInstance) return false;
+  const inComponentDef = chain.some((a) => a?.type === 'COMPONENT' || a?.type === 'COMPONENT_SET');
+  if (inComponentDef) return true;
+  const nodeType = (node?.type || '').toUpperCase();
+  return nodeType === 'COMPONENT' || nodeType === 'COMPONENT_SET';
+}
+
 function collectAltIssues(fileJson, issues, idGen) {
   const document = fileJson?.document;
   if (!document || !document.children) return;
   for (const page of document.children) {
     const pageName = page.name || '';
-    for (const { node } of walkNodes(page)) {
+    for (const { node, ancestors } of walkNodes(page)) {
       const name = (node.name || '').trim();
       if (!GENERIC_ALT_NAMES.test(name)) continue;
       const type = (node.type || '').toUpperCase();
       if (type === 'TEXT') continue;
+      // Design-system master components often use placeholder names (Icon, Image, etc.).
+      // Report these more usefully in concrete usage contexts (instances/layouts) instead.
+      if (isInComponentDefinitionContext(node, ancestors)) continue;
       const severity = name.length <= 2 || /^(icon|image|rect)$/i.test(name) ? 'MED' : 'LOW';
       issues.push({
         id: idGen(),

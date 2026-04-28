@@ -58,7 +58,7 @@ interface Props {
   /** Pipeline to agents: fetch file JSON from backend (Figma REST). Called after confirm scan when fileKey is available. */
   fetchFigmaFile?: (body: FetchFigmaFileBody) => Promise<unknown>;
   /** DS Audit agent: fetch issues from backend (Kimi). Called after confirm scan when fileKey is available. */
-  fetchDsAudit?: (body: { file_key: string; depth?: number }) => Promise<{
+  fetchDsAudit?: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{
     issues: AuditIssue[];
     libraryContextHint?: { type: string; message: string };
     spec_coverage_summary?: DsAuditSummary;
@@ -66,7 +66,7 @@ interface Props {
     quality_gates?: DsQualityGates;
   }>;
   /** A11Y Audit agent: fetch issues from backend (no Kimi). Called after confirm when fileKey is available. */
-  fetchA11yAudit?: (body: { file_key: string; depth?: number }) => Promise<{ issues: AuditIssue[] }>;
+  fetchA11yAudit?: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>;
   /** UX Audit agent: fetch issues from backend (Kimi). Called after confirm when fileKey/fileJson is available. */
   fetchUxAudit?: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>;
   /** JWT for auth backend, used for audit feedback tickets. */
@@ -227,9 +227,41 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     setA11yAuditError(prev => (prev != null && isFigmaConnectionError(prev) ? null : prev));
   }, [tokenVerifiedAt]);
 
-  // Reset WCAG filter to AA whenever page or scope changes (Nielsen: consistent system state)
+  // Scope/page change invalidates DS/A11Y/UX snapshots. Reset to initial state so we never
+  // show stale 100% (or stale issues) for a new selection before a fresh scan.
   useEffect(() => {
     setWcagLevelFilter('AA');
+    setActiveCat(null);
+    setExpandedIssue(null);
+    setFixedIds(new Set());
+    setDiscardedIds(new Set());
+    setFeedbackSentIds(new Set());
+
+    // DS
+    setHasAudited(false);
+    setDsAuditIssues(null);
+    setDsAuditError(null);
+    setDsAdvisory(null);
+    setDsLibraryContextHint(null);
+    setDsSpecCoverageSummary(null);
+    setDsReadabilitySummary(null);
+    setDsQualityGates(null);
+    setLastAuditDate(null);
+
+    // A11Y
+    setHasDeepScanned(false);
+    setA11yAuditIssues(null);
+    setA11yAuditError(null);
+    setLastA11yAuditDate(null);
+    setAuditScopeLabel('Page');
+    setAuditScopeName('');
+    setAuditScopeIsCurrent(false);
+
+    // UX
+    setHasUxAudited(false);
+    setUxAuditIssues(null);
+    setUxAuditError(null);
+    setLastUxAuditDate(null);
   }, [selectedPageId, scanScope]);
 
   /** One surface per error: file not saved = banner only; connection/Figma = toast only; others = toast only (no duplicate banner). */
@@ -286,21 +318,42 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       const isTimeout = /timeout|504|timed out/i.test(message);
       const lowerMsg = message.toLowerCase();
       const isRateLimited = lowerMsg.includes('kimi_rate_limit') || lowerMsg.includes('rate limit') || lowerMsg.includes('rate-limited');
-      const isInputTooLarge = lowerMsg.includes('ux_audit_input_too_large') || lowerMsg.includes('selection too large for ux audit');
+      const isUxInputTooLarge = lowerMsg.includes('ux_audit_input_too_large') || lowerMsg.includes('selection too large for ux audit');
+      const isDsInputTooLarge =
+        lowerMsg.includes('ds_audit_input_too_large') ||
+        lowerMsg.includes('selection too large for ds audit') ||
+        lowerMsg.includes('total message size') ||
+        lowerMsg.includes('exceeds limit');
+      const isInputTooLarge = isUxInputTooLarge || isDsInputTooLarge;
       const isKimiValidation = /kimi api error|context|token|too large|max(_| )?completion|invalid_request|model/i.test(lowerMsg);
+      const busyDescription = isUx
+        ? 'The UX audit is temporarily busy. Please retry in about a minute.'
+        : isA11y
+          ? 'The accessibility audit is temporarily busy. Please retry in about a minute.'
+          : 'The DS audit is temporarily busy. Please retry in about a minute.';
+      const tooLargeDescription = isUx
+        ? 'This selection is too large for UX Audit. Try a smaller frame group or a tighter page section.'
+        : isA11y
+          ? 'This selection is too large for Accessibility Audit. Try Current Selection or a single page, then retry.'
+          : 'This selection is too large for DS Audit. Try Current Selection or a single page, then retry.';
+      const kimiValidationDescription = isUx
+        ? 'UX audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.'
+        : isA11y
+          ? 'Accessibility audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.'
+          : 'DS audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.';
       const opts = isTimeout
         ? getSystemToastOptions('audit_timed_out')
         : isRateLimited
           ? getSystemToastOptions('service_unavailable', {
-              description: 'The UX audit is temporarily busy. Please retry in about a minute.',
+              description: busyDescription,
             })
         : isInputTooLarge
           ? getSystemToastOptions('audit_timed_out', {
-              description: 'This selection is too large for UX Audit. Try a smaller frame group or a tighter page section.',
+              description: tooLargeDescription,
             })
         : isKimiValidation
           ? getSystemToastOptions('audit_couldnt_start', {
-              description: 'UX audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.',
+              description: kimiValidationDescription,
             })
           : getSystemToastOptions('audit_couldnt_start');
       showToast({
@@ -1063,7 +1116,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       return;
     }
     if (!fetchUxAudit) return;
-    const cost = UX_AUDIT_CREDITS;
+    const cost: number = UX_AUDIT_CREDITS;
     setConfirmConfig({
       isOpen: true,
       title: 'Run UX Audit',
@@ -1613,14 +1666,14 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
                           You accept to send data to improve the plugin quality and the <button onClick={() => setShowPrivacyModal(true)} className="underline cursor-pointer hover:text-black">Privacy & Policy</button>.
                       </p>
                   </div>
-                  <Button
-                    variant="primary"
-                    fullWidth
+                  <button
+                    type="button"
                     onClick={handleSubmitFeedback}
                     disabled={!canSubmitFeedback}
+                    className="w-full bg-[#ff90e8] text-black border-2 border-black shadow-[4px_4px_0px_0px_#000] px-4 py-3 text-xs font-black uppercase disabled:bg-gray-200 disabled:cursor-not-allowed"
                   >
                     Send Feedback
-                  </Button>
+                  </button>
               </div>
           </div>
       )}

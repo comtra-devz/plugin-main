@@ -1916,17 +1916,39 @@ app.post('/api/figma/token-status', async (req, res) => {
 
 // --- DS Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
 const KIMI_API_KEY = process.env.KIMI_API_KEY;
-const KIMI_MODEL = process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
+const DEFAULT_KIMI_MODEL = 'kimi-k2.6';
+const KIMI_MODEL = process.env.KIMI_MODEL || DEFAULT_KIMI_MODEL;
+
+function isKimiFixedSamplingModel(model) {
+  const s = String(model || '').trim();
+  // Moonshot Kimi k2.5+ rejects custom sampling params on some endpoints/accounts.
+  return /kimi[-_]?k2\.[5-9]/i.test(s);
+}
+
+function buildKimiChatRequestPayload({ model = KIMI_MODEL, messages, maxTokens = 4096 }) {
+  const resolvedModel = String(model || KIMI_MODEL || '').trim() || DEFAULT_KIMI_MODEL;
+  const payload = {
+    model: resolvedModel,
+    messages,
+    // Moonshot chat completions expects max_tokens; older code used OpenAI-style max_completion_tokens.
+    max_tokens: maxTokens,
+  };
+  if (!isKimiFixedSamplingModel(resolvedModel)) {
+    payload.temperature = 0.3;
+  }
+  return payload;
+}
+
 /**
  * Modello per messaggi multimodali (image_url in content).
  * Moonshot elenca esplicitamente modelli vision: moonshot-v1-*-vision-preview, kimi-k2.5, ecc.
- * Il default testuale (es. kimi-k2-0905-preview) non è nella lista ufficiale “vision”.
+ * Kimi K2.6 supports multimodal input; keep KIMI_VISION_MODEL override for account/provider differences.
  * @see https://platform.moonshot.ai/docs/guide/use-kimi-vision-model
  */
-const KIMI_VISION_MODEL = process.env.KIMI_VISION_MODEL || 'kimi-k2.5';
+const KIMI_VISION_MODEL = process.env.KIMI_VISION_MODEL || process.env.KIMI_MODEL || DEFAULT_KIMI_MODEL;
 /** Plugin Generate A/B (50/50): Moonshot chat model slug per arm — set B to alternate flagship (e.g. Kimi 2.6) via env. */
 const KIMI_GENERATE_MODEL_A =
-  process.env.KIMI_GENERATE_MODEL_A || process.env.KIMI_MODEL_PRIMARY || process.env.KIMI_MODEL || 'kimi-k2-0905-preview';
+  process.env.KIMI_GENERATE_MODEL_A || process.env.KIMI_MODEL_PRIMARY || process.env.KIMI_MODEL || DEFAULT_KIMI_MODEL;
 const KIMI_GENERATE_MODEL_B =
   process.env.KIMI_GENERATE_MODEL_B ||
   process.env.KIMI_MODEL_SECONDARY ||
@@ -1939,10 +1961,10 @@ const KIMI_GENERATION_SPEC_MODEL =
   process.env.KIMI_GENERATE_MODEL_A ||
   process.env.KIMI_MODEL_PRIMARY ||
   process.env.KIMI_MODEL ||
-  'kimi-k2-0905-preview';
+  DEFAULT_KIMI_MODEL;
 
 function resolveGenerateChatModel(abVariant) {
-  const primary = String(KIMI_GENERATE_MODEL_A || '').trim() || 'kimi-k2-0905-preview';
+  const primary = String(KIMI_GENERATE_MODEL_A || '').trim() || DEFAULT_KIMI_MODEL;
   const secondaryRaw = String(KIMI_GENERATE_MODEL_B || '').trim();
   const secondary = secondaryRaw || primary;
   return abVariant === 'B' ? secondary : primary;
@@ -2669,6 +2691,151 @@ function sizeBandFromNodeCount(n) {
   return '200k+';
 }
 
+/**
+ * DS audit prompt payload budget:
+ * sending full Figma REST JSON can exceed provider request-size limits even for one dense page.
+ * We compact to only fields used by DS rules / deterministic post-filters.
+ */
+const DS_PROMPT_CHAR_BUDGET = 1200000;
+const DS_PROMPT_MAX_TEXT_CHARS = 120;
+const DS_PROMPT_MAX_PAINTS = 4;
+
+function trimPaintForDsPrompt(p) {
+  if (!p || typeof p !== 'object') return null;
+  const out = { type: p.type };
+  if (p.visible === false) out.visible = false;
+  if (typeof p.opacity === 'number') out.opacity = p.opacity;
+  if (p.type === 'SOLID' && p.color && typeof p.color === 'object') {
+    out.color = {
+      r: typeof p.color.r === 'number' ? p.color.r : undefined,
+      g: typeof p.color.g === 'number' ? p.color.g : undefined,
+      b: typeof p.color.b === 'number' ? p.color.b : undefined,
+      a: typeof p.color.a === 'number' ? p.color.a : undefined,
+    };
+  }
+  return out;
+}
+
+function collectReferencedComponentIds(node, out) {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === 'INSTANCE' && node.componentId != null && String(node.componentId).trim() !== '') {
+    out.add(String(node.componentId).trim());
+  }
+  if (Array.isArray(node.children)) {
+    for (const c of node.children) collectReferencedComponentIds(c, out);
+  }
+}
+
+function compactNodeForDsPrompt(node) {
+  if (!node || typeof node !== 'object') return null;
+  const out = {
+    id: node.id != null ? String(node.id) : '',
+    type: node.type != null ? String(node.type) : '',
+  };
+  if (node.name != null) out.name = String(node.name);
+  if (node.visible === false) out.visible = false;
+  if (node.componentId != null && String(node.componentId).trim() !== '') out.componentId = String(node.componentId);
+  if (node.layoutPositioning != null) out.layoutPositioning = node.layoutPositioning;
+  if (node.layoutMode != null) out.layoutMode = node.layoutMode;
+  if (node.primaryAxisSizingMode != null) out.primaryAxisSizingMode = node.primaryAxisSizingMode;
+  if (node.counterAxisSizingMode != null) out.counterAxisSizingMode = node.counterAxisSizingMode;
+  if (node.primaryAxisAlignItems != null) out.primaryAxisAlignItems = node.primaryAxisAlignItems;
+  if (node.counterAxisAlignItems != null) out.counterAxisAlignItems = node.counterAxisAlignItems;
+  if (node.layoutWrap != null) out.layoutWrap = node.layoutWrap;
+  if (node.paddingTop != null) out.paddingTop = node.paddingTop;
+  if (node.paddingRight != null) out.paddingRight = node.paddingRight;
+  if (node.paddingBottom != null) out.paddingBottom = node.paddingBottom;
+  if (node.paddingLeft != null) out.paddingLeft = node.paddingLeft;
+  if (node.itemSpacing != null) out.itemSpacing = node.itemSpacing;
+  if (node.counterAxisSpacing != null) out.counterAxisSpacing = node.counterAxisSpacing;
+  if (node.strokeWeight != null) out.strokeWeight = node.strokeWeight;
+  if (node.cornerRadius != null) out.cornerRadius = node.cornerRadius;
+  if (Array.isArray(node.rectangleCornerRadii)) out.rectangleCornerRadii = node.rectangleCornerRadii;
+  if (node.fillStyleId != null && String(node.fillStyleId).trim() !== '') out.fillStyleId = String(node.fillStyleId);
+  if (node.strokeStyleId != null && String(node.strokeStyleId).trim() !== '') out.strokeStyleId = String(node.strokeStyleId);
+  if (node.textStyleId != null && String(node.textStyleId).trim() !== '') out.textStyleId = String(node.textStyleId);
+  if (node.absoluteBoundingBox && typeof node.absoluteBoundingBox === 'object') {
+    const b = node.absoluteBoundingBox;
+    out.absoluteBoundingBox = { x: b.x, y: b.y, width: b.width, height: b.height };
+  }
+  if (node.style && typeof node.style === 'object') {
+    const st = {};
+    if (node.style.fontSize != null) st.fontSize = node.style.fontSize;
+    if (node.style.fontWeight != null) st.fontWeight = node.style.fontWeight;
+    if (node.style.lineHeightPx != null) st.lineHeightPx = node.style.lineHeightPx;
+    if (node.style.fontFamily != null) st.fontFamily = node.style.fontFamily;
+    if (Object.keys(st).length > 0) out.style = st;
+  }
+  if (typeof node.characters === 'string' && node.characters.length > 0) {
+    out.characters =
+      node.characters.length > DS_PROMPT_MAX_TEXT_CHARS
+        ? `${node.characters.slice(0, DS_PROMPT_MAX_TEXT_CHARS)}...`
+        : node.characters;
+  }
+  if (Array.isArray(node.fills) && node.fills.length > 0) {
+    out.fills = node.fills.slice(0, DS_PROMPT_MAX_PAINTS).map(trimPaintForDsPrompt).filter(Boolean);
+  }
+  if (Array.isArray(node.strokes) && node.strokes.length > 0) {
+    out.strokes = node.strokes.slice(0, DS_PROMPT_MAX_PAINTS).map(trimPaintForDsPrompt).filter(Boolean);
+  }
+  if (node.boundVariables && typeof node.boundVariables === 'object') {
+    const bv = {};
+    for (const k of ['fills', 'strokes', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight']) {
+      if (node.boundVariables[k] != null) bv[k] = node.boundVariables[k];
+    }
+    if (Object.keys(bv).length > 0) out.boundVariables = bv;
+  }
+  if (Array.isArray(node.children) && node.children.length > 0) {
+    out.children = node.children.map(compactNodeForDsPrompt).filter(Boolean);
+  } else if (Array.isArray(node.children)) {
+    out.children = [];
+  }
+  return out;
+}
+
+function compactFileJsonForDsPrompt(fileJson) {
+  if (!fileJson || typeof fileJson !== 'object') return fileJson;
+  const compactDocument = compactNodeForDsPrompt(fileJson.document || { type: 'DOCUMENT', id: '0:0', children: [] });
+  const referenced = new Set();
+  collectReferencedComponentIds(compactDocument, referenced);
+  let compactComponents = undefined;
+  if (fileJson.components && typeof fileJson.components === 'object') {
+    compactComponents = {};
+    for (const id of referenced) {
+      const c = fileJson.components[id];
+      if (!c || typeof c !== 'object') continue;
+      compactComponents[id] = {
+        key: c.key,
+        name: c.name,
+        description: c.description,
+        remote: c.remote === true,
+      };
+    }
+  }
+  return {
+    document: compactDocument || { type: 'DOCUMENT', id: '0:0', children: [] },
+    ...(compactComponents ? { components: compactComponents } : {}),
+  };
+}
+
+function buildDsPromptInputJson(fileJson) {
+  const fullString = JSON.stringify(fileJson);
+  if (fullString.length <= DS_PROMPT_CHAR_BUDGET) return { payload: fileJson, compacted: false };
+  const compact = compactFileJsonForDsPrompt(fileJson);
+  const compactString = JSON.stringify(compact);
+  if (compactString.length <= DS_PROMPT_CHAR_BUDGET) return { payload: compact, compacted: true };
+  // Last resort: still use compact payload; route already maps provider-size errors to ds_audit_input_too_large.
+  return { payload: compact, compacted: true };
+}
+
+function safeJsonSize(obj) {
+  try {
+    return JSON.stringify(obj).length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Parallel Figma REST calls with bounded concurrency (sequential was N×latency for “all pages” audits). */
 async function mapWithConcurrency(items, concurrency, mapper) {
   if (!items.length) return [];
@@ -3002,7 +3169,18 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       });
     }
 
-    const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.\n\n${JSON.stringify(fileJson)}`;
+    const dsPromptInput = buildDsPromptInputJson(fileJson);
+    const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.${
+      dsPromptInput.compacted
+        ? ' Nota: il payload e` stato compattato lato server per limiti di richiesta; usa solo i campi presenti senza assumere dati mancanti.'
+        : ''
+    }\n\n${JSON.stringify(dsPromptInput.payload)}`;
+    console.info('DS Audit: prompt payload', {
+      model: KIMI_MODEL,
+      compacted: dsPromptInput.compacted,
+      original_chars: safeJsonSize(fileJson),
+      prompt_chars: userMessage.length,
+    });
 
     const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
       method: 'POST',
@@ -3010,19 +3188,28 @@ app.post('/api/agents/ds-audit', async (req, res) => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${KIMI_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: KIMI_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        temperature: 0.3,
-        max_completion_tokens: 4096,
-      }),
+      body: JSON.stringify(
+        buildKimiChatRequestPayload({
+          model: KIMI_MODEL,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          maxTokens: 4096,
+        }),
+      ),
     });
     if (!kimiRes.ok) {
       const t = await kimiRes.text();
+      const lower = String(t || '').toLowerCase();
+      const isInputTooLarge = /total message size|exceeds limit|context length|maximum context|token limit|invalid_request_error/.test(lower);
       console.error('DS Audit: Kimi API', kimiRes.status, t.slice(0, 300));
+      if (isInputTooLarge) {
+        return res.status(413).json({
+          error: 'ds_audit_input_too_large',
+          details: 'Selection too large for DS audit. Use Current Selection or a single page and retry.',
+        });
+      }
       return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
     }
     const kimiData = await kimiRes.json();
@@ -3113,12 +3300,7 @@ async function callKimi(messages, maxTokens = 8192, textModelOverride = null) {
       ? String(textModelOverride).trim()
       : KIMI_MODEL;
   const model = usesVision ? KIMI_VISION_MODEL : textModel;
-  /** kimi-k2.5: la doc Moonshot impone temperature/top_p fissi; altri valori possono dare errore. */
-  const isK25Family = /k2\.5/i.test(String(model));
-  const payload = { model, messages, max_tokens: maxTokens };
-  if (!isK25Family) {
-    payload.temperature = 0.3;
-  }
+  const payload = buildKimiChatRequestPayload({ model, messages, maxTokens });
   const r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
@@ -6255,15 +6437,16 @@ app.post('/api/agents/ux-audit', async (req, res) => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${KIMI_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: KIMI_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        temperature: 0.3,
-        max_completion_tokens: 4096,
-      }),
+      body: JSON.stringify(
+        buildKimiChatRequestPayload({
+          model: KIMI_MODEL,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          maxTokens: 4096,
+        }),
+      ),
     });
     if (!kimiRes.ok) {
       const t = await kimiRes.text();
