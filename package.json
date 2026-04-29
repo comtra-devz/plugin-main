@@ -9,6 +9,7 @@
     "build:ui": "vite build && mv dist/index.html dist/ui.html",
     "build:plugin": "node build.mjs",
     "check-auth": "node check-auth.mjs",
+    "verify:backend": "node scripts/verify-auth-backend.mjs",
     "verify-ds-import": "node scripts/verify-ds-import.mjs",
     "preview": "vite preview"
   },

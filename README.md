@@ -317,6 +317,12 @@ Il flusso "Login with Figma" usa un server OAuth deployato separatamente (es. au
 
 ---
 
+## DS e Generate — cosa è “fonte di verità” (team)
+
+Per allineare prompt, validator e DS importato senza ambiguità: **[docs/ds-authority.md](docs/ds-authority.md)**. Spec leggere e checklist quando cambia il DS: **[docs/ds-for-generate/README.md](docs/ds-for-generate/README.md)**.
+
+---
+
 ## Run Locally
 
 **Prerequisites:** Node.js

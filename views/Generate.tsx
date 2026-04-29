@@ -34,7 +34,7 @@ import {
   safeLocalStorageSetItem,
 } from '../lib/safeWebStorage';
 
-/** Break out of view `p-3 sm:p-4` so black rules span the full plugin width. */
+/** Break out of view horizontal padding `px-3 sm:px-4` so black rules span the full plugin width. */
 const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
 const FULL_BLEED_IN = 'px-3 sm:px-4';
 
@@ -1824,18 +1824,31 @@ export const Generate: React.FC<Props> = ({
   /** Chat UI vs threads list — follow the active tab (threads shows a stub until scope is ready). */
   const showChatComposerShell = generateComposerTab === 'chat';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dock = composerDockRef.current;
     if (!dock || !showChatComposerShell) return;
+    let cancelled = false;
     const update = () => {
+      if (cancelled) return;
       const h = Math.ceil(dock.getBoundingClientRect().height);
       if (Number.isFinite(h) && h > 0) setComposerDockHeight(h);
     };
     update();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    // Two rAF: first paint can report 0/wrong height before fonts/flex settle.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        update();
+      });
+    });
+    const t1 = window.setTimeout(update, 0);
+    const t2 = window.setTimeout(update, 100);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => requestAnimationFrame(update)) : null;
     ro?.observe(dock);
     window.addEventListener('resize', update);
     return () => {
+      cancelled = true;
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       ro?.disconnect();
       window.removeEventListener('resize', update);
     };
@@ -1877,6 +1890,7 @@ export const Generate: React.FC<Props> = ({
     (generateStep === 'context' || generateStep === 'ai');
 
   const showLiveReasoning = loading && liveReasoningLines.length > 0;
+  const effectiveComposerDockHeight = Math.max(132, composerDockHeight);
 
   return (
     <div
@@ -1884,7 +1898,7 @@ export const Generate: React.FC<Props> = ({
       className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-0 sm:gap-2 sm:p-4 sm:pb-0"
     >
       <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
-        <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
+        <div className={`${FULL_BLEED_IN} pb-1 pt-1.5`}>
           <div className="mb-2 grid min-h-9 grid-cols-[1fr_auto_1fr] items-center gap-x-2">
             <span className="min-w-0" aria-hidden />
             <div
@@ -1936,7 +1950,7 @@ export const Generate: React.FC<Props> = ({
       )}
 
       {showGenerateComposer && !showReport && (
-        <div className={`${FULL_BLEED_OUT} ${genError ? '' : '-mt-2'} shrink-0 flex flex-col`}>
+        <div className={`${FULL_BLEED_OUT} shrink-0 flex flex-col`}>
           <div className={`${FULL_BLEED_IN} bg-white`}>
             <BrutalDropdown
               open={isSystemOpen}
@@ -2052,12 +2066,13 @@ export const Generate: React.FC<Props> = ({
                   ref={chatScrollRef}
                   data-component="Generate: Chat scroll"
                   className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
+                  style={{ scrollPaddingBottom: `${effectiveComposerDockHeight + 8}px` }}
                 >
                   <div className="flex h-full min-h-full flex-1 flex-col">
                     <div className="flex-1" aria-hidden />
                     <div
                       className="flex w-full flex-col gap-2 p-2"
-                      style={{ paddingBottom: `${composerDockHeight + 12}px` }}
+                      style={{ paddingBottom: `${effectiveComposerDockHeight + 8}px` }}
                     >
                     {showPreflight ? (
                       <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
@@ -2097,8 +2112,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showIntroTyping && conversationTurns.length === 0 && !showIntroBubble ? (
-                      <div className="flex justify-start">
-                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
+                      <div className="flex w-full justify-start pr-10">
+                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] font-black leading-none text-black">
                           <span className="inline-flex items-center gap-0.5" aria-label="Assistant is typing">
                             <span className="animate-bounce">·</span>
                             <span className="animate-bounce delay-100">·</span>
@@ -2108,19 +2123,22 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showIntroBubble && conversationTurns.length === 0 ? (
-                      <div className="flex justify-start">
-                        <div className="max-w-full border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
-                          Hi — I am here to generate on the frame using your design system. Below you have three quick starters, or
-                          type what you need: I reason step by step as we go.
+                      <div className="flex w-full justify-start pr-10">
+                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] leading-snug text-black">
+                          Tell me what you want to make. You can start from one of these prompts, or write it in your
+                          own words — I&apos;ll use your design system while we go.
                         </div>
                       </div>
                     ) : null}
                     {conversationTurns.map((turn) => (
-                      <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className="max-w-full">
+                      <div
+                        key={turn.id}
+                        className={`flex w-full ${turn.role === 'user' ? 'justify-end pl-10' : 'justify-start pr-10'}`}
+                      >
+                        <div className="max-w-[82%]">
                           <div
                             className={`border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
-                              turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
+                              turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'border-transparent bg-[#EBEBEB] text-black'
                             }`}
                           >
                             {turn.body}
@@ -2164,8 +2182,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ))}
                     {showAssistantThinkingDots ? (
-                      <div className="flex justify-start" aria-live="polite" aria-busy="true">
-                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
+                      <div className="flex w-full justify-start pr-10" aria-live="polite" aria-busy="true">
+                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] font-black leading-none text-black">
                           <span className="inline-flex items-center gap-0.5" aria-label="Assistant is thinking">
                             <span className="animate-bounce">·</span>
                             <span className="animate-bounce delay-100">·</span>
@@ -2175,8 +2193,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showLiveReasoning ? (
-                      <div className="flex justify-start" aria-live="polite">
-                        <div className="max-w-full border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                      <div className="flex w-full justify-start pr-10" aria-live="polite">
+                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] leading-snug text-black">
                           <p className="mb-1 font-black uppercase">Live reasoning</p>
                           <div className="space-y-0.5">
                             {liveReasoningLines.map((line, idx) => (
@@ -2207,7 +2225,7 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {conversationTurns.length === 0 ? (
-                      <div className="-mx-1 border-t-2 border-black bg-white px-1 py-2">
+                      <div className="-mx-1 bg-white px-1 py-2">
                         <p className="mb-1.5 px-1 text-[9px] font-black uppercase text-gray-500">Quick starters</p>
                         <div className="flex flex-col gap-1.5">
                           {contextSuggestions.map((txt, i) => (

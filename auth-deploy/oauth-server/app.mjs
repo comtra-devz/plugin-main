@@ -3301,11 +3301,25 @@ async function callKimi(messages, maxTokens = 8192, textModelOverride = null) {
       : KIMI_MODEL;
   const model = usesVision ? KIMI_VISION_MODEL : textModel;
   const payload = buildKimiChatRequestPayload({ model, messages, maxTokens });
-  const r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
-    body: JSON.stringify(payload),
-  });
+  const timeoutMs = Math.max(15000, Number(process.env.KIMI_API_TIMEOUT_MS || 55000));
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(new Error('Kimi request timeout')), timeoutMs);
+  let r;
+  try {
+    r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      throw new Error(`Kimi API timeout after ${timeoutMs}ms`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!r.ok) {
     const t = await r.text();
     throw new Error(t || `Kimi API ${r.status}`);
@@ -4576,6 +4590,8 @@ app.post('/api/agents/generate', async (req, res) => {
   const callKimiGenerate = (messages, maxTokens = 8192) => callKimi(messages, maxTokens, generateChatModel);
 
   const startMs = Date.now();
+  const generateBudgetMs = Math.max(120000, Number(process.env.GENERATE_REQUEST_BUDGET_MS || 240000));
+  const budgetLeftMs = () => generateBudgetMs - (Date.now() - startMs);
   const phaseTimers = {
     started_at_ms: startMs,
     resolve_source_ms: null,
@@ -4641,7 +4657,7 @@ app.post('/api/agents/generate', async (req, res) => {
     let generationSpec = null;
     let generationSpecUsed = false;
     const callKimiSpec = (messages, maxTokens = 2200) => callKimi(messages, maxTokens, KIMI_GENERATION_SPEC_MODEL);
-    if (mode === 'create' || mode === 'screenshot') {
+    if ((mode === 'create' || mode === 'screenshot') && budgetLeftMs() > 90000) {
       try {
         const specRes = await runGenerationSpecResolver({
           callKimi: callKimiSpec,
@@ -4749,7 +4765,7 @@ app.post('/api/agents/generate', async (req, res) => {
       wizardSignals && Array.isArray(wizardSignals.brand_voice_keywords)
         ? wizardSignals.brand_voice_keywords.map((x) => String(x || '').trim()).filter(Boolean)
         : [];
-    if (cdEntry && (toneW || kwW.length)) {
+    if (cdEntry && (toneW || kwW.length) && budgetLeftMs() > 75000) {
       try {
         const tovRule = patternsPayload?.wizard_integration?.override_rules?.tov_enrichment_trigger;
         const charLimits =
@@ -4825,7 +4841,7 @@ app.post('/api/agents/generate', async (req, res) => {
     let actionPlan = null;
     const forceDirectForVision = Boolean(screenshotDataUrl);
 
-    if (useKimiDualSwarmPipeline) {
+    if (useKimiDualSwarmPipeline && budgetLeftMs() > 100000) {
       try {
         const dual = await runGenerateDualCallPipeline({
           callKimi: callKimiGenerate,
@@ -4932,6 +4948,7 @@ app.post('/api/agents/generate', async (req, res) => {
       ];
       const repairPasses = [structuralErrors, dsErrors].filter((errs) => errs.length > 0);
       for (let pass = 0; pass < repairPasses.length; pass++) {
+        if (budgetLeftMs() <= 70000) break;
         repairStats.repair_passes_attempted += 1;
         const repair = await repairActionPlanWithKimi(
           systemPrompt,
@@ -4981,7 +4998,7 @@ app.post('/api/agents/generate', async (req, res) => {
     }
 
     // Final targeted semantic pass (escape hatch): try once more before returning 422.
-    if (!semanticFitValidation.valid) {
+    if (!semanticFitValidation.valid && budgetLeftMs() > 55000) {
       repairStats.semantic_escape_hatch_attempted = true;
       const semanticOnlyErrors = semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`);
       const semanticRepair = await repairActionPlanWithKimi(

@@ -26,6 +26,8 @@ Per questo motivo questa ottimizzazione è **non distruttiva**: introduciamo ind
 
 ### Core plugin
 
+- **Autorità DS + Generate (team):** `docs/ds-authority.md` — ordine di priorità quando DS, index e prompt divergono
+- **Spec leggere per Generate:** `docs/ds-for-generate/README.md` — foundations, pattern, regole “umane”, checklist manutenzione DS
 - OAuth: `docs/OAUTH-FIGMA.md`
 - Generate: `docs/GENERATE-TAB-SPEC.md`
 - Generate design intelligence playbook: `docs/GENERATE-DESIGN-INTELLIGENCE-PLAYBOOK.md`

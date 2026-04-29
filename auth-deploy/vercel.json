@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/agents/*.mjs": {
+    "api/agents/**/*.mjs": {
       "maxDuration": 300,
       "includeFiles": "prompts/**"
     }

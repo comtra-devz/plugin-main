@@ -2461,6 +2461,8 @@ export default function AppTest() {
       };
       // generate-v2 is rollout-dependent on deploy; use stable route first to avoid
       // CORS/404 noise in plugin webview when v2 alias is not yet active.
+      // Do NOT add *.vercel.app fallbacks: Figma plugin CSP only allows domains listed in
+      // manifest.json networkAccess.allowedDomains (auth.comtra.dev is allowed).
       const endpoints = [`${AUTH_BACKEND_URL}/api/agents/generate`];
       let lastError: Error | null = null;
       for (let i = 0; i < endpoints.length; i++) {
@@ -2479,6 +2481,11 @@ export default function AppTest() {
           }
           if (!r.ok) {
             const msg = await parseErrorMessage(r);
+            if (r.status === 504 || r.status === 502) {
+              throw new Error(
+                `Generation timed out or the server was unreachable (${r.status}). If this persists, the backend may be over its time limit — check Vercel logs for /api/agents/generate.`,
+              );
+            }
             // Backward-compatible fallback when v2 route isn't deployed yet.
             if (i === 0 && (r.status === 404 || r.status === 405) && endpoints.length > 1) continue;
             throw new Error(msg);
