@@ -52,6 +52,14 @@ import {
   generationSpecToPromptBlock,
   runGenerationSpecResolver,
 } from './generation-spec-resolver.mjs';
+import {
+  prepCacheEnabled,
+  prepCacheGet,
+  prepCacheSet,
+  prepCacheKeyDsPrompt,
+  prepCacheKeySpec,
+  prepCacheTtlMs,
+} from './generate-prep-cache.mjs';
 import { runKimiContentDefaultsEnrichment } from './kimi-content-enrichment.mjs';
 import { buildDesignIntelligenceExecutorHints } from './design-intelligence-executor-hints.mjs';
 
@@ -4654,10 +4662,61 @@ app.post('/api/agents/generate', async (req, res) => {
       prompt,
       patternsPayload,
     );
-    let generationSpec = null;
-    let generationSpecUsed = false;
+    const dsHashForCache =
+      String(dsCacheHashFromBody || '').trim() ||
+      (dsIndexForValidation && typeof dsIndexForValidation.hash === 'string' ? dsIndexForValidation.hash : '') ||
+      'nohash';
+
+    let generationSpecCacheHit = false;
+
+    const fetchTovAdminOverrides = async () => {
+      if (!dbSql) return null;
+      try {
+        const tovRow = await dbSql`
+          SELECT prompt_overrides FROM generate_tov_config WHERE singleton = 'default' LIMIT 1
+        `;
+        const po = tovRow.rows?.[0]?.prompt_overrides;
+        if (po && typeof po === 'object' && !Array.isArray(po)) return po;
+      } catch (tovErr) {
+        const msg = String(tovErr?.message || '');
+        if (!/does not exist|relation|no such table/i.test(msg)) {
+          console.error('generate_tov_config read', msg);
+        }
+      }
+      return null;
+    };
+
     const callKimiSpec = (messages, maxTokens = 2200) => callKimi(messages, maxTokens, KIMI_GENERATION_SPEC_MODEL);
-    if ((mode === 'create' || mode === 'screenshot') && budgetLeftMs() > 90000) {
+
+    const resolveGenerationSpecPhase = async () => {
+      let generationSpec = null;
+      let generationSpecUsed = false;
+      let specIn = 0;
+      let specOut = 0;
+      let cacheHit = false;
+      if (!(mode === 'create' || mode === 'screenshot') || budgetLeftMs() <= 90000) {
+        return { generationSpec, generationSpecUsed, specIn, specOut, cacheHit };
+      }
+      const specKey = prepCacheKeySpec({
+        prompt,
+        mode,
+        dsHash: dsHashForCache,
+        archetype: inferredScreenArchetype,
+        packId: packV2ArchetypeId,
+        specModel: KIMI_GENERATION_SPEC_MODEL,
+      });
+      if (prepCacheEnabled) {
+        const hit = prepCacheGet(specKey);
+        if (hit?.spec && typeof hit.spec === 'object') {
+          return {
+            generationSpec: hit.spec,
+            generationSpecUsed: true,
+            specIn: 0,
+            specOut: 0,
+            cacheHit: true,
+          };
+        }
+      }
       try {
         const specRes = await runGenerationSpecResolver({
           callKimi: callKimiSpec,
@@ -4671,13 +4730,23 @@ app.post('/api/agents/generate', async (req, res) => {
         if (specRes?.spec) {
           generationSpec = specRes.spec;
           generationSpecUsed = true;
-          totalInputTokens += specRes.usage.input;
-          totalOutputTokens += specRes.usage.output;
+          specIn = Math.max(0, Number(specRes.usage?.input ?? specRes.usage?.prompt_tokens ?? 0));
+          specOut = Math.max(0, Number(specRes.usage?.output ?? specRes.usage?.completion_tokens ?? 0));
+          if (prepCacheEnabled) prepCacheSet(specKey, { spec: generationSpec }, prepCacheTtlMs);
         }
       } catch (specErr) {
         console.error('Generation spec resolver failed', specErr?.message || specErr);
       }
-    }
+      return { generationSpec, generationSpecUsed, specIn, specOut, cacheHit: false };
+    };
+
+    const [adminPromptOverrides, specPhase] = await Promise.all([fetchTovAdminOverrides(), resolveGenerationSpecPhase()]);
+    let generationSpec = specPhase.generationSpec;
+    let generationSpecUsed = specPhase.generationSpecUsed;
+    totalInputTokens += specPhase.specIn;
+    totalOutputTokens += specPhase.specOut;
+    generationSpecCacheHit = specPhase.cacheHit;
+
     const generationSpecBlock = generationSpecToPromptBlock(generationSpec);
     const retrievalPrompt = [prompt, generationSpecSearchText(generationSpec)].filter(Boolean).join('\n');
     const isCustomSourceForPrompt = isCustomDsSource(dsSource);
@@ -4687,12 +4756,29 @@ app.post('/api/agents/generate', async (req, res) => {
     const promptTopKVariables = isCustomSourceForPrompt
       ? Number(process.env.GENERATE_DS_PROMPT_VARIABLES_CUSTOM || 64)
       : Number(process.env.GENERATE_DS_PROMPT_VARIABLES || 48);
-    const dsIndexForPrompt = dsIndexForValidation
-      ? buildPromptScopedDsIndex(dsIndexForValidation, retrievalPrompt, {
-          topKComponents: promptTopKComponents,
-          topKVariables: promptTopKVariables,
-        })
-      : null;
+
+    let dsPromptIndexCacheHit = false;
+    const dsPromptKey = prepCacheKeyDsPrompt({
+      dsHash: dsHashForCache,
+      retrievalPrompt,
+      topKComponents: promptTopKComponents,
+      topKVariables: promptTopKVariables,
+    });
+    let dsIndexForPrompt = null;
+    if (prepCacheEnabled && dsIndexForValidation) {
+      const hit = prepCacheGet(dsPromptKey);
+      if (hit?.dsIndexForPrompt && typeof hit.dsIndexForPrompt === 'object') {
+        dsIndexForPrompt = JSON.parse(JSON.stringify(hit.dsIndexForPrompt));
+        dsPromptIndexCacheHit = true;
+      }
+    }
+    if (!dsIndexForPrompt && dsIndexForValidation) {
+      dsIndexForPrompt = buildPromptScopedDsIndex(dsIndexForValidation, retrievalPrompt, {
+        topKComponents: promptTopKComponents,
+        topKVariables: promptTopKVariables,
+      });
+      if (prepCacheEnabled) prepCacheSet(dsPromptKey, { dsIndexForPrompt }, prepCacheTtlMs);
+    }
     const dsIndexHashLine =
       dsCacheHashFromBody ||
       (dsIndexForValidation && typeof dsIndexForValidation.hash === 'string' ? dsIndexForValidation.hash : '') ||
@@ -4730,21 +4816,6 @@ app.post('/api/agents/generate', async (req, res) => {
         : null;
     const wizardSignalsBlock = formatWizardSignalsBlock(wizardSignals);
 
-    let adminPromptOverrides = null;
-    if (dbSql) {
-      try {
-        const tovRow = await dbSql`
-          SELECT prompt_overrides FROM generate_tov_config WHERE singleton = 'default' LIMIT 1
-        `;
-        const po = tovRow.rows?.[0]?.prompt_overrides;
-        if (po && typeof po === 'object' && !Array.isArray(po)) adminPromptOverrides = po;
-      } catch (tovErr) {
-        const msg = String(tovErr?.message || '');
-        if (!/does not exist|relation|no such table/i.test(msg)) {
-          console.error('generate_tov_config read', msg);
-        }
-      }
-    }
     const comtraTovRes = resolveComtraTovResolution(wizardSignalsBlock, adminPromptOverrides);
     const comtraTovBlock = comtraTovRes.block;
     const comtraTovSource = comtraTovRes.source;
@@ -5257,9 +5328,16 @@ app.post('/api/agents/generate', async (req, res) => {
       },
       generation_spec: {
         used: Boolean(generationSpecUsed),
+        cache_hit: Boolean(generationSpecCacheHit),
         model: KIMI_GENERATION_SPEC_MODEL,
         archetype_id: generationSpec?.archetype_id || null,
         confidence: generationSpec?.confidence ?? null,
+      },
+      prep_cache: {
+        enabled: Boolean(prepCacheEnabled),
+        ttl_ms: prepCacheTtlMs,
+        generation_spec_hit: Boolean(generationSpecCacheHit),
+        ds_prompt_scoped_index_hit: Boolean(dsPromptIndexCacheHit),
       },
       comtra_tov: { source: comtraTovSource },
     };
