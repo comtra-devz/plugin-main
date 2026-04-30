@@ -34,7 +34,7 @@ import {
   safeLocalStorageSetItem,
 } from '../lib/safeWebStorage';
 
-/** Break out of view horizontal padding `px-3 sm:px-4` so black rules span the full plugin width. */
+/** Break out of view `p-3 sm:p-4` so black rules span the full plugin width. */
 const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
 const FULL_BLEED_IN = 'px-3 sm:px-4';
 
@@ -338,8 +338,6 @@ export const Generate: React.FC<Props> = ({
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const composerDockRef = useRef<HTMLDivElement>(null);
-  const [composerDockHeight, setComposerDockHeight] = useState(132);
   /** After Enhance: button stays off until the user edits the terminal (avoids nested enhance). */
   const [enhanceLocked, setEnhanceLocked] = useState(false);
   /** Clean goal text used to rebuild the block when DS or context changes. */
@@ -1824,36 +1822,6 @@ export const Generate: React.FC<Props> = ({
   /** Chat UI vs threads list — follow the active tab (threads shows a stub until scope is ready). */
   const showChatComposerShell = generateComposerTab === 'chat';
 
-  useLayoutEffect(() => {
-    const dock = composerDockRef.current;
-    if (!dock || !showChatComposerShell) return;
-    let cancelled = false;
-    const update = () => {
-      if (cancelled) return;
-      const h = Math.ceil(dock.getBoundingClientRect().height);
-      if (Number.isFinite(h) && h > 0) setComposerDockHeight(h);
-    };
-    update();
-    // Two rAF: first paint can report 0/wrong height before fonts/flex settle.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        update();
-      });
-    });
-    const t1 = window.setTimeout(update, 0);
-    const t2 = window.setTimeout(update, 100);
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => requestAnimationFrame(update)) : null;
-    ro?.observe(dock);
-    window.addEventListener('resize', update);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      ro?.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, [showChatComposerShell, composerAttachments.length, hasContent, promptText, composerFocused]);
-
   useEffect(() => {
     if (!showGenerateComposer || showReport || conversationTurns.length > 0 || !showChatComposerShell) return;
     setShowIntroTyping(true);
@@ -1879,7 +1847,6 @@ export const Generate: React.FC<Props> = ({
     showRefinementChips,
     refineChipsHiddenByComposer,
     liveReasoningLines,
-    composerDockHeight,
   ]);
 
   /** Solo mentre aspettiamo contesto/modello — non durante canvas/crediti (altrimenti puntini “fantasma” col messaggio già pronto). */
@@ -1890,15 +1857,14 @@ export const Generate: React.FC<Props> = ({
     (generateStep === 'context' || generateStep === 'ai');
 
   const showLiveReasoning = loading && liveReasoningLines.length > 0;
-  const effectiveComposerDockHeight = Math.max(132, composerDockHeight);
 
   return (
     <div
       data-component="Generate: View Container"
-      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-0 sm:gap-2 sm:p-4 sm:pb-0"
+      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-28 sm:gap-2 sm:p-4"
     >
       <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
-        <div className={`${FULL_BLEED_IN} pb-1 pt-1.5`}>
+        <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
           <div className="mb-2 grid min-h-9 grid-cols-[1fr_auto_1fr] items-center gap-x-2">
             <span className="min-w-0" aria-hidden />
             <div
@@ -1962,15 +1928,14 @@ export const Generate: React.FC<Props> = ({
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="grid h-10 w-full cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_24px_auto] items-center bg-white px-3 py-0 text-left text-xs font-black uppercase leading-none"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 text-left text-xs font-black uppercase leading-none"
                 >
-                  <span className="flex h-full shrink-0 items-center whitespace-nowrap text-gray-500">Design system</span>
-                  <span className="flex h-full items-center justify-center px-1.5" aria-hidden>·</span>
-                  <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={selectedSystemDisplayName}>
-                    {selectedSystemDisplayName}
+                  <span className="flex h-full min-w-0 translate-y-[1px] items-center gap-1.5 truncate leading-none">
+                    <span className="text-gray-500">Design system</span>
+                    <span aria-hidden>·</span>
+                    <span className="truncate">{selectedSystemDisplayName}</span>
                   </span>
-                  <span aria-hidden />
-                  <span className="flex h-full shrink-0 items-center justify-end leading-none" aria-hidden>
+                  <span className="flex h-full translate-y-[1px] items-center leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
                   </span>
                 </button>
@@ -1996,15 +1961,11 @@ export const Generate: React.FC<Props> = ({
                         setIsSystemOpen(false);
                         setSystemSearch('');
                       }}
-                      className={`${brutalSelectOptionRowClass} flex h-10 !px-2 !py-0 items-center justify-between gap-2 leading-none ${
-                        selectedSystem === sys
-                          ? '!bg-[#ffc900] !text-black hover:!bg-[#ffc900] hover:!text-black'
-                          : ''
-                      }`.trim()}
+                      className={`${brutalSelectOptionRowClass} flex min-h-10 items-center justify-between gap-2 leading-none ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
                     >
-                      <span className="flex h-full min-w-0 items-center truncate">{displaySystemName(sys)}</span>
+                      <span className="min-w-0 translate-y-[1px] truncate">{displaySystemName(sys)}</span>
                       {isFileDesignSystemOption(sys) ? (
-                        <span className="ml-2 flex h-5 shrink-0 items-center border border-current px-1 text-[8px] leading-none">
+                        <span className="ml-2 shrink-0 translate-y-[1px] border border-current px-1 py-0.5 text-[8px] leading-none">
                           Current
                         </span>
                       ) : null}
@@ -2066,14 +2027,10 @@ export const Generate: React.FC<Props> = ({
                   ref={chatScrollRef}
                   data-component="Generate: Chat scroll"
                   className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
-                  style={{ scrollPaddingBottom: `${effectiveComposerDockHeight + 8}px` }}
                 >
-                  <div className="flex h-full min-h-full flex-1 flex-col">
+                  <div className="flex h-full min-h-full flex-1 flex-col pb-2">
                     <div className="flex-1" aria-hidden />
-                    <div
-                      className="flex w-full flex-col gap-2 p-2"
-                      style={{ paddingBottom: `${effectiveComposerDockHeight + 8}px` }}
-                    >
+                    <div className="flex w-full flex-col gap-2 px-1 pb-2 pt-1">
                     {showPreflight ? (
                       <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
                         <p className="text-[10px] font-black uppercase">
@@ -2112,8 +2069,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showIntroTyping && conversationTurns.length === 0 && !showIntroBubble ? (
-                      <div className="flex w-full justify-start pr-10">
-                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] font-black leading-none text-black">
+                      <div className="flex justify-start">
+                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
                           <span className="inline-flex items-center gap-0.5" aria-label="Assistant is typing">
                             <span className="animate-bounce">·</span>
                             <span className="animate-bounce delay-100">·</span>
@@ -2123,22 +2080,19 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showIntroBubble && conversationTurns.length === 0 ? (
-                      <div className="flex w-full justify-start pr-10">
-                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] leading-snug text-black">
-                          Tell me what you want to make. You can start from one of these prompts, or write it in your
-                          own words — I&apos;ll use your design system while we go.
+                      <div className="flex justify-start">
+                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                          Hi — I am here to generate on the frame using your design system. Below you have three quick starters, or
+                          type what you need: I reason step by step as we go.
                         </div>
                       </div>
                     ) : null}
                     {conversationTurns.map((turn) => (
-                      <div
-                        key={turn.id}
-                        className={`flex w-full ${turn.role === 'user' ? 'justify-end pl-10' : 'justify-start pr-10'}`}
-                      >
-                        <div className="max-w-[82%]">
+                      <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className="max-w-[95%]">
                           <div
                             className={`border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
-                              turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'border-transparent bg-[#EBEBEB] text-black'
+                              turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
                             }`}
                           >
                             {turn.body}
@@ -2182,8 +2136,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ))}
                     {showAssistantThinkingDots ? (
-                      <div className="flex w-full justify-start pr-10" aria-live="polite" aria-busy="true">
-                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] font-black leading-none text-black">
+                      <div className="flex justify-start" aria-live="polite" aria-busy="true">
+                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
                           <span className="inline-flex items-center gap-0.5" aria-label="Assistant is thinking">
                             <span className="animate-bounce">·</span>
                             <span className="animate-bounce delay-100">·</span>
@@ -2193,8 +2147,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showLiveReasoning ? (
-                      <div className="flex w-full justify-start pr-10" aria-live="polite">
-                        <div className="max-w-[82%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] leading-snug text-black">
+                      <div className="flex justify-start" aria-live="polite">
+                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
                           <p className="mb-1 font-black uppercase">Live reasoning</p>
                           <div className="space-y-0.5">
                             {liveReasoningLines.map((line, idx) => (
@@ -2225,7 +2179,7 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {conversationTurns.length === 0 ? (
-                      <div className="-mx-1 bg-white px-1 py-2">
+                      <div className="-mx-1 border-t-2 border-black bg-white px-1 py-2">
                         <p className="mb-1.5 px-1 text-[9px] font-black uppercase text-gray-500">Quick starters</p>
                         <div className="flex flex-col gap-1.5">
                           {contextSuggestions.map((txt, i) => (
@@ -2248,7 +2202,6 @@ export const Generate: React.FC<Props> = ({
               </div>
 
               <div
-                ref={composerDockRef}
                 data-component="Generate: Composer dock"
                 className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-0 py-0"
                 style={{ bottom: 'calc(3.5rem + 5px)' }}
@@ -2397,14 +2350,14 @@ export const Generate: React.FC<Props> = ({
               </div>
             </>
           ) : threadScopeReady ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 py-2">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 pt-2 pb-40">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
                 <p className="text-[10px] font-black uppercase">Threads</p>
                 <Button variant="secondary" type="button" className="text-[9px] uppercase" onClick={() => void handleNewConversation()}>
                   New chat
                 </Button>
               </div>
-              <div className="custom-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+              <div className="custom-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto">
                 {threadList.length === 0 ? (
                   <p className="text-[10px] text-gray-800">No threads yet. Send a message in Chat to start one.</p>
                 ) : (
