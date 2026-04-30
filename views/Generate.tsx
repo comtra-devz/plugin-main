@@ -38,6 +38,11 @@ import {
 const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
 const FULL_BLEED_IN = 'px-3 sm:px-4';
 
+/** Air between last chat line and composer top; keep in sync with scroll reserve. */
+const CHAT_COMPOSER_GAP_PX = 8;
+/** Until ResizeObserver runs (matches ~ composer + action row). */
+const COMPOSER_DOCK_FALLBACK_PX = 128;
+
 /** Hybrid UX §8 — cockpit plugin (this view); archive/search/analytics via web/API admin. */
 
 interface Props { 
@@ -338,6 +343,8 @@ export const Generate: React.FC<Props> = ({
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
+  const [composerDockHeight, setComposerDockHeight] = useState(COMPOSER_DOCK_FALLBACK_PX);
   /** After Enhance: button stays off until the user edits the terminal (avoids nested enhance). */
   const [enhanceLocked, setEnhanceLocked] = useState(false);
   /** Clean goal text used to rebuild the block when DS or context changes. */
@@ -1822,6 +1829,35 @@ export const Generate: React.FC<Props> = ({
   /** Chat UI vs threads list — follow the active tab (threads shows a stub until scope is ready). */
   const showChatComposerShell = generateComposerTab === 'chat';
 
+  useLayoutEffect(() => {
+    const dock = composerDockRef.current;
+    if (!dock || !showChatComposerShell) return;
+    let cancelled = false;
+    const update = () => {
+      if (cancelled) return;
+      const h = Math.ceil(dock.getBoundingClientRect().height);
+      if (Number.isFinite(h) && h > 0) setComposerDockHeight(h);
+    };
+    update();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        update();
+      });
+    });
+    const t1 = window.setTimeout(update, 0);
+    const t2 = window.setTimeout(update, 100);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => requestAnimationFrame(update)) : null;
+    ro?.observe(dock);
+    window.addEventListener('resize', update);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      ro?.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [showChatComposerShell, composerAttachments.length, hasContent, promptText, composerFocused]);
+
   useEffect(() => {
     if (!showGenerateComposer || showReport || conversationTurns.length > 0 || !showChatComposerShell) return;
     setShowIntroTyping(true);
@@ -1847,6 +1883,7 @@ export const Generate: React.FC<Props> = ({
     showRefinementChips,
     refineChipsHiddenByComposer,
     liveReasoningLines,
+    composerDockHeight,
   ]);
 
   /** Solo mentre aspettiamo contesto/modello — non durante canvas/crediti (altrimenti puntini “fantasma” col messaggio già pronto). */
@@ -1858,10 +1895,14 @@ export const Generate: React.FC<Props> = ({
 
   const showLiveReasoning = loading && liveReasoningLines.length > 0;
 
+  const chatReserveBottomPx =
+    (Number.isFinite(composerDockHeight) && composerDockHeight > 0 ? composerDockHeight : COMPOSER_DOCK_FALLBACK_PX) +
+    CHAT_COMPOSER_GAP_PX;
+
   return (
     <div
       data-component="Generate: View Container"
-      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-28 sm:gap-2 sm:p-4"
+      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-0 sm:gap-2 sm:p-4 sm:pb-0"
     >
       <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
         <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
@@ -2027,10 +2068,14 @@ export const Generate: React.FC<Props> = ({
                   ref={chatScrollRef}
                   data-component="Generate: Chat scroll"
                   className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
+                  style={{ scrollPaddingBottom: `${chatReserveBottomPx}px` }}
                 >
-                  <div className="flex h-full min-h-full flex-1 flex-col pb-2">
+                  <div className="flex h-full min-h-full flex-1 flex-col">
                     <div className="flex-1" aria-hidden />
-                    <div className="flex w-full flex-col gap-2 px-1 pb-2 pt-1">
+                    <div
+                      className="flex w-full flex-col gap-2 px-1 pt-1"
+                      style={{ paddingBottom: `${chatReserveBottomPx}px` }}
+                    >
                     {showPreflight ? (
                       <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
                         <p className="text-[10px] font-black uppercase">
@@ -2202,6 +2247,7 @@ export const Generate: React.FC<Props> = ({
               </div>
 
               <div
+                ref={composerDockRef}
                 data-component="Generate: Composer dock"
                 className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-0 py-0"
                 style={{ bottom: 'calc(3.5rem + 5px)' }}
