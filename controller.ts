@@ -2335,6 +2335,7 @@ figma.ui.onmessage = async (raw: any) => {
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
+    const includeFileJson = msg.includeFileJson === true;
     const POST_MESSAGE_SIZE_LIMIT = 1.4e6;
     const CHUNK_SIZE = 1e6;
     (async () => {
@@ -2351,8 +2352,15 @@ figma.ui.onmessage = async (raw: any) => {
           }
         }
 
-        if (scope === 'current') {
-          const fileJson = await buildDocumentJsonAsync({ scope: 'current', nodeIds: base.nodeIds ?? undefined });
+        if (scope === 'current' || scope === 'page' || (scope === 'all' && includeFileJson)) {
+          const docScope = scope === 'page' ? 'page' : 'current';
+          const opts =
+            scope === 'all'
+              ? { scope: 'all' as const }
+              : docScope === 'page'
+                ? { scope: 'page' as const, pageId: base.pageId ?? undefined }
+                : { scope: 'current' as const, nodeIds: base.nodeIds ?? undefined };
+          const fileJson = await buildDocumentJsonAsync(opts);
           const jsonString = JSON.stringify(fileJson);
           if (jsonString.length > POST_MESSAGE_SIZE_LIMIT) {
             const totalChunks = Math.ceil(jsonString.length / CHUNK_SIZE);

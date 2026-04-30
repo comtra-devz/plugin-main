@@ -232,5 +232,6 @@ export function isFigmaConnectionError(message: string | null): boolean {
   const m = message.toLowerCase();
   return (
     m.includes('figma') && (m.includes('token') || m.includes('conness') || m.includes('reconnect') || m.includes('riconnetti'))
-  ) || m.includes('no figma token') || m.includes('figma non connesso');
+  ) || m.includes('no figma token') || m.includes('figma non connesso')
+    || m.includes('figma_reconnect') || m.includes('figma api token not stored') || m.includes('figma rejected this token');
 }

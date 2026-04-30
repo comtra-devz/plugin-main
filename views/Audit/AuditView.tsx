@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP, AUTH_BACKEND_URL } from '../../constants';
+import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP, AUTH_BACKEND_URL, SHOW_FIGMA_LOGIN } from '../../constants';
 import { UserPlan, AuditIssue, DsAuditSummary, DsQualityGates } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CircularScore } from '../../components/widgets/CircularScore';
@@ -44,7 +44,7 @@ interface Props {
   plan: UserPlan; 
   userTier?: string;
   onUnlockRequest: () => void;
-  /** When audit fails for missing Figma token, call this to open login and start OAuth. */
+  /** When audit fails for missing Figma API token on server, open login (OAuth adds token; email users may retry with plugin file payload). */
   onRetryConnection?: () => void;
   /** Debug: check if backend has a Figma token for current user (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
   onCheckTokenStatus?: () => void;
@@ -71,6 +71,12 @@ interface Props {
   fetchUxAudit?: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>;
   /** JWT for auth backend, used for audit feedback tickets. */
   authToken?: string | null;
+  /**
+   * True when the account is linked via Figma OAuth (`figma_user_id`): prefer backend REST fetch (`file_key`)
+   * on large scopes — original perf path, tokens persisted server-side.
+   * False for email-only users: prefer plugin `file_json` when present so audits work without server token.
+   */
+  preferServerFigmaFetch?: boolean;
   /** True when one or more layers are selected on the Figma canvas (synced via selection-changed). */
   canvasSelectionActive: boolean;
 }
@@ -79,7 +85,26 @@ type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
 import { getSystemToastOptions, isFileNotSavedError, isFigmaConnectionError } from '../../lib/errorCopy';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, authToken, canvasSelectionActive }) => {
+export const Audit: React.FC<Props> = ({
+  plan,
+  userTier,
+  onUnlockRequest,
+  onRetryConnection,
+  onCheckTokenStatus,
+  tokenVerifiedAt,
+  creditsRemaining,
+  useInfiniteCreditsForTest,
+  estimateCredits,
+  consumeCredits,
+  onNavigateToGenerate,
+  fetchFigmaFile,
+  fetchDsAudit,
+  fetchA11yAudit,
+  fetchUxAudit,
+  authToken,
+  preferServerFigmaFetch = false,
+  canvasSelectionActive,
+}) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
@@ -322,7 +347,10 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         showToast({
           ...opts,
           dismissible: true,
-          actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Reconnect Figma', onClick: onRetryConnection }] : [],
+          actions:
+            onRetryConnection && SHOW_FIGMA_LOGIN
+              ? [{ label: opts.ctaLabel ?? 'Reconnect Figma', onClick: onRetryConnection }]
+              : [],
         });
         return;
       }
@@ -376,7 +404,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         setUxAuditError(opts.description ?? opts.title);
       }
     },
-    [showToast, onRetryConnection]
+    [showToast, onRetryConnection],
   );
 
   const isPro = plan === 'PRO';
@@ -923,22 +951,62 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
         else setAuditScopeLabel('Page');
         setAuditScopeName(typeof msg.selectionName === 'string' ? msg.selectionName : '');
         setAuditScopeIsCurrent(msg.scope === 'current');
-        // Prefer file_key whenever available to keep request payload small and avoid 413 on large files.
-        const auditBody = hasFileKey
-          ? {
-              file_key: msg.fileKey as string,
-              scope: msg.scope ?? 'all',
-              page_id: msg.pageId ?? undefined,
-              node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
-              page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
-            }
-          : { file_json: msg.fileJson as object };
+        // OAuth-linked accounts: backend-first via file_key on full-file scopes (linear, server token). Email-only: plugin file_json when available (no server token).
+        const auditBody =
+          preferServerFigmaFetch
+            ? (() => {
+                const shouldUsePluginJson =
+                  hasFileJson && (msg.scope === 'current' || msg.scope === 'page');
+                return shouldUsePluginJson
+                  ? { file_json: msg.fileJson as object }
+                  : hasFileKey
+                    ? {
+                        file_key: msg.fileKey as string,
+                        scope: msg.scope ?? 'all',
+                        page_id: msg.pageId ?? undefined,
+                        node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
+                        page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
+                      }
+                    : { file_json: msg.fileJson as object };
+              })()
+            : hasFileJson
+              ? { file_json: msg.fileJson as object }
+              : {
+                  file_key: msg.fileKey as string,
+                  scope: msg.scope ?? 'all',
+                  page_id: msg.pageId ?? undefined,
+                  node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
+                  page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
+                };
 
         const setAuditError = (message: string) => {
           showAuditError(message, isA11yScan, isUxScan);
         };
 
         (async () => {
+          const runAuditWithInlineFallback = async <T,>(
+            run: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<T>,
+          ): Promise<T> => {
+            try {
+              return await run(auditBody as { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] });
+            } catch (err) {
+              const msgText = err instanceof Error ? err.message : String(err || '');
+              const lower = msgText.toLowerCase();
+              const figmaOAuthIssue =
+                lower.includes('figma_reconnect') ||
+                lower.includes('figma non connesso') ||
+                lower.includes('no figma token') ||
+                lower.includes('figma api token not stored') ||
+                lower.includes('figma rejected this token') ||
+                lower.includes('re-login') ||
+                lower.includes('figma connection lost');
+              const inlineFallbackPossible = hasFileJson && !!(msg.fileJson && typeof msg.fileJson === 'object');
+              if (figmaOAuthIssue && inlineFallbackPossible) {
+                return run({ file_json: msg.fileJson as object });
+              }
+              throw err;
+            }
+          };
           try {
             // Charge only after a successful provider response (all audits),
             // so failed scans never consume credits.
@@ -950,7 +1018,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               }
               setUxAuditError(null);
               setUxAuditLoading(true);
-              const data = await fetchUxAudit(auditBody);
+              const data = await runAuditWithInlineFallback<{ issues: AuditIssue[] }>(
+                fetchUxAudit as (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>,
+              );
               if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
                 const chargeResult = await consumeCredits({
                   action_type: 'ux_audit',
@@ -977,7 +1047,9 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               }
               setA11yAuditError(null);
               setA11yAuditLoading(true);
-              const data = await fetchA11yAudit(auditBody);
+              const data = await runAuditWithInlineFallback<{ issues: AuditIssue[] }>(
+                fetchA11yAudit as (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>,
+              );
               if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
                 const chargeResult = await consumeCredits({
                   action_type: 'a11y_audit',
@@ -1007,7 +1079,23 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setDsReadabilitySummary(null);
               setDsQualityGates(null);
               setDsAuditLoading(true);
-              const data = await fetchDsAudit(auditBody);
+              const data = await runAuditWithInlineFallback<{
+                issues: AuditIssue[];
+                advisory?: { type: string; message: string; ctaLabel?: string; ctaUrl?: string };
+                libraryContextHint?: { type: string; message: string };
+                spec_coverage_summary?: DsAuditSummary;
+                readability_summary?: DsAuditSummary;
+                quality_gates?: DsQualityGates;
+              }>(
+                fetchDsAudit as (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{
+                  issues: AuditIssue[];
+                  advisory?: { type: string; message: string; ctaLabel?: string; ctaUrl?: string };
+                  libraryContextHint?: { type: string; message: string };
+                  spec_coverage_summary?: DsAuditSummary;
+                  readability_summary?: DsAuditSummary;
+                  quality_gates?: DsQualityGates;
+                }>,
+              );
               const rawIssues = Array.isArray(data?.issues) ? (data.issues as AuditIssue[]) : [];
               const enriched = await new Promise<AuditIssue[]>((resolve) => {
                 if (rawIssues.length === 0) {
@@ -1117,7 +1205,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditError]);
+  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditError, preferServerFigmaFetch]);
 
   const handleStartScan = useCallback(() => {
     if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
@@ -1225,7 +1313,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     const pageId = scanScope === 'page' ? selectedPageId : undefined;
     requestAnimationFrame(() => {
       window.parent.postMessage(
-        { pluginMessage: { type: 'get-file-context', scope, pageId } },
+        {
+          pluginMessage: {
+            type: 'get-file-context',
+            scope,
+            pageId,
+            // All Pages keeps backend-first path via file_key, but ships inline JSON for automatic fallback if Figma OAuth is unavailable.
+            includeFileJson: scope === 'all',
+          },
+        },
         '*'
       );
     });
@@ -1678,7 +1774,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
       {((activeTab === 'DS' && dsAuditError && isFigmaConnectionError(dsAuditError)) || (activeTab === 'A11Y' && a11yAuditError && isFigmaConnectionError(a11yAuditError)) || (activeTab === 'UX' && uxAuditError && isFigmaConnectionError(uxAuditError))) && (
         <div className="py-2 px-3 bg-amber-100 border-2 border-amber-600 text-amber-900 text-[10px] font-bold uppercase flex flex-col gap-2">
           <span>Connection isn't complete. Try again in a moment.</span>
-          {onRetryConnection && (
+          {onRetryConnection && SHOW_FIGMA_LOGIN && (
             <button type="button" onClick={onRetryConnection} className="w-fit py-1.5 px-3 bg-black text-white text-[10px] font-bold uppercase border-2 border-black hover:bg-gray-800">
               Retry
             </button>

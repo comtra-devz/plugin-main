@@ -38,7 +38,7 @@ export interface User {
   plan: UserPlan;
   tier?: string; // '1w', '1m', '6m', '1y'
   stats: UserStats;
-  /** JWT per API credits; presente dopo login OAuth (nuovo flusso) */
+  /** JWT per API (crediti, audit, sync): presente dopo magic link o login Figma OAuth */
   authToken?: string;
   /** Gamification: da backend (OAuth callback + GET/POST credits) */
   current_level?: number;

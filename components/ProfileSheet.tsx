@@ -67,7 +67,7 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
         )}
         {simulateFreeTier && creditsLabel.includes('—') && !creditsFetchError && (
           <p data-component="Profile: Simulate Free Tier Sync Hint" className="text-[10px] font-bold mt-2 bg-white/90 border border-black px-2 py-1">
-            With Simulate Free Tier on, credits come from the server: <strong>log in</strong> again (Log out then Log in with Figma) to see the 25 free credits.
+            With Simulate Free Tier on, credits come from the server: <strong>log in</strong> again (Log out, then sign in with your email link or Figma OAuth) to see the 25 free credits.
           </p>
         )}
       </div>

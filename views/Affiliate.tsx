@@ -88,7 +88,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
       <div className="p-4 pb-16">
         <div className={`${BRUTAL.card} bg-white`}>
           <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
-          <p className="text-sm text-gray-600">Sign in with Figma to get your affiliate code and share Comtra.</p>
+          <p className="text-sm text-gray-600">Sign in to Comtra to get your affiliate code and share Comtra.</p>
         </div>
       </div>
     );
@@ -99,7 +99,7 @@ export const Affiliate: React.FC<Props> = ({ user }) => {
       <div className="p-4 pb-16">
         <div className={`${BRUTAL.card} bg-white`}>
           <h2 className="text-2xl font-black uppercase mb-2 bg-black text-white inline-block px-2">Partner Program</h2>
-          <p className="text-sm text-gray-600">Log in (Login with Figma) to get your affiliate code.</p>
+          <p className="text-sm text-gray-600">Log in (email link or Figma) to get your affiliate code.</p>
         </div>
       </div>
     );

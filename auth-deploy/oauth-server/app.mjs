@@ -65,6 +65,12 @@ import { buildDesignIntelligenceExecutorHints } from './design-intelligence-exec
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Literal FIGMA_RECONNECT lets the plugin detect and retry with inline file_json (email sign-in users). */
+const MSG_FIGMA_API_TOKEN_MISSING =
+  'Figma API token not stored (FIGMA_RECONNECT). Plugin runs still work when file JSON is sent inline. Use Sign in with Figma (OAuth) from Login only for server-side Figma fetch.';
+const MSG_FIGMA_TOKEN_REJECTED_BY_API =
+  'Figma rejected this token (FIGMA_RECONNECT). Sign in with Figma (OAuth) from Login again to refresh server access.';
+
 function formatWizardSignalsBlock(wizardSignals) {
   if (!wizardSignals || typeof wizardSignals !== 'object' || Array.isArray(wizardSignals)) return '';
   const tone = typeof wizardSignals.tone_of_voice === 'string' ? wizardSignals.tone_of_voice.trim() : '';
@@ -1873,7 +1879,7 @@ app.post('/api/figma/file', async (req, res) => {
     if (!accessToken) {
       console.warn('POST /api/figma/file: no token for user_id=', userId, '(no row, expired, or refresh failed)');
       return res.status(403).json({
-        error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.',
+        error: MSG_FIGMA_API_TOKEN_MISSING,
         code: 'FIGMA_RECONNECT',
       });
     }
@@ -1895,7 +1901,7 @@ app.post('/api/figma/file', async (req, res) => {
     if (figmaRes.status === 403) {
       console.warn('POST /api/figma/file: Figma 403 anche dopo refresh per user_id=', userId);
       return res.status(403).json({
-        error: 'Figma non connesso. Clicca "Riconnetti Figma" nel plugin.',
+        error: MSG_FIGMA_TOKEN_REJECTED_BY_API,
         code: 'FIGMA_RECONNECT',
       });
     }
@@ -3089,7 +3095,7 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
       let accessToken = await getFigmaAccessToken(dbSql, userId);
       if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
       if (!accessToken) {
-    const err = new Error('Figma non connesso. Clicca "Riconnetti Figma" nel plugin.');
+    const err = new Error(MSG_FIGMA_API_TOKEN_MISSING);
     err.status = 403;
     err.code = 'FIGMA_RECONNECT';
     throw err;

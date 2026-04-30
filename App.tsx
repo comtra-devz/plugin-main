@@ -1078,7 +1078,7 @@ export default function AppTest() {
   /** Debug: call token-status endpoint and show result (see docs/FIGMA-TOKEN-TROUBLESHOOTING.md). */
   const handleCheckTokenStatus = React.useCallback(async () => {
     if (!user?.authToken) {
-      alert('You\'re not logged in. Use Log in with Figma.');
+      alert('You\'re not signed in. Open the login screen and sign in with email or Figma.');
       return;
     }
     const url = `${AUTH_BACKEND_URL}/api/figma/token-status`;
@@ -1093,12 +1093,28 @@ export default function AppTest() {
       let msg: string;
       if (hasToken) {
         msg = 'Figma token: present and valid.';
+      } else if (reason === 'no_row') {
+        msg =
+          'No Figma OAuth token stored for this account (normal if you only use email sign-in).\n\n' +
+          'Audits still run when the plugin sends file data. To let the server fetch from Figma’s API, sign in with Figma (OAuth) once from the login screen.\n\n' +
+          'See docs/FIGMA-TOKEN-TROUBLESHOOTING.md';
+      } else if (reason === 'no_db') {
+        msg = 'Could not check Figma token (database unavailable on server).';
       } else if (reason === 'figma_rejected') {
-        msg = 'The token in DB is no longer accepted by Figma (revoked or expired).\n\nLog out then Log in with Figma to get a new token.';
+        msg =
+          'The stored Figma token was rejected (revoked or expired).\n\n' +
+          'Open Login and complete Sign in with Figma (OAuth) again to refresh server access.';
+      } else if (reason === 'expired_or_invalid') {
+        msg =
+          'No usable Figma token in storage.\n\n' +
+          'If you use email sign-in only, plugin workflows still work. To fix server-side Figma API access, sign in with Figma (OAuth) from Login.';
       } else if (reason) {
-        msg = `Figma token: missing or invalid.\nreason: ${reason}\n\nLog out then Log in with Figma. See docs/FIGMA-TOKEN-TROUBLESHOOTING.md`;
+        msg = `Figma token check: ${reason}.\n\nIf you use email sign-in, scans from the plugin can still work. For server file fetch from Figma, use Sign in with Figma (OAuth) from Login.\n\nSee docs/FIGMA-TOKEN-TROUBLESHOOTING.md`;
       } else {
-        msg = 'Figma token: missing or invalid.\n\nLog out then Log in with Figma. Check backend logs for "figma_tokens save failed".';
+        msg =
+          'Could not verify a Figma API token.\n\n' +
+          'Email sign-in is fine for plugin workflows; connect Figma OAuth from Login if you need server file fetch.\n\n' +
+          'Check backend logs for "figma_tokens" if this persists.';
       }
       alert(msg);
     } catch (e) {
@@ -2621,6 +2637,7 @@ export default function AppTest() {
             fetchA11yAudit={fetchA11yAudit}
             fetchUxAudit={fetchUxAudit}
             authToken={user?.authToken}
+            preferServerFigmaFetch={Boolean(user?.figma_user_id != null && String(user.figma_user_id).trim() !== '')}
             canvasSelectionActive={selectedNode !== null}
             onNavigateToGenerate={(prompt) => {
               setGenPrompt(prompt);
