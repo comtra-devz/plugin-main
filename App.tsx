@@ -892,7 +892,7 @@ export default function AppTest() {
   }, []);
 
   useEffect(() => {
-    if (view === ViewState.GENERATE || view === ViewState.CODE) {
+    if (view === ViewState.AUDIT || view === ViewState.GENERATE || view === ViewState.CODE) {
       window.parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
     }
   }, [view]);
@@ -2621,6 +2621,7 @@ export default function AppTest() {
             fetchA11yAudit={fetchA11yAudit}
             fetchUxAudit={fetchUxAudit}
             authToken={user?.authToken}
+            canvasSelectionActive={selectedNode !== null}
             onNavigateToGenerate={(prompt) => {
               setGenPrompt(prompt);
               setView(ViewState.GENERATE);

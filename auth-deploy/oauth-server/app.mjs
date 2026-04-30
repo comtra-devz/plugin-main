@@ -1388,16 +1388,30 @@ const XP_BY_ACTION = {
   scan: 50,
   wireframe_gen: 30,
   generate: 30,
+  generate_refinement_light: 10,
+  generate_refinement_medium: 15,
+  generate_refinement_heavy: 20,
+  generate_refinement_xl: 25,
   enhance_plus: 8,
   wireframe_modified: 20,
   proto_scan: 40,
+  proto_audit: 40,
   a11y_check: 35,
   a11y_audit: 35,
   ux_audit: 45,
+  audit_auto_fix: 10,
+  audit_auto_fix_all: 15,
   sync_storybook: 25,
   sync_github: 25,
   sync_bitbucket: 25,
   sync: 25,
+  comp_sync: 25,
+  scan_sync: 25,
+  sync_fix: 25,
+  code_gen_ai: 40,
+  code_gen_free: 2,
+  token_css: 2,
+  token_json: 2,
   fix_accepted: 10,
   bug_report: 5,
 };
@@ -1806,6 +1820,30 @@ app.post('/api/credits/log-free', async (req, res) => {
       INSERT INTO credit_transactions (user_id, action_type, credits_consumed, file_id)
       VALUES (${userId}, ${actionType}, 0, null)
     `;
+    // Free actions still count for progression/trophies.
+    const xpEarned = XP_BY_ACTION[actionType] ?? 0;
+    if (xpEarned > 0) {
+      const u = await dbSql`SELECT total_xp FROM users WHERE id = ${userId} LIMIT 1`;
+      if (u.rows.length > 0) {
+        const oldXp = Math.max(0, Number(u.rows[0].total_xp) || 0);
+        const totalXp = oldXp + xpEarned;
+        const info = getLevelInfo(totalXp);
+        await dbSql`
+          UPDATE users
+          SET total_xp = ${totalXp}, current_level = ${info.level}, updated_at = NOW()
+          WHERE id = ${userId}
+        `;
+        await dbSql`
+          INSERT INTO xp_transactions (user_id, action_type, xp_earned)
+          VALUES (${userId}, ${actionType}, ${xpEarned})
+        `;
+      }
+    }
+    try {
+      await checkTrophies(dbSql, userId);
+    } catch (e) {
+      console.error('checkTrophies log-free', e);
+    }
     res.status(204).end();
   } catch (err) {
     console.error('POST /api/credits/log-free', err);
@@ -6973,9 +7011,10 @@ async function getTrophyContext(sql, userId) {
   const wireframesGen = (counts.wireframe_gen || 0) + (counts.generate || 0);
   const wireframesModified = counts.wireframe_modified || 0;
   const protoScans = (counts.proto_scan || 0) + (counts.proto_audit || 0);
-  const a11y = counts.a11y_check || counts.a11y_audit || 0;
+  const a11y = (counts.a11y_check || 0) + (counts.a11y_audit || 0);
   const ux = counts.ux_audit || 0;
-  const syncStorybook = counts.sync_storybook || 0;
+  // New sync actions are tracked as comp_sync; treat them as Storybook sync activity for trophies/stats.
+  const syncStorybook = (counts.sync_storybook || 0) + (counts.comp_sync || 0);
   const syncGithub = counts.sync_github || 0;
   const syncBitbucket = counts.sync_bitbucket || 0;
 

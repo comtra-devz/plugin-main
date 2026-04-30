@@ -4,6 +4,7 @@ import { Button } from '../../../components/ui/Button';
 import { BrutalDropdown, brutalMenuRowClass } from '../../../components/ui/BrutalSelect';
 import { CircularScore } from '../../../components/widgets/CircularScore';
 import { IssueList } from '../components/IssueList';
+import { ScopeCurrentSelectionRow } from '../components/ScopeCurrentSelectionRow';
 import { ExtendedAuditCategory, formatIssueCount } from '../data';
 import { AuditIssue } from '../../../types';
 
@@ -50,6 +51,7 @@ interface Props {
   uxAuditError?: string | null;
   onRetryConnection?: () => void;
   onCheckTokenStatus?: () => void;
+  canvasSelectionActive?: boolean;
 }
 
 /**
@@ -84,11 +86,15 @@ export const UxAuditTab: React.FC<Props> = ({
   uxAuditError,
   onRetryConnection,
   onCheckTokenStatus,
+  canvasSelectionActive = true,
 }) => {
   const selectedPage = documentPages.find(p => p.id === selectedPageId) ?? null;
   const handleScanClick = () => onRunUxAudit();
   const scopeLabel = getUxScopeLabel(scanScope, selectedPage);
-  const canRun = scanScope !== 'unselected' && !(scanScope === 'page' && !selectedPageId);
+  const canRun =
+    scanScope !== 'unselected' &&
+    !(scanScope === 'page' && !selectedPageId) &&
+    !(scanScope === 'current' && !canvasSelectionActive);
   const hasIssues = (displayIssues?.length ?? 0) > 0;
 
   if (!hasUxResult) {
@@ -121,14 +127,13 @@ export const UxAuditTab: React.FC<Props> = ({
                 </button>
               }
             >
-              <div
-                role="option"
-                onClick={() => { setScanScope('current'); setIsScopeDropdownOpen(false); }}
-                className={`${brutalMenuRowClass} border-b border-gray-100`}
-              >
-                <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' || scanScope === 'all' ? 'bg-black' : 'bg-white'}`} />
-                <span className="text-xs font-bold">Current Selection</span>
-              </div>
+              <ScopeCurrentSelectionRow
+                scanScope={scanScope}
+                setScanScope={setScanScope}
+                closeDropdown={() => setIsScopeDropdownOpen(false)}
+                canvasSelectionActive={canvasSelectionActive}
+                currentOptionSelected={scanScope === 'current' || scanScope === 'all'}
+              />
               <div className="border-t border-gray-200 my-0" aria-hidden />
               {documentPages.map((page) => (
                 <div
@@ -218,14 +223,13 @@ export const UxAuditTab: React.FC<Props> = ({
             </button>
           }
         >
-          <div
-            role="option"
-            onClick={() => { setScanScope('current'); setIsScopeDropdownOpen(false); }}
-            className={`${brutalMenuRowClass} border-b border-gray-100`}
-          >
-            <div className={`w-3 h-3 shrink-0 border border-black flex items-center justify-center ${scanScope === 'current' || scanScope === 'all' ? 'bg-black' : 'bg-white'}`} />
-            <span className="text-xs font-bold">Current Selection</span>
-          </div>
+          <ScopeCurrentSelectionRow
+            scanScope={scanScope}
+            setScanScope={setScanScope}
+            closeDropdown={() => setIsScopeDropdownOpen(false)}
+            canvasSelectionActive={canvasSelectionActive}
+            currentOptionSelected={scanScope === 'current' || scanScope === 'all'}
+          />
           <div className="border-t border-gray-200 my-0" aria-hidden />
           {documentPages.map((page) => (
             <div

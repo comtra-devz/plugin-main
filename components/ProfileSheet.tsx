@@ -25,6 +25,16 @@ interface Props {
   onOpenTerms: () => void;
 }
 
+/** Dot finché non c’è profilo salvato (magic) o c’è conflitto Figma. */
+function showPersonalDetailsDot(u: User): boolean {
+  if (u.name_conflict && typeof u.name_conflict === 'object') return true;
+  if (u.show_profile_badge) return true;
+  const hasFigma = u.figma_user_id != null && String(u.figma_user_id).trim() !== '';
+  if (hasFigma) return false;
+  if (u.profile_saved_at) return false;
+  return true;
+}
+
 export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetchError, onRetryCredits, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onPersonalDetails, onOpenDocs, onOpenPrivacy, onOpenTerms }) => (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
@@ -101,9 +111,17 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
         <button
           data-component="Profile: Personal Details"
           onClick={onPersonalDetails}
-          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all"
+          className="text-left text-sm font-bold hover:bg-gray-100 p-2 border border-transparent hover:border-black transition-all w-full grid grid-cols-[1fr_24px] items-center gap-2"
         >
-          Personal details
+          <span className="truncate">Personal details</span>
+          <span className="h-6 w-6 flex items-center justify-center justify-self-end" aria-hidden>
+            {showPersonalDetailsDot(user) ? (
+              <span
+                className="h-3 w-3 rounded-full border-2 border-white bg-red-600 shadow-[0_0_0_1px_#000]"
+                title="Complete Personal details"
+              />
+            ) : null}
+          </span>
         </button>
         <button 
           data-component="Profile: Docs Button"

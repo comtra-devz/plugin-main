@@ -71,13 +71,15 @@ interface Props {
   fetchUxAudit?: (body: { file_key?: string; file_json?: object; scope?: string; page_id?: string; node_ids?: string[]; page_ids?: string[] }) => Promise<{ issues: AuditIssue[] }>;
   /** JWT for auth backend, used for audit feedback tickets. */
   authToken?: string | null;
+  /** True when one or more layers are selected on the Figma canvas (synced via selection-changed). */
+  canvasSelectionActive: boolean;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
 import { getSystemToastOptions, isFileNotSavedError, isFigmaConnectionError } from '../../lib/errorCopy';
 
-export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, authToken }) => {
+export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetryConnection, onCheckTokenStatus, tokenVerifiedAt, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, onNavigateToGenerate, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, authToken, canvasSelectionActive }) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
   const [hasAudited, setHasAudited] = useState(false);
@@ -158,6 +160,15 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
   const [scanProgress, setScanProgress] = useState({ percent: 0, count: 0 });
   const [fakeProgressPercent, setFakeProgressPercent] = useState(0);
   const fakeProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Default scope to Current Selection when canvas has a selection; clear invalid current when selection empties. */
+  useEffect(() => {
+    if (canvasSelectionActive) {
+      setScanScope((prev) => (prev === 'unselected' ? 'current' : prev));
+    } else {
+      setScanScope((prev) => (prev === 'current' ? 'unselected' : prev));
+    }
+  }, [canvasSelectionActive]);
 
   // Component Deviation Navigator State
   const [deviationNavIndex, setDeviationNavIndex] = useState<{ [issueId: string]: number }>({});
@@ -492,6 +503,18 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
     }, 1500);
     return () => clearInterval(interval);
   }, [isA11yLoader]);
+
+  // Guardrail: if plugin/file-context messaging gets stuck, fail fast instead of infinite loading.
+  useEffect(() => {
+    if (!waitingForFileContext) return;
+    const t = setTimeout(() => {
+      setWaitingForFileContext(false);
+      setIsLaunchingAudit(false);
+      setIsCalculating(false);
+      showAuditError('File context request timed out. Please retry the scan.', activeTab === 'A11Y', activeTab === 'UX');
+    }, 25000);
+    return () => clearTimeout(t);
+  }, [waitingForFileContext, activeTab, showAuditError]);
 
   // Rotate Prototype loader messages (same ToV)
   const isProtoLoader = activeTab === 'PROTOTYPE' && protoAuditLoading;
@@ -917,24 +940,8 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
 
         (async () => {
           try {
-            // UX: charge only after successful provider response to avoid charging on 429/temporary failures.
-            const shouldChargeBeforeAudit = !isUxScan;
-            if (shouldChargeBeforeAudit && !useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
-              const result = await consumeCredits({
-                action_type: isUxScan ? 'ux_audit' : isA11yScan ? 'a11y_audit' : 'audit',
-                credits_consumed: payload.cost,
-                max_health_score: payload.score,
-              });
-              if (result.error === 'Insufficient credits') {
-                onUnlockRequest();
-                setWaitingForFileContext(false);
-                return;
-              }
-              if (result.error) {
-                setAuditError(result.error);
-                return;
-              }
-            }
+            // Charge only after a successful provider response (all audits),
+            // so failed scans never consume credits.
             setShowReceipt(false);
             if (isUxScan) {
               if (!fetchUxAudit) {
@@ -971,6 +978,22 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setA11yAuditError(null);
               setA11yAuditLoading(true);
               const data = await fetchA11yAudit(auditBody);
+              if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
+                const chargeResult = await consumeCredits({
+                  action_type: 'a11y_audit',
+                  credits_consumed: payload.cost,
+                  max_health_score: payload.score,
+                });
+                if (chargeResult.error === 'Insufficient credits') {
+                  onUnlockRequest();
+                  setWaitingForFileContext(false);
+                  return;
+                }
+                if (chargeResult.error) {
+                  setAuditError(chargeResult.error);
+                  return;
+                }
+              }
               setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
               setLastA11yAuditDate(new Date());
               if (msg.scope === 'page' && msg.pageId) {
@@ -1039,6 +1062,22 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
               setDsQualityGates(
                 data?.quality_gates && typeof data.quality_gates === 'object' ? data.quality_gates : null,
               );
+              if (!useInfiniteCreditsForTest && !isPro && payload.cost > 0) {
+                const chargeResult = await consumeCredits({
+                  action_type: 'audit',
+                  credits_consumed: payload.cost,
+                  max_health_score: payload.score,
+                });
+                if (chargeResult.error === 'Insufficient credits') {
+                  onUnlockRequest();
+                  setWaitingForFileContext(false);
+                  return;
+                }
+                if (chargeResult.error) {
+                  setAuditError(chargeResult.error);
+                  return;
+                }
+              }
             } else {
               setAuditError('Audit not available');
               return;
@@ -1765,6 +1804,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
             disableAllPages={false}
+            canvasSelectionActive={canvasSelectionActive}
         />
       )}
 
@@ -1798,6 +1838,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
             disableAllPages={true}
+            canvasSelectionActive={canvasSelectionActive}
         />
       )}
 
@@ -1830,6 +1871,7 @@ export const Audit: React.FC<Props> = ({ plan, userTier, onUnlockRequest, onRetr
             uxAuditError={uxAuditError}
             onRetryConnection={onRetryConnection}
             onCheckTokenStatus={onCheckTokenStatus}
+            canvasSelectionActive={canvasSelectionActive}
         />
       )}
 

@@ -18,6 +18,14 @@ function mergeUserFromApiProfile(user: User, p: {
   show_profile_badge?: boolean;
   profile_locked?: boolean;
 }): User {
+  const nextConflict =
+    p.name_conflict !== undefined ? p.name_conflict : user.name_conflict;
+  const nextProfileSavedAt =
+    p.profile_saved_at !== undefined ? p.profile_saved_at : user.profile_saved_at;
+  const nextShowProfileBadge =
+    p.show_profile_badge !== undefined
+      ? p.show_profile_badge
+      : (!nextConflict && nextProfileSavedAt ? false : user.show_profile_badge);
   const first = (p.first_name && String(p.first_name).trim()) || user.first_name;
   const avFrom = (first && String(first).trim()) || (p.name && String(p.name).trim()) || user.name;
   const avatar = (avFrom || 'U').charAt(0).toUpperCase();
@@ -27,9 +35,9 @@ function mergeUserFromApiProfile(user: User, p: {
     first_name: p.first_name ?? user.first_name,
     surname: p.surname ?? user.surname,
     figma_user_id: p.figma_user_id !== undefined ? p.figma_user_id : user.figma_user_id,
-    profile_saved_at: p.profile_saved_at !== undefined ? p.profile_saved_at : user.profile_saved_at,
-    name_conflict: p.name_conflict !== undefined ? p.name_conflict : user.name_conflict,
-    show_profile_badge: p.show_profile_badge !== undefined ? p.show_profile_badge : user.show_profile_badge,
+    profile_saved_at: nextProfileSavedAt,
+    name_conflict: nextConflict,
+    show_profile_badge: nextShowProfileBadge,
     profile_locked: p.profile_locked !== undefined ? p.profile_locked : user.profile_locked,
     avatar,
   };

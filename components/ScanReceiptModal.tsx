@@ -1,4 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+/** Rotating subtitle, smug-but-winky transparency vibes (English). New pick each modal mount. */
+const RECEIPT_TAGLINES = [
+  "We're not like those apps that surprise you at checkout. Revolutionary, we know.",
+  'Full disclosure, because guessing your bill is so last decade.',
+  'You always see the price first. Others wish they thought of it first.',
+  "Radical transparency: here's exactly what we're about to charge you.",
+  'No sticker shock here. Just physics, math, and exceptional taste.',
+  'Precision billing for people who actually read receipts.',
+  'Consider this your politely condescending cost breakdown.',
+  'Know before you owe. Groundbreaking stuff.',
+  'Every credit accounted for, because mysteries belong in novels.',
+  'Up-front totals: uncommon courtesy, expertly delivered.',
+] as const;
 
 interface Props {
   nodeCount: number;
@@ -25,21 +39,23 @@ function roundTo3SigFigs(n: number): number {
 }
 
 export const ScanReceiptModal: React.FC<Props> = ({ nodeCount, cost, sizeLabel, target, onConfirm, onCancel }) => {
+  const [tagline] = useState(
+    () => RECEIPT_TAGLINES[Math.floor(Math.random() * RECEIPT_TAGLINES.length)],
+  );
   const targetOnly = target.replace(/\s*\([^)]*\)\s*$/, '').trim();
   const sizeDisplay = sizeLabel === '200k+' ? '200k+' : roundTo3SigFigs(nodeCount).toLocaleString();
 
   return (
     <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6">
-      <div className="bg-white border-2 border-black shadow-[8px_8px_0_0_#fff] max-w-xs w-full font-mono relative overflow-hidden">
-        
-        {/* Receipt Header */}
-        <div className="bg-yellow-400 text-black p-3 text-center border-b-2 border-dashed border-black">
-          <h3 className="font-bold uppercase text-lg tracking-widest">Calculation Results</h3>
-          <p className="text-[10px]">Everything in detail</p>
+      <div className="bg-white border-2 border-black shadow-[8px_8px_0_0_#fff] max-w-xs w-full font-mono relative flex flex-col">
+        {/* Receipt Header: tagline wraps; body/footer follow in column flow */}
+        <div className="bg-yellow-400 text-black px-3 py-3 text-center border-b-2 border-dashed border-black flex flex-col items-center gap-1.5">
+          <h3 className="font-bold uppercase text-lg tracking-widest shrink-0">Calculation Results</h3>
+          <p className="text-[10px] leading-snug w-full max-w-full text-center break-words">{tagline}</p>
         </div>
 
         {/* Receipt Body: gap tra label e valore, padding uniforme per evitare che il testo a destra sbatta con la label */}
-        <div className="p-6 text-xs space-y-0">
+        <div className="p-6 text-xs space-y-0 flex flex-col">
           <div className="flex gap-3 items-start border-b border-black/10 py-3 first:pt-0">
             <span className="text-gray-500 uppercase shrink-0 pt-0.5">Target</span>
             <span className="font-bold min-w-0 text-right leading-relaxed break-words">{targetOnly}</span>

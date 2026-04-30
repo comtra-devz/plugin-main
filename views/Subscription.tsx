@@ -65,7 +65,7 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6">
            <div data-component="Subscription: Warning Modal" className={`${BRUTAL.card} bg-white text-center`}>
               <div className="text-4xl mb-2">⚡</div>
-              <h2 className="text-xl font-black uppercase mb-2 text-red-600">Credits esauriti</h2>
+              <h2 className="text-xl font-black uppercase mb-2 text-red-600">Credits exhausted</h2>
               <p className="text-xs text-gray-600 mb-4 font-medium">
                  You've used all {totalCredits} credits in your current cycle. Upgrade to PRO to continue.
               </p>
@@ -155,19 +155,21 @@ export const Subscription: React.FC<Props> = ({ user, credits, useInfiniteCredit
         <div data-component="Subscription: Upgrade Card" className={`${BRUTAL.card} bg-[#ffc900] border-dashed`}>
           <h3 data-component="Subscription: Upgrade Title" className="font-black uppercase text-lg mb-2">Upgrade to Pro</h3>
           <ul className="list-disc list-inside text-xs font-bold mb-4 space-y-1">
-            <li data-component="Subscription: Benefit 1">600 credits / 6 mesi</li>
+            <li data-component="Subscription: Benefit 1">600 credits / 6 months</li>
             <li data-component="Subscription: Benefit 2">Full Code Export (React/Storybook)</li>
-            <li data-component="Subscription: Benefit 3">Deep Fix e funzionalità sbloccate</li>
+            <li data-component="Subscription: Benefit 3">Deep Fix and unlocked features</li>
           </ul>
           <Button data-component="Subscription: Buy License Button" variant="black" fullWidth onClick={onUpgrade}>
-            Acquista (da €7)
+            Buy (from €7)
           </Button>
         </div>
       )}
 
-      <button data-component="Subscription: Cancel Button" className="text-xs font-bold underline text-gray-500 hover:text-black">
-        Cancel Subscription
-      </button>
+      {isPro && (
+        <button data-component="Subscription: Cancel Button" className="text-xs font-bold underline text-gray-500 hover:text-black">
+          Cancel Subscription
+        </button>
+      )}
     </div>
   );
 };
