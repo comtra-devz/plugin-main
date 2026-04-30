@@ -105,7 +105,8 @@ const COPY: Record<string, SystemToastOptions> = {
   },
   audit_timed_out: {
     title: 'Audit timed out',
-    description: 'Your file is too large to scan in one go. Select fewer frames or a single page and retry.',
+    description:
+      'The scan took too long or the server stopped responding. Retry in a moment, or narrow scope (current selection / one page).',
     variant: 'warning',
     ctaLabel: 'Retry',
   },
@@ -233,5 +234,8 @@ export function isFigmaConnectionError(message: string | null): boolean {
   return (
     m.includes('figma') && (m.includes('token') || m.includes('conness') || m.includes('reconnect') || m.includes('riconnetti'))
   ) || m.includes('no figma token') || m.includes('figma non connesso')
-    || m.includes('figma_reconnect') || m.includes('figma api token not stored') || m.includes('figma rejected this token');
+    || m.includes('figma_reconnect') || m.includes('figma api token not stored') || m.includes('figma rejected this token')
+    || m.includes('re-login') || m.includes('grant file access')
+    || (m.includes('oauth') && (m.includes('figma') || m.includes('token')))
+    || (m.includes('403') && m.includes('token'));
 }

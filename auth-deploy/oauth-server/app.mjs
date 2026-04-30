@@ -62,6 +62,7 @@ import {
 } from './generate-prep-cache.mjs';
 import { runKimiContentDefaultsEnrichment } from './kimi-content-enrichment.mjs';
 import { buildDesignIntelligenceExecutorHints } from './design-intelligence-executor-hints.mjs';
+import { withKimiConcurrencySlot } from './kimi-concurrency.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2043,6 +2044,23 @@ function normalizeMoonshotUsage(usage) {
   return { inputTokens, outputTokens };
 }
 
+/** Moonshot may return 429 or 400 with TPM/org rate-limit wording (not always 429). */
+function kimiResponseLooksRateLimited(status, bodyText) {
+  const st = Number(status);
+  const t = String(bodyText || '').toLowerCase();
+  if (st === 429) return true;
+  if (/\btpm\b|tokens per minute|rate.?limit|too many requests|throttl/.test(t)) return true;
+  if (st === 400 && (/request reached/.test(t) || /organization.*limit/.test(t) || /\borg-[a-z0-9]+\b.*\bproj-/.test(t))) {
+    return true;
+  }
+  return false;
+}
+
+function kimiRateLimitRetryAfterSec() {
+  const n = Number(process.env.KIMI_RATE_LIMIT_RETRY_AFTER_SEC);
+  return Number.isFinite(n) && n >= 10 && n <= 300 ? Math.floor(n) : 65;
+}
+
 function extractJsonFromContent(text) {
   if (!text || typeof text !== 'string') return null;
   const trimmed = text.trim();
@@ -3234,28 +3252,40 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       prompt_chars: userMessage.length,
     });
 
-    const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${KIMI_API_KEY}`,
-      },
-      body: JSON.stringify(
-        buildKimiChatRequestPayload({
-          model: KIMI_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-          ],
-          maxTokens: 4096,
-        }),
-      ),
-    });
+    const kimiRes = await withKimiConcurrencySlot(() =>
+      fetch('https://api.moonshot.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${KIMI_API_KEY}`,
+        },
+        body: JSON.stringify(
+          buildKimiChatRequestPayload({
+            model: KIMI_MODEL,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userMessage },
+            ],
+            maxTokens: 4096,
+          }),
+        ),
+      }),
+    );
     if (!kimiRes.ok) {
       const t = await kimiRes.text();
       const lower = String(t || '').toLowerCase();
-      const isInputTooLarge = /total message size|exceeds limit|context length|maximum context|token limit|invalid_request_error/.test(lower);
       console.error('DS Audit: Kimi API', kimiRes.status, t.slice(0, 300));
+      if (kimiResponseLooksRateLimited(kimiRes.status, t)) {
+        const retryAfterSec = kimiRateLimitRetryAfterSec();
+        res.setHeader('Retry-After', String(retryAfterSec));
+        return res.status(429).json({
+          error:
+            'DS audit hit the AI provider rate limit (tokens/minute). Wait briefly — the plugin will retry automatically when possible.',
+          code: 'KIMI_RATE_LIMIT',
+          retryAfterSec,
+        });
+      }
+      const isInputTooLarge = /total message size|exceeds limit|context length|maximum context|token limit|invalid_request_error/.test(lower);
       if (isInputTooLarge) {
         return res.status(413).json({
           error: 'ds_audit_input_too_large',
@@ -3308,6 +3338,12 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     });
   } catch (err) {
     console.error('POST /api/agents/ds-audit', err);
+    if (err?.code === 'KIMI_QUEUE_TIMEOUT') {
+      return res.status(503).json({
+        error: err.message || 'Too many simultaneous AI requests. Retry shortly.',
+        code: 'KIMI_QUEUE_TIMEOUT',
+      });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -3358,12 +3394,14 @@ async function callKimi(messages, maxTokens = 8192, textModelOverride = null) {
   const timeout = setTimeout(() => ctrl.abort(new Error('Kimi request timeout')), timeoutMs);
   let r;
   try {
-    r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
-      body: JSON.stringify(payload),
-      signal: ctrl.signal,
-    });
+    r = await withKimiConcurrencySlot(() =>
+      fetch('https://api.moonshot.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KIMI_API_KEY}` },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      }),
+    );
   } catch (e) {
     if (e?.name === 'AbortError') {
       throw new Error(`Kimi API timeout after ${timeoutMs}ms`);
@@ -6493,7 +6531,7 @@ app.post('/api/agents/a11y-audit', async (req, res) => {
   } catch (err) {
     const msg = err?.message || '';
     if (msg.includes('File too large')) {
-      return res.status(400).json({ error: msg });
+      return res.status(413).json({ error: msg, code: 'A11Y_FILE_TOO_LARGE' });
     }
     console.error('POST /api/agents/a11y-audit', err);
     res.status(500).json({ error: 'Server error' });
@@ -6570,32 +6608,35 @@ app.post('/api/agents/ux-audit', async (req, res) => {
       uxBlob,
     ].join('\n\n');
 
-    const kimiRes = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${KIMI_API_KEY}`,
-      },
-      body: JSON.stringify(
-        buildKimiChatRequestPayload({
-          model: KIMI_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-          ],
-          maxTokens: 4096,
-        }),
-      ),
-    });
+    const kimiRes = await withKimiConcurrencySlot(() =>
+      fetch('https://api.moonshot.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${KIMI_API_KEY}`,
+        },
+        body: JSON.stringify(
+          buildKimiChatRequestPayload({
+            model: KIMI_MODEL,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userMessage },
+            ],
+            maxTokens: 4096,
+          }),
+        ),
+      }),
+    );
     if (!kimiRes.ok) {
       const t = await kimiRes.text();
       console.error('UX Audit: Kimi API', kimiRes.status, t.slice(0, 300));
-      // Preserve upstream semantics: 429 from Kimi should stay 429 (not generic 400),
-      // so frontend can show a proper "retry later" message.
-      if (kimiRes.status === 429) {
+      if (kimiResponseLooksRateLimited(kimiRes.status, t)) {
+        const retryAfterSec = kimiRateLimitRetryAfterSec();
+        res.setHeader('Retry-After', String(retryAfterSec));
         return res.status(429).json({
           error: 'UX audit temporarily rate-limited by AI provider. Please retry in about 1 minute.',
           code: 'KIMI_RATE_LIMIT',
+          retryAfterSec,
         });
       }
       if (kimiRes.status === 400 && /token limit|exceeded model token limit|invalid_request_error/i.test(t)) {
@@ -6625,6 +6666,12 @@ app.post('/api/agents/ux-audit', async (req, res) => {
     res.json({ issues });
   } catch (err) {
     console.error('POST /api/agents/ux-audit', err);
+    if (err?.code === 'KIMI_QUEUE_TIMEOUT') {
+      return res.status(503).json({
+        error: err.message || 'Too many simultaneous AI requests. Retry shortly.',
+        code: 'KIMI_QUEUE_TIMEOUT',
+      });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });

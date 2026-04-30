@@ -354,8 +354,10 @@ export const Audit: React.FC<Props> = ({
         });
         return;
       }
-      const isTimeout = /timeout|504|timed out/i.test(message);
       const lowerMsg = message.toLowerCase();
+      const isTimeout =
+        /\b504\b|\b524\b|\b408\b|gateway timeout|endpoint request timed out|lambda deadline|socket hang up/i.test(lowerMsg) ||
+        /\baudit timed out\b/i.test(lowerMsg);
       const isRateLimited = lowerMsg.includes('kimi_rate_limit') || lowerMsg.includes('rate limit') || lowerMsg.includes('rate-limited');
       const isUxInputTooLarge = lowerMsg.includes('ux_audit_input_too_large') || lowerMsg.includes('selection too large for ux audit');
       const isDsInputTooLarge =
@@ -363,8 +365,19 @@ export const Audit: React.FC<Props> = ({
         lowerMsg.includes('selection too large for ds audit') ||
         lowerMsg.includes('total message size') ||
         lowerMsg.includes('exceeds limit');
-      const isInputTooLarge = isUxInputTooLarge || isDsInputTooLarge;
-      const isKimiValidation = /kimi api error|context|token|too large|max(_| )?completion|invalid_request|model/i.test(lowerMsg);
+      const isA11yPayloadTooLarge =
+        lowerMsg.includes('a11y_file_too_large') ||
+        lowerMsg.includes('file too large for full scan') ||
+        lowerMsg.includes('file too large for a11y');
+      const isInputTooLarge = isUxInputTooLarge || isDsInputTooLarge || isA11yPayloadTooLarge;
+      /** Kimi / Moonshot failures only — never use for Accessibility (deterministic engine, no LLM). */
+      const isKimiValidation =
+        !isA11y &&
+        (/kimi api error|moonshot|kimi_rate_limit|invalid_request_error|exceeded model token|context length exceeded|max_completion_tokens|max tokens|input too long/i.test(
+          lowerMsg,
+        ) ||
+          (!/figma\.com|"err"\s*:|"status"\s*:\s*4\d\d/.test(message) &&
+            /\binvalid_request_error\b|\bcontext window\b|\bprompt tokens\b/i.test(lowerMsg)));
       const busyDescription = isUx
         ? 'The UX audit is temporarily busy. Please retry in about a minute.'
         : isA11y
@@ -373,13 +386,11 @@ export const Audit: React.FC<Props> = ({
       const tooLargeDescription = isUx
         ? 'This selection is too large for UX Audit. Try a smaller frame group or a tighter page section.'
         : isA11y
-          ? 'This selection is too large for Accessibility Audit. Try Current Selection or a single page, then retry.'
+          ? 'This page has more layers than we can scan in one pass. Use Current selection to pick one section, or hide heavy symbol pages and retry.'
           : 'This selection is too large for DS Audit. Try Current Selection or a single page, then retry.';
       const kimiValidationDescription = isUx
         ? 'UX audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.'
-        : isA11y
-          ? 'Accessibility audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.'
-          : 'DS audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.';
+        : 'DS audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.';
       const opts = isTimeout
         ? getSystemToastOptions('audit_timed_out')
         : isRateLimited
@@ -389,6 +400,11 @@ export const Audit: React.FC<Props> = ({
         : isInputTooLarge
           ? getSystemToastOptions('audit_timed_out', {
               description: tooLargeDescription,
+            })
+        : isA11y
+          ? getSystemToastOptions('audit_couldnt_start', {
+              description:
+                'Accessibility scan could not finish. Check your Figma connection, try Current selection, or retry in a moment — this audit does not use generative AI.',
             })
         : isKimiValidation
           ? getSystemToastOptions('audit_couldnt_start', {
@@ -400,7 +416,7 @@ export const Audit: React.FC<Props> = ({
         dismissible: true,
         actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
       });
-      if (isUx && (isKimiValidation || isRateLimited || isInputTooLarge)) {
+      if (isUx && (isKimiValidation || isRateLimited || isInputTooLarge || isTimeout)) {
         setUxAuditError(opts.description ?? opts.title);
       }
     },
@@ -897,7 +913,16 @@ export const Audit: React.FC<Props> = ({
       if (msg.type === 'file-context-chunked-start') {
         chunkedRef.current = {
           totalChunks: msg.totalChunks ?? 0,
-          meta: { fileKey: msg.fileKey, scope: msg.scope, pageId: msg.pageId, selectionType: msg.selectionType, selectionName: msg.selectionName },
+          meta: {
+            fileKey: msg.fileKey,
+            fileName: msg.fileName,
+            scope: msg.scope,
+            pageId: msg.pageId,
+            nodeIds: msg.nodeIds,
+            pageIds: msg.pageIds,
+            selectionType: msg.selectionType,
+            selectionName: msg.selectionName,
+          },
           chunks: {},
         };
       }
@@ -1188,8 +1213,12 @@ export const Audit: React.FC<Props> = ({
             }
           } catch (err) {
             let message = err instanceof Error ? err.message : 'Something went wrong';
-            if (/timeout|504|timed out/i.test(message)) {
-              message = 'Audit timed out. Try a single page or smaller selection.';
+            if (
+              /\b504\b|\b524\b|\b408\b|gateway timeout|endpoint request timed out|lambda deadline|socket hang up|\btimed out\b|deadline exceeded/i.test(
+                message,
+              )
+            ) {
+              message = 'Audit timed out. Try again shortly or reduce scope.';
             }
             setAuditError(message);
           } finally {

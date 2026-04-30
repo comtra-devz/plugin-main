@@ -60,6 +60,74 @@ function delayMs(ms: number): Promise<void> {
   });
 }
 
+/** Moonshot TPM (429) + server-side concurrency queue (503 KIMI_QUEUE_TIMEOUT): retry in iframe. */
+const KIMI_AGENT_MAX_ATTEMPTS = 5;
+
+async function fetchPostJsonWithKimi429Retries(
+  url: string,
+  authToken: string,
+  payload: unknown,
+  labelForLog: string,
+): Promise<Response> {
+  let lastText = '{}';
+  let lastStatus = 502;
+
+  for (let attempt = 0; attempt < KIMI_AGENT_MAX_ATTEMPTS; attempt++) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) return r;
+
+    const text = await r.text();
+    lastText = text;
+    lastStatus = r.status;
+
+    let j: { code?: string; retryAfterSec?: number } = {};
+    try {
+      j = JSON.parse(text) as { code?: string; retryAfterSec?: number };
+    } catch {
+      /* noop */
+    }
+
+    const is429Limit = r.status === 429 && j.code === 'KIMI_RATE_LIMIT';
+    const isQueueTimeout = r.status === 503 && j.code === 'KIMI_QUEUE_TIMEOUT';
+
+    if (is429Limit && attempt < KIMI_AGENT_MAX_ATTEMPTS - 1) {
+      const hdr = Number(r.headers.get('retry-after'));
+      const sec = Math.min(
+        180,
+        Math.max(
+          15,
+          Number.isFinite(j.retryAfterSec) && j.retryAfterSec! > 0
+            ? j.retryAfterSec!
+            : Number.isFinite(hdr) && hdr > 0
+              ? hdr
+              : 65,
+        ),
+      );
+      console.warn(
+        `[Comtra] ${labelForLog}: Kimi rate limit (TPM); automatic retry ${attempt + 2}/${KIMI_AGENT_MAX_ATTEMPTS} after ${sec}s`,
+      );
+      await delayMs(sec * 1000);
+      continue;
+    }
+
+    if (isQueueTimeout && attempt < KIMI_AGENT_MAX_ATTEMPTS - 1) {
+      const wait = 10000 + Math.floor(Math.random() * 5000);
+      console.warn(
+        `[Comtra] ${labelForLog}: Kimi concurrency slot busy; automatic retry ${attempt + 2}/${KIMI_AGENT_MAX_ATTEMPTS} after ${wait}ms`,
+      );
+      await delayMs(wait);
+      continue;
+    }
+
+    return new Response(text, { status: r.status, statusText: r.statusText });
+  }
+  return new Response(lastText, { status: lastStatus });
+}
+
 /** Coalesce parallel GET /api/credits (stesso iframe): più effect/handler non duplicano la richiesta. */
 let creditsInflightLite: Promise<CreditsFetchOutcome> | null = null;
 let creditsInflightFull: Promise<CreditsFetchOutcome> | null = null;
@@ -1253,22 +1321,24 @@ export default function AppTest() {
     const payload = body.file_json
       ? { file_json: body.file_json }
       : { file_key: body.file_key, scope: body.scope, page_id: body.page_id, node_ids: body.node_ids, page_ids: body.page_ids };
-    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/ds-audit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-      body: JSON.stringify(payload),
-    });
-    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
+    const r = await fetchPostJsonWithKimi429Retries(
+      `${AUTH_BACKEND_URL}/api/agents/ds-audit`,
+      user.authToken,
+      payload,
+      'DS audit',
+    );
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
+      let j: { error?: string; details?: string; code?: string } = {};
       try {
-        const j = JSON.parse(text);
+        j = JSON.parse(text) as { error?: string; details?: string; code?: string };
         const details = typeof j.details === 'string' && j.details.trim() ? ` (${j.details.trim()})` : '';
         msg = (j.error || text) + details;
       } catch {
         // keep as-is
       }
+      if (r.status === 503 && j.code !== 'KIMI_QUEUE_TIMEOUT') handle503();
       console.warn('[Comtra] POST /api/agents/ds-audit failed', r.status, msg.slice(0, 400));
       throw new Error(msg);
     }
@@ -1290,8 +1360,9 @@ export default function AppTest() {
       const text = await r.text();
       let msg = text;
       try {
-        const j = JSON.parse(text);
+        const j = JSON.parse(text) as { error?: string; code?: string };
         msg = j.error || text;
+        if (j.code) msg = `${msg} (${j.code})`;
       } catch {
         // keep as-is
       }
@@ -1305,21 +1376,23 @@ export default function AppTest() {
     const payload = body.file_json
       ? { file_json: body.file_json }
       : { file_key: body.file_key, scope: body.scope, page_id: body.page_id, node_ids: body.node_ids, page_ids: body.page_ids };
-    const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/ux-audit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
-      body: JSON.stringify(payload),
-    });
-    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
+    const r = await fetchPostJsonWithKimi429Retries(
+      `${AUTH_BACKEND_URL}/api/agents/ux-audit`,
+      user.authToken,
+      payload,
+      'UX audit',
+    );
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
+      let j: { error?: string; code?: string } = {};
       try {
-        const j = JSON.parse(text);
+        j = JSON.parse(text) as { error?: string; code?: string };
         msg = j.error || text;
       } catch {
         // keep as-is
       }
+      if (r.status === 503 && j.code !== 'KIMI_QUEUE_TIMEOUT') handle503();
       throw new Error(msg);
     }
     return r.json();

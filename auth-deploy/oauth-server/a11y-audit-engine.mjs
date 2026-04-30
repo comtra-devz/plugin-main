@@ -499,21 +499,32 @@ function collectOKLCHIssues(fileJson, issues, idGen) {
 }
 
 // --- Main
-const A11Y_NODE_CAP = 6000; // Cap to avoid Vercel 5min timeout on huge files
+/** Whole-file / multi-page payloads (REST overview or large exports): strict cap — avoids server timeouts. */
+const A11Y_NODE_CAP_MULTI_PAGE = 6000;
+/** Single-page slice from plugin (`CANVAS` root) or REST page fetch (`DOCUMENT` with one canvas): user already narrowed scope. */
+const A11Y_NODE_CAP_SINGLE_PAGE = 22000;
 let idCounter = 0;
 function nextId() {
   idCounter += 1;
   return `a11y-${idCounter}`;
 }
 
-function countNodes(fileJson) {
+function getA11yNodeCap(fileJson) {
+  const doc = fileJson?.document;
+  if (!doc?.children) return A11Y_NODE_CAP_MULTI_PAGE;
+  if (doc.type === 'CANVAS') return A11Y_NODE_CAP_SINGLE_PAGE;
+  if (doc.type === 'DOCUMENT' && doc.children.length <= 1) return A11Y_NODE_CAP_SINGLE_PAGE;
+  return A11Y_NODE_CAP_MULTI_PAGE;
+}
+
+function countNodes(fileJson, cap) {
   let n = 0;
   const doc = fileJson?.document;
   if (!doc?.children) return 0;
   for (const page of doc.children) {
     for (const _ of walkNodes(page)) {
       n++;
-      if (n > A11Y_NODE_CAP) return n;
+      if (n > cap) return n;
     }
   }
   return n;
@@ -521,13 +532,16 @@ function countNodes(fileJson) {
 
 /**
  * Run A11Y audit on Figma file JSON. Returns { issues }.
- * Throws if file has more than A11Y_NODE_CAP nodes (to avoid timeout).
+ * Throws if node count exceeds a scope-aware cap (to avoid timeout).
  * @param {object} fileJson - Full response from GET /v1/files/:key or plugin serialization
  */
 export function runA11yAudit(fileJson) {
-  const nodeCount = countNodes(fileJson);
-  if (nodeCount > A11Y_NODE_CAP) {
-    throw new Error(`File too large for full scan (${nodeCount.toLocaleString()} nodes). Try scanning a single page instead.`);
+  const cap = getA11yNodeCap(fileJson);
+  const nodeCount = countNodes(fileJson, cap);
+  if (nodeCount > cap) {
+    throw new Error(
+      `File too large for full scan (${nodeCount.toLocaleString()} nodes, limit ${cap.toLocaleString()}). Try Current selection or a smaller page section.`,
+    );
   }
   idCounter = 0;
   const issues = [];

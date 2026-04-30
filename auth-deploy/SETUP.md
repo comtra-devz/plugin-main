@@ -31,7 +31,7 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `FIGMA_CLIENT_ID` | Dalla OAuth app Figma | già fatto |
 | `FIGMA_CLIENT_SECRET` | Stessa app Figma | già fatto |
 | `BASE_URL` | `https://auth.comtra.dev` (senza slash finale) | già fatto |
-| `REDIS_URL` | URL Redis (OAuth) | già fatto |
+| `REDIS_URL` | URL Redis (OAuth **+** limite globale concorrenza chiamate Kimi tra utenti) | già fatto |
 | `POSTGRES_URL` | URL connessione Postgres (Supabase) | **da aggiungere** — vedi sotto |
 | `JWT_SECRET` | Stringa segreta lunga (es. `openssl rand -hex 32`) | **da aggiungere** |
 | `LEMON_SQUEEZY_WEBHOOK_SECRET` | Signing secret del webhook Lemon Squeezy (6–40 caratteri) | **da aggiungere** per affiliate |
@@ -42,6 +42,9 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `LEMON_VARIANT_1Y` | ID della **variant** del piano **Annual (1y)** in Lemon | Obbligatorio per legare gli sconti livello al prodotto giusto. Se hai solo nomi tipo `LEMON_VARIANT_SV` / `AZ` / `TZ` / `SN`, copia l’**ID numerico** della variant Annual da Lemon e incollalo qui (o aggiungi questa variabile accanto alle altre). |
 | `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
 | `KIMI_MODEL` | Nome modello (opzionale) | Default backend: `kimi-k2.6`. Per **testing a basso costo** puoi impostare `kimi-k2-0905-preview` via env. |
+| `KIMI_GLOBAL_MAX_CONCURRENT` | (Opzionale) Max chiamate **Kimi in parallelo** su tutta l’istanza, se c’è **REDIS_URL** | Default **16**. Abbassa se vedi TPM troppo spesso; alza (es. 32–48) solo se Moonshot permette più throughput e Redis c’è. |
+| `KIMI_QUEUE_MAX_WAIT_MS` | Attesa massima in coda per un “slot” Kimi (ms) | Default **90000**. |
+| `KIMI_LEASE_MS` | Dopo quanto uno slot Redis scade se il worker muore (ms) | Default **180000**. |
 
 Dopo ogni modifica alle variabili: **Redeploy**.
 

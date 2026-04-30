@@ -1369,23 +1369,58 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
     }
   }
 
-  // P-14: Interactive component (simplified: component with CHANGE_TO should have variants)
+  // P-14: Interactive component completeness.
+  // Only flag when CHANGE_TO is used AND required interaction states are truly missing.
+  // Disabled is intentionally not required here (situational).
+  const p14SeenComponentSets = new Set<string>();
+  function hasStateVariant(children: readonly BaseNode[], state: 'hover' | 'focus' | 'pressed'): boolean {
+    const re =
+      state === 'hover'
+        ? /\b(hover|mouse\s*over|mouseover)\b/i
+        : state === 'focus'
+          ? /\b(focus|focused|keyboard)\b/i
+          : /\b(pressed|active|down)\b/i;
+    return children.some((c) => re.test((c.name || '').toLowerCase()));
+  }
   for (const rd of reactionDetails) {
-    for (const a of rd.actions) {
-      if ((a as any).navigation !== 'CHANGE_TO') continue;
-      p14Count++;
-      issues.push({
-        id: `P-14-${String(p14Count).padStart(3, '0')}`,
-        rule_id: 'P-14',
-        categoryId: 'component-advanced',
-        msg: 'Verify component has required variants (Default, Hover, Pressed, Disabled) for Change to',
-        severity: 'HIGH',
-        layerId: rd.nodeId,
-        fix: 'Edit the main component: add missing state variants (Default, Hover, Pressed, Disabled) and wire interactions (e.g. Hover → Default on Mouse leave). States are defined on the main component, not on the instance.',
-        pageName,
-      });
-      break;
+    const hasChangeTo = rd.actions.some((a) => (a as any).navigation === 'CHANGE_TO');
+    if (!hasChangeTo) continue;
+    const sourceNode = await figma.getNodeByIdAsync(rd.nodeId);
+    if (!sourceNode) continue;
+
+    let setNode: ComponentSetNode | null = null;
+    if (sourceNode.type === 'INSTANCE') {
+      const mc = sourceNode.mainComponent;
+      if (mc && mc.parent && mc.parent.type === 'COMPONENT_SET') setNode = mc.parent as ComponentSetNode;
+    } else if (sourceNode.type === 'COMPONENT') {
+      if (sourceNode.parent && sourceNode.parent.type === 'COMPONENT_SET') setNode = sourceNode.parent as ComponentSetNode;
+    } else if (sourceNode.type === 'COMPONENT_SET') {
+      setNode = sourceNode as ComponentSetNode;
     }
+    if (!setNode) continue;
+    if (p14SeenComponentSets.has(setNode.id)) continue;
+    p14SeenComponentSets.add(setNode.id);
+
+    const variants = (setNode.children as BaseNode[]) ?? [];
+    const missingStates: string[] = [];
+    if (!hasStateVariant(variants, 'hover')) missingStates.push('Hover');
+    if (!hasStateVariant(variants, 'focus')) missingStates.push('Focus');
+    if (!hasStateVariant(variants, 'pressed')) missingStates.push('Pressed');
+    if (missingStates.length === 0) continue;
+
+    p14Count++;
+    issues.push({
+      id: `P-14-${String(p14Count).padStart(3, '0')}`,
+      rule_id: 'P-14',
+      categoryId: 'component-advanced',
+      msg: `Missing interactive variants for Change to: ${missingStates.join(', ')}`,
+      severity: 'HIGH',
+      // Keep selection/hidden-layer semantics anchored to the concrete layer in the audited page.
+      // Using the component set id can point to another page/library and bypass hidden-layer filtering.
+      layerId: rd.nodeId,
+      fix: `Add missing variants (${missingStates.join(', ')}) in the main component set and wire Change to transitions accordingly. Disabled is optional and context-dependent.`,
+      pageName,
+    });
   }
 
   // P-15: Variable usage (SET_VARIABLE — variable should exist)
@@ -1499,19 +1534,28 @@ async function runProtoAudit(page: PageNode, selectedFlowNodeIds: string[]): Pro
     return false;
   }
 
-  function collectInteractiveLikelyNodes(n: BaseNode, acc: BaseNode[]) {
+  function hasReactions(n: BaseNode): boolean {
+    return 'reactions' in n && Array.isArray((n as any).reactions) && (n as any).reactions.length > 0;
+  }
+
+  function collectInteractiveLikelyNodes(n: BaseNode, acc: BaseNode[], ancestorInteractive: boolean) {
     const name = (n.name || '').toLowerCase();
     const nameLooksInteractive =
       /^(btn|button|cta|link|icon-)/.test(name) || name.includes('button') || name.includes('link');
+    const selfHasReactions = hasReactions(n);
+    const thisNodeInteractive = selfHasReactions || nameLooksInteractive;
     if (nameLooksInteractive) {
-      const hasReactions =
-        'reactions' in n && Array.isArray((n as any).reactions) && (n as any).reactions.length > 0;
-      if (!hasReactions && !isLikelyLayoutContainer(n)) acc.push(n);
+      // Skip when parent is already interactive (common pattern: parent hotspot + passive child label/icon).
+      if (!selfHasReactions && !ancestorInteractive && !isLikelyLayoutContainer(n)) acc.push(n);
     }
-    if ('children' in n) for (const c of (n as ChildrenMixin).children as BaseNode[]) collectInteractiveLikelyNodes(c, acc);
+    if ('children' in n) {
+      for (const c of (n as ChildrenMixin).children as BaseNode[]) {
+        collectInteractiveLikelyNodes(c, acc, ancestorInteractive || thisNodeInteractive);
+      }
+    }
   }
   const interactiveLikely: BaseNode[] = [];
-  for (const child of page.children) collectInteractiveLikelyNodes(child, interactiveLikely);
+  for (const child of page.children) collectInteractiveLikelyNodes(child, interactiveLikely, false);
   for (const node of interactiveLikely.slice(0, 10)) {
     p19Count++;
     issues.push({
