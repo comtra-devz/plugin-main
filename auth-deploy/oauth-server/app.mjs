@@ -2867,9 +2867,9 @@ function sizeBandFromNodeCount(n) {
 }
 
 /**
- * DS audit prompt payload budget:
- * sending full Figma REST JSON can exceed provider request-size limits even for one dense page.
- * We compact to only fields used by DS rules / deterministic post-filters.
+ * DS audit: max size after semantic narrowing (see compactFileJsonForDsPrompt).
+ * Scope (selection / page / file) still comes from resolveDesignDocumentFromBody — we do not
+ * truncate mid-JSON by char index; we send a DS-relevant node schema, not raw Figma REST.
  */
 const DS_PROMPT_CHAR_BUDGET = 1200000;
 const DS_PROMPT_MAX_TEXT_CHARS = 120;
@@ -2994,12 +2994,12 @@ function compactFileJsonForDsPrompt(fileJson) {
 }
 
 function buildDsPromptInputJson(fileJson) {
-  const fullString = JSON.stringify(fileJson);
-  if (fullString.length <= DS_PROMPT_CHAR_BUDGET) return { payload: fileJson, compacted: false };
   const compact = compactFileJsonForDsPrompt(fileJson);
   const compactString = JSON.stringify(compact);
-  if (compactString.length <= DS_PROMPT_CHAR_BUDGET) return { payload: compact, compacted: true };
-  // Last resort: still use compact payload; route already maps provider-size errors to ds_audit_input_too_large.
+  if (compactString.length <= DS_PROMPT_CHAR_BUDGET) {
+    return { payload: compact, compacted: true };
+  }
+  // Still use semantic-only tree; route maps provider oversize to ds_audit_input_too_large.
   return { payload: compact, compacted: true };
 }
 
@@ -3358,11 +3358,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     }
 
     const dsPromptInput = buildDsPromptInputJson(fileJson);
-    const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo.${
-      dsPromptInput.compacted
-        ? ' Nota: il payload e` stato compattato lato server per limiti di richiesta; usa solo i campi presenti senza assumere dati mancanti.'
-        : ''
-    }\n\n${JSON.stringify(dsPromptInput.payload)}`;
+    const userMessage = `Ecco il JSON del file di design. Esegui l'audit secondo le regole e restituisci solo un JSON con chiave "issues" (array di issue). Nessun testo prima o dopo. Nota: non è l'export Figma REST completo — include solo i campi pertinenti alle regole DS (layout, token/stili, testo per nodo troncato dove serve, component refs). Usa solo i campi presenti.\n\n${JSON.stringify(dsPromptInput.payload)}`;
     const beforeKimiMs = Date.now() - dsAuditReqStart;
     console.info(
       '[DS_AUDIT_TIMING] ' +
