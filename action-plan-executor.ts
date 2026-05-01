@@ -987,11 +987,11 @@ function prepareModifyModeCloneHost(page: PageNode): {
 } {
   const rawSel = page.selection[0];
   if (!rawSel || !('clone' in rawSel)) {
-    figma.notify('Nessuna selezione adatta: layout creato come nuovo blocco sulla pagina.');
+    figma.notify('No suitable selection — layout was added as a new block on the page.');
     return { appendParent: page, rootPos: nextPlacementOnPage(page), clonedFromId: null };
   }
   if (rawSel.type === 'COMPONENT' || rawSel.type === 'COMPONENT_SET') {
-    figma.notify('Per “modifica” seleziona un frame, gruppo o istanza — non un componente master.');
+    figma.notify('For Modify, select a frame, group, or instance — not a main component or set.');
     return { appendParent: page, rootPos: nextPlacementOnPage(page), clonedFromId: null };
   }
 
@@ -1020,7 +1020,7 @@ function prepareModifyModeCloneHost(page: PageNode): {
     return { appendParent: host, rootPos: { x: 0, y: 0 }, clonedFromId: sel.id };
   }
 
-  figma.notify('Copia creata; il nuovo layout è sotto la copia (selezione non contenitrice).');
+  figma.notify('Duplicate created; new layout is placed under the copy (selection was not a container).');
   if ('x' in dup && 'y' in dup && 'height' in dup) {
     const h = (dup as LayoutMixin).height;
     const yOff = typeof h === 'number' && Number.isFinite(h) ? h : 0;
@@ -1247,12 +1247,12 @@ export async function executeActionPlanOnCanvas(
   const skippedInstances = preflight.instanceRequested - preflight.instanceResolved;
   if (skippedInstances > 0) {
     figma.notify(
-      `Generate: ${skippedInstances}/${preflight.instanceRequested} istanze DS saltate (key/id non risolvibili).`,
+      `Generate: skipped ${skippedInstances}/${preflight.instanceRequested} DS instances (unresolved component keys). Add those components to the file or library, then regenerate.`,
     );
   }
   if (preflight.variableRequested > preflight.variableResolved) {
     figma.notify(
-      `Generate: ${preflight.variableRequested - preflight.variableResolved}/${preflight.variableRequested} variabili non risolte.`,
+      `Generate: could not map ${preflight.variableRequested - preflight.variableResolved}/${preflight.variableRequested} variables. Publish or link the variable collections, then try again.`,
     );
   }
 

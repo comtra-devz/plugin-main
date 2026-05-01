@@ -414,8 +414,9 @@ export default function AppTest() {
       ...opts,
       dismissible: true,
       ...(showDiscountCta && {
-        title: 'Comtra is taking a breather',
-        description: 'The outage has lasted a while. You can request a 5% discount code below.',
+        title: 'Still seeing errors?',
+        description:
+          'The service has been unavailable for a while. Request a one-time 5% discount code below, or wait and retry your action once things stabilize.',
         actions: [
           {
             label: 'Request discount code',
@@ -1126,7 +1127,7 @@ export default function AppTest() {
     setRecentTransactions([]);
     setShowProfile(false);
     setShowLogin(true);
-    setLogoutToast('You\'re logged out. See you next time!');
+    setLogoutToast("You're signed out. Use Log in when you're ready — your files stay in Figma.");
     setView(ViewState.AUDIT);
     setGenPrompt('');
   };

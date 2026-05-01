@@ -23,7 +23,7 @@ export const TrophiesModal: React.FC<Props> = ({ trophies, onClose, onViewStats 
 
         <h2 className="text-3xl font-black uppercase mb-1 tracking-tighter">Badges Unlocked!</h2>
         <p className="text-[10px] font-bold uppercase text-gray-500 mb-4">
-          {trophies.length} {trophies.length === 1 ? 'badge' : 'badges'} sbloccat{trophies.length === 1 ? 'o' : 'i'}
+          {trophies.length} new {trophies.length === 1 ? 'badge' : 'badges'} unlocked
         </p>
 
         <div className="mb-6 max-h-32 overflow-y-auto">

@@ -384,16 +384,17 @@ export const Analytics: React.FC<Props> = ({ user, stats, trophies: trophiesFrom
     try {
       await navigator.clipboard.writeText(rewardCode);
       const toastId = showToast({
-        title: 'Yay, you got it!',
-        description: 'Discount code copied.',
+        title: 'Code copied',
+        description: 'Paste it at checkout on your next upgrade — it stays in clipboard until you overwrite it.',
         dismissible: false,
         variant: 'info',
       });
       window.setTimeout(() => dismissToast(toastId), 1100);
     } catch (_) {
       const toastId = showToast({
-        title: 'Copy failed',
-        description: 'Please copy manually.',
+        title: 'Clipboard blocked',
+        description:
+          'This environment blocked automatic copy. Select the code in this screen and press ⌘C / Ctrl+C, or type it at checkout.',
         dismissible: false,
         variant: 'warning',
       });

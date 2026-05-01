@@ -11,6 +11,7 @@ import {
 } from '../lib/dsImportsStorage';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../lib/safeWebStorage';
 import { useToast } from '../contexts/ToastContext';
+import { getSystemToastOptions } from '../lib/errorCopy';
 import { ImportConversationalPanel, type ImportFeedItem } from '../components/generate/ImportConversationalPanel';
 
 const INTRO_SEEN_KEY = 'comtra-generate-ds-intro-seen';
@@ -261,7 +262,7 @@ function buildTokenAndStyleGapHints(s: DsIndexSummary): ImportGapHint[] {
     hints.push({
       id: 'tokens',
       title: 'No variables (tokens) in this file',
-      body: 'Generate still works, but output is less aligned to your DS color, spacing, and type decisions.',
+      body: 'Create or link variable collections in this file, publish them, then re-run the variables step so Generate can use your real tokens.',
     });
   }
   const st = s.styles_summary;
@@ -270,7 +271,7 @@ function buildTokenAndStyleGapHints(s: DsIndexSummary): ImportGapHint[] {
     hints.push({
       id: 'styles',
       title: 'No local paint, text, or effect styles',
-      body: 'Output can be less polished and less consistent with production if your DS relies on local styles.',
+      body: 'Add or import the styles your DS uses, save the file, and run the import again — or continue knowing styles may need manual polish.',
     });
   }
   return hints;
@@ -284,7 +285,7 @@ function buildComponentsGapHints(s: DsIndexSummary): ImportGapHint[] {
       {
         id: 'components',
         title: 'No components in the index',
-        body: 'Without indexed components, Generate cannot anchor layouts to your real variants and stays more generic.',
+        body: 'Add components to this file (or enable the right library), complete the Components step of the wizard, then save — we need at least one indexed component to mirror your DS.',
       },
     ];
   }
@@ -775,13 +776,8 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         : fileName || 'This file';
 
     if (!wizardCapture?.fullIndex) {
-      showToast({
-        title: 'Server: nessuno snapshot inviato',
-        description:
-          'Manca l’indice completo (wizard). Rifai lo step componenti e conferma di nuovo: altrimenti su /ds-imports/context il payload resta vuoto.',
-        variant: 'warning',
-        dismissible: true,
-      });
+      const snap = getSystemToastOptions('ds_import_snapshot_missing');
+      showToast({ ...snap, dismissible: true });
       onBusyChange(false);
       setFinalizeLoading(false);
       return;
@@ -841,12 +837,10 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
         return;
       }
       setWizardError(msg);
-      showToast({
-        title: 'Salvataggio non completato',
-        description: `${msg} Il catalogo non è considerato pronto finché il server non conferma lo snapshot. Riprova.`,
-        variant: 'warning',
-        dismissible: true,
+      const base = getSystemToastOptions('ds_import_server_save_failed', {
+        description: `${msg} The catalog is not live until the server accepts the snapshot — fix the issue if you can, then save again from the wizard.`,
       });
+      showToast({ ...base, dismissible: true });
       onBusyChange(false);
       setFinalizeLoading(false);
       return;
@@ -878,12 +872,10 @@ export const GenerateDsImport: React.FC<GenerateDsImportProps> = ({
     }
     if (!metaRes.ok) {
       const err = metaRes.error || 'Timeout writing DS metadata';
-      showToast({
-        title: 'Metadati Figma non salvati',
-        description: `${err} Lo snapshot è comunque sul server e verificato; il catalogo è sbloccato. Puoi ripetere l’import se vuoi riscrivere i metadati locali.`,
-        variant: 'warning',
-        dismissible: true,
+      const meta = getSystemToastOptions('ds_import_metadata_local_failed', {
+        description: `${err} The server snapshot is fine; repeat import later if you need local metadata refreshed beside the file.`,
       });
+      showToast({ ...meta, dismissible: true });
     }
 
     setSessionCatalogPrepared(fileKey);

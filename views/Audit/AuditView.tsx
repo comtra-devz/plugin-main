@@ -397,12 +397,12 @@ export const Audit: React.FC<Props> = ({
       if (isLikelyNetworkOrCorsFetchFailure(message)) {
         const opts = getSystemToastOptions('audit_couldnt_start', {
           description:
-            "We couldn't reach Comtra's servers from the plugin. Check your connection or VPN, then retry.",
+            "We couldn't reach Comtra from the plugin. Check Wi‑Fi or VPN, confirm other sites load, then run the audit again — no need to reconnect Figma unless you just changed tokens.",
         });
         showToast({
           ...opts,
           dismissible: true,
-          actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
+          actions: [],
         });
         if (isUx) setUxAuditError(opts.description ?? opts.title);
         return;
@@ -499,7 +499,7 @@ export const Audit: React.FC<Props> = ({
       showToast({
         ...opts,
         dismissible: true,
-        actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
+        actions: [],
       });
       if (
         isUx &&

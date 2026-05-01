@@ -1842,13 +1842,13 @@ figma.ui.onmessage = async (raw: any) => {
         }
         figma.notify(
           modifyMode
-            ? 'Comtra: copia modificata sulla pagina (originale invariata).'
-            : 'Comtra: interfaccia creata sulla pagina corrente.',
+            ? 'Comtra: edits placed on a duplicate — original untouched.'
+            : 'Comtra: layout created on the current page.',
         );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         figma.ui.postMessage({ type: 'action-plan-execute-error', requestId, error: errMsg });
-        figma.notify(`Comtra: errore creazione — ${errMsg}`);
+        figma.notify(`Comtra: couldn't create layout — ${errMsg}`);
       } finally {
         setDsContextIndexRefreshSuspended(false);
       }
@@ -2623,7 +2623,12 @@ figma.ui.onmessage = async (raw: any) => {
         }
       } catch (e: any) {
         const errMsg = String(e?.message || e);
-        if (!isBackground) figma.notify(`Count failed at ${count} nodes: ${errMsg}`, { error: true });
+        if (!isBackground) {
+          figma.notify(
+            `Stopped counting after ${count.toLocaleString()} nodes (${errMsg}). Reselect your frame and try again.`,
+            { error: true },
+          );
+        }
         figma.ui.postMessage({
           type: 'count-nodes-error',
           error: errMsg,
@@ -2650,12 +2655,12 @@ figma.ui.onmessage = async (raw: any) => {
       });
       if (!ok) {
         figma.notify(
-          'Could not select that layer — the file may have changed since the audit, or the layer was removed.',
+          "Couldn't jump to that layer — refresh the audit or pick an issue from the current file.",
           { error: true },
         );
       }
     } else {
-      figma.notify('No layer ID for this issue.', { error: true });
+      figma.notify('No layer reference on this issue — open the issue from a fresh audit.', { error: true });
       figma.ui.postMessage({ type: 'select-layer-result', layerId: '', ok: false });
     }
   }
@@ -2669,7 +2674,9 @@ figma.ui.onmessage = async (raw: any) => {
           await figma.setCurrentPageAsync(page);
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
-          figma.notify(`Could not switch page: ${errMsg}`, { error: true });
+          figma.notify(`Couldn't switch page (${errMsg}). Open that page in Figma and retry from the audit.`, {
+            error: true,
+          });
         }
       }
     }
@@ -2813,7 +2820,10 @@ figma.ui.onmessage = async (raw: any) => {
         figma.notify("Contrast fix applied — " + (node ? node.name : 'layer'));
         await selectLayerAndReveal(layerId);
       } else {
-        figma.notify("Could not apply contrast fix", { error: true });
+        figma.notify(
+          "Contrast fix couldn't apply — unlock the layer or use variables attached to this fill.",
+          { error: true },
+        );
       }
       return;
     }
@@ -2834,7 +2844,10 @@ figma.ui.onmessage = async (raw: any) => {
         figma.notify('Touch target fix applied — ' + (node ? node.name : 'layer'));
         await selectLayerAndReveal(applyId);
       } else {
-        figma.notify('Could not apply touch target fix', { error: true });
+        figma.notify(
+          "Touch-target fix couldn't apply — check the layer is not locked and has resizable padding or frame.",
+          { error: true },
+        );
       }
       return;
     }
@@ -2844,7 +2857,7 @@ figma.ui.onmessage = async (raw: any) => {
       figma.notify("Fix applied to " + node.name);
       await selectLayerAndReveal(layerId);
     } else {
-      figma.notify("Layer not found", { error: true });
+      figma.notify("That layer isn't in the file anymore — re-run the audit and open the issue again.", { error: true });
     }
   }
 
