@@ -415,6 +415,13 @@ export const Audit: React.FC<Props> = ({
         return;
       }
 
+      /** Platform / CDN / serverless wall-clock (504, gateway, Lambda) — misleading to blame frame size. */
+      const isServerOrGatewayWallClock =
+        httpStatus === 504 ||
+        httpStatus === 524 ||
+        /\b504\b/.test(lowerMsg) ||
+        /\b524\b/.test(lowerMsg) ||
+        /\bgateway timeout\b|\bendpoint request timed out\b|\blambda deadline\b|\binvocation timed out\b|\b504 gateway\b/i.test(lowerMsg);
       const isTimeout =
         /\b504\b|\b524\b|\b408\b|gateway timeout|endpoint request timed out|lambda deadline|socket hang up/i.test(lowerMsg) ||
         /\baudit timed out\b/i.test(lowerMsg) ||
@@ -467,7 +474,9 @@ export const Audit: React.FC<Props> = ({
       const kimiValidationDescription = isUx
         ? 'UX audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.'
         : 'DS audit request was rejected by the AI engine. Try Current Selection or a single page, then retry.';
-      const opts = isTimeout
+      const opts = isServerOrGatewayWallClock
+        ? getSystemToastOptions('audit_server_or_provider_timeout')
+        : isTimeout
         ? getSystemToastOptions('audit_timed_out')
         : isRateLimited
           ? getSystemToastOptions('service_unavailable', {
@@ -1306,14 +1315,9 @@ export const Audit: React.FC<Props> = ({
               setTimeout(() => setIsCalculating(false), 200);
             }
           } catch (err) {
-            let message = err instanceof Error ? err.message : 'Something went wrong';
-            if (
-              /\b504\b|\b524\b|\b408\b|gateway timeout|endpoint request timed out|lambda deadline|socket hang up|\btimed out\b|deadline exceeded/i.test(
-                message,
-              )
-            ) {
-              message = 'Audit timed out. Try again shortly or reduce scope.';
-            }
+            // Keep the original message (e.g. "… — HTTP 504") so showAuditError can classify
+            // server/gateway wall-clock vs selection size. Do not replace with a generic string.
+            const message = err instanceof Error ? err.message : 'Something went wrong';
             setAuditError(message);
           } finally {
             setPendingScanType(null);

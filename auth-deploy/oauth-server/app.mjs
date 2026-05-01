@@ -3312,11 +3312,20 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     return res.status(500).json({ error: 'System prompt not found' });
   }
 
+  const dsAuditReqStart = Date.now();
   try {
     let fileJson;
     try {
       const resolved = await resolveDesignDocumentFromBody({ body, userId, fallbackScope: 'all' });
       fileJson = resolved.fileJson;
+      console.info(
+        '[DS_AUDIT_TIMING] ' +
+          JSON.stringify({
+            phase: 'resolve_design_document_ms',
+            ms: Date.now() - dsAuditReqStart,
+            file_key: resolved.fileKey || body?.file_key || null,
+          }),
+      );
     } catch (resolveErr) {
       const status = Number(resolveErr?.status) || 400;
       const code = resolveErr?.code;
@@ -3354,13 +3363,20 @@ app.post('/api/agents/ds-audit', async (req, res) => {
         ? ' Nota: il payload e` stato compattato lato server per limiti di richiesta; usa solo i campi presenti senza assumere dati mancanti.'
         : ''
     }\n\n${JSON.stringify(dsPromptInput.payload)}`;
-    console.info('DS Audit: prompt payload', {
-      model: KIMI_MODEL,
-      compacted: dsPromptInput.compacted,
-      original_chars: safeJsonSize(fileJson),
-      prompt_chars: userMessage.length,
-    });
+    const beforeKimiMs = Date.now() - dsAuditReqStart;
+    console.info(
+      '[DS_AUDIT_TIMING] ' +
+        JSON.stringify({
+          phase: 'prompt_built',
+          model: KIMI_MODEL,
+          compacted: dsPromptInput.compacted,
+          original_chars: safeJsonSize(fileJson),
+          prompt_chars: userMessage.length,
+          ms_since_request_start: beforeKimiMs,
+        }),
+    );
 
+    const kimiHttpStart = Date.now();
     const kimiRes = await withKimiConcurrencySlot(() =>
       fetch('https://api.moonshot.ai/v1/chat/completions', {
         method: 'POST',
@@ -3379,6 +3395,17 @@ app.post('/api/agents/ds-audit', async (req, res) => {
           }),
         ),
       }),
+    );
+    const kimiHttpMs = Date.now() - kimiHttpStart;
+    console.info(
+      '[DS_AUDIT_TIMING] ' +
+        JSON.stringify({
+          phase: 'kimi_queue_wait_plus_http_ms',
+          ms: kimiHttpMs,
+          ok: kimiRes.ok,
+          status: kimiRes.status,
+          note: 'queue Redis + HTTP Moonshot',
+        }),
     );
     if (!kimiRes.ok) {
       const t = await kimiRes.text();
@@ -3437,6 +3464,13 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     }
 
     const libraryContextHint = getLibraryContextHint(fileJson);
+    console.info(
+      '[DS_AUDIT_TIMING] ' +
+        JSON.stringify({
+          phase: 'total_request_wall_ms_ok',
+          ms: Date.now() - dsAuditReqStart,
+        }),
+    );
     res.json({
       issues,
       spec_snapshot: specSnapshot,
@@ -3447,6 +3481,14 @@ app.post('/api/agents/ds-audit', async (req, res) => {
     });
   } catch (err) {
     console.error('POST /api/agents/ds-audit', err);
+    console.error(
+      '[DS_AUDIT_TIMING] ' +
+        JSON.stringify({
+          phase: 'failed_after_ms',
+          ms: typeof dsAuditReqStart === 'number' ? Date.now() - dsAuditReqStart : null,
+          code: err?.code ?? null,
+        }),
+    );
     if (err?.code === 'KIMI_QUEUE_TIMEOUT') {
       return res.status(503).json({
         error: err.message || 'Too many simultaneous AI requests. Retry shortly.',

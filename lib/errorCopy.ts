@@ -121,7 +121,15 @@ const COPY: Record<string, SystemToastOptions> = {
   audit_timed_out: {
     title: 'Audit timed out',
     description:
-      'The scan ran too long or the connection dropped. Wait a minute, pick a smaller frame or page, then run the audit again.',
+      'The request stalled or dropped before a full response arrived. Wait a moment and run the audit again. If it keeps failing, try Current selection or a single page — otherwise the bottleneck is usually network load, not canvas size.',
+    variant: 'warning',
+    ctaLabel: 'Run audit again',
+  },
+  /** HTTP 504/524, gateway/Lambda deadline — server or AI provider wall-clock limit; not “selection too large”. */
+  audit_server_or_provider_timeout: {
+    title: 'Audit timed out on our side',
+    description:
+      'Comtra or the AI provider stopped waiting for a complete response (platform time limit). This usually reflects load or queueing — not that your selection is too small or large. Wait one to two minutes and run the audit again.',
     variant: 'warning',
     ctaLabel: 'Run audit again',
   },
