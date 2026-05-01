@@ -15,6 +15,14 @@ export const AUTH_BACKEND_URL =
 export const SHOW_FIGMA_LOGIN =
   typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SHOW_FIGMA_LOGIN === 'true';
 
+/**
+ * URL (gif/mp4) mostrato nel gate PAT pre-audit. Opzionale: se vuoto, nessun media.
+ * Esempio: asset hostato o file statico in `/`
+ */
+export const FIGMA_PAT_ONBOARDING_GIF_URL =
+  (typeof import.meta !== 'undefined' && String((import.meta as any).env?.VITE_FIGMA_PAT_ONBOARDING_GIF_URL || '').trim()) ||
+  '';
+
 /** Plugin ID (manifest); usato per postMessage sicuro verso Figma */
 export const FIGMA_PLUGIN_ID = 'COMTRA_PLUGIN_DEV_ID';
 

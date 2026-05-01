@@ -57,9 +57,10 @@ CREATE INDEX IF NOT EXISTS idx_affiliates_lemon_id ON affiliates(lemon_affiliate
 CREATE TABLE IF NOT EXISTS figma_tokens (
   user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   access_token TEXT NOT NULL,
-  refresh_token TEXT NOT NULL,
+  refresh_token TEXT,
   expires_at TIMESTAMPTZ NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  token_kind TEXT NOT NULL DEFAULT 'oauth'
 );
 
 -- XP e livelli (gamification)

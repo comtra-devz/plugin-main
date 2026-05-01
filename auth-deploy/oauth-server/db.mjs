@@ -1,11 +1,14 @@
 /**
  * Postgres client compatibile con Supabase (pooler). Usa DATABASE_URL o POSTGRES_URL.
  * Restituisce { rows, rowCount } come @vercel/postgres per non cambiare i chiamanti.
+ *
+ * prepare: false — Supabase pool (PgBouncer transaction mode) invalida prepared statements
+ * tra richieste serverless; senza questo si vede PostgresError "prepared statement does not exist".
  */
 import postgres from 'postgres';
 
 const URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-const raw = URL ? postgres(URL, { max: 1 }) : null;
+const raw = URL ? postgres(URL, { max: 1, prepare: false }) : null;
 
 function wrapResult(rows) {
   const r = Array.isArray(rows) ? rows : rows || [];

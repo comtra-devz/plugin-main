@@ -49,6 +49,8 @@ export interface User {
   tags?: string[];
   /** Collegato Figma (OAuth) — "Personal details" in sola lettura. */
   figma_user_id?: string | null;
+  /** Token Figma salvato server-side (OAuth o PAT): stesso percorso REST degli audit. */
+  has_figma_rest_token?: boolean;
   first_name?: string | null;
   surname?: string | null;
   profile_saved_at?: string | null;

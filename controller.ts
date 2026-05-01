@@ -2375,11 +2375,12 @@ figma.ui.onmessage = async (raw: any) => {
     return;
   }
 
-  // File context: for "all/page" we send identifiers and backend fetches via REST API. Scope "current" sends fileJson from plugin.
+  // File context: backend-first uses file_key + scope/page/node ids (light). Plugin-side fileJson only when metadataOnly is false or All Pages needs inline fallback (email / no OAuth).
   if (msg.type === 'get-file-context') {
     const scope = msg.scope as 'all' | 'current' | 'page' | undefined;
     const pageId = msg.pageId;
     const includeFileJson = msg.includeFileJson === true;
+    const metadataOnly = msg.metadataOnly === true;
     const POST_MESSAGE_SIZE_LIMIT = 1.4e6;
     const CHUNK_SIZE = 1e6;
     (async () => {
@@ -2394,6 +2395,21 @@ figma.ui.onmessage = async (raw: any) => {
             const t = first.type;
             selectionType = t === 'FRAME' ? 'Frame' : t === 'COMPONENT' ? 'Component' : t === 'INSTANCE' ? 'Instance' : t === 'GROUP' ? 'Group' : t === 'SECTION' ? 'Section' : t === 'PAGE' ? 'Page' : 'Selection';
           }
+        }
+
+        if (metadataOnly && (scope === 'current' || scope === 'page')) {
+          if (!base.fileKey) {
+            figma.ui.postMessage({
+              type: 'file-context-result',
+              ...base,
+              selectionType,
+              selectionName,
+              error: 'FILE_LINK_UNAVAILABLE',
+            });
+            return;
+          }
+          figma.ui.postMessage({ type: 'file-context-result', ...base, selectionType, selectionName });
+          return;
         }
 
         if (scope === 'current' || scope === 'page' || (scope === 'all' && includeFileJson)) {

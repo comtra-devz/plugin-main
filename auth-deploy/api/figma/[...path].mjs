@@ -2,6 +2,7 @@
  * Unico handler per /api/figma/* (resta sotto il limite di 12 Serverless Functions su Vercel Hobby).
  * - /api/figma/file -> POST only
  * - /api/figma/token-status -> GET o POST (debug token)
+ * - /api/figma/personal-access-token -> POST (PAT)
  */
 import app from '../../oauth-server/app.mjs';
 
@@ -22,6 +23,15 @@ export default function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(204).end();
     if (req.method !== 'POST') return res.status(405).end();
     req.url = '/api/figma/file';
+    return app(req, res);
+  }
+
+
+  if (segment === 'personal-access-token') {
+    setCors(res, 'POST, OPTIONS');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    if (req.method !== 'POST') return res.status(405).end();
+    req.url = '/api/figma/personal-access-token';
     return app(req, res);
   }
 

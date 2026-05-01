@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { APP_VERSION, COLORS } from '../constants';
+import { APP_VERSION, COLORS, SHOW_FIGMA_LOGIN } from '../constants';
+import { profileAttentionTitle, userNeedsProfileAttentionDot } from '../lib/profileAttention';
 import { User } from '../types';
 
 interface Props {
@@ -25,17 +26,11 @@ interface Props {
   onOpenTerms: () => void;
 }
 
-/** Dot finché non c’è profilo salvato (magic) o c’è conflitto Figma. */
-function showPersonalDetailsDot(u: User): boolean {
-  if (u.name_conflict && typeof u.name_conflict === 'object') return true;
-  if (u.show_profile_badge) return true;
-  const hasFigma = u.figma_user_id != null && String(u.figma_user_id).trim() !== '';
-  if (hasFigma) return false;
-  if (u.profile_saved_at) return false;
-  return true;
-}
-
-export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetchError, onRetryCredits, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onPersonalDetails, onOpenDocs, onOpenPrivacy, onOpenTerms }) => (
+export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetchError, onRetryCredits, lowCreditsWarning, isTestUser, simulateFreeTier, onSimulateFreeTierChange, usingSimulatedCredits, onResetSimulatedCredits, onClose, onLogout, onManageSub, onPersonalDetails, onOpenDocs, onOpenPrivacy, onOpenTerms }) => {
+  const patGateActive = !SHOW_FIGMA_LOGIN;
+  const personalDetailsDot = userNeedsProfileAttentionDot(user, patGateActive);
+  const personalDetailsDotTitle = profileAttentionTitle(user, patGateActive);
+  return (
   <div className="fixed inset-0 z-[60]">
     <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
     <div data-component="Profile: Sheet Container" className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] absolute top-16 right-4 w-72 overflow-hidden animate-in slide-in-from-top-2">
@@ -115,10 +110,10 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
         >
           <span className="truncate">Personal details</span>
           <span className="h-6 w-6 flex items-center justify-center justify-self-end" aria-hidden>
-            {showPersonalDetailsDot(user) ? (
+            {personalDetailsDot ? (
               <span
                 className="h-3 w-3 rounded-full border-2 border-white bg-red-600 shadow-[0_0_0_1px_#000]"
-                title="Complete Personal details"
+                title={personalDetailsDotTitle}
               />
             ) : null}
           </span>
@@ -158,4 +153,5 @@ export const ProfileSheet: React.FC<Props> = ({ user, creditsLabel, creditsFetch
       </div>
     </div>
   </div>
-);
+  );
+};

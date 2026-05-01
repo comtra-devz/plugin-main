@@ -99,7 +99,8 @@ const COPY: Record<string, SystemToastOptions> = {
   // 5 — Audit
   audit_couldnt_start: {
     title: "Audit couldn't start",
-    description: "Comtra lost the connection to your file. This usually fixes itself — try again.",
+    description:
+      "We couldn't complete this audit. Retry once — if it keeps failing, try a smaller selection or switch scope.",
     variant: 'warning',
     ctaLabel: 'Retry',
   },

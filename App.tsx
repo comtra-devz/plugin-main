@@ -28,7 +28,7 @@ import type {
 } from './views/Code/types';
 import { SyncScanRateLimitedError } from './lib/syncScanRateLimitedError';
 import { isLikelyNetworkOrCorsFetchFailure } from './lib/pluginFetchErrors';
-import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage } from './constants';
+import { AUTH_BACKEND_URL, TEST_USER_EMAILS, FREE_TIER_CREDITS, buildCheckoutRedirectUrl, getSimulateFreeTierFromStorage, setSimulateFreeTierInStorage, getSimulatedCreditsFromStorage, setSimulatedCreditsInStorage, SHOW_FIGMA_LOGIN } from './constants';
 import { getSystemToastOptions } from './lib/errorCopy';
 import { replaceDsImportsFromServer } from './lib/dsImportsStorage';
 import {
@@ -58,6 +58,13 @@ function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+/** Normalizes audit fetch failures so the UI can classify (413 payload, 401 session, …). */
+function formatAuditHttpError(parsedMessage: string, rawBody: string, status: number): string {
+  const base = (parsedMessage || '').trim() || rawBody.trim().slice(0, 400).trim();
+  const head = base.length > 0 ? base : 'Request failed';
+  return `${head} — HTTP ${status}`;
 }
 
 /** Moonshot TPM (429) + server-side concurrency queue (503 KIMI_QUEUE_TIMEOUT): retry in iframe. */
@@ -189,6 +196,7 @@ function normalizeOAuthUser(raw: {
   total_xp?: number; current_level?: number; xp_for_next_level?: number; xp_for_current_level_start?: number;
   credits_total?: number; credits_used?: number; credits_remaining?: number;
   figma_user_id?: string | null;
+  has_figma_rest_token?: boolean;
   first_name?: string | null;
   surname?: string | null;
   profile_saved_at?: string | null;
@@ -224,6 +232,7 @@ function normalizeOAuthUser(raw: {
     xp_for_next_level: raw.xp_for_next_level,
     xp_for_current_level_start: raw.xp_for_current_level_start,
     figma_user_id: raw.figma_user_id,
+    has_figma_rest_token: raw.has_figma_rest_token === true,
     first_name: raw.first_name,
     surname: raw.surname,
     profile_saved_at: raw.profile_saved_at,
@@ -1340,7 +1349,7 @@ export default function AppTest() {
       }
       if (r.status === 503 && j.code !== 'KIMI_QUEUE_TIMEOUT') handle503();
       console.warn('[Comtra] POST /api/agents/ds-audit failed', r.status, msg.slice(0, 400));
-      throw new Error(msg);
+      throw new Error(formatAuditHttpError(msg, text, r.status));
     }
     return r.json();
   }, [user?.authToken, handle503]);
@@ -1355,7 +1364,10 @@ export default function AppTest() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
       body: JSON.stringify(payload),
     });
-    if (r.status === 503) { handle503(); throw new Error('Service temporarily unavailable'); }
+    if (r.status === 503) {
+      handle503();
+      throw new Error(formatAuditHttpError('Service temporarily unavailable', '', r.status));
+    }
     if (!r.ok) {
       const text = await r.text();
       let msg = text;
@@ -1366,7 +1378,7 @@ export default function AppTest() {
       } catch {
         // keep as-is
       }
-      throw new Error(msg);
+      throw new Error(formatAuditHttpError(msg, text, r.status));
     }
     return r.json();
   }, [user?.authToken, handle503]);
@@ -1392,8 +1404,9 @@ export default function AppTest() {
       } catch {
         // keep as-is
       }
+      if (j.code) msg = `${msg} (${j.code})`;
       if (r.status === 503 && j.code !== 'KIMI_QUEUE_TIMEOUT') handle503();
-      throw new Error(msg);
+      throw new Error(formatAuditHttpError(msg, text, r.status));
     }
     return r.json();
   }, [user?.authToken, handle503]);
@@ -2710,7 +2723,15 @@ export default function AppTest() {
             fetchA11yAudit={fetchA11yAudit}
             fetchUxAudit={fetchUxAudit}
             authToken={user?.authToken}
-            preferServerFigmaFetch={Boolean(user?.figma_user_id != null && String(user.figma_user_id).trim() !== '')}
+            preferServerFigmaFetch={Boolean(
+              (user?.figma_user_id != null && String(user.figma_user_id).trim() !== '') ||
+                user?.has_figma_rest_token === true
+            )}
+            patGateEnabled={!SHOW_FIGMA_LOGIN}
+            onNavigateToPersonalDetails={() => {
+              setShowProfile(false);
+              setView(ViewState.PERSONAL_DETAILS);
+            }}
             canvasSelectionActive={selectedNode !== null}
             onNavigateToGenerate={(prompt) => {
               setGenPrompt(prompt);

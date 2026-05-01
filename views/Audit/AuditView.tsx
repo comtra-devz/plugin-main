@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BRUTAL, TIER_LIMITS, PRIVACY_CONTENT, getScanCostAndSize, getA11yCostAndSize, getPrototypeAuditCost, UX_AUDIT_CREDITS, COUNT_CAP, AUTH_BACKEND_URL, SHOW_FIGMA_LOGIN } from '../../constants';
+import { FigmaPatGateModal } from '../../components/FigmaPatGateModal';
 import { UserPlan, AuditIssue, DsAuditSummary, DsQualityGates } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CircularScore } from '../../components/widgets/CircularScore';
@@ -79,11 +80,29 @@ interface Props {
   preferServerFigmaFetch?: boolean;
   /** True when one or more layers are selected on the Figma canvas (synced via selection-changed). */
   canvasSelectionActive: boolean;
+  /**
+   * When true, DS + UX “scan” first shows the Figma PAT gate (no server REST yet). Off when `SHOW_FIGMA_LOGIN` / OAuth path ships.
+   */
+  patGateEnabled?: boolean;
+  /** Navigate to Personal details (save PAT). */
+  onNavigateToPersonalDetails?: () => void;
 }
 
 type AuditTab = 'DS' | 'A11Y' | 'UX' | 'PROTOTYPE';
 
 import { getSystemToastOptions, isFileNotSavedError, isFigmaConnectionError } from '../../lib/errorCopy';
+import { isLikelyNetworkOrCorsFetchFailure } from '../../lib/pluginFetchErrors';
+
+/** Matches `formatAuditHttpError` suffix in App.tsx (`… — HTTP 413`). */
+function extractTrailingHttpStatus(message: string): number | null {
+  const m = /HTTP\s+(\d{3})\s*$/i.exec(message.trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Plugin serialize + chunked postMessage after `get-file-context` often exceeds a few tens of seconds on large frames. */
+const FILE_CONTEXT_GUARD_MS = 120_000;
 
 export const Audit: React.FC<Props> = ({
   plan,
@@ -104,9 +123,14 @@ export const Audit: React.FC<Props> = ({
   authToken,
   preferServerFigmaFetch = false,
   canvasSelectionActive,
+  patGateEnabled = false,
+  onNavigateToPersonalDetails,
 }) => {
   const { showToast } = useToast();
+  const needsPatGateBeforeHeavyAudit = patGateEnabled && !preferServerFigmaFetch;
   const [activeTab, setActiveTab] = useState<AuditTab>('DS');
+  /** Pre-flight modal: add Figma PAT before DS/UX credit confirmation when OAuth UI is off. */
+  const [patGateOpen, setPatGateOpen] = useState(false);
   const [hasAudited, setHasAudited] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
@@ -265,7 +289,19 @@ export const Audit: React.FC<Props> = ({
 
   // Scope/page change invalidates DS/A11Y/UX snapshots. Reset to initial state so we never
   // show stale 100% (or stale issues) for a new selection before a fresh scan.
+  // Exception: scanScope flipping only between `current` and `unselected` is driven by canvas
+  // selection empty/fill — do not wipe a completed audit when the user briefly deselects.
+  const prevScanScopeForResetRef = useRef<ScanScope | null>(null);
   useEffect(() => {
+    const prevScope = prevScanScopeForResetRef.current;
+    prevScanScopeForResetRef.current = scanScope;
+    if (
+      prevScope != null &&
+      ((prevScope === 'current' && scanScope === 'unselected') ||
+        (prevScope === 'unselected' && scanScope === 'current'))
+    ) {
+      return;
+    }
     setWcagLevelFilter('AA');
     setActiveCat(null);
     setExpandedIssue(null);
@@ -354,11 +390,41 @@ export const Audit: React.FC<Props> = ({
         });
         return;
       }
+
       const lowerMsg = message.toLowerCase();
+      const httpStatus = extractTrailingHttpStatus(message);
+
+      if (isLikelyNetworkOrCorsFetchFailure(message)) {
+        const opts = getSystemToastOptions('audit_couldnt_start', {
+          description:
+            "We couldn't reach Comtra's servers from the plugin. Check your connection or VPN, then retry.",
+        });
+        showToast({
+          ...opts,
+          dismissible: true,
+          actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
+        });
+        if (isUx) setUxAuditError(opts.description ?? opts.title);
+        return;
+      }
+
+      if (httpStatus === 401) {
+        const opts = getSystemToastOptions('session_expired');
+        showToast({ ...opts, dismissible: true, actions: [] });
+        if (isUx) setUxAuditError(opts.description ?? opts.title);
+        return;
+      }
+
       const isTimeout =
         /\b504\b|\b524\b|\b408\b|gateway timeout|endpoint request timed out|lambda deadline|socket hang up/i.test(lowerMsg) ||
-        /\baudit timed out\b/i.test(lowerMsg);
-      const isRateLimited = lowerMsg.includes('kimi_rate_limit') || lowerMsg.includes('rate limit') || lowerMsg.includes('rate-limited');
+        /\baudit timed out\b/i.test(lowerMsg) ||
+        /\brequest timed out\b/i.test(lowerMsg);
+      const isRateLimited =
+        lowerMsg.includes('kimi_rate_limit') ||
+        lowerMsg.includes('rate limit') ||
+        lowerMsg.includes('rate-limited') ||
+        lowerMsg.includes('kimi_queue_timeout') ||
+        lowerMsg.includes('too many simultaneous ai requests');
       const isUxInputTooLarge = lowerMsg.includes('ux_audit_input_too_large') || lowerMsg.includes('selection too large for ux audit');
       const isDsInputTooLarge =
         lowerMsg.includes('ds_audit_input_too_large') ||
@@ -369,22 +435,32 @@ export const Audit: React.FC<Props> = ({
         lowerMsg.includes('a11y_file_too_large') ||
         lowerMsg.includes('file too large for full scan') ||
         lowerMsg.includes('file too large for a11y');
-      const isInputTooLarge = isUxInputTooLarge || isDsInputTooLarge || isA11yPayloadTooLarge;
+      const isHttpPayloadTooLarge =
+        httpStatus === 413 ||
+        httpStatus === 431 ||
+        /\bpayload too large|request entity too large|entity too large\b/i.test(lowerMsg);
+      const isInputTooLarge =
+        isUxInputTooLarge || isDsInputTooLarge || isA11yPayloadTooLarge || isHttpPayloadTooLarge;
       /** Kimi / Moonshot failures only — never use for Accessibility (deterministic engine, no LLM). */
       const isKimiValidation =
         !isA11y &&
-        (/kimi api error|moonshot|kimi_rate_limit|invalid_request_error|exceeded model token|context length exceeded|max_completion_tokens|max tokens|input too long/i.test(
+        (/kimi api error|moonshot|kimi_rate_limit|invalid_request_error|exceeded model token|context length exceeded|max_completion_tokens|max tokens|input too long|prompt is too long|reduce (?:the )?(?:prompt|length)|maximum context|tokens exceeded/i.test(
           lowerMsg,
         ) ||
           (!/figma\.com|"err"\s*:|"status"\s*:\s*4\d\d/.test(message) &&
             /\binvalid_request_error\b|\bcontext window\b|\bprompt tokens\b/i.test(lowerMsg)));
+      const isUpstreamOrGateway =
+        !isA11y &&
+        (httpStatus === 502 ||
+          httpStatus === 504 ||
+          (httpStatus === 503 && !lowerMsg.includes('kimi_queue_timeout')));
       const busyDescription = isUx
         ? 'The UX audit is temporarily busy. Please retry in about a minute.'
         : isA11y
           ? 'The accessibility audit is temporarily busy. Please retry in about a minute.'
           : 'The DS audit is temporarily busy. Please retry in about a minute.';
       const tooLargeDescription = isUx
-        ? 'This selection is too large for UX Audit. Try a smaller frame group or a tighter page section.'
+        ? 'This selection may be too heavy to send (common with very tall mobile screens). Scan one section at a time, or split the frame.'
         : isA11y
           ? 'This page has more layers than we can scan in one pass. Use Current selection to pick one section, or hide heavy symbol pages and retry.'
           : 'This selection is too large for DS Audit. Try Current Selection or a single page, then retry.';
@@ -401,6 +477,11 @@ export const Audit: React.FC<Props> = ({
           ? getSystemToastOptions('audit_timed_out', {
               description: tooLargeDescription,
             })
+        : isUpstreamOrGateway
+          ? getSystemToastOptions('analysis_interrupted', {
+              description:
+                'The audit service hit an upstream error. Retry shortly — extremely large selections make this more likely.',
+            })
         : isA11y
           ? getSystemToastOptions('audit_couldnt_start', {
               description:
@@ -410,13 +491,25 @@ export const Audit: React.FC<Props> = ({
           ? getSystemToastOptions('audit_couldnt_start', {
               description: kimiValidationDescription,
             })
+        : httpStatus != null
+          ? getSystemToastOptions('audit_couldnt_start', {
+              description: `We couldn't finish this audit (HTTP ${httpStatus}). Retry once — very tall frames often need a smaller scope.`,
+            })
           : getSystemToastOptions('audit_couldnt_start');
       showToast({
         ...opts,
         dismissible: true,
         actions: onRetryConnection ? [{ label: opts.ctaLabel ?? 'Retry', onClick: onRetryConnection }] : [],
       });
-      if (isUx && (isKimiValidation || isRateLimited || isInputTooLarge || isTimeout)) {
+      if (
+        isUx &&
+        (isKimiValidation ||
+          isRateLimited ||
+          isInputTooLarge ||
+          isTimeout ||
+          isUpstreamOrGateway ||
+          httpStatus != null)
+      ) {
         setUxAuditError(opts.description ?? opts.title);
       }
     },
@@ -448,7 +541,10 @@ export const Audit: React.FC<Props> = ({
       : dsAuditIssues;
 
   // Determine which issue set to use (DS / A11Y use real issues from agent when available)
-  let currentIssues = activeTab === 'DS' && dsAuditIssuesForList != null ? dsAuditIssuesForList : DS_ISSUES;
+  let currentIssues =
+    activeTab === 'DS'
+      ? (dsAuditIssuesForList != null ? dsAuditIssuesForList : hasAudited ? [] : DS_ISSUES)
+      : DS_ISSUES;
   if (activeTab === 'A11Y') currentIssues = a11yAuditIssues != null ? (selectedPageName ? a11yIssuesScoped : a11yAuditIssues) : A11Y_ISSUES;
   if (activeTab === 'UX') currentIssues = hasUxAudited && uxAuditIssues != null ? uxAuditIssues : [];
   if (activeTab === 'PROTOTYPE') currentIssues = hasProtoAudited && protoAuditIssues ? protoAuditIssues : [];
@@ -555,10 +651,13 @@ export const Audit: React.FC<Props> = ({
       setWaitingForFileContext(false);
       setIsLaunchingAudit(false);
       setIsCalculating(false);
-      showAuditError('File context request timed out. Please retry the scan.', activeTab === 'A11Y', activeTab === 'UX');
-    }, 25000);
+      const payload = confirmPayloadRef.current;
+      const isUx = payload?.pendingScanType === 'UX';
+      const isA11y = payload?.pendingScanType === 'A11Y';
+      showAuditError('File context request timed out. Please retry the scan.', isA11y, isUx);
+    }, FILE_CONTEXT_GUARD_MS);
     return () => clearTimeout(t);
-  }, [waitingForFileContext, activeTab, showAuditError]);
+  }, [waitingForFileContext, showAuditError]);
 
   // Rotate Prototype loader messages (same ToV)
   const isProtoLoader = activeTab === 'PROTOTYPE' && protoAuditLoading;
@@ -976,24 +1075,19 @@ export const Audit: React.FC<Props> = ({
         else setAuditScopeLabel('Page');
         setAuditScopeName(typeof msg.selectionName === 'string' ? msg.selectionName : '');
         setAuditScopeIsCurrent(msg.scope === 'current');
-        // OAuth-linked accounts: backend-first via file_key on full-file scopes (linear, server token). Email-only: plugin file_json when available (no server token).
+        // OAuth-linked: always send file_key + scope so the server fetches via Figma REST (small request body).
+        // Plugin still builds file_json for inline fallback after FIGMA_RECONNECT / token errors only.
         const auditBody =
           preferServerFigmaFetch
-            ? (() => {
-                const shouldUsePluginJson =
-                  hasFileJson && (msg.scope === 'current' || msg.scope === 'page');
-                return shouldUsePluginJson
-                  ? { file_json: msg.fileJson as object }
-                  : hasFileKey
-                    ? {
-                        file_key: msg.fileKey as string,
-                        scope: msg.scope ?? 'all',
-                        page_id: msg.pageId ?? undefined,
-                        node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
-                        page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
-                      }
-                    : { file_json: msg.fileJson as object };
-              })()
+            ? hasFileKey
+              ? {
+                  file_key: msg.fileKey as string,
+                  scope: msg.scope ?? 'all',
+                  page_id: msg.pageId ?? undefined,
+                  node_ids: Array.isArray(msg.nodeIds) ? msg.nodeIds : undefined,
+                  page_ids: Array.isArray(msg.pageIds) ? msg.pageIds : undefined,
+                }
+              : { file_json: msg.fileJson as object }
             : hasFileJson
               ? { file_json: msg.fileJson as object }
               : {
@@ -1225,6 +1319,7 @@ export const Audit: React.FC<Props> = ({
             setPendingScanType(null);
             setWaitingForFileContext(false);
             setIsLaunchingAudit(false);
+            setIsCalculating(false);
             setA11yAuditLoading((prev) => (isA11yScan ? false : prev));
             setDsAuditLoading((prev) => (!isA11yScan ? false : prev));
             setUxAuditLoading((prev) => (isUxScan ? false : prev));
@@ -1236,18 +1331,28 @@ export const Audit: React.FC<Props> = ({
     return () => window.removeEventListener('message', handler);
   }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditError, preferServerFigmaFetch]);
 
+  const handleOpenPatGatePersonalDetails = useCallback(() => {
+    setPatGateOpen(false);
+    onNavigateToPersonalDetails?.();
+  }, [onNavigateToPersonalDetails]);
+
   const handleStartScan = useCallback(() => {
     if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
     if (knownZeroCredits) {
       onUnlockRequest();
       return;
     }
+    if (needsPatGateBeforeHeavyAudit) {
+      setPatGateOpen(true);
+      return;
+    }
+    setAuditFixError(null);
     setIsCalculating(true);
     setScanProgress({ percent: 0, count: 0 });
     const scope = scanScope;
     const pageId = scope === 'page' ? selectedPageId : undefined;
     window.parent.postMessage({ pluginMessage: { type: 'count-nodes', scope, pageId, countCap: COUNT_CAP } }, '*');
-  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId]);
+  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId, needsPatGateBeforeHeavyAudit]);
 
   const handleRunA11yAudit = useCallback(() => {
     if (scanScope === 'unselected' || (scanScope === 'page' && !selectedPageId)) return;
@@ -1256,6 +1361,7 @@ export const Audit: React.FC<Props> = ({
       return;
     }
     pendingAuditKindRef.current = 'A11Y';
+    setAuditFixError(null);
     setIsCalculating(true);
     setScanProgress({ percent: 0, count: 0 });
     window.parent.postMessage(
@@ -1272,6 +1378,10 @@ export const Audit: React.FC<Props> = ({
       return;
     }
     if (!fetchUxAudit) return;
+    if (needsPatGateBeforeHeavyAudit) {
+      setPatGateOpen(true);
+      return;
+    }
     const cost: number = UX_AUDIT_CREDITS;
     setConfirmConfig({
       isOpen: true,
@@ -1281,6 +1391,7 @@ export const Audit: React.FC<Props> = ({
       onConfirm: () => {
         setIsLaunchingAudit(true);
         setConfirmConfig(null);
+        setAuditFixError(null);
         setUxAuditError(null);
         confirmPayloadRef.current = { cost, score: 0, pendingScanType: 'UX' };
         setWaitingForFileContext(true);
@@ -1290,13 +1401,20 @@ export const Audit: React.FC<Props> = ({
         const pageId = scanScope === 'page' ? selectedPageId ?? undefined : undefined;
         requestAnimationFrame(() => {
           window.parent.postMessage(
-            { pluginMessage: { type: 'get-file-context', scope, pageId } },
+            {
+              pluginMessage: {
+                type: 'get-file-context',
+                scope,
+                pageId,
+                metadataOnly: preferServerFigmaFetch,
+              },
+            },
             '*'
           );
         });
       },
     });
-  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId, fetchUxAudit]);
+  }, [knownZeroCredits, onUnlockRequest, scanScope, selectedPageId, fetchUxAudit, preferServerFigmaFetch, needsPatGateBeforeHeavyAudit]);
 
   /** Prototype Audit: confirm then run in-plugin audit; cost from getPrototypeAuditCost(selectedFlowIds.length). */
   const handleRunProtoAudit = useCallback(() => {
@@ -1335,6 +1453,7 @@ export const Audit: React.FC<Props> = ({
     pendingScanTypeRef.current = null;
     setIsLaunchingAudit(true);
     confirmPayloadRef.current = { cost, score, pendingScanType: scanType };
+    setAuditFixError(null);
     setShowReceipt(false);
     setWaitingForFileContext(true);
     // Defer postMessage so React commits the loader state and the full-page loader is visible before we request file context
@@ -1347,8 +1466,9 @@ export const Audit: React.FC<Props> = ({
             type: 'get-file-context',
             scope,
             pageId,
-            // All Pages keeps backend-first path via file_key, but ships inline JSON for automatic fallback if Figma OAuth is unavailable.
-            includeFileJson: scope === 'all',
+            // All Pages: inline JSON only when the UI must fall back without server file_key fetch (magic link / no OAuth).
+            includeFileJson: !preferServerFigmaFetch && scope === 'all',
+            metadataOnly: preferServerFigmaFetch && (scope === 'current' || scope === 'page'),
           },
         },
         '*'
@@ -1781,6 +1901,12 @@ export const Audit: React.FC<Props> = ({
             onConfirm={handleConfirmScan} 
             onCancel={() => { pendingScanTypeRef.current = null; setShowReceipt(false); }} 
           />
+      )}
+      {patGateOpen && (
+        <FigmaPatGateModal
+          onOpenPersonalDetails={handleOpenPatGatePersonalDetails}
+          onCancel={() => setPatGateOpen(false)}
+        />
       )}
       {confirmConfig && confirmConfig.isOpen && (
           <ConfirmationModal

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BRUTAL, AUTH_BACKEND_URL } from '../constants';
+import { FigmaPatInfoDialog } from '../components/FigmaPatInfoDialog';
 import { Button } from '../components/ui/Button';
+import { AUTH_BACKEND_URL, BRUTAL } from '../constants';
 import { User } from '../types';
 
 interface Props {
@@ -13,6 +14,7 @@ function mergeUserFromApiProfile(user: User, p: {
   first_name?: string | null;
   surname?: string | null;
   figma_user_id?: string | null;
+  has_figma_rest_token?: boolean;
   profile_saved_at?: string | null;
   name_conflict?: User['name_conflict'];
   show_profile_badge?: boolean;
@@ -35,6 +37,7 @@ function mergeUserFromApiProfile(user: User, p: {
     first_name: p.first_name ?? user.first_name,
     surname: p.surname ?? user.surname,
     figma_user_id: p.figma_user_id !== undefined ? p.figma_user_id : user.figma_user_id,
+    has_figma_rest_token: p.has_figma_rest_token !== undefined ? p.has_figma_rest_token : user.has_figma_rest_token,
     profile_saved_at: nextProfileSavedAt,
     name_conflict: nextConflict,
     show_profile_badge: nextShowProfileBadge,
@@ -49,6 +52,10 @@ export const PersonalDetails: React.FC<Props> = ({ user, onUpdateUser }) => {
   const [saving, setSaving] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [patToken, setPatToken] = useState('');
+  const [patSaving, setPatSaving] = useState(false);
+  const [patMsg, setPatMsg] = useState<string | null>(null);
+  const [patInfoOpen, setPatInfoOpen] = useState(false);
   const locked = Boolean(user?.profile_locked ?? user?.figma_user_id);
   const c = user?.name_conflict;
 
@@ -125,6 +132,35 @@ export const PersonalDetails: React.FC<Props> = ({ user, onUpdateUser }) => {
     }
   };
 
+  const savePersonalAccessToken = async () => {
+    const tok = patToken.trim();
+    if (!tok || !user.authToken) return;
+    setPatSaving(true);
+    setPatMsg(null);
+    try {
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/figma/personal-access-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.authToken}`,
+        },
+        body: JSON.stringify({ token: tok }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setPatMsg(typeof d?.error === 'string' ? d.error : 'Could not save token.');
+        return;
+      }
+      setPatMsg('Saved. Audits will use Figma REST like OAuth.');
+      setPatToken('');
+      onUpdateUser({ ...user, has_figma_rest_token: true });
+    } catch {
+      setPatMsg('Network error.');
+    } finally {
+      setPatSaving(false);
+    }
+  };
+
   return (
     <div className="p-4 flex flex-col min-h-0">
       <h2 className="text-2xl font-black uppercase border-b-2 border-black pb-2 mb-4">Personal details</h2>
@@ -183,6 +219,54 @@ export const PersonalDetails: React.FC<Props> = ({ user, onUpdateUser }) => {
           </Button>
         )}
       </form>
+      {!user.figma_user_id && (
+        <div className={`mt-8 pt-6 border-t-2 border-black max-w-sm`}>
+          <h3 className="text-sm font-black uppercase mb-2">Figma file access (audits)</h3>
+          <p className="text-[10px] font-medium text-black/80 mb-3 leading-snug">
+            Paste a Figma Personal Access Token so scans use the same fast server path as OAuth. Create one under Figma → Settings → Security.
+          </p>
+          {user.has_figma_rest_token && (
+            <p className="text-[10px] font-bold text-green-800 bg-green-50 border border-green-600 px-2 py-1 mb-2">
+              Token on file — audits use Figma REST.
+            </p>
+          )}
+          {patMsg && (
+            <p className="text-[10px] font-bold text-black bg-[#ffc900] border-2 border-black px-2 py-1 mb-2">{patMsg}</p>
+          )}
+          <div className="relative mb-2">
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="figd_…"
+              value={patToken}
+              onChange={(e) => setPatToken(e.target.value)}
+              className={`${BRUTAL.input} rounded w-full pr-10 font-mono text-[11px]`}
+            />
+            <button
+              type="button"
+              onClick={() => setPatInfoOpen(true)}
+              className="absolute right-1 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded border-2 border-black bg-white text-black shadow-[2px_2px_0_0_#000] hover:bg-[#ffc900] focus:outline-none focus:ring-2 focus:ring-black"
+              aria-label="Why we need your Figma token"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" aria-hidden>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          <Button
+            type="button"
+            variant="black"
+            className="w-full py-2"
+            disabled={patSaving || !patToken.trim()}
+            onClick={() => void savePersonalAccessToken()}
+          >
+            {patSaving ? 'Saving…' : 'Save Figma token'}
+          </Button>
+        </div>
+      )}
+      {patInfoOpen ? <FigmaPatInfoDialog onClose={() => setPatInfoOpen(false)} /> : null}
+
     </div>
   );
 };

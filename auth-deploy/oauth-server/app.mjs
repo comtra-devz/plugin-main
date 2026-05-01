@@ -1306,29 +1306,63 @@ function isAdminApiRequest(req) {
   return false;
 }
 
-/** Get valid Figma access token for user; refresh if expired (within 5 min buffer). Returns null if no tokens or refresh fails. */
-async function getFigmaAccessToken(sql, userId) {
-  const r = await dbSql`SELECT access_token, refresh_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+/** Headers for Figma REST: OAuth bearer vs Personal Access Token (magic-link parity path). */
+function figmaRestHeaders(auth) {
+  if (!auth || !auth.token) return {};
+  if (auth.kind === 'pat') {
+    return { 'X-Figma-Token': auth.token };
+  }
+  return { Authorization: `Bearer ${auth.token}` };
+}
+
+/**
+ * Valid Figma auth for REST: OAuth (refresh when expired) or PAT (no refresh).
+ * Returns null if no row or unusable.
+ */
+async function getFigmaAuthForUser(userId) {
+  let r;
+  try {
+    r = await dbSql`
+      SELECT access_token, refresh_token, expires_at, COALESCE(token_kind, 'oauth') AS token_kind
+      FROM figma_tokens WHERE user_id = ${userId} LIMIT 1
+    `;
+  } catch (e) {
+    if (/column|does not exist/i.test(String(e))) {
+      r = await dbSql`SELECT access_token, refresh_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+    } else throw e;
+  }
   if (r.rows.length === 0) return null;
   const row = r.rows[0];
+  const kind = String(row.token_kind || 'oauth').toLowerCase() === 'pat' ? 'pat' : 'oauth';
+  if (kind === 'pat') {
+    return { token: row.access_token, kind: 'pat' };
+  }
   const expiresAt = row.expires_at ? new Date(row.expires_at) : null;
   const now = new Date();
   const bufferMs = 5 * 60 * 1000;
   if (expiresAt && expiresAt.getTime() > now.getTime() + bufferMs) {
-    return row.access_token;
+    return { token: row.access_token, kind: 'oauth' };
   }
-  if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return row.access_token;
+  if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return { token: row.access_token, kind: 'oauth' };
+  const rt = row.refresh_token != null ? String(row.refresh_token).trim() : '';
+  if (!rt) {
+    return expiresAt && expiresAt.getTime() > now.getTime()
+      ? { token: row.access_token, kind: 'oauth' }
+      : null;
+  }
   const refreshRes = await fetch('https://api.figma.com/v1/oauth/refresh', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: 'Basic ' + Buffer.from(`${FIGMA_CLIENT_ID}:${FIGMA_CLIENT_SECRET}`).toString('base64'),
     },
-    body: new URLSearchParams({ refresh_token: row.refresh_token }),
+    body: new URLSearchParams({ refresh_token: rt }),
   });
   if (!refreshRes.ok) {
     console.error('Figma refresh token failed', await refreshRes.text());
-    return expiresAt && expiresAt.getTime() > now.getTime() ? row.access_token : null;
+    return expiresAt && expiresAt.getTime() > now.getTime()
+      ? { token: row.access_token, kind: 'oauth' }
+      : null;
   }
   const data = await refreshRes.json();
   const newExpiresIn = Math.max(60, Number(data.expires_in) || 90 * 24 * 3600);
@@ -1336,16 +1370,34 @@ async function getFigmaAccessToken(sql, userId) {
   await dbSql`
     UPDATE figma_tokens SET access_token = ${data.access_token}, expires_at = ${newExpiresAt.toISOString()}, updated_at = NOW() WHERE user_id = ${userId}
   `;
-  return data.access_token;
+  return { token: data.access_token, kind: 'oauth' };
+}
+
+/** @deprecated Use getFigmaAuthForUser — returns raw token string for legacy call sites. */
+async function getFigmaAccessToken(sql, userId) {
+  const auth = await getFigmaAuthForUser(userId);
+  return auth ? auth.token : null;
 }
 
 /** Force refresh Figma token (e.g. after 403 from Figma). Returns new access_token or null. Use to recover without asking user to re-login. */
 async function forceRefreshFigmaToken(userId) {
-  const r = await dbSql`SELECT refresh_token FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+  let r;
+  try {
+    r = await dbSql`
+      SELECT refresh_token, COALESCE(token_kind, 'oauth') AS token_kind FROM figma_tokens WHERE user_id = ${userId} LIMIT 1
+    `;
+  } catch (e) {
+    if (/column|does not exist/i.test(String(e))) {
+      r = await dbSql`SELECT refresh_token FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
+    } else throw e;
+  }
   if (r.rows.length === 0) {
     console.warn('forceRefreshFigmaToken: no row in figma_tokens for user_id=', userId, '(user must complete "Riconnetti Figma" once)');
     return null;
   }
+  if (String(r.rows[0].token_kind || 'oauth').toLowerCase() === 'pat') return null;
+  const rt = r.rows[0].refresh_token != null ? String(r.rows[0].refresh_token).trim() : '';
+  if (!rt) return null;
   if (!FIGMA_CLIENT_ID || !FIGMA_CLIENT_SECRET) return null;
   const refreshRes = await fetch('https://api.figma.com/v1/oauth/refresh', {
     method: 'POST',
@@ -1353,7 +1405,7 @@ async function forceRefreshFigmaToken(userId) {
       'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: 'Basic ' + Buffer.from(`${FIGMA_CLIENT_ID}:${FIGMA_CLIENT_SECRET}`).toString('base64'),
     },
-    body: new URLSearchParams({ refresh_token: r.rows[0].refresh_token }),
+    body: new URLSearchParams({ refresh_token: rt }),
   });
   if (!refreshRes.ok) {
     console.warn('forceRefreshFigmaToken: Figma refresh failed for user_id=', userId, await refreshRes.text());
@@ -1873,11 +1925,12 @@ app.post('/api/figma/file', async (req, res) => {
     return res.status(503).json({ error: 'Figma file API requires database' });
   }
   try {
-    let accessToken = await getFigmaAccessToken(dbSql, userId);
-    if (!accessToken) {
-      accessToken = await forceRefreshFigmaToken(userId);
+    let auth = await getFigmaAuthForUser(userId);
+    if (!auth) {
+      await forceRefreshFigmaToken(userId);
+      auth = await getFigmaAuthForUser(userId);
     }
-    if (!accessToken) {
+    if (!auth) {
       console.warn('POST /api/figma/file: no token for user_id=', userId, '(no row, expired, or refresh failed)');
       return res.status(403).json({
         error: MSG_FIGMA_API_TOKEN_MISSING,
@@ -1889,13 +1942,15 @@ app.post('/api/figma/file', async (req, res) => {
     if (idsParam) url.searchParams.set('ids', idsParam);
 
     let figmaRes = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: figmaRestHeaders(auth),
     });
-    if (figmaRes.status === 403) {
-      const newToken = await forceRefreshFigmaToken(userId);
-      if (newToken) {
+    if (figmaRes.status === 403 && auth.kind !== 'pat') {
+      await forceRefreshFigmaToken(userId);
+      const auth2 = await getFigmaAuthForUser(userId);
+      if (auth2) {
+        auth = auth2;
         figmaRes = await fetch(url.toString(), {
-          headers: { Authorization: `Bearer ${newToken}` },
+          headers: figmaRestHeaders(auth),
         });
       }
     }
@@ -1924,10 +1979,10 @@ app.post('/api/figma/file', async (req, res) => {
 });
 
 // --- Debug: token status — verifica con Figma API così "presente e valido" = token davvero usabile (vedi docs/FIGMA-TOKEN-TROUBLESHOOTING.md)
-async function figmaTokenValidForApi(accessToken) {
-  if (!accessToken) return false;
+async function figmaTokenValidForApi(figmaAuth) {
+  if (!figmaAuth || !figmaAuth.token) return false;
   const meRes = await fetch('https://api.figma.com/v1/me', {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: figmaRestHeaders(figmaAuth),
   });
   return meRes.ok;
 }
@@ -1939,9 +1994,9 @@ app.get('/api/figma/token-status', async (req, res) => {
   try {
     const r = await dbSql`SELECT access_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
     if (r.rows.length === 0) return res.json({ ok: false, hasToken: false, reason: 'no_row' });
-    const token = await getFigmaAccessToken(dbSql, userId);
-    if (!token) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
-    const validWithFigma = await figmaTokenValidForApi(token);
+    const fa = await getFigmaAuthForUser(userId);
+    if (!fa) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
+    const validWithFigma = await figmaTokenValidForApi(fa);
     if (!validWithFigma) return res.json({ ok: false, hasToken: false, reason: 'figma_rejected' });
     return res.json({ ok: true, hasToken: true });
   } catch (err) {
@@ -1956,15 +2011,65 @@ app.post('/api/figma/token-status', async (req, res) => {
   try {
     const r = await dbSql`SELECT access_token, expires_at FROM figma_tokens WHERE user_id = ${userId} LIMIT 1`;
     if (r.rows.length === 0) return res.json({ ok: false, hasToken: false, reason: 'no_row' });
-    const token = await getFigmaAccessToken(dbSql, userId);
-    if (!token) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
-    const validWithFigma = await figmaTokenValidForApi(token);
+    const fa = await getFigmaAuthForUser(userId);
+    if (!fa) return res.json({ ok: false, hasToken: false, reason: 'expired_or_invalid' });
+    const validWithFigma = await figmaTokenValidForApi(fa);
     if (!validWithFigma) return res.json({ ok: false, hasToken: false, reason: 'figma_rejected' });
     return res.json({ ok: true, hasToken: true });
   } catch (err) {
     console.error('POST /api/figma/token-status', err);
     return res.status(500).json({ ok: false, hasToken: false, reason: 'error' });
   }
+});
+
+
+// --- Save Figma Personal Access Token (magic / email users): same REST access as OAuth for audits
+app.post('/api/figma/personal-access-token', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Database not configured' });
+  const raw = String(req.body?.token || req.body?.access_token || '').trim();
+  if (!raw) return res.status(400).json({ error: 'token required' });
+  const meRes = await fetch('https://api.figma.com/v1/me', {
+    headers: { 'X-Figma-Token': raw },
+  });
+  if (!meRes.ok) {
+    const t = await meRes.text();
+    console.warn('PAT /me failed', meRes.status, t.slice(0, 200));
+    return res.status(400).json({ error: 'Figma rejected this token. Check it is a valid Personal Access Token with file read access.' });
+  }
+  const me = await meRes.json();
+  const handle = me && me.handle != null ? String(me.handle) : '';
+  const expiresAt = new Date('2099-01-01T00:00:00.000Z');
+  const emptyRefresh = '';
+  try {
+    await dbSql`
+      INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at, token_kind)
+      VALUES (${userId}, ${raw}, ${emptyRefresh}, ${expiresAt.toISOString()}, NOW(), 'pat')
+      ON CONFLICT (user_id) DO UPDATE SET
+        access_token = EXCLUDED.access_token,
+        refresh_token = EXCLUDED.refresh_token,
+        expires_at = EXCLUDED.expires_at,
+        updated_at = NOW(),
+        token_kind = 'pat'
+    `;
+  } catch (e) {
+    if (/token_kind|column|does not exist/i.test(String(e))) {
+      await dbSql`
+        INSERT INTO figma_tokens (user_id, access_token, refresh_token, expires_at, updated_at)
+        VALUES (${userId}, ${raw}, ${emptyRefresh}, ${expiresAt.toISOString()}, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = NOW()
+      `;
+    } else {
+      console.error('POST /api/figma/personal-access-token', e);
+      return res.status(500).json({ error: 'Could not save token' });
+    }
+  }
+  return res.json({ ok: true, figma_handle: handle, has_figma_rest_token: true });
 });
 
 // --- DS Audit agent (Kimi): file_key → Figma JSON → Kimi → issues
@@ -2931,12 +3036,12 @@ const FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW = 5;
 const FIGMA_AUDIT_PAGE_FETCH_CONCURRENCY = 2;
 
 /** Fetch file JSON from Figma REST API. Never requests the full file in one go: per-page or per-node only, to avoid 400 on large files. Returns { document } for audit engines. */
-async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeIds, pageIds) {
+async function fetchFigmaFileForAudit(figmaAuth, fileKey, scope, pageId, nodeIds, pageIds) {
   const scopeType = scope === 'current' || scope === 'page' || scope === 'all' ? scope : 'all';
   const idsArr = Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : [];
   const pageIdTrim = typeof pageId === 'string' ? pageId.trim() : '';
   const pageIdsArr = Array.isArray(pageIds) ? pageIds.filter(Boolean) : [];
-  const auth = { headers: { Authorization: `Bearer ${accessToken}` } };
+  const figmaReqInit = { headers: figmaRestHeaders(figmaAuth) };
 
   const handleFigmaError = (res, t) => {
     if (res.status === 403) {
@@ -2960,7 +3065,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}/nodes`);
     url.searchParams.set('ids', idsArr.join(','));
     url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_NODES));
-    const res = await fetch(url.toString(), auth);
+    const res = await fetch(url.toString(), figmaReqInit);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
     const nodesMap = data.nodes || {};
@@ -2972,7 +3077,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     url.searchParams.set('ids', pageIdTrim);
     url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_PAGE));
-    const res = await fetch(url.toString(), auth);
+    const res = await fetch(url.toString(), figmaReqInit);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
     const doc = data.document || { type: 'DOCUMENT', id: '0:0', children: [] };
@@ -2987,7 +3092,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
       const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
       url.searchParams.set('ids', pid);
       url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_PAGE));
-      const res = await fetch(url.toString(), auth);
+      const res = await fetch(url.toString(), figmaReqInit);
       if (!res.ok) {
         const t = await res.text();
         handleFigmaError(res, t);
@@ -3006,7 +3111,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
   if (scopeType === 'all') {
     const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
     url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW));
-    const res = await fetch(url.toString(), auth);
+    const res = await fetch(url.toString(), figmaReqInit);
     if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
     const data = await res.json();
     return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] }, components: data.components };
@@ -3014,7 +3119,7 @@ async function fetchFigmaFileForAudit(accessToken, fileKey, scope, pageId, nodeI
 
   const url = new URL(`https://api.figma.com/v1/files/${fileKey}`);
   url.searchParams.set('depth', String(FIGMA_AUDIT_REST_DEPTH_FULL_OVERVIEW));
-  const res = await fetch(url.toString(), auth);
+  const res = await fetch(url.toString(), figmaReqInit);
   if (!res.ok) { const t = await res.text(); handleFigmaError(res, t); }
   const data = await res.json();
   return { document: data.document || { type: 'DOCUMENT', id: '0:0', children: [] }, components: data.components };
@@ -3110,9 +3215,12 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
     throw err;
   }
 
-      let accessToken = await getFigmaAccessToken(dbSql, userId);
-      if (!accessToken) accessToken = await forceRefreshFigmaToken(userId);
-      if (!accessToken) {
+      let figmaAuth = await getFigmaAuthForUser(userId);
+      if (!figmaAuth) {
+        await forceRefreshFigmaToken(userId);
+        figmaAuth = await getFigmaAuthForUser(userId);
+      }
+      if (!figmaAuth) {
     const err = new Error(MSG_FIGMA_API_TOKEN_MISSING);
     err.status = 403;
     err.code = 'FIGMA_RECONNECT';
@@ -3123,7 +3231,7 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
   let fileJson = null;
   try {
     fileJson = await fetchFigmaFileForAudit(
-      accessToken,
+      figmaAuth,
       fileKey,
       providerParams.scope,
       providerParams.pageId,
@@ -3134,11 +3242,12 @@ async function resolveDesignDocumentFromBody({ body, userId, fallbackScope = 'al
         fetchErr = err;
       }
       if (fetchErr && fetchErr.message && fetchErr.message.includes('re-login')) {
-        const newToken = await forceRefreshFigmaToken(userId);
-        if (newToken) {
+        await forceRefreshFigmaToken(userId);
+        const authRetry = await getFigmaAuthForUser(userId);
+        if (authRetry) {
           try {
         fileJson = await fetchFigmaFileForAudit(
-          newToken,
+          authRetry,
           fileKey,
           providerParams.scope,
           providerParams.pageId,
@@ -7153,6 +7262,12 @@ async function loadUserForLoginResponse(dbSql, user) {
       user.tags = Array.isArray(rawTags) ? rawTags : (rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags) ? [] : []);
     }
   } catch (_) { /* tags column may not exist before migration 006 */ }
+  try {
+    const ft = await dbSql`SELECT 1 FROM figma_tokens WHERE user_id = ${user.id} LIMIT 1`;
+    user.has_figma_rest_token = ft.rows.length > 0;
+  } catch (_) {
+    user.has_figma_rest_token = false;
+  }
   const productionStats = await getProductionStats(dbSql, user.id);
   if (productionStats) user.stats = productionStats;
 }

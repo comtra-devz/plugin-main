@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { SHOW_FIGMA_LOGIN } from '../constants';
+import { profileAttentionTitle, userNeedsProfileAttentionDot } from '../lib/profileAttention';
 import { NavBar } from './NavBar';
 import { ViewState, User } from '../types';
 
@@ -10,19 +12,17 @@ interface Props {
   onOpenProfile: () => void;
 }
 
-/** Dot finché non c’è profilo salvato (magic) o c’è conflitto Figma; non dipende solo dal flag server. */
-function showProfileAvatarDot(u: User): boolean {
-  if (u.name_conflict && typeof u.name_conflict === 'object') return true;
-  if (u.show_profile_badge) return true;
-  const hasFigma = u.figma_user_id != null && String(u.figma_user_id).trim() !== '';
-  if (hasFigma) return false;
-  if (u.profile_saved_at) return false;
-  return true;
-}
-
 export const Layout: React.FC<Props> = ({ children, current, setView, user, onOpenProfile }) => {
   const mainRef = useRef<HTMLElement | null>(null);
-  const showDot = useMemo(() => (user ? showProfileAvatarDot(user) : false), [user]);
+  const patGateActive = !SHOW_FIGMA_LOGIN;
+  const showDot = useMemo(
+    () => (user ? userNeedsProfileAttentionDot(user, patGateActive) : false),
+    [user, patGateActive],
+  );
+  const dotTitle = useMemo(
+    () => (user ? profileAttentionTitle(user, patGateActive) : ''),
+    [user, patGateActive],
+  );
 
   useEffect(() => {
     if (!mainRef.current) return;
@@ -50,8 +50,8 @@ export const Layout: React.FC<Props> = ({ children, current, setView, user, onOp
             {showDot && (
               <span
                 className="pointer-events-none absolute -right-1 -top-1 z-10 h-3 w-3 rounded-full border-2 border-white bg-red-600 shadow-[0_0_0_1px_#000]"
-                aria-label="Profile action needed"
-                title="Add your name in Profile → Personal details"
+                aria-label={dotTitle}
+                title={dotTitle}
               />
             )}
           </button>
