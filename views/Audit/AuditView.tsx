@@ -30,7 +30,7 @@ import {
   getUxScoreCopy,
   getPrototypeScoreCopy,
 } from './data';
-import { getCreditsForIssue, getCreditsForFixAll, ACTION_AUTO_FIX, ACTION_AUTO_FIX_ALL } from './autoFixConfig';
+import { getCreditsForIssue, ACTION_AUTO_FIX, getAutoFixCanvasKind } from './autoFixConfig';
 import { useToast } from '../../contexts/ToastContext';
 
 export interface FetchFigmaFileBody {
@@ -1505,6 +1505,29 @@ export const Audit: React.FC<Props> = ({
     });
   };
 
+  const handleGuidanceOnly = useCallback(
+    (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setAuditFixError(null);
+      const issue = activeIssues.find((i) => i.id === id);
+      const title = issue?.rule_id ? `Manual fix (${issue.rule_id})` : 'Manual fix';
+      const body = [issue?.msg && `Issue: ${issue.msg}`, issue?.fix && `Suggested steps:\n${issue.fix}`]
+        .filter(Boolean)
+        .join('\n\n');
+      setConfirmConfig({
+        isOpen: true,
+        title,
+        message:
+          (body || 'No automated canvas fix exists for this rule in the plugin yet.') +
+          '\n\nNo credits charged — apply the steps in Figma yourself.',
+        confirmLabel: 'OK',
+        onConfirm: () => setConfirmConfig(null),
+        onCancel: () => setConfirmConfig(null),
+      });
+    },
+    [activeIssues],
+  );
+
   const handleFix = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (id === 'p2' && onNavigateToGenerate) {
@@ -1514,6 +1537,10 @@ export const Audit: React.FC<Props> = ({
 
     setAuditFixError(null);
     const issue = activeIssues.find(i => i.id === id);
+    if (issue && getAutoFixCanvasKind(issue, activeTab) === 'guidance_only') {
+      handleGuidanceOnly(e, id);
+      return;
+    }
     const cost = issue ? getCreditsForIssue(issue) : 2;
     const layerId = issue?.layerIds?.[deviationNavIndex[id] ?? 0] ?? issue?.layerId;
     const isOklchAdvisory = issue?.rule_id === 'CLR-002';
@@ -1560,35 +1587,7 @@ export const Audit: React.FC<Props> = ({
       return;
     }
 
-    setConfirmConfig({
-        isOpen: true,
-        title: "Confirm Auto-Fix",
-        message: `This action will apply changes to your layer.\n\nConsume ${cost} credit${cost !== 1 ? 's' : ''}?`,
-        details: {
-          method: 'Automatic fix',
-          action: 'Apply suggested fix for this issue category.',
-          target: issue?.categoryId ? `Category: ${issue.categoryId}` : 'Selected issue layer',
-          scope: 'Current layer',
-          costLabel: `${cost} credit${cost !== 1 ? 's' : ''}`,
-        },
-        confirmLabel: `Apply Fix (-${cost} Credits)`,
-        onConfirm: async () => {
-            const result = await consumeCredits({
-              action_type: ACTION_AUTO_FIX,
-              credits_consumed: cost,
-            });
-            if (result.error) {
-              setAuditFixError(result.error === 'Insufficient credits' ? 'Insufficient credits. Upgrade or try again later.' : result.error);
-              return;
-            }
-            applySingleFix(id);
-            setAuditFixError(null);
-            setConfirmConfig(null);
-            if (layerId) {
-              window.parent.postMessage({ pluginMessage: { type: 'apply-fix', layerId } }, '*');
-            }
-        }
-    });
+    handleGuidanceOnly(e, id);
   };
 
   function applySingleFix(id: string) {
@@ -1605,42 +1604,15 @@ export const Audit: React.FC<Props> = ({
   }
 
   const handleFixAll = () => {
-      const unfixed = activeIssues.filter(
-        (i) =>
-          !fixedIds.has(i.id) &&
-          i.id !== 'p2' &&
-          !discardedIds.has(i.id) &&
-          !(i.categoryId === 'touch' && i.passes === true) &&
-          i.rule_id !== 'CLR-002'
-      );
-      if (unfixed.length === 0) return;
-
-      const totalCredits = getCreditsForFixAll(unfixed);
       setAuditFixError(null);
       setConfirmConfig({
         isOpen: true,
-        title: `Fix All (${unfixed.length})`,
-        message: `You are about to apply ${unfixed.length} fixes (${totalCredits} credits). For safety, we recommend duplicating the file or page before proceeding. Confirm?`,
-        confirmLabel: `Apply All (-${totalCredits} Credits)`,
-        onConfirm: async () => {
-            const result = await consumeCredits({
-              action_type: ACTION_AUTO_FIX_ALL,
-              credits_consumed: totalCredits,
-            });
-            if (result.error) {
-              setAuditFixError(result.error === 'Insufficient credits' ? 'Insufficient credits. Upgrade or try again later.' : result.error);
-              return;
-            }
-            const newFixed = new Set(fixedIds);
-            unfixed.forEach(i => newFixed.add(i.id));
-            setFixedIds(newFixed);
-            const addedScore = unfixed.length * 5;
-            setScore(Math.min(100, score + addedScore));
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 2000);
-            setAuditFixError(null);
-            setConfirmConfig(null);
-        }
+        title: 'Fix all',
+        message:
+          'Batch auto-fix is not available yet. Use Auto-Fix Layer on each Accessibility contrast or touch issue that supports it, or How to fix for manual steps. Previously, Fix all could charge credits without applying real fixes — that path is disabled.',
+        confirmLabel: 'OK',
+        onConfirm: () => setConfirmConfig(null),
+        onCancel: () => setConfirmConfig(null),
       });
   };
 
@@ -1859,6 +1831,7 @@ export const Audit: React.FC<Props> = ({
     scopeIsCurrent: auditScopeIsCurrent,
     getCreditsForIssue,
     onFix: handleFix,
+    onGuidanceOnly: handleGuidanceOnly,
     onUndo: handleUndo,
     onDiscard: handleDiscard,
     onUndoDiscard: handleUndoDiscard,

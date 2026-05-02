@@ -1,5 +1,7 @@
 # Mappatura completa issue → categorie → auto-fix
 
+**Guida breve (solo cosa è davvero automatico sul canvas):** [AUTO-FIX-COSA-E-REALMENTE-AUTOMATICO.md](./AUTO-FIX-COSA-E-REALMENTE-AUTOMATICO.md)
+
 Documento di riferimento per **allineare UI, crediti e implementazione plugin** su tutti gli audit.  
 Aggiornare questo file quando si aggiungono regole, `categoryId` o capacità di fix nel controller.
 
@@ -18,9 +20,10 @@ Aggiornare questo file quando si aggiungono regole, `categoryId` o capacità di 
 
 | Pezzo | Ruolo |
 |--------|--------|
-| `views/Audit/autoFixConfig.ts` | Crediti default per `categoryId`, override `rule_id`, `ACTION_AUTO_FIX*`. |
-| `views/Audit/AuditView.tsx` | `handleFix` → contrast: `get-contrast-fix-preview` + apply; **touch (A11Y)**: `get-touch-fix-preview` + `consumeCredits` + `apply-fix` con `fixPreview`; altri: `apply-fix` con solo `layerId`. |
-| `controller.ts` → `apply-fix` | **Contrasto** + `fixPreview`: `applyContrastFix`. **Touch** + `fixPreview`: `applyTouchFix` (padding variabile / hardcoded / resize). **Tutto il resto**: stub generico. |
+| `views/Audit/autoFixConfig.ts` | Crediti; **`canAutomateCanvasFix`** / **`getAutoFixCanvasKind`** — cosa è automatizzabile sul canvas (solo **A11Y contrast + touch** oggi); **`FIX_ALL_BATCH_ENABLED`** (default `false`) per batch “fix all”. |
+| `views/Audit/components/IssueList.tsx` | Se **automatizzabile** → bottone **Auto-Fix Layer** (con crediti). Se no → **How to fix** (testo guida, **0 crediti**). **Fix all** mostrato solo se `FIX_ALL_BATCH_ENABLED` e tutte le issue aperte sono automatizzabili (oggi: nascosto). |
+| `views/Audit/AuditView.tsx` | `handleFix`: contrast + touch come prima; **nessun** addebito per lo stub: le altre issue aprono solo la guida (`handleGuidanceOnly`). **Fix all**: non consuma più crediti — messaggio informativo (prima segnava risolte senza apply). |
+| `controller.ts` → `apply-fix` | **Contrasto** + `fixPreview`: `applyContrastFix`. **Touch** + `fixPreview`: `applyTouchFix`. Il ramo generico (solo select + notify) resta per compatibilità ma **non** dovrebbe più essere raggiunto dall’UI per issue non contrast/touch. |
 | `auth-deploy/oauth-server/a11y-audit-engine.mjs` | Emissione issue A11Y con `rule_id` dove indicato. |
 
 ---

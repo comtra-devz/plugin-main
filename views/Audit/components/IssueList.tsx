@@ -4,6 +4,11 @@ import { BRUTAL } from '../../../constants';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/Badge';
 import { AuditIssue } from '../../../types';
+import {
+  FIX_ALL_BATCH_ENABLED,
+  canAutomateCanvasFix,
+  getAutoFixCanvasKind,
+} from '../autoFixConfig';
 
 interface IssueListProps {
   displayIssues: AuditIssue[];
@@ -26,6 +31,8 @@ interface IssueListProps {
   /** Return credits cost for a single fix (for badge). Defaults to 2. */
   getCreditsForIssue?: (issue: AuditIssue) => number;
   onFix: (e: React.MouseEvent, id: string) => void;
+  /** Opens guidance modal (no credits) when automation is not implemented for this issue. */
+  onGuidanceOnly?: (e: React.MouseEvent, id: string) => void;
   onUndo: (e: React.MouseEvent, id: string) => void;
   onDiscard: (e: React.MouseEvent, id: string) => void;
   onUndoDiscard: (e: React.MouseEvent, id: string) => void;
@@ -57,6 +64,7 @@ export const IssueList: React.FC<IssueListProps> = ({
   isPro,
   activeTab,
   onFix,
+  onGuidanceOnly,
   onUndo,
   onDiscard,
   onUndoDiscard,
@@ -86,6 +94,13 @@ export const IssueList: React.FC<IssueListProps> = ({
   );
   const getCredits = getCreditsForIssueProp ?? (() => 2);
   const fixAllCost = remainingIssues.reduce((sum, i) => sum + getCredits(i), 0);
+  const automatableRemaining = remainingIssues.filter((i) => canAutomateCanvasFix(i, activeTab));
+  const showFixAll =
+    FIX_ALL_BATCH_ENABLED &&
+    isPro &&
+    activeTab !== 'PROTOTYPE' &&
+    automatableRemaining.length > 0 &&
+    automatableRemaining.length === remainingIssues.length;
 
   const groupedIssues: { [pageName: string]: AuditIssue[] } = {};
   if (scopeIsCurrent && scopeName) {
@@ -162,6 +177,7 @@ export const IssueList: React.FC<IssueListProps> = ({
                   const flowScopedRules = new Set(['P-03', 'P-05', 'P-06', 'P-07', 'P-11', 'P-18']);
                   const canSelectFlow = activeTab === 'PROTOTYPE' && !!i.flowName && !!onSelectFlow && !!i.rule_id && flowScopedRules.has(i.rule_id);
                     const isOklchAdvisory = i.rule_id === 'CLR-002';
+                    const fixKind = getAutoFixCanvasKind(i, activeTab);
                     const currentIndex = deviationNavIndex[i.id] || 0;
                     
                     if (isDiscarded) {
@@ -306,17 +322,37 @@ export const IssueList: React.FC<IssueListProps> = ({
                             )}
                             
                             {!isTouchPassAdvisory && (
-                              <Button
+                              fixKind === 'guidance_only' ? (
+                                <Button
+                                  variant="secondary"
+                                  layout="row"
+                                  onClick={(e) => (onGuidanceOnly ?? onFix)(e, i.id)}
+                                  className={`${isDeviationGroup ? 'w-full' : 'flex-1'} text-[10px] h-12 relative border-2 border-black`}
+                                >
+                                  How to fix
+                                  <span className="absolute bottom-0.5 right-1 text-[8px] bg-gray-200 text-black px-1 font-bold rounded-sm border border-black">
+                                    No auto-apply
+                                  </span>
+                                </Button>
+                              ) : (
+                                <Button
                                   variant="primary"
                                   layout="row"
                                   onClick={(e) => onFix(e, i.id)}
                                   className={`${isDeviationGroup ? 'w-full' : 'flex-1'} text-[10px] h-12 relative`}
-                              >
-                                  {isWireframeIssue ? 'Create Wireframe' : isOklchAdvisory ? 'View Suggestion' : 'Auto-Fix Layer'}
-                                  {!isOklchAdvisory && (
-                                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">-{getCredits(i)} Credits</span>
+                                >
+                                  {isWireframeIssue
+                                    ? 'Create Wireframe'
+                                    : isOklchAdvisory
+                                      ? 'View Suggestion'
+                                      : 'Auto-Fix Layer'}
+                                  {fixKind === 'automated' && !isOklchAdvisory && (
+                                    <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black shadow-[1px_1px_0_0_#000]">
+                                      -{getCredits(i)} Credits
+                                    </span>
                                   )}
-                              </Button>
+                                </Button>
+                              )
                             )}
                             </div>
                             )}
@@ -329,7 +365,7 @@ export const IssueList: React.FC<IssueListProps> = ({
         </div>
       ))}
 
-      {isPro && fixAllCost > 0 && activeTab !== 'PROTOTYPE' && (
+      {showFixAll && (
           <Button
             variant="primary"
             fullWidth

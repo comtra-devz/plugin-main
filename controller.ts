@@ -2853,8 +2853,8 @@ figma.ui.onmessage = async (raw: any) => {
     }
 
     const node = await figma.getNodeByIdAsync(layerId);
-    if (node && 'fills' in node) {
-      figma.notify("Fix applied to " + node.name);
+    if (node) {
+      figma.notify('Layer selected — no automated property change (use UI “How to fix” for this rule).');
       await selectLayerAndReveal(layerId);
     } else {
       figma.notify("That layer isn't in the file anymore — re-run the audit and open the issue again.", { error: true });

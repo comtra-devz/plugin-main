@@ -1,9 +1,48 @@
 /**
  * Auto-fix credits mapping and config.
  * Single source of truth for cost per fix and action_type sent to the credits API.
+ *
+ * Canvas automation today (controller.ts):
+ * - A11Y contrast (CTR-*) → get-contrast-fix-preview + applyContrastFix
+ * - A11Y touch (TGT-*) → get-touch-fix-preview + applyTouchFix
+ * Everything else (DS, UX, Proto, most A11Y rules) is guidance-only until a handler exists.
+ * See audit-specs/AUTO-FIX-ISSUE-MAP.md.
  */
 
 import type { AuditIssue } from '../../types';
+
+/** Re-enable "Fix all" when batch apply is implemented (sequential preview/apply for contrast+touch). */
+export const FIX_ALL_BATCH_ENABLED = false;
+
+export type AutoFixCanvasKind = 'automated' | 'guidance_only' | 'wireframe_nav' | 'advisory_dialog';
+
+/**
+ * True when the plugin controller can apply a real change (not just select layer + notify).
+ * @param activeTab — Audit tab: DS | A11Y | UX | PROTOTYPE
+ */
+export function canAutomateCanvasFix(issue: AuditIssue, activeTab: string): boolean {
+  if (issue.hideLayerActions) return false;
+  if (issue.id === 'p2') return true;
+  if (issue.rule_id === 'CLR-002') return false;
+  const hasLayer = Boolean(
+    (issue.layerId && String(issue.layerId).trim()) || (issue.layerIds && issue.layerIds.length > 0),
+  );
+  if (!hasLayer) return false;
+  if (activeTab === 'A11Y') {
+    if (issue.categoryId === 'contrast') return true;
+    if (issue.categoryId === 'touch' && issue.passes !== true) return true;
+    return false;
+  }
+  return false;
+}
+
+/** UX label + routing: wireframe shortcut, OKLCH advisory, real auto-fix, or manual guidance modal. */
+export function getAutoFixCanvasKind(issue: AuditIssue, activeTab: string): AutoFixCanvasKind {
+  if (issue.id === 'p2') return 'wireframe_nav';
+  if (issue.rule_id === 'CLR-002') return 'advisory_dialog';
+  if (canAutomateCanvasFix(issue, activeTab)) return 'automated';
+  return 'guidance_only';
+}
 
 /** Action type sent to API when consuming credits for a single auto-fix. */
 export const ACTION_AUTO_FIX = 'audit_auto_fix';
@@ -88,4 +127,11 @@ export function getCreditsForIssue(issue: AuditIssue): number {
  */
 export function getCreditsForFixAll(issues: AuditIssue[]): number {
   return issues.reduce((sum, i) => sum + getCreditsForIssue(i), 0);
+}
+
+/** Credits for issues that actually run automated canvas fixes (used when batch exists). */
+export function getCreditsForAutomatableIssues(issues: AuditIssue[], activeTab: string): number {
+  return issues
+    .filter((i) => canAutomateCanvasFix(i, activeTab))
+    .reduce((sum, i) => sum + getCreditsForIssue(i), 0);
 }

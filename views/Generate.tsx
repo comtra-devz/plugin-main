@@ -38,10 +38,11 @@ import {
 const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
 const FULL_BLEED_IN = 'px-3 sm:px-4';
 
-/** Air between last chat line and composer top; keep in sync with scroll reserve. */
-const CHAT_COMPOSER_GAP_PX = 8;
-/** Until ResizeObserver runs (matches ~ composer + action row). */
-const COMPOSER_DOCK_FALLBACK_PX = 128;
+/** Intro empty-state: dots duration, then crossfade ms before locking on bubble-only. */
+const INTRO_WELCOME_DOTS_MS = 840;
+const INTRO_WELCOME_CROSSFADE_MS = 300;
+
+type IntroWelcomePhase = 'off' | 'dots' | 'crossfade' | 'bubble';
 
 /** Hybrid UX §8 — cockpit plugin (this view); archive/search/analytics via web/API admin. */
 
@@ -343,8 +344,6 @@ export const Generate: React.FC<Props> = ({
   // ContentEditable Ref
   const inputRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const composerDockRef = useRef<HTMLDivElement>(null);
-  const [composerDockHeight, setComposerDockHeight] = useState(COMPOSER_DOCK_FALLBACK_PX);
   /** After Enhance: button stays off until the user edits the terminal (avoids nested enhance). */
   const [enhanceLocked, setEnhanceLocked] = useState(false);
   /** Clean goal text used to rebuild the block when DS or context changes. */
@@ -377,9 +376,8 @@ export const Generate: React.FC<Props> = ({
   const [showReport, setShowReport] = useState(false);
   /** Conversation timeline (Phase 1): one user/assistant pair per relevant Generate action. */
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
-  /** Fake typing + first assistant bubble before any timeline message. */
-  const [showIntroTyping, setShowIntroTyping] = useState(false);
-  const [showIntroBubble, setShowIntroBubble] = useState(false);
+  /** Empty-chat welcome: staggered dots → crossfade → intro bubble (see INTRO_WELCOME_*). */
+  const [introWelcomePhase, setIntroWelcomePhase] = useState<IntroWelcomePhase>('off');
   const [dsScopeHash, setDsScopeHash] = useState<string>('');
   const [serverThreadId, setServerThreadId] = useState<string | null>(null);
   const [threadList, setThreadList] = useState<
@@ -879,11 +877,11 @@ export const Generate: React.FC<Props> = ({
     ? [
         `Keep "${selectedLayerName}" structure but improve spacing and typography hierarchy.`,
         `Adapt "${selectedLayerName}" for mobile while preserving content priority.`,
-        `Create two stronger variants for "${selectedLayerName}" aligned to ${selectedSystemDisplayName}.`,
+        `Create two stronger variants for "${selectedLayerName}" with clearer hierarchy and contrast.`,
       ]
     : screenshotAttachment
       ? [
-          `Recreate this screenshot using ${selectedSystemDisplayName} tokens and components.`,
+          'Recreate this screenshot using tokens and components from this file.',
           'Keep layout intent, but simplify visual density and improve contrast.',
           userTier === 'PRO'
             ? 'Generate two alternatives: one safe and one exploratory.'
@@ -1564,8 +1562,7 @@ export const Generate: React.FC<Props> = ({
     setServerThreadId(null);
     serverThreadIdRef.current = null;
     pendingOptimisticUserTurnIdRef.current = null;
-    setShowIntroTyping(false);
-    setShowIntroBubble(false);
+    setIntroWelcomePhase('off');
     setShowRefinementChips(false);
     setRefineChipsHiddenByComposer(false);
     setShowPreflight(false);
@@ -1829,43 +1826,21 @@ export const Generate: React.FC<Props> = ({
   /** Chat UI vs threads list — follow the active tab (threads shows a stub until scope is ready). */
   const showChatComposerShell = generateComposerTab === 'chat';
 
-  useLayoutEffect(() => {
-    const dock = composerDockRef.current;
-    if (!dock || !showChatComposerShell) return;
-    let cancelled = false;
-    const update = () => {
-      if (cancelled) return;
-      const h = Math.ceil(dock.getBoundingClientRect().height);
-      if (Number.isFinite(h) && h > 0) setComposerDockHeight(h);
-    };
-    update();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        update();
-      });
-    });
-    const t1 = window.setTimeout(update, 0);
-    const t2 = window.setTimeout(update, 100);
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => requestAnimationFrame(update)) : null;
-    ro?.observe(dock);
-    window.addEventListener('resize', update);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      ro?.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, [showChatComposerShell, composerAttachments.length, hasContent, promptText, composerFocused]);
-
   useEffect(() => {
-    if (!showGenerateComposer || showReport || conversationTurns.length > 0 || !showChatComposerShell) return;
-    setShowIntroTyping(true);
-    const t = setTimeout(() => {
-      setShowIntroTyping(false);
-      setShowIntroBubble(true);
-    }, 900);
-    return () => clearTimeout(t);
+    if (!showGenerateComposer || showReport || conversationTurns.length > 0 || !showChatComposerShell) {
+      setIntroWelcomePhase('off');
+      return;
+    }
+    setIntroWelcomePhase('dots');
+    const tCrossfade = window.setTimeout(() => setIntroWelcomePhase('crossfade'), INTRO_WELCOME_DOTS_MS);
+    const tBubble = window.setTimeout(
+      () => setIntroWelcomePhase('bubble'),
+      INTRO_WELCOME_DOTS_MS + INTRO_WELCOME_CROSSFADE_MS,
+    );
+    return () => {
+      window.clearTimeout(tCrossfade);
+      window.clearTimeout(tBubble);
+    };
   }, [showGenerateComposer, showReport, conversationTurns.length, showChatComposerShell]);
 
   /** Keep latest bubbles at the bottom of the fixed-height chat panel (scroll only when content overflows). */
@@ -1877,13 +1852,11 @@ export const Generate: React.FC<Props> = ({
     conversationTurns,
     loading,
     generateStep,
-    showIntroTyping,
-    showIntroBubble,
+    introWelcomePhase,
     showPreflight,
     showRefinementChips,
     refineChipsHiddenByComposer,
     liveReasoningLines,
-    composerDockHeight,
   ]);
 
   /** Solo mentre aspettiamo contesto/modello — non durante canvas/crediti (altrimenti puntini “fantasma” col messaggio già pronto). */
@@ -1895,17 +1868,13 @@ export const Generate: React.FC<Props> = ({
 
   const showLiveReasoning = loading && liveReasoningLines.length > 0;
 
-  const chatReserveBottomPx =
-    (Number.isFinite(composerDockHeight) && composerDockHeight > 0 ? composerDockHeight : COMPOSER_DOCK_FALLBACK_PX) +
-    CHAT_COMPOSER_GAP_PX;
-
   return (
     <div
       data-component="Generate: View Container"
-      className="relative flex min-h-0 flex-1 flex-col gap-2 p-3 pb-0 sm:gap-2 sm:p-4 sm:pb-0"
+      className="relative flex min-h-0 flex-1 flex-col gap-0 px-3 pt-0 pb-0 sm:px-4 sm:pb-0"
     >
       <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
-        <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
+        <div className={`${FULL_BLEED_IN} pb-1 pt-1`}>
           <div className="mb-2 grid min-h-9 grid-cols-[1fr_auto_1fr] items-center gap-x-2">
             <span className="min-w-0" aria-hidden />
             <div
@@ -1930,13 +1899,14 @@ export const Generate: React.FC<Props> = ({
 
       {/* Error from generation or file context */}
       {genError && (
-        <div className="w-full border-2 border-black bg-red-50 p-3 text-[10px] font-bold text-red-900 shadow-[3px_3px_0_0_#000] flex justify-between items-start gap-2">
+        <div className="mt-2 w-full border-2 border-black bg-red-50 p-3 text-[10px] font-bold text-red-900 shadow-[3px_3px_0_0_#000] flex justify-between items-start gap-2">
           <span>{genError}</span>
           <button type="button" onClick={() => setGenError(null)} className="font-bold shrink-0" aria-label="Dismiss">✕</button>
         </div>
       )}
 
       {usesFileDs && !showReport && (
+        <div className={`min-h-0 shrink-0 ${catalogReady ? '' : 'mt-2'}`}>
         <GenerateDsImport
           fileKey={genFileKey}
           fileName={genFileName}
@@ -1954,6 +1924,7 @@ export const Generate: React.FC<Props> = ({
           onUnlockRequest={onUnlockRequest}
           fetchImportNarration={fetchImportNarration}
         />
+        </div>
       )}
 
       {showGenerateComposer && !showReport && (
@@ -1964,19 +1935,22 @@ export const Generate: React.FC<Props> = ({
               onOpenChange={setIsSystemOpen}
               maxHeightClassName=""
               panelClassName="!overflow-visible flex flex-col p-0"
+              className="block w-full min-h-0 [&>button]:max-h-10"
               trigger={
                 <button
                   type="button"
                   data-component="Generate: DS Selector"
                   onClick={() => setIsSystemOpen(!isSystemOpen)}
-                  className="flex h-10 w-full cursor-pointer items-center justify-between bg-white px-3 text-left text-xs font-black uppercase leading-none"
+                  className="grid h-10 max-h-10 w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 bg-white px-3 py-0 text-left text-xs font-black uppercase leading-none tracking-tight"
                 >
-                  <span className="flex h-full min-w-0 translate-y-[1px] items-center gap-1.5 truncate leading-none">
-                    <span className="text-gray-500">Design system</span>
-                    <span aria-hidden>·</span>
-                    <span className="truncate">{selectedSystemDisplayName}</span>
+                  <span className="flex min-w-0 items-center gap-1.5 truncate leading-none">
+                    <span className="shrink-0 text-gray-500">Design system</span>
+                    <span className="shrink-0" aria-hidden>
+                      ·
+                    </span>
+                    <span className="min-w-0 truncate leading-none">{selectedSystemDisplayName}</span>
                   </span>
-                  <span className="flex h-full translate-y-[1px] items-center leading-none" aria-hidden>
+                  <span className="flex shrink-0 items-center justify-center leading-none" aria-hidden>
                     {isSystemOpen ? '▲' : '▼'}
                   </span>
                 </button>
@@ -2004,9 +1978,9 @@ export const Generate: React.FC<Props> = ({
                       }}
                       className={`${brutalSelectOptionRowClass} flex min-h-10 items-center justify-between gap-2 leading-none ${selectedSystem === sys ? brutalSelectOptionSelectedClass : ''}`.trim()}
                     >
-                      <span className="min-w-0 translate-y-[1px] truncate">{displaySystemName(sys)}</span>
+                      <span className="min-w-0 truncate">{displaySystemName(sys)}</span>
                       {isFileDesignSystemOption(sys) ? (
-                        <span className="ml-2 shrink-0 translate-y-[1px] border border-current px-1 py-0.5 text-[8px] leading-none">
+                        <span className="ml-2 shrink-0 border border-current px-1 py-0.5 text-[8px] leading-none">
                           Current
                         </span>
                       ) : null}
@@ -2060,22 +2034,16 @@ export const Generate: React.FC<Props> = ({
       )}
 
       {showGenerateComposer && !showReport ? (
-        <div data-component="Generate: Conversational column" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div data-component="Generate: Conversational column" className="flex min-h-0 flex-1 flex-col">
           {showChatComposerShell ? (
-            <>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
                 <div
                   ref={chatScrollRef}
                   data-component="Generate: Chat scroll"
                   className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
-                  style={{ scrollPaddingBottom: `${chatReserveBottomPx}px` }}
                 >
-                  <div className="flex h-full min-h-full flex-1 flex-col">
-                    <div className="flex-1" aria-hidden />
-                    <div
-                      className="flex w-full flex-col gap-2 px-1 pt-1"
-                      style={{ paddingBottom: `${chatReserveBottomPx}px` }}
-                    >
+                  <div className="flex min-h-full w-full flex-col justify-end">
+                    <div className="flex w-full flex-col gap-2 pt-0">
                     {showPreflight ? (
                       <div data-component="Generate: Preflight clarifier" className="shrink-0 space-y-2 px-1 pb-2 pt-2">
                         <p className="text-[10px] font-black uppercase">
@@ -2113,22 +2081,40 @@ export const Generate: React.FC<Props> = ({
                         </div>
                       </div>
                     ) : null}
-                    {showIntroTyping && conversationTurns.length === 0 && !showIntroBubble ? (
-                      <div className="flex justify-start">
-                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
-                          <span className="inline-flex items-center gap-0.5" aria-label="Assistant is typing">
-                            <span className="animate-bounce">·</span>
-                            <span className="animate-bounce delay-100">·</span>
-                            <span className="animate-bounce delay-200">·</span>
-                          </span>
-                        </div>
-                      </div>
-                    ) : null}
-                    {showIntroBubble && conversationTurns.length === 0 ? (
-                      <div className="flex justify-start">
-                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
-                          Hi — I am here to generate on the frame using your design system. Below you have three quick starters, or
-                          type what you need: I reason step by step as we go.
+                    {(introWelcomePhase === 'dots' ||
+                      introWelcomePhase === 'crossfade' ||
+                      introWelcomePhase === 'bubble') &&
+                    conversationTurns.length === 0 ? (
+                      <div className="flex justify-start" data-component="Generate: Intro welcome">
+                        <div className="relative isolate grid max-w-[95%] grid-cols-1 grid-rows-1 place-items-start bg-[#EBEBEB] px-2 py-1.5 text-[10px] text-black">
+                          {(introWelcomePhase === 'dots' || introWelcomePhase === 'crossfade') && (
+                            <div
+                              className={`col-start-1 row-start-1 flex min-h-[1.125rem] items-center transition-opacity duration-300 ease-out ${
+                                introWelcomePhase === 'dots' ? 'opacity-100' : 'opacity-0'
+                              }`}
+                              aria-hidden={introWelcomePhase !== 'dots'}
+                            >
+                              <span className="inline-flex items-center gap-0.5 font-black leading-none" aria-label="Assistant is typing">
+                                <span className="animate-bounce">·</span>
+                                <span className="animate-bounce delay-100">·</span>
+                                <span className="animate-bounce delay-200">·</span>
+                              </span>
+                            </div>
+                          )}
+                          {(introWelcomePhase === 'crossfade' || introWelcomePhase === 'bubble') && (
+                            <div
+                              className={`col-start-1 row-start-1 max-w-full min-w-0 ${
+                                introWelcomePhase === 'crossfade'
+                                  ? 'intro-welcome-bubble-in'
+                                  : 'opacity-100'
+                              }`}
+                            >
+                              <p className="leading-snug">
+                                Hi — I am here to generate on the frame using your design system. Below you have three quick starters,
+                                or type what you need: I reason step by step as we go.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : null}
@@ -2136,8 +2122,10 @@ export const Generate: React.FC<Props> = ({
                       <div key={turn.id} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className="max-w-[95%]">
                           <div
-                            className={`border-2 border-black px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
-                              turn.role === 'user' ? 'bg-[#ffc900]/90 font-mono' : 'bg-white'
+                            className={`px-2 py-1.5 text-[10px] whitespace-pre-wrap leading-snug ${
+                              turn.role === 'user'
+                                ? 'border-2 border-black bg-[#ffc900]/90 font-mono'
+                                : 'bg-[#EBEBEB] text-black'
                             }`}
                           >
                             {turn.body}
@@ -2182,7 +2170,7 @@ export const Generate: React.FC<Props> = ({
                     ))}
                     {showAssistantThinkingDots ? (
                       <div className="flex justify-start" aria-live="polite" aria-busy="true">
-                        <div className="border-2 border-black bg-white px-2 py-1.5 text-[10px] font-black leading-none">
+                        <div className="bg-[#EBEBEB] px-2 py-1.5 text-[10px] font-black leading-none text-black">
                           <span className="inline-flex items-center gap-0.5" aria-label="Assistant is thinking">
                             <span className="animate-bounce">·</span>
                             <span className="animate-bounce delay-100">·</span>
@@ -2193,7 +2181,7 @@ export const Generate: React.FC<Props> = ({
                     ) : null}
                     {showLiveReasoning ? (
                       <div className="flex justify-start" aria-live="polite">
-                        <div className="max-w-[95%] border-2 border-black bg-white px-2 py-1.5 text-[10px] leading-snug">
+                        <div className="max-w-[95%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] leading-snug text-black">
                           <p className="mb-1 font-black uppercase">Live reasoning</p>
                           <div className="space-y-0.5">
                             {liveReasoningLines.map((line, idx) => (
@@ -2224,8 +2212,8 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {conversationTurns.length === 0 ? (
-                      <div className="-mx-1 border-t-2 border-black bg-white px-1 py-2">
-                        <p className="mb-1.5 px-1 text-[9px] font-black uppercase text-gray-500">Quick starters</p>
+                      <div className="bg-white pt-2">
+                        <p className="mb-1.5 text-[9px] font-black uppercase text-gray-500">Quick starters</p>
                         <div className="flex flex-col gap-1.5">
                           {contextSuggestions.map((txt, i) => (
                             <button
@@ -2244,13 +2232,10 @@ export const Generate: React.FC<Props> = ({
                     </div>
                   </div>
                 </div>
-              </div>
 
               <div
-                ref={composerDockRef}
                 data-component="Generate: Composer dock"
-                className="fixed inset-x-0 z-[56] border-t-2 border-black bg-[#f7f7f7] px-0 py-0"
-                style={{ bottom: 'calc(3.5rem + 5px)' }}
+                className={`${FULL_BLEED_OUT} relative z-[56] shrink-0 border-t-2 border-black bg-[#f7f7f7]`}
               >
                 <input
                   ref={screenshotFileInputRef}
@@ -2272,7 +2257,7 @@ export const Generate: React.FC<Props> = ({
                   onDrop={handleComposerDrop}
                 >
                   {composerAttachments.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+                    <div className="flex flex-wrap items-center gap-2 px-5 pt-2 sm:px-6">
                       {composerAttachments.map((att) => (
                         <div key={att.id} className="relative">
                           {att.type === 'image' && att.previewUrl ? (
@@ -2309,7 +2294,7 @@ export const Generate: React.FC<Props> = ({
                     onKeyDown={handlePromptKeyDown}
                     onClick={handleContentClick}
                     data-component="Generate: Rich Input"
-                    className={`max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-3 pb-14 ${
+                    className={`max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-5 pb-14 sm:px-6 ${
                       composerAttachments.length > 0 ? 'pt-1.5' : 'pt-2.5'
                     } text-sm font-mono leading-snug outline-none ${
                       composerFocused ? 'bg-[#ece7cf]' : 'bg-[#f7f7f7]'
@@ -2318,7 +2303,7 @@ export const Generate: React.FC<Props> = ({
                     data-placeholder={promptPlaceholder}
                   />
                   <div
-                    className={`absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-2 py-1.5 ${
+                    className={`absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-5 py-1.5 sm:px-6 ${
                       composerFocused ? 'bg-[#ece7cf]' : 'bg-neutral-50'
                     }`}
                   >
@@ -2394,9 +2379,9 @@ export const Generate: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           ) : threadScopeReady ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 pt-2 pb-40">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 py-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-2">
                 <p className="text-[10px] font-black uppercase">Threads</p>
                 <Button variant="secondary" type="button" className="text-[9px] uppercase" onClick={() => void handleNewConversation()}>
