@@ -55,6 +55,8 @@ interface Props {
   useInfiniteCreditsForTest?: boolean;
   estimateCredits: (payload: { action_type: string; node_count?: number }) => Promise<{ estimated_credits: number }>;
   consumeCredits: (payload: { action_type: string; credits_consumed: number; file_id?: string; max_health_score?: number }) => Promise<{ credits_remaining?: number; error?: string }>;
+  /** When audits are free (PRO / test / $0 cost), still award XP via backend log-free (no credit debit). */
+  logFreeAction?: (actionType: string) => Promise<void>;
   onNavigateToGenerate?: (prompt: string) => void;
   /** Pipeline to agents: fetch file JSON from backend (Figma REST). Called after confirm scan when fileKey is available. */
   fetchFigmaFile?: (body: FetchFigmaFileBody) => Promise<unknown>;
@@ -115,6 +117,7 @@ export const Audit: React.FC<Props> = ({
   useInfiniteCreditsForTest,
   estimateCredits,
   consumeCredits,
+  logFreeAction,
   onNavigateToGenerate,
   fetchFigmaFile,
   fetchDsAudit,
@@ -801,11 +804,14 @@ export const Audit: React.FC<Props> = ({
           setHasProtoAudited(true);
           setLastProtoAuditDate(new Date());
           const cost = protoCostRef.current;
-          if (cost > 0 && !useInfiniteCreditsForTest && !(plan === 'PRO')) {
+          const shouldChargeProto = cost > 0 && !useInfiniteCreditsForTest && !(plan === 'PRO');
+          if (shouldChargeProto) {
             consumeCredits({ action_type: 'proto_audit', credits_consumed: cost }).then((result) => {
               if (result.error === 'Insufficient credits') onUnlockRequest();
               else if (result.error) setProtoAuditError(result.error);
             });
+          } else if (logFreeAction) {
+            void logFreeAction('proto_audit').catch(() => {});
           }
         }
       }
@@ -1164,6 +1170,8 @@ export const Audit: React.FC<Props> = ({
                   setAuditError(chargeResult.error);
                   return;
                 }
+              } else if (logFreeAction) {
+                void logFreeAction('ux_audit').catch(() => {});
               }
               setUxAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
               setHasUxAudited(true);
@@ -1193,6 +1201,8 @@ export const Audit: React.FC<Props> = ({
                   setAuditError(chargeResult.error);
                   return;
                 }
+              } else if (logFreeAction) {
+                void logFreeAction('a11y_audit').catch(() => {});
               }
               setA11yAuditIssues(Array.isArray(data?.issues) ? data.issues : []);
               setLastA11yAuditDate(new Date());
@@ -1293,6 +1303,8 @@ export const Audit: React.FC<Props> = ({
                   setAuditError(chargeResult.error);
                   return;
                 }
+              } else if (logFreeAction) {
+                void logFreeAction('audit').catch(() => {});
               }
             } else {
               setAuditError('Audit not available');
@@ -1333,7 +1345,20 @@ export const Audit: React.FC<Props> = ({
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [consumeCredits, fetchFigmaFile, fetchDsAudit, fetchA11yAudit, fetchUxAudit, onUnlockRequest, useInfiniteCreditsForTest, plan, showAuditError, preferServerFigmaFetch]);
+  }, [
+    consumeCredits,
+    fetchFigmaFile,
+    fetchDsAudit,
+    fetchA11yAudit,
+    fetchUxAudit,
+    logFreeAction,
+    onUnlockRequest,
+    useInfiniteCreditsForTest,
+    plan,
+    showAuditError,
+    preferServerFigmaFetch,
+    isPro,
+  ]);
 
   const handleOpenPatGatePersonalDetails = useCallback(() => {
     setPatGateOpen(false);

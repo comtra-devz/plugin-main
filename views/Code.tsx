@@ -266,6 +266,8 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   }) => void) | null>(null);
   const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
+  /** True when this sync scan run already took credits via consume (FREE); PRO/test skip consume and use log-free XP on success. */
+  const syncScanPrepaidWithConsumeRef = useRef(false);
 
   const isPro = plan === 'PRO';
   const isAnnual = userTier === '1y';
@@ -386,6 +388,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             setHasSyncScanned(true);
             setSyncScanError(null);
             setSyncScanUpgradeUrl(null);
+            if (!syncScanPrepaidWithConsumeRef.current && logFreeAction) {
+              void logFreeAction('scan_sync').catch(() => {});
+            }
             if (snap.fileKey && storybookUrl) {
               const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
               try {
@@ -465,7 +470,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [storybookUrl, storybookToken, fetchSyncScan]);
+  }, [storybookUrl, storybookToken, fetchSyncScan, logFreeAction]);
 
   const requestCurrentFileContext = () =>
     new Promise<{ fileKey: string | null; fileName: string | null }>((resolve) => {
@@ -1200,6 +1205,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     setSyncScanUpgradeUrl(null);
     setIsSyncScanning(true);
     pendingSyncScanRef.current = true;
+    syncScanPrepaidWithConsumeRef.current = false;
 
     try {
       if (!isPro && !useInfiniteCreditsForTest) {
@@ -1220,6 +1226,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
           if (consumeResult.error === 'Insufficient credits') onUnlockRequest();
           return;
         }
+        syncScanPrepaidWithConsumeRef.current = true;
       }
       clearPendingSyncScanTimeout();
       pendingSyncScanTimeoutRef.current = window.setTimeout(() => {

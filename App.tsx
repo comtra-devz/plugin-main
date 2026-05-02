@@ -2719,6 +2719,7 @@ export default function AppTest() {
             useInfiniteCreditsForTest={useInfiniteCreditsForTest}
             estimateCredits={estimateCredits}
             consumeCredits={consumeCredits}
+            logFreeAction={logFreeAction}
             fetchFigmaFile={fetchFigmaFile}
             fetchDsAudit={fetchDsAudit}
             fetchA11yAudit={fetchA11yAudit}
