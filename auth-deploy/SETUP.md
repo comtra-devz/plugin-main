@@ -41,7 +41,8 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | *(alias)* `LEMON_STORE_ID` | Stesso valore dello store id | Stesso discorso al posto di `LEMON_SQUEEZY_STORE_ID`. |
 | `LEMON_VARIANT_1Y` | ID della **variant** del piano **Annual (1y)** in Lemon | Obbligatorio per legare gli sconti livello al prodotto giusto. Se hai solo nomi tipo `LEMON_VARIANT_SV` / `AZ` / `TZ` / `SN`, copia l’**ID numerico** della variant Annual da Lemon e incollalo qui (o aggiungi questa variabile accanto alle altre). |
 | `KIMI_API_KEY` | API key da [platform.moonshot.ai](https://platform.moonshot.ai) (Console → API Keys) | **obbligatoria** per DS Audit e altri agenti |
-| `KIMI_MODEL` | Nome modello (opzionale) | Default backend: `kimi-k2.6`. Per **testing a basso costo** puoi impostare `kimi-k2-0905-preview` via env. |
+| `KIMI_MODEL` | Modello di default per Generate, UX audit, ecc. (opzionale) | Default backend: `kimi-k2.6`. |
+| `KIMI_DS_AUDIT_MODEL` | Modello **solo** per `POST /api/agents/ds-audit` | Default nel codice: `kimi-k2-0905-preview` (latenza storica). Per usare di nuovo **Kimi 2.6** sull’audit DS senza toccare il resto: `kimi-k2.6`. |
 | `KIMI_GLOBAL_MAX_CONCURRENT` | (Opzionale) Max chiamate **Kimi in parallelo** su tutta l’istanza, se c’è **REDIS_URL** | Default **16**. Abbassa se vedi TPM troppo spesso; alza (es. 32–48) solo se Moonshot permette più throughput e Redis c’è. |
 | `KIMI_QUEUE_MAX_WAIT_MS` | Attesa massima in coda per un “slot” Kimi (ms) | Default **90000**. |
 | `KIMI_LEASE_MS` | Dopo quanto uno slot Redis scade se il worker muore (ms) | Default **180000**. |

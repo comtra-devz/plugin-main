@@ -2076,6 +2076,13 @@ app.post('/api/figma/personal-access-token', async (req, res) => {
 const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const DEFAULT_KIMI_MODEL = 'kimi-k2.6';
 const KIMI_MODEL = process.env.KIMI_MODEL || DEFAULT_KIMI_MODEL;
+/** DS Audit only: does not inherit `KIMI_MODEL` so global 2.6 does not override this A/B. Set `KIMI_DS_AUDIT_MODEL=kimi-k2.6` to use the same as the rest of the app. */
+const DEFAULT_KIMI_DS_AUDIT_MODEL = 'kimi-k2-0905-preview';
+const KIMI_DS_AUDIT_MODEL = (() => {
+  const o = process.env.KIMI_DS_AUDIT_MODEL;
+  if (o != null && String(o).trim() !== '') return String(o).trim();
+  return DEFAULT_KIMI_DS_AUDIT_MODEL;
+})();
 
 function isKimiFixedSamplingModel(model) {
   const s = String(model || '').trim();
@@ -2083,7 +2090,7 @@ function isKimiFixedSamplingModel(model) {
   return /kimi[-_]?k2\.[5-9]/i.test(s);
 }
 
-function buildKimiChatRequestPayload({ model = KIMI_MODEL, messages, maxTokens = 4096 }) {
+function buildKimiChatRequestPayload({ model = KIMI_MODEL, messages, maxTokens = 4096, thinking } = {}) {
   const resolvedModel = String(model || KIMI_MODEL || '').trim() || DEFAULT_KIMI_MODEL;
   const payload = {
     model: resolvedModel,
@@ -2093,6 +2100,10 @@ function buildKimiChatRequestPayload({ model = KIMI_MODEL, messages, maxTokens =
   };
   if (!isKimiFixedSamplingModel(resolvedModel)) {
     payload.temperature = 0.3;
+  }
+  /** Kimi K2.5+ optional chain-of-thought; disabling speeds TTFT for audits (see Moonshot K2.6 guide). */
+  if (thinking && typeof thinking === 'object') {
+    payload.thinking = thinking;
   }
   return payload;
 }
@@ -3364,7 +3375,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       '[DS_AUDIT_TIMING] ' +
         JSON.stringify({
           phase: 'prompt_built',
-          model: KIMI_MODEL,
+          model: KIMI_DS_AUDIT_MODEL,
           compacted: dsPromptInput.compacted,
           original_chars: safeJsonSize(fileJson),
           prompt_chars: userMessage.length,
@@ -3382,12 +3393,13 @@ app.post('/api/agents/ds-audit', async (req, res) => {
         },
         body: JSON.stringify(
           buildKimiChatRequestPayload({
-            model: KIMI_MODEL,
+            model: KIMI_DS_AUDIT_MODEL,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userMessage },
             ],
             maxTokens: 4096,
+            ...(isKimiFixedSamplingModel(KIMI_DS_AUDIT_MODEL) ? { thinking: { type: 'disabled' } } : {}),
           }),
         ),
       }),
@@ -3401,6 +3413,8 @@ app.post('/api/agents/ds-audit', async (req, res) => {
           ok: kimiRes.ok,
           status: kimiRes.status,
           note: 'queue Redis + HTTP Moonshot',
+          kimi_thinking:
+            isKimiFixedSamplingModel(KIMI_DS_AUDIT_MODEL) ? 'disabled' : 'default',
         }),
     );
     if (!kimiRes.ok) {
@@ -3427,9 +3441,27 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       return res.status(kimiRes.status >= 500 ? 502 : 400).json({ error: 'Kimi API error', details: t.slice(0, 200) });
     }
     const kimiData = await kimiRes.json();
-    const content = kimiData?.choices?.[0]?.message?.content;
+    const choice0 = kimiData?.choices?.[0];
+    const content = choice0?.message?.content;
+    const finishReason = choice0?.finish_reason;
+    if (content == null || typeof content !== 'string') {
+      console.error(
+        '[DS_AUDIT_TIMING] ' +
+          JSON.stringify({
+            phase: 'kimi_missing_content',
+            finish_reason: finishReason ?? null,
+            refusal: Boolean(choice0?.message && choice0.message.refusal != null),
+          }),
+      );
+    }
     const parsed = extractJsonFromContent(content);
+    if (parsed == null && typeof content === 'string' && content.trim()) {
+      console.error('DS Audit: Kimi returned non-JSON content', content.slice(0, 800));
+    }
     const rawIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
+    if (rawIssues.length === 0 && parsed && typeof parsed === 'object' && !Array.isArray(parsed.issues)) {
+      console.warn('[DS_AUDIT_TIMING]', JSON.stringify({ phase: 'kimi_issues_shape', keys: Object.keys(parsed) }));
+    }
     let issues = rawIssues.map(normalizeDsAuditIssue).filter(Boolean);
     try {
       issues = resolveDsAuditIssuesFromSnapshot(issues, fileJson);
@@ -3455,7 +3487,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
       const sizeBand = nodeCount > 0 ? sizeBandFromNodeCount(nodeCount) : null;
       dbSql`
         INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
-        VALUES ('ds_audit', ${inputTokens}, ${outputTokens}, ${sizeBand}, ${KIMI_MODEL})
+        VALUES ('ds_audit', ${inputTokens}, ${outputTokens}, ${sizeBand}, ${KIMI_DS_AUDIT_MODEL})
       `.catch((err) => console.error('Kimi usage log insert failed', err.message));
     }
 
@@ -6770,6 +6802,7 @@ app.post('/api/agents/ux-audit', async (req, res) => {
               { role: 'user', content: userMessage },
             ],
             maxTokens: 4096,
+            ...(isKimiFixedSamplingModel(KIMI_MODEL) ? { thinking: { type: 'disabled' } } : {}),
           }),
         ),
       }),
