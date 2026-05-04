@@ -165,6 +165,8 @@ export interface SyncSnapshot {
     description: string;
     width?: number;
     height?: number;
+    /** Figma published component key when available (Deep Sync identity hints). */
+    figmaComponentKey?: string;
   }>;
   /** Canvas instances — used with `components` so drift names match the previous document walk. */
   instances: Array<{
@@ -179,6 +181,8 @@ export interface SyncSnapshot {
     name: string;
     type: 'FILL' | 'TEXT' | 'EFFECT' | 'GRID';
   }>;
+  /** Map Figma node id → persisted comtra:identity JSON (plugin data). */
+  comtra_identities?: Record<string, Record<string, unknown>>;
 }
 
 export interface NavProps {

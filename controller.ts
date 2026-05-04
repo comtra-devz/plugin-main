@@ -25,6 +25,19 @@ setTimeout(() => {
 const SESSION_DAYS = 30; // Durata sessione in giorni; 0 = nessuna scadenza (solo logout manuale)
 const DS_IMPORT_META_STORAGE_KEY = 'comtra-ds-import-meta-v1';
 const SYNC_RESTORE_STORAGE_KEY = 'comtra-sync-restore-state-v1';
+/** Deep Sync: persistent Figma ↔ Storybook identity (JSON) on nodes. */
+const COMTRA_IDENTITY_PLUGIN_KEY = 'comtra:identity';
+
+function parseComtraIdentityPluginData(raw: string | undefined): Record<string, unknown> | null {
+  if (!raw || !String(raw).trim()) return null;
+  try {
+    const o = JSON.parse(String(raw)) as unknown;
+    if (o && typeof o === 'object' && !Array.isArray(o)) return o as Record<string, unknown>;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 type DsImportMetaRow = {
   fileKey: string;
@@ -2268,6 +2281,79 @@ figma.ui.onmessage = async (raw: any) => {
     return;
   }
 
+  if (msg.type === 'set-comtra-node-identity') {
+    void (async () => {
+      const nodeId = String(msg.nodeId || '').trim();
+      try {
+        const identity = msg.identity;
+        if (!nodeId || !identity || typeof identity !== 'object' || Array.isArray(identity)) {
+          figma.ui.postMessage({ type: 'comtra-node-identity-set', nodeId: nodeId || null, ok: false });
+          return;
+        }
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (!node || !('setPluginData' in node)) {
+          figma.ui.postMessage({ type: 'comtra-node-identity-set', nodeId, ok: false });
+          return;
+        }
+        (node as SceneNode).setPluginData(COMTRA_IDENTITY_PLUGIN_KEY, JSON.stringify(identity));
+        figma.ui.postMessage({ type: 'comtra-node-identity-set', nodeId, ok: true });
+      } catch (e) {
+        console.error('[set-comtra-node-identity]', e);
+        figma.ui.postMessage({ type: 'comtra-node-identity-set', nodeId: nodeId || null, ok: false });
+      }
+    })();
+    return;
+  }
+
+  if (msg.type === 'get-comtra-node-identity') {
+    void (async () => {
+      const nodeId = String(msg.nodeId || '').trim();
+      try {
+        if (!nodeId) {
+          figma.ui.postMessage({ type: 'comtra-node-identity-result', nodeId: null, identity: null });
+          return;
+        }
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (!node || !('getPluginData' in node)) {
+          figma.ui.postMessage({ type: 'comtra-node-identity-result', nodeId, identity: null });
+          return;
+        }
+        const raw = (node as SceneNode).getPluginData(COMTRA_IDENTITY_PLUGIN_KEY);
+        figma.ui.postMessage({
+          type: 'comtra-node-identity-result',
+          nodeId,
+          identity: parseComtraIdentityPluginData(raw),
+        });
+      } catch (e) {
+        console.error('[get-comtra-node-identity]', e);
+        figma.ui.postMessage({ type: 'comtra-node-identity-result', nodeId: nodeId || null, identity: null });
+      }
+    })();
+    return;
+  }
+
+  if (msg.type === 'get-all-comtra-identities') {
+    void (async () => {
+      try {
+        await figma.loadAllPagesAsync();
+        const identities: Record<string, Record<string, unknown>> = {};
+        const nodes = figma.root.findAllWithCriteria({
+          types: ['COMPONENT', 'COMPONENT_SET', 'INSTANCE'],
+        }) as SceneNode[];
+        for (const n of nodes) {
+          const raw = n.getPluginData(COMTRA_IDENTITY_PLUGIN_KEY);
+          const parsed = parseComtraIdentityPluginData(raw);
+          if (parsed) identities[n.id] = parsed;
+        }
+        figma.ui.postMessage({ type: 'all-comtra-identities-result', identities });
+      } catch (e) {
+        console.error('[get-all-comtra-identities]', e);
+        figma.ui.postMessage({ type: 'all-comtra-identities-result', identities: {}, error: String(e) });
+      }
+    })();
+    return;
+  }
+
   /** Lightweight snapshot for Deep Sync (no full document JSON, no REST on backend). */
   if (msg.type === 'get-sync-snapshot') {
     (async () => {
@@ -2319,6 +2405,10 @@ figma.ui.onmessage = async (raw: any) => {
               inSet && node.variantProperties
                 ? ({ ...node.variantProperties } as Record<string, string>)
                 : null;
+            const figmaComponentKey =
+              'key' in node && typeof (node as { key?: unknown }).key === 'string'
+                ? String((node as { key: string }).key)
+                : undefined;
             components.push({
               key: node.id,
               name: node.name,
@@ -2327,7 +2417,15 @@ figma.ui.onmessage = async (raw: any) => {
               description,
               width: typeof node.width === 'number' ? node.width : undefined,
               height: typeof node.height === 'number' ? node.height : undefined,
+              figmaComponentKey,
             });
+          }
+
+          const comtraIdentities: Record<string, Record<string, unknown>> = {};
+          for (const node of compAndSets) {
+            if (node.type !== 'COMPONENT') continue;
+            const parsed = parseComtraIdentityPluginData(node.getPluginData(COMTRA_IDENTITY_PLUGIN_KEY));
+            if (parsed) comtraIdentities[node.id] = parsed;
           }
 
           const instances: Array<{ id: string; name: string; mainComponentName: string | null; width?: number; height?: number }> = [];
@@ -2359,6 +2457,7 @@ figma.ui.onmessage = async (raw: any) => {
               components,
               instances,
               styles,
+              comtra_identities: comtraIdentities,
             },
           });
         } finally {

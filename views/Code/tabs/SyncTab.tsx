@@ -1,5 +1,5 @@
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SyncTabProps,
   BRUTAL,
@@ -85,6 +85,14 @@ const SOURCE_STEPPER_TOTAL = SOURCE_WIZARD_STEPS.length;
 const SOURCE_STEPPER_NODE_HALF = 20; // 40px node
 const SOURCE_STEPPER_RAIL_LEFT_PCT = 100 / (SOURCE_STEPPER_TOTAL * 2);
 const SOURCE_STEPPER_RAIL_WIDTH_PCT = 100 - SOURCE_STEPPER_RAIL_LEFT_PCT * 2;
+
+const DEEP_SYNC_LOADER_STEPS = [
+  'Reading Storybook index',
+  'Fetching repo structure',
+  'Mapping component identities',
+  'Analyzing drift',
+  'Generating sync plan',
+] as const;
 
 const SYNC_CATEGORY_META: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, { label: string; desc: string; tone: string }> = {
   MISSING: {
@@ -293,7 +301,9 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   onDeleteSourceConnection,
   onScanSourceConnection,
   onStartSourceAuth,
-  lastSyncAllDate
+  lastSyncAllDate,
+  syncScanVariant = 'legacy',
+  syncReconcileMeta = null,
 }) => {
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
   const [tokenInput, setTokenInput] = useState(storybookToken || '');
@@ -318,6 +328,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     Partial<Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, boolean>>
   >({});
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [deepLoaderIx, setDeepLoaderIx] = useState(0);
   const filtersRowRef = useRef<HTMLDivElement | null>(null);
   const draggingFiltersRef = useRef(false);
   const dragStartXRef = useRef(0);
@@ -346,6 +357,35 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           ],
     [activeSyncFileKey, activeSyncFileName, storybookUrl, syncLinkedFiles],
   );
+  useEffect(() => {
+    if (!isSyncScanning || syncScanVariant !== 'deep') {
+      setDeepLoaderIx(0);
+      return;
+    }
+    const t = window.setInterval(() => {
+      setDeepLoaderIx((i) => (i + 1) % DEEP_SYNC_LOADER_STEPS.length);
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [isSyncScanning, syncScanVariant]);
+
+  const deepBuckets = useMemo(() => {
+    const inSync: SyncDriftItem[] = [];
+    const needsReview: SyncDriftItem[] = [];
+    const drift: SyncDriftItem[] = [];
+    const unFigma: SyncDriftItem[] = [];
+    const unStory: SyncDriftItem[] = [];
+    for (const it of syncItems) {
+      const c = it.syncCategory;
+      if (c === 'in_sync') inSync.push(it);
+      else if (c === 'needs_review') needsReview.push(it);
+      else if (c === 'unmatched_figma') unFigma.push(it);
+      else if (c === 'unmatched_story') unStory.push(it);
+      else if (c === 'drift' || !c) drift.push(it);
+      else drift.push(it);
+    }
+    return { inSync, needsReview, drift, unFigma, unStory };
+  }, [syncItems]);
+
   const syncOverview = useMemo(() => {
     const sections: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]> = {
       MISSING: [],
@@ -817,6 +857,28 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           </BrutalDropdown>
                         )}
                       </div>
+                      <div
+                        className={`mt-2 flex items-center gap-2 border-2 px-2 py-1.5 text-[9px] font-bold uppercase ${
+                          sourceConnection?.status === 'ready'
+                            ? 'border-green-600 bg-green-50 text-green-800'
+                            : 'border-gray-400 bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block size-2 rounded-full ${sourceConnection?.status === 'ready' ? 'animate-pulse bg-green-500' : 'bg-gray-400'}`}
+                          aria-hidden
+                        />
+                        {sourceConnection?.status === 'ready' ? (
+                          <span>AI Agent ready</span>
+                        ) : (
+                          <span className="flex flex-wrap items-center gap-1">
+                            Connect source to enable AI Sync
+                            <button type="button" className="underline" onClick={openSourceWizardFromEntry}>
+                              Open wizard
+                            </button>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                   {syncScanError && (
@@ -836,6 +898,14 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   )}
                   {!hasSyncScanned ? (
                     <div className="text-center">
+                      {isSyncScanning && syncScanVariant === 'deep' ? (
+                        <div className="mb-3 min-h-[100px] border-2 border-black bg-black p-3 text-left font-mono text-[10px] leading-relaxed text-green-400">
+                          <div className="text-green-300">{DEEP_SYNC_LOADER_STEPS[deepLoaderIx]}</div>
+                          <div className="mt-2 text-[9px] text-gray-500">
+                            Deep Sync: Storybook + repository + Qwen mapping (or standard fallback if AI is unavailable).
+                          </div>
+                        </div>
+                      ) : null}
                       {sourceConnectionLoading ? (
                         <p className="text-[10px] text-gray-500 mb-2">Checking existing source connection…</p>
                       ) : sourceConnection ? (
@@ -888,7 +958,24 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                         null
                       ) : (
                         <>
-                          <div className="mb-3 grid grid-cols-2 gap-2">
+                          <div className="mb-2 flex justify-end">
+                            {syncReconcileMeta?.analysis_mode === 'ai' ? (
+                              <span
+                                className="border-2 border-violet-600 bg-violet-100 px-2 py-0.5 text-[8px] font-black uppercase text-violet-900"
+                                title={syncReconcileMeta.reasoning_summary || 'AI analysis'}
+                              >
+                                AI Analysis
+                              </span>
+                            ) : syncReconcileMeta?.analysis_mode === 'standard' ? (
+                              <span
+                                className="border-2 border-gray-500 bg-gray-100 px-2 py-0.5 text-[8px] font-black uppercase text-gray-800"
+                                title="AI agent temporarily unavailable — standard analysis."
+                              >
+                                Standard Analysis
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                             <div className={`${BRUTAL.card} bg-[#ffc900] p-2`}>
                               <div className="text-[9px] font-black uppercase">Sync Health</div>
                               <div className="text-2xl font-black leading-none">{syncOverview.score}</div>
@@ -905,7 +992,86 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               <div className="text-[9px] font-black uppercase text-gray-500">Manual Review</div>
                               <div className="text-xl font-black leading-none">{syncOverview.manual}</div>
                             </div>
+                            <div className={`${BRUTAL.card} p-2`}>
+                              <div className="text-[9px] font-black uppercase text-gray-500">AI confidence</div>
+                              <div
+                                className={`text-2xl font-black leading-none ${
+                                  syncReconcileMeta?.avg_confidence == null
+                                    ? 'text-gray-400'
+                                    : syncReconcileMeta.avg_confidence >= 0.8
+                                      ? 'text-green-700'
+                                      : syncReconcileMeta.avg_confidence >= 0.6
+                                        ? 'text-amber-700'
+                                        : 'text-red-600'
+                                }`}
+                                title={
+                                  syncReconcileMeta?.avg_confidence == null
+                                    ? 'N/A when only legacy scan ran'
+                                    : syncReconcileMeta.reasoning_summary || ''
+                                }
+                              >
+                                {syncReconcileMeta?.avg_confidence == null
+                                  ? 'N/A'
+                                  : `${Math.round(syncReconcileMeta.avg_confidence * 100)}%`}
+                              </div>
+                            </div>
                           </div>
+                          {(deepBuckets.inSync.length > 0 ||
+                            deepBuckets.needsReview.length > 0 ||
+                            deepBuckets.unFigma.length > 0 ||
+                            deepBuckets.unStory.length > 0) && (
+                            <div className="mb-3 space-y-2 border-2 border-black bg-white p-2 text-left text-[10px]">
+                              {deepBuckets.inSync.length > 0 ? (
+                                <details className="border border-gray-200 p-1">
+                                  <summary className="cursor-pointer font-black uppercase">
+                                    In sync ({deepBuckets.inSync.length})
+                                  </summary>
+                                  <ul className="mt-1 max-h-28 overflow-y-auto font-mono text-[9px] text-green-800">
+                                    {deepBuckets.inSync.map((x) => (
+                                      <li key={x.id}>{x.figmaName || x.name}</li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              ) : null}
+                              {deepBuckets.needsReview.length > 0 ? (
+                                <div className="border border-amber-300 bg-amber-50 p-2">
+                                  <div className="font-black uppercase text-amber-900">
+                                    Needs review ({deepBuckets.needsReview.length})
+                                  </div>
+                                  <ul className="mt-1 space-y-1">
+                                    {deepBuckets.needsReview.map((x) => (
+                                      <li
+                                        key={x.id}
+                                        className="flex flex-wrap justify-between gap-1 border-b border-amber-200 pb-1 font-mono text-[9px]"
+                                      >
+                                        <span>{x.figmaName || x.layerId}</span>
+                                        <span className="text-gray-600">↔ {x.storybookName || x.storyId}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                              {(deepBuckets.unFigma.length > 0 || deepBuckets.unStory.length > 0) && (
+                                <details className="border border-gray-200 p-1">
+                                  <summary className="cursor-pointer font-black uppercase">
+                                    Unmatched (Figma {deepBuckets.unFigma.length} / Story {deepBuckets.unStory.length})
+                                  </summary>
+                                  <div className="mt-1 grid grid-cols-2 gap-2 font-mono text-[8px]">
+                                    <ul className="max-h-24 overflow-y-auto">
+                                      {deepBuckets.unFigma.map((x) => (
+                                        <li key={x.id}>{x.layerId || x.name}</li>
+                                      ))}
+                                    </ul>
+                                    <ul className="max-h-24 overflow-y-auto">
+                                      {deepBuckets.unStory.map((x) => (
+                                        <li key={x.id}>{x.storybookName || x.name}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          )}
 
                           <div
                             ref={filtersRowRef}

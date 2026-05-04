@@ -51,7 +51,7 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `QWEN_MODEL_TEXT` | Modello testo per Generate (create / modify senza screenshot) | Default: `qwen3.5-35b-a3b` |
 | `QWEN_MODEL_VL` | Modello vision quando c’è screenshot e `mode !== modify` | Default: `qwen3-vl-32b-instruct` |
 | `QWEN_API_TIMEOUT_MS` | Timeout HTTP Qwen (ms) | Default **120000**. |
-| `USE_QWEN_FOR_GENERATE` | `false` / `0` / `off` / `no` = **forza Kimi** sul main Generate anche se `QWEN_API_KEY` c’è. Se la variabile è assente o `true`, con key Qwen il main è **Qwen**. | Serve ancora **`KIMI_API_KEY`** per spec resolver, repair ed enrichment. |
+| `USE_QWEN_FOR_GENERATE` | `false` / `0` / `off` / `no` = **forza Kimi** sul Generate (main, spec, repair, enrichment) anche se `QWEN_API_KEY` c’è. Se assente o `true` e c’è `QWEN_API_KEY`, **tutto il percorso Generate** usa **Qwen** (`QWEN_MODEL_TEXT` / `QWEN_MODEL_VL` via `routeQwenGenerate`). **`KIMI_API_KEY`** non è richiesta in quel caso (resta necessaria per altre route: DS audit, Enhance Plus, UX audit, code gen, ecc.). |
 | *(smoke)* `GET /api/health/qwen-config` | JSON: `use_qwen_for_generate`, `use_qwen_explicitly_disabled`, modelli (mai secret) | Dopo deploy env. |
 
 Dopo ogni modifica alle variabili: **Redeploy**.

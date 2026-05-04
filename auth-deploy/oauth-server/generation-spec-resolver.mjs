@@ -93,7 +93,7 @@ export function normalizeGenerationSpec(rawSpec) {
 
 export function generationSpecToPromptBlock(spec) {
   if (!spec || typeof spec !== 'object') return '';
-  return ['', '[GENERATION_SPEC — Kimi-resolved pattern contract]', JSON.stringify(spec), '[END GENERATION_SPEC]'].join('\n');
+  return ['', '[GENERATION_SPEC — resolved pattern contract]', JSON.stringify(spec), '[END GENERATION_SPEC]'].join('\n');
 }
 
 export function generationSpecSearchText(spec) {

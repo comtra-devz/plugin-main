@@ -1139,6 +1139,16 @@ function getUserAuthContext(req) {
   return { userId: null, reason: 'jwt_verify_failed' };
 }
 
+async function userHasProPlan(userId) {
+  if (!dbSql || !userId) return false;
+  try {
+    const r = await dbSql`SELECT plan FROM users WHERE id = ${userId} LIMIT 1`;
+    return String(r.rows[0]?.plan || 'FREE').toUpperCase() === 'PRO';
+  } catch {
+    return false;
+  }
+}
+
 /** First name + surname in DB + flags for plugin (Personal Details, badge). */
 function attachUserProfileFromRow(user, row) {
   if (!row) return;
@@ -1468,6 +1478,9 @@ const XP_BY_ACTION = {
   sync: 25,
   comp_sync: 25,
   scan_sync: 25,
+  sync_reconcile: 30,
+  sync_reconcile_fallback: 15,
+  sync_open_pr: 8,
   sync_fix: 25,
   code_gen_ai: 40,
   code_gen_free: 2,
@@ -1509,6 +1522,9 @@ function estimateCreditsByAction(actionType, nodeCount, options = {}) {
   if (actionType === 'ux_audit') return 4;
   if (actionType === 'sync') return 1;
   if (actionType === 'scan_sync') return 15;
+  if (actionType === 'sync_reconcile') return 30;
+  if (actionType === 'sync_reconcile_fallback') return 15;
+  if (actionType === 'sync_open_pr') return 8;
   if (actionType === 'sync_fix' || actionType === 'sync_storybook' || actionType === 'comp_sync') return 5;
   if (actionType === 'code_gen') return 0;
   if (actionType === 'code_gen_ai') return 40;
@@ -2003,6 +2019,7 @@ app.get('/api/health/qwen-config', (_req, res) => {
       base_url_configured: Boolean(QWEN_BASE_URL),
       model_text: QWEN_MODEL_TEXT,
       model_vl: QWEN_MODEL_VL,
+      model_sync_reconcile: QWEN_SYNC_RECONCILE_MODEL,
     },
   });
 });
@@ -2159,6 +2176,10 @@ const QWEN_BASE_URL = String(
 ).replace(/\/$/, '');
 const QWEN_MODEL_TEXT = String(process.env.QWEN_MODEL_TEXT || 'qwen3.5-35b-a3b').trim();
 const QWEN_MODEL_VL = String(process.env.QWEN_MODEL_VL || 'qwen3-vl-32b-instruct').trim();
+/** Deep Sync reconcile: structured JSON + repo context; default qwen-plus (strong instruction following). Override with QWEN_SYNC_RECONCILE_MODEL. */
+const QWEN_SYNC_RECONCILE_MODEL = String(
+  process.env.QWEN_SYNC_RECONCILE_MODEL || process.env.QWEN_MODEL_TEXT || 'qwen-plus',
+).trim();
 
 /** Opt out of Qwen for main Generate (stay on Kimi) while keeping QWEN_* in env for other use. */
 function useQwenForGenerateExplicitlyDisabled() {
@@ -3571,7 +3592,7 @@ app.post('/api/agents/ds-audit', async (req, res) => {
   }
 });
 
-// --- Generate agent (Kimi): file_key + prompt → action plan JSON. A/B: 50% model A vs model B (see KIMI_GENERATE_MODEL_*)
+// --- Generate agent: file_key + prompt → action plan JSON. Kimi path: A/B 50% model A vs B (KIMI_GENERATE_MODEL_*). Qwen path: QWEN_MODEL_* via routeQwenGenerate.
 const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
 const GENERATE_QWEN_OVERLAY_PATH = path.join(__dirname, '..', 'prompts', 'generate-qwen-overlay.md');
 const GENERATE_QWEN_VL_OVERLAY_PATH = path.join(__dirname, '..', 'prompts', 'generate-qwen-vl-overlay.md');
@@ -3643,7 +3664,7 @@ async function callKimi(messages, maxTokens = 8192, textModelOverride = null) {
   return { content: data?.choices?.[0]?.message?.content, usage: data?.usage };
 }
 
-async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, promptContext, textModelOverride = null) {
+function buildRepairActionPlanMessages(systemPrompt, actionPlan, errors, promptContext) {
   const repairUserMsg = [
     'Your previous JSON is invalid. Repair it and return only one valid JSON object.',
     `Validation errors: ${(errors || []).join(' | ')}`,
@@ -3651,11 +3672,7 @@ async function repairActionPlanWithKimi(systemPrompt, actionPlan, errors, prompt
     `Prompt context:\n${promptContext}`,
     `Previous JSON:\n${JSON.stringify(actionPlan || {}, null, 2)}`,
   ].join('\n\n');
-  return callKimi(
-    [{ role: 'system', content: systemPrompt }, { role: 'user', content: repairUserMsg }],
-    8192,
-    textModelOverride,
-  );
+  return [{ role: 'system', content: systemPrompt }, { role: 'user', content: repairUserMsg }];
 }
 
 function normalizeActionPlanEnvelope(actionPlan, { prompt, mode, dsSource } = {}) {
@@ -4892,12 +4909,6 @@ app.post('/api/agents/generate', async (req, res) => {
   const useQwenForGenerate = useQwenForGenerateFromEnv();
   if (useQwenForGenerate) {
     if (!QWEN_API_KEY) return res.status(503).json({ error: 'QWEN_API_KEY not configured' });
-    if (!KIMI_API_KEY) {
-      return res.status(503).json({
-        error:
-          'KIMI_API_KEY is still required when Generate uses Qwen (spec resolver, repair, enrichment use Kimi until migrated).',
-      });
-    }
   } else if (!KIMI_API_KEY) {
     return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
   }
@@ -4938,6 +4949,26 @@ app.post('/api/agents/generate', async (req, res) => {
       temperature: route.temperature,
     });
     return { content: out.content, usage: out.usage };
+  };
+  /** Content-defaults copy pass: Qwen text when Generate is on Qwen (same contract as `runKimiContentDefaultsEnrichment`). */
+  const callEnrichmentLlm = async (messages, maxTokens = 2048) => {
+    if (useQwenForGenerate) {
+      const route = routeQwenGenerate(
+        { mode: 'create', hasScreenshot: false },
+        { textModel: QWEN_MODEL_TEXT, vlModel: QWEN_MODEL_VL },
+      );
+      const capped = Math.min(Math.max(256, maxTokens), route.maxTokens);
+      const out = await callQwenChatCompletion({
+        baseUrl: QWEN_BASE_URL,
+        apiKey: QWEN_API_KEY,
+        model: route.modelId,
+        messages,
+        maxTokens: capped,
+        temperature: route.temperature,
+      });
+      return { content: out.content, usage: out.usage };
+    }
+    return callKimiGenerate(messages, maxTokens);
   };
   const mainGenerateModelForLog = useQwenForGenerate ? getQwenMainRoute().modelId : generateChatModel;
 
@@ -5032,6 +5063,26 @@ app.post('/api/agents/generate', async (req, res) => {
     };
 
     const callKimiSpec = (messages, maxTokens = 2200) => callKimi(messages, maxTokens, KIMI_GENERATION_SPEC_MODEL);
+    /** Spec resolver: Qwen text when main Generate uses Qwen (same timeout budget as main, avoids Kimi Tier0 stalls). */
+    const callSpecLlm = async (messages, maxTokens = 2200) => {
+      if (useQwenForGenerate) {
+        const route = routeQwenGenerate(
+          { mode: 'create', hasScreenshot: false },
+          { textModel: QWEN_MODEL_TEXT, vlModel: QWEN_MODEL_VL },
+        );
+        const capped = Math.min(Math.max(512, maxTokens), Math.max(route.maxTokens, 2200));
+        const out = await callQwenChatCompletion({
+          baseUrl: QWEN_BASE_URL,
+          apiKey: QWEN_API_KEY,
+          model: route.modelId,
+          messages,
+          maxTokens: capped,
+          temperature: route.temperature,
+        });
+        return { content: out.content, usage: out.usage };
+      }
+      return callKimiSpec(messages, maxTokens);
+    };
 
     const resolveGenerationSpecPhase = async () => {
       let generationSpec = null;
@@ -5048,7 +5099,7 @@ app.post('/api/agents/generate', async (req, res) => {
         dsHash: dsHashForCache,
         archetype: inferredScreenArchetype,
         packId: packV2ArchetypeId,
-        specModel: KIMI_GENERATION_SPEC_MODEL,
+        specModel: useQwenForGenerate ? `qwen:${QWEN_MODEL_TEXT}` : KIMI_GENERATION_SPEC_MODEL,
       });
       if (prepCacheEnabled) {
         const hit = prepCacheGet(specKey);
@@ -5064,7 +5115,7 @@ app.post('/api/agents/generate', async (req, res) => {
       }
       try {
         const specRes = await runGenerationSpecResolver({
-          callKimi: callKimiSpec,
+          callKimi: callSpecLlm,
           extractJsonFromContent,
           userPrompt: prompt,
           inferredScreenArchetype,
@@ -5221,7 +5272,7 @@ app.post('/api/agents/generate', async (req, res) => {
             ? tovRule.char_limits
             : undefined;
         const enrich = await runKimiContentDefaultsEnrichment({
-          callKimi: callKimiGenerate,
+          callKimi: callEnrichmentLlm,
           archetypeId: packV2ArchetypeId,
           contentDefaultsEntry: cdEntry,
           kimiEnrichableFields: cdEntry.kimi_enrichable_fields,
@@ -5229,7 +5280,7 @@ app.post('/api/agents/generate', async (req, res) => {
           brandVoiceKeywords: kwW.length ? kwW : null,
           charLimits,
           cacheUserId: userId,
-          cachePartition: generateChatModel,
+          cachePartition: useQwenForGenerate ? `qwen:${mainGenerateModelForLog}` : generateChatModel,
         });
         if (enrich.used) {
           kimiEnrichmentBlock = enrich.block;
@@ -5239,7 +5290,7 @@ app.post('/api/agents/generate', async (req, res) => {
           totalOutputTokens += enrich.usage.output;
         }
       } catch (enrErr) {
-        console.error('Kimi content enrichment failed', enrErr?.message || enrErr);
+        console.error('Content defaults enrichment failed', enrErr?.message || enrErr);
       }
     }
     const primaryCustomDsSuccessLine =
@@ -5285,6 +5336,29 @@ app.post('/api/agents/generate', async (req, res) => {
       kimiEnrichmentBlock,
       comtraTovBlock,
     ].join('\n');
+
+    const runRepairLlmForGenerate = async (errorsList) => {
+      const messages = buildRepairActionPlanMessages(
+        systemPromptForLlm,
+        actionPlan,
+        errorsList,
+        `User prompt: ${prompt}\n\n${contextBlob}`,
+      );
+      if (useQwenForGenerate) {
+        const route = getQwenMainRoute();
+        const capped = Math.min(8192, route.maxTokens);
+        const out = await callQwenChatCompletion({
+          baseUrl: QWEN_BASE_URL,
+          apiKey: QWEN_API_KEY,
+          model: route.modelId,
+          messages,
+          maxTokens: capped,
+          temperature: route.temperature,
+        });
+        return { content: out.content, usage: out.usage };
+      }
+      return callKimi(messages, 8192, generateChatModel);
+    };
 
     let actionPlan = null;
     const forceDirectForVision = Boolean(screenshotDataUrl);
@@ -5400,13 +5474,7 @@ app.post('/api/agents/generate', async (req, res) => {
       for (let pass = 0; pass < repairPasses.length; pass++) {
         if (budgetLeftMs() <= 70000) break;
         repairStats.repair_passes_attempted += 1;
-        const repair = await repairActionPlanWithKimi(
-          systemPromptForLlm,
-          actionPlan,
-          repairPasses[pass],
-          `User prompt: ${prompt}\n\n${contextBlob}`,
-          generateChatModel,
-        );
+        const repair = await runRepairLlmForGenerate(repairPasses[pass]);
         totalInputTokens += Math.max(0, Number(repair?.usage?.input_tokens ?? repair?.usage?.prompt_tokens ?? 0));
         totalOutputTokens += Math.max(0, Number(repair?.usage?.output_tokens ?? repair?.usage?.completion_tokens ?? 0));
         const repaired = extractJsonFromContent(repair?.content);
@@ -5451,16 +5519,10 @@ app.post('/api/agents/generate', async (req, res) => {
     if (!semanticFitValidation.valid && budgetLeftMs() > 55000) {
       repairStats.semantic_escape_hatch_attempted = true;
       const semanticOnlyErrors = semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`);
-      const semanticRepair = await repairActionPlanWithKimi(
-        systemPromptForLlm,
-        actionPlan,
-        [
-          ...semanticOnlyErrors,
-          'Replace semantically incompatible INSTANCE_COMPONENT with either a correct DS component from index or CREATE_RECT + CREATE_TEXT fallback for that slot.',
-        ],
-        `User prompt: ${prompt}\n\n${contextBlob}`,
-        generateChatModel,
-      );
+      const semanticRepair = await runRepairLlmForGenerate([
+        ...semanticOnlyErrors,
+        'Replace semantically incompatible INSTANCE_COMPONENT with either a correct DS component from index or CREATE_RECT + CREATE_TEXT fallback for that slot.',
+      ]);
       totalInputTokens += Math.max(
         0,
         Number(semanticRepair?.usage?.input_tokens ?? semanticRepair?.usage?.prompt_tokens ?? 0),
@@ -5709,7 +5771,7 @@ app.post('/api/agents/generate', async (req, res) => {
       generation_spec: {
         used: Boolean(generationSpecUsed),
         cache_hit: Boolean(generationSpecCacheHit),
-        model: KIMI_GENERATION_SPEC_MODEL,
+        model: useQwenForGenerate ? QWEN_MODEL_TEXT : KIMI_GENERATION_SPEC_MODEL,
         archetype_id: generationSpec?.archetype_id || null,
         confidence: generationSpec?.confidence ?? null,
       },
@@ -6977,6 +7039,7 @@ app.post('/api/agents/ux-audit', async (req, res) => {
 
 // --- Sync: check Storybook URL (verifica che esponga /api/stories o equivalente)
 const { runSyncScanFromSnapshot, fetchStorybookMetadata } = await import('./sync-scan-engine.mjs');
+const { runDeepSyncReconcile, openGithubPrsFromSession, getSessionPrStatus } = await import('./sync-reconcile-engine.mjs');
 
 app.post('/api/agents/sync-check-storybook', async (req, res) => {
   const userId = getUserIdFromToken(req);
@@ -7070,6 +7133,126 @@ app.post('/api/agents/sync-scan', async (req, res) => {
     });
   } catch (err) {
     console.error('POST /api/agents/sync-scan', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/agents/sync-reconcile', async (req, res) => {
+  const userId = getUserIdFromToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!(await userHasProPlan(userId))) {
+    return res.status(403).json({ error: 'sync_requires_pro', code: 'sync_requires_pro' });
+  }
+  if (!POSTGRES_URL) return res.status(503).json({ error: 'Deep Sync requires database' });
+  const body = req.body || {};
+  const storybookUrl = (body.storybook_url || body.storybookUrl || '').trim();
+  const storybookToken = (body.storybook_token || body.storybookToken || '').trim() || undefined;
+  const rawSnap = body.sync_snapshot ?? body.syncSnapshot;
+  const syncSnapshot =
+    rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap) ? rawSnap : null;
+  if (!storybookUrl) return res.status(400).json({ error: 'storybook_url required' });
+  if (!syncSnapshot?.fileKey) return res.status(400).json({ error: 'sync_snapshot_required' });
+
+  try {
+    const result = await runDeepSyncReconcile({
+      sql: dbSql,
+      userId,
+      syncSnapshot,
+      storybookUrl,
+      storybookToken,
+      qwenBaseUrl: QWEN_BASE_URL,
+      qwenApiKey: QWEN_API_KEY,
+      qwenModel: QWEN_SYNC_RECONCILE_MODEL,
+    });
+
+    if (result.connectionStatus === 'unreachable' && result.error) {
+      return res.status(400).json({ error: result.error, connectionStatus: 'unreachable' });
+    }
+
+    const items = Array.isArray(result.items) ? result.items : [];
+    const normalizedStorybookUrl = normalizeStorybookUrl(storybookUrl);
+    const snapshotFileKey = String(syncSnapshot.fileKey || '').trim();
+
+    if (dbSql && snapshotFileKey && normalizedStorybookUrl) {
+      try {
+        await dbSql`
+          INSERT INTO user_sync_scans (
+            user_id, figma_file_key, storybook_url, items_json, last_scanned_at, updated_at
+          )
+          VALUES (
+            ${userId}, ${snapshotFileKey}, ${normalizedStorybookUrl}, ${JSON.stringify(items)}::jsonb, NOW(), NOW()
+          )
+          ON CONFLICT (user_id, figma_file_key, storybook_url) DO UPDATE SET
+            items_json = EXCLUDED.items_json,
+            last_scanned_at = EXCLUDED.last_scanned_at,
+            updated_at = NOW()
+        `;
+      } catch (cacheErr) {
+        console.warn('[sync-reconcile] could not persist scan cache', cacheErr?.message || cacheErr);
+      }
+    }
+
+    res.json({
+      items,
+      connectionStatus: result.connectionStatus || 'ok',
+      analysis_mode: result.analysis_mode,
+      reasoning_summary: result.reasoning_summary,
+      avg_confidence: result.avg_confidence,
+      sync_session_id: result.sync_session_id,
+    });
+  } catch (err) {
+    const code = err?.code;
+    const status = err?.status === 400 ? 400 : 500;
+    console.error('POST /api/agents/sync-reconcile', err);
+    if (status === 400) {
+      return res.status(400).json({ error: err?.message || 'Bad request', code: code || undefined });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/sync/open-pr', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!(await userHasProPlan(userId))) {
+    return res.status(403).json({ error: 'sync_requires_pro', code: 'sync_requires_pro' });
+  }
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const body = req.body || {};
+  const syncSessionId = String(body.sync_session_id || body.syncSessionId || '').trim();
+  const filePath = body.file_path != null ? String(body.file_path) : null;
+  const userConfirmed = body.user_confirmed === true || body.user_confirmed === 'true';
+  if (!syncSessionId) return res.status(400).json({ error: 'sync_session_id required' });
+  try {
+    const results = await openGithubPrsFromSession({
+      sql: dbSql,
+      userId,
+      syncSessionId,
+      filePath,
+      userConfirmed,
+    });
+    res.json({ results });
+  } catch (err) {
+    const st = err?.status === 404 ? 404 : err?.status === 501 ? 501 : 400;
+    console.error('POST /api/sync/open-pr', err);
+    res.status(st).json({ error: err?.message || 'open-pr failed' });
+  }
+});
+
+app.get('/api/sync/pr-status', async (req, res) => {
+  const authCtx = getUserAuthContext(req);
+  const userId = authCtx.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED', reason: authCtx.reason });
+  if (!dbSql) return res.status(503).json({ error: 'Database required' });
+  const syncSessionId = String(req.query.sync_session_id || req.query.syncSessionId || '').trim();
+  const prUrl = String(req.query.pr_url || req.query.prUrl || '').trim() || null;
+  if (!syncSessionId && !prUrl) return res.status(400).json({ error: 'sync_session_id or pr_url required' });
+  try {
+    const out = await getSessionPrStatus({ sql: dbSql, userId, syncSessionId: syncSessionId || null, prUrl });
+    res.json(out);
+  } catch (err) {
+    console.error('GET /api/sync/pr-status', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

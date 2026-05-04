@@ -56,7 +56,7 @@ export function Button({
       type="button"
       disabled={disabled}
       style={style}
-      className={`${BRUTAL.btn} ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? 'w-full' : ''} ${layoutClass} relative overflow-hidden ${className}`.trim()}
+      className={`${BRUTAL.btn} ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? 'w-full' : ''} ${layoutClass} relative overflow-visible ${className}`.trim()}
       {...rest}
     >
       {children}

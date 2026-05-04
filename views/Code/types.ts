@@ -61,6 +61,13 @@ export type SyncDriftAction =
   | { kind: 'create_figma_placeholder'; targetName: string; storybookUrl?: string | null }
   | null;
 
+export type SyncDriftSyncCategory =
+  | 'in_sync'
+  | 'needs_review'
+  | 'drift'
+  | 'unmatched_figma'
+  | 'unmatched_story';
+
 export interface SyncDriftItem {
   id: string;
   name: string;
@@ -75,6 +82,20 @@ export interface SyncDriftItem {
   storybookUrl?: string | null;
   suggestedAction?: string | null;
   syncAction?: SyncDriftAction;
+  /** Deep Sync reconcile grouping (doc UI sections). */
+  syncCategory?: SyncDriftSyncCategory;
+  repoPath?: string | null;
+  diff?: string | null;
+  confidenceScore?: number | null;
+  storyId?: string | null;
+  analysisMode?: 'ai' | 'standard';
+}
+
+export interface SyncReconcileMeta {
+  sync_session_id: string | null;
+  analysis_mode: 'ai' | 'standard' | null;
+  reasoning_summary?: string | null;
+  avg_confidence?: number | null;
 }
 
 export type SourceProvider = 'github' | 'bitbucket' | 'gitlab' | 'custom';
@@ -173,4 +194,8 @@ export interface SyncTabProps {
   onScanSourceConnection: (input: SourceConnectionInput) => Promise<SourceScanResult | null>;
   onStartSourceAuth: (provider: SourceProvider) => Promise<{ ok: boolean; url?: string | null; error?: string }>;
   lastSyncAllDate: Date | null;
+  /** When source is ready, scan uses POST /api/agents/sync-reconcile (Qwen + repo). */
+  syncScanVariant?: 'legacy' | 'deep';
+  /** Last successful reconcile / scan metadata for badges and PR flow. */
+  syncReconcileMeta?: SyncReconcileMeta | null;
 }

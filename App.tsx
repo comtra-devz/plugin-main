@@ -25,6 +25,7 @@ import type {
   SourceConnectionInput,
   SourceProvider,
   SourceScanResult,
+  SyncDriftItem,
 } from './views/Code/types';
 import { SyncScanRateLimitedError } from './lib/syncScanRateLimitedError';
 import { isLikelyNetworkOrCorsFetchFailure } from './lib/pluginFetchErrors';
@@ -1438,7 +1439,16 @@ export default function AppTest() {
               description: c.description ? c.description.slice(0, 240) : '',
               width: typeof c.width === 'number' ? c.width : undefined,
               height: typeof c.height === 'number' ? c.height : undefined,
+              figmaComponentKey: typeof (c as { figmaComponentKey?: string }).figmaComponentKey === 'string'
+                ? (c as { figmaComponentKey: string }).figmaComponentKey
+                : undefined,
             })),
+            comtra_identities:
+              body.sync_snapshot.comtra_identities &&
+              typeof body.sync_snapshot.comtra_identities === 'object' &&
+              !Array.isArray(body.sync_snapshot.comtra_identities)
+                ? body.sync_snapshot.comtra_identities
+                : undefined,
             instances: (body.sync_snapshot.instances || []).slice(0, 500).map((i) => ({
               id: i.id,
               name: i.name,
@@ -1477,6 +1487,98 @@ export default function AppTest() {
         throw new Error(msg);
       }
       return data;
+    },
+    [user?.authToken, handle503, AUTH_BACKEND_URL],
+  );
+
+  const fetchSyncReconcile = React.useCallback(
+    async (body: {
+      sync_snapshot?: SyncSnapshot;
+      storybook_url: string;
+      storybook_token?: string;
+    }) => {
+      if (!user?.authToken) {
+        return {
+          items: [] as SyncDriftItem[],
+          connectionStatus: 'ok' as const,
+          analysis_mode: null as null,
+          reasoning_summary: null as null,
+          avg_confidence: null as null,
+          sync_session_id: null as null,
+        };
+      }
+      const base = { storybook_url: body.storybook_url, storybook_token: body.storybook_token };
+      const slimSyncSnapshot = body.sync_snapshot
+        ? {
+            fileKey: body.sync_snapshot.fileKey,
+            fileName: body.sync_snapshot.fileName,
+            pages: body.sync_snapshot.pages,
+            components: (body.sync_snapshot.components || []).map((c) => ({
+              key: c.key,
+              name: c.name,
+              pageId: c.pageId,
+              variantProperties: c.variantProperties,
+              description: c.description ? c.description.slice(0, 240) : '',
+              width: typeof c.width === 'number' ? c.width : undefined,
+              height: typeof c.height === 'number' ? c.height : undefined,
+              figmaComponentKey: typeof (c as { figmaComponentKey?: string }).figmaComponentKey === 'string'
+                ? (c as { figmaComponentKey: string }).figmaComponentKey
+                : undefined,
+            })),
+            instances: (body.sync_snapshot.instances || []).slice(0, 500).map((i) => ({
+              id: i.id,
+              name: i.name,
+              mainComponentName: i.mainComponentName,
+              width: typeof i.width === 'number' ? i.width : undefined,
+              height: typeof i.height === 'number' ? i.height : undefined,
+            })),
+            styles: [],
+            comtra_identities:
+              body.sync_snapshot.comtra_identities &&
+              typeof body.sync_snapshot.comtra_identities === 'object' &&
+              !Array.isArray(body.sync_snapshot.comtra_identities)
+                ? body.sync_snapshot.comtra_identities
+                : undefined,
+          }
+        : undefined;
+      const payload =
+        slimSyncSnapshot && typeof slimSyncSnapshot === 'object'
+          ? { ...base, sync_snapshot: slimSyncSnapshot }
+          : { ...base };
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-reconcile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify(payload),
+      });
+      if (r.status === 503) {
+        handle503();
+        throw new Error('Service temporarily unavailable');
+      }
+      const data = (await r.json().catch(() => ({}))) as {
+        items?: SyncDriftItem[];
+        connectionStatus?: string;
+        analysis_mode?: 'ai' | 'standard';
+        reasoning_summary?: string;
+        avg_confidence?: number;
+        sync_session_id?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!r.ok) {
+        if (r.status === 403 && data.code === 'sync_requires_pro') {
+          throw new Error('Deep Sync requires a Pro plan.');
+        }
+        const msg = data.error || `Sync reconcile failed (${r.status})`;
+        throw new Error(msg);
+      }
+      return {
+        items: Array.isArray(data.items) ? data.items : [],
+        connectionStatus: (data.connectionStatus || 'ok') as 'ok' | string,
+        analysis_mode: data.analysis_mode ?? null,
+        reasoning_summary: data.reasoning_summary ?? null,
+        avg_confidence: data.avg_confidence ?? null,
+        sync_session_id: data.sync_session_id ?? null,
+      };
     },
     [user?.authToken, handle503, AUTH_BACKEND_URL],
   );
@@ -2791,6 +2893,7 @@ export default function AppTest() {
             consumeCredits={consumeCredits}
             logFreeAction={logFreeAction}
             fetchSyncScan={fetchSyncScan}
+            fetchSyncReconcile={fetchSyncReconcile}
             fetchCheckStorybook={fetchCheckStorybook}
             fetchSourceConnection={fetchSourceConnection}
             fetchSyncScanCache={fetchSyncScanCache}

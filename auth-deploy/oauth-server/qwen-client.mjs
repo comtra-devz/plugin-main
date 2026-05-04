@@ -61,7 +61,12 @@ export async function callQwenChatCompletion(opts) {
     temperature,
   };
 
-  const timeoutMs = Math.max(20000, Number(process.env.QWEN_API_TIMEOUT_MS || 120000));
+  const timeoutMs = Math.max(
+    20000,
+    typeof opts?.timeoutMs === 'number' && Number.isFinite(opts.timeoutMs)
+      ? Math.floor(opts.timeoutMs)
+      : Number(process.env.QWEN_API_TIMEOUT_MS || 120000),
+  );
   const backoffMs = [1000, 2000, 4000];
   let lastErr = null;
 

@@ -210,7 +210,7 @@ export const DesignSystemTab: React.FC<Props> = ({
               </BrutalDropdown>
           </div>
 
-          <div className="px-4">
+          <div className="overflow-visible px-4 pb-3">
             <Button
               variant="primary"
               fullWidth

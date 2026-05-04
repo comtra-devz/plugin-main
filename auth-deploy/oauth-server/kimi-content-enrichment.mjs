@@ -1,6 +1,7 @@
 /**
- * Design Intelligence v2 — Kimi enrichment for `content_defaults` (§9.1 pack v2).
+ * Design Intelligence v2 — LLM enrichment for `content_defaults` (§9.1 pack v2).
  * Single batched call when wizard_signals (tone / keywords) are present.
+ * `opts.callKimi` is a generic chat caller (Kimi or Qwen) with the same message shape.
  */
 
 import { createHash } from 'node:crypto';
@@ -148,10 +149,10 @@ title/max ${lim('title')}, description/max ${lim('description')}, primary_cta/ma
 
   const block = [
     '',
-    '[KIMI_CONTENT_ENRICHMENT — DI v2]',
+    '[CONTENT_DEFAULTS_ENRICHMENT — DI v2]',
     'Use these strings when choosing INSTANCE_COMPONENT TEXT properties and CREATE_TEXT where they match slot intent; still obey DS index and validation.',
     JSON.stringify({ archetype: archetypeId, enriched_copy: outStrings }),
-    '[END KIMI_CONTENT_ENRICHMENT]',
+    '[END CONTENT_DEFAULTS_ENRICHMENT]',
   ].join('\n');
 
   const out = { block, used: true, usage, enriched: outStrings, cacheHit: false };

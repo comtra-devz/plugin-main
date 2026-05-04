@@ -2052,7 +2052,7 @@ export const Generate: React.FC<Props> = ({
                 <div
                   ref={chatScrollRef}
                   data-component="Generate: Chat scroll"
-                  className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-y-auto"
+                  className="generate-chat-scroll flex min-h-0 flex-1 flex-col overflow-x-visible overflow-y-auto"
                 >
                   <div className="flex min-h-full w-full flex-col justify-end">
                     <div className="flex w-full flex-col gap-2 pt-0">
@@ -2146,12 +2146,11 @@ export const Generate: React.FC<Props> = ({
                           turn.actions &&
                           turn.actions.length > 0 &&
                           !dismissedAssistantActionTurnIds.has(turn.id) ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
+                            <div className="mt-2 flex flex-wrap gap-1.5 pb-2">
                               {turn.actions.map((action) => {
                                 const m = action.match(/^(.*)\s+\(~\s*(\d+)\s*cr\)$/i);
                                 const baseAction = m ? m[1].trim() : action;
                                 const cost = m ? m[2] : null;
-                                const isConfirm = /^Generate now|^Apply change/i.test(baseAction);
                                 return (
                                   <button
                                     key={`${turn.id}-${action}`}
@@ -2159,23 +2158,13 @@ export const Generate: React.FC<Props> = ({
                                     onClick={() =>
                                       handleIntentAction(action, turn.actionIntent, turn.actionPrompt, turn.id)
                                     }
-                                    className={`inline-flex min-h-9 items-center gap-1.5 border-2 border-black px-3 py-1 text-[10px] font-black ${
-                                      isConfirm
-                                        ? 'relative bg-black pr-12 text-white shadow-[3px_3px_0_0_#ff90e8] hover:bg-neutral-900'
-                                        : 'bg-white hover:bg-[#ffc900]'
-                                    }`}
+                                    className={`relative inline-flex min-h-8 items-center gap-1 border-2 border-black bg-[#ff90e8] px-2.5 py-1 text-[9px] font-black uppercase text-black shadow-[2px_2px_0_0_#000] transition-colors hover:bg-white ${cost ? 'pr-9' : ''}`}
                                   >
                                     <span>{baseAction}</span>
                                     {cost ? (
-                                      isConfirm ? (
-                                        <span className="absolute right-1 top-1/2 -translate-y-1/2 border border-black bg-[#ffc900] px-1 py-0 leading-none text-[8px] text-black">
-                                          {cost}CR
-                                        </span>
-                                      ) : (
-                                        <span className="border border-black bg-white px-1 py-0 leading-none text-[8px]">
-                                          {cost}CR
-                                        </span>
-                                      )
+                                      <span className="absolute right-1 top-1/2 -translate-y-1/2 border border-black bg-[#ffc900] px-1 py-0 text-[7px] font-black leading-none text-black">
+                                        {cost}CR
+                                      </span>
                                     ) : null}
                                   </button>
                                 );
@@ -2249,7 +2238,7 @@ export const Generate: React.FC<Props> = ({
 
               <div
                 data-component="Generate: Composer dock"
-                className={`${FULL_BLEED_OUT} relative z-[56] shrink-0 border-t-2 border-black bg-[#f7f7f7]`}
+                className={`${FULL_BLEED_OUT} relative z-[56] shrink-0 overflow-visible border-t-2 border-black bg-[#f7f7f7] pb-2`}
               >
                 <input
                   ref={screenshotFileInputRef}
@@ -2260,7 +2249,7 @@ export const Generate: React.FC<Props> = ({
                   onChange={handleScreenshotFileChange}
                 />
                 <div
-                  className={`relative w-full bg-[#f7f7f7] ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''} ${
+                  className={`relative w-full overflow-visible bg-[#f7f7f7] ${dsGateBlocked ? 'opacity-50 pointer-events-none' : ''} ${
                     composerDragActive ? 'ring-2 ring-[#4b6bff] ring-inset bg-[#eef2ff]' : ''
                   }`}
                   onDragOver={(e) => {
@@ -2271,7 +2260,7 @@ export const Generate: React.FC<Props> = ({
                   onDrop={handleComposerDrop}
                 >
                   {composerAttachments.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-2 px-5 pt-2 sm:px-6">
+                    <div className="flex flex-wrap items-center gap-2 px-4 pt-2 sm:px-4">
                       {composerAttachments.map((att) => (
                         <div key={att.id} className="relative">
                           {att.type === 'image' && att.previewUrl ? (
@@ -2308,7 +2297,7 @@ export const Generate: React.FC<Props> = ({
                     onKeyDown={handlePromptKeyDown}
                     onClick={handleContentClick}
                     data-component="Generate: Rich Input"
-                    className={`max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-5 pb-14 sm:px-6 ${
+                    className={`max-h-[160px] min-h-[5.25rem] cursor-text overflow-y-auto px-4 pb-14 sm:px-4 ${
                       composerAttachments.length > 0 ? 'pt-1.5' : 'pt-2.5'
                     } text-sm font-mono leading-snug outline-none ${
                       composerFocused ? 'bg-[#ece7cf]' : 'bg-[#f7f7f7]'
@@ -2317,7 +2306,7 @@ export const Generate: React.FC<Props> = ({
                     data-placeholder={promptPlaceholder}
                   />
                   <div
-                    className={`absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-5 py-1.5 sm:px-6 ${
+                    className={`absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-4 py-1.5 sm:px-4 ${
                       composerFocused ? 'bg-[#ece7cf]' : 'bg-neutral-50'
                     }`}
                   >
@@ -2353,7 +2342,7 @@ export const Generate: React.FC<Props> = ({
                         type="button"
                         onClick={handleEnhancePrompt}
                         disabled={!hasContent || loading || enhancePlusBusy || enhanceLocked || dsGateBlocked}
-                        className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center border-2 border-black bg-white px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
+                        className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center border-2 border-black bg-[#ff90e8] px-2 text-[8px] font-black uppercase text-black shadow-[2px_2px_0_0_#000] transition-colors ${!hasContent || loading || enhancePlusBusy || enhanceLocked ? 'cursor-not-allowed opacity-40' : 'hover:bg-white'}`}
                       >
                         Enhance
                       </button>
@@ -2362,7 +2351,7 @@ export const Generate: React.FC<Props> = ({
                           type="button"
                           onClick={() => void handleEnhancePlusPrompt()}
                           disabled={!hasContent || loading || enhancePlusBusy || dsGateBlocked}
-                          className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 border-2 border-black bg-white px-2 text-[9px] font-black uppercase ${!hasContent || loading || enhancePlusBusy ? 'cursor-not-allowed opacity-40' : 'hover:bg-[#ffc900]'}`}
+                          className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 border-2 border-black bg-[#ff90e8] px-2 text-[8px] font-black uppercase text-black shadow-[2px_2px_0_0_#000] transition-colors ${!hasContent || loading || enhancePlusBusy ? 'cursor-not-allowed opacity-40' : 'hover:bg-white'}`}
                         >
                           {enhancePlusBusy ? (
                             '…'

@@ -22,6 +22,7 @@ import type {
   SyncLinkedFileOption,
   StorybookConnectionInfo,
   SyncDriftItem,
+  type SyncReconcileMeta,
 } from './Code/types';
 import { collectSubtreeNodeIds, exportLocalDeepCode } from '../services/localDeepCodeExport';
 
@@ -47,6 +48,18 @@ interface Props {
   }) => Promise<{
     items: SyncDriftItem[];
     connectionStatus?: string;
+  }>;
+  fetchSyncReconcile?: (body: {
+    sync_snapshot?: SyncSnapshot;
+    storybook_url: string;
+    storybook_token?: string;
+  }) => Promise<{
+    items: SyncDriftItem[];
+    connectionStatus?: string;
+    analysis_mode?: 'ai' | 'standard' | null;
+    reasoning_summary?: string | null;
+    avg_confidence?: number | null;
+    sync_session_id?: string | null;
   }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo>;
   fetchSourceConnection?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<SourceConnection | null>;
@@ -188,7 +201,7 @@ const upsertSyncLinkedFile = (item: SyncLinkedFileOption) => {
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchCheckStorybook, fetchSourceConnection, fetchSyncScanCache, fetchLatestSyncScanCacheForFile, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
+export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchSyncReconcile, fetchCheckStorybook, fetchSourceConnection, fetchSyncScanCache, fetchLatestSyncScanCacheForFile, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -249,8 +262,11 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   const [sourceConnectionError, setSourceConnectionError] = useState<string | null>(null);
   const [sourceAuthStartUrl, setSourceAuthStartUrl] = useState<string | null>(null);
   const [lastSyncAllDate, setLastSyncAllDate] = useState<Date | null>(null);
+  const [syncReconcileMeta, setSyncReconcileMeta] = useState<SyncReconcileMeta | null>(null);
   const [expandedDriftId, setExpandedDriftId] = useState<string | null>(null);
   const [layerSelectionFeedback, setLayerSelectionFeedback] = useState<string | null>(null);
+  const sourceConnectionRef = useRef(sourceConnection);
+  sourceConnectionRef.current = sourceConnection;
 
   // Token generation: pending request type for design-tokens-result handler
   const pendingTokenRequestRef = useRef<'css' | 'json' | null>(null);
@@ -287,6 +303,10 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!isPro && activeTab === 'SYNC') setActiveTab('TOKENS');
+  }, [isPro, activeTab]);
 
   // Listen for file-context (sync scan) and design-tokens-result
   useEffect(() => {
@@ -379,17 +399,41 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             return;
           }
           try {
-            const result = await fetchSyncScan({
-              sync_snapshot: snap,
-              storybook_url: storybookUrl,
-              storybook_token: storybookToken ?? undefined,
-            });
+            const sc = sourceConnectionRef.current;
+            const useDeep =
+              Boolean(
+                fetchSyncReconcile &&
+                  sc?.status === 'ready' &&
+                  sc?.hasToken &&
+                  isPro,
+              );
+            const result = useDeep
+              ? await fetchSyncReconcile!({
+                  sync_snapshot: snap,
+                  storybook_url: storybookUrl,
+                  storybook_token: storybookToken ?? undefined,
+                })
+              : await fetchSyncScan({
+                  sync_snapshot: snap,
+                  storybook_url: storybookUrl,
+                  storybook_token: storybookToken ?? undefined,
+                });
             setSyncItems(result.items || []);
             setHasSyncScanned(true);
             setSyncScanError(null);
             setSyncScanUpgradeUrl(null);
+            if (useDeep && 'sync_session_id' in result) {
+              setSyncReconcileMeta({
+                sync_session_id: result.sync_session_id ?? null,
+                analysis_mode: result.analysis_mode ?? null,
+                reasoning_summary: result.reasoning_summary ?? null,
+                avg_confidence: result.avg_confidence ?? null,
+              });
+            } else {
+              setSyncReconcileMeta(null);
+            }
             if (!syncScanPrepaidWithConsumeRef.current && logFreeAction) {
-              void logFreeAction('scan_sync').catch(() => {});
+              void logFreeAction(useDeep ? 'sync_reconcile' : 'scan_sync').catch(() => {});
             }
             if (snap.fileKey && storybookUrl) {
               const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
@@ -470,7 +514,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [storybookUrl, storybookToken, fetchSyncScan, logFreeAction]);
+  }, [storybookUrl, storybookToken, fetchSyncScan, fetchSyncReconcile, logFreeAction, isPro]);
 
   const requestCurrentFileContext = () =>
     new Promise<{ fileKey: string | null; fileName: string | null }>((resolve) => {
@@ -1295,7 +1339,9 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-3 border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">
+      <div
+        className={`grid ${isPro ? 'grid-cols-3' : 'grid-cols-2'} border-2 border-black bg-white shadow-[4px_4px_0_0_#000]`}
+      >
         <button 
           onClick={() => setActiveTab('TOKENS')}
           className={`py-3 px-2 text-[10px] font-black uppercase transition-colors ${activeTab === 'TOKENS' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
@@ -1308,12 +1354,14 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
         >
           Target
         </button>
-        <button 
-          onClick={() => setActiveTab('SYNC')}
-          className={`py-3 px-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'SYNC' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
-        >
-          Sync
-        </button>
+        {isPro ? (
+          <button 
+            onClick={() => setActiveTab('SYNC')}
+            className={`py-3 px-2 text-[10px] font-black uppercase transition-colors border-l-2 border-black ${activeTab === 'SYNC' ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
+          >
+            Sync
+          </button>
+        ) : null}
       </div>
 
       {/* TAB 1: CSS & TOKENS */}
@@ -1408,6 +1456,12 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             onScanSourceConnection={handleScanSourceConnection}
             onStartSourceAuth={handleStartSourceAuth}
             lastSyncAllDate={lastSyncAllDate}
+            syncScanVariant={
+              sourceConnection?.status === 'ready' && sourceConnection?.hasToken && fetchSyncReconcile
+                ? 'deep'
+                : 'legacy'
+            }
+            syncReconcileMeta={syncReconcileMeta}
         />
       )}
 
