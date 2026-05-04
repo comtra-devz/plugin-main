@@ -1997,6 +1997,7 @@ app.get('/api/health/qwen-config', (_req, res) => {
   res.json({
     ok: true,
     use_qwen_for_generate: useQwenForGenerateFromEnv(),
+    use_qwen_explicitly_disabled: useQwenForGenerateExplicitlyDisabled(),
     qwen: {
       api_key_configured: Boolean(QWEN_API_KEY),
       base_url_configured: Boolean(QWEN_BASE_URL),
@@ -2151,7 +2152,7 @@ const KIMI_GENERATION_SPEC_MODEL =
   process.env.KIMI_MODEL ||
   DEFAULT_KIMI_MODEL;
 
-/** DashScope International (Qwen) for plugin Generate when USE_QWEN_FOR_GENERATE is true. */
+/** DashScope International (Qwen) for plugin Generate main LLM path. */
 const QWEN_API_KEY = String(process.env.QWEN_API_KEY || '').trim();
 const QWEN_BASE_URL = String(
   process.env.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
@@ -2159,8 +2160,20 @@ const QWEN_BASE_URL = String(
 const QWEN_MODEL_TEXT = String(process.env.QWEN_MODEL_TEXT || 'qwen3.5-35b-a3b').trim();
 const QWEN_MODEL_VL = String(process.env.QWEN_MODEL_VL || 'qwen3-vl-32b-instruct').trim();
 
+/** Opt out of Qwen for main Generate (stay on Kimi) while keeping QWEN_* in env for other use. */
+function useQwenForGenerateExplicitlyDisabled() {
+  const v = String(process.env.USE_QWEN_FOR_GENERATE ?? '').trim().toLowerCase();
+  return v === '0' || v === 'false' || v === 'off' || v === 'no';
+}
+
+/**
+ * Main Generate uses Qwen when a DashScope key is configured, unless USE_QWEN_FOR_GENERATE is explicitly false/0.
+ * (Legacy: setting USE_QWEN_FOR_GENERATE=true still enables Qwen even if key check were relaxed elsewhere.)
+ */
 function useQwenForGenerateFromEnv() {
-  return process.env.USE_QWEN_FOR_GENERATE === 'true' || process.env.USE_QWEN_FOR_GENERATE === '1';
+  if (useQwenForGenerateExplicitlyDisabled()) return false;
+  if (!QWEN_API_KEY) return false;
+  return true;
 }
 
 function resolveGenerateChatModel(abVariant) {
@@ -4882,7 +4895,7 @@ app.post('/api/agents/generate', async (req, res) => {
     if (!KIMI_API_KEY) {
       return res.status(503).json({
         error:
-          'KIMI_API_KEY is still required when USE_QWEN_FOR_GENERATE is on (spec resolver, repair, enrichment use Kimi).',
+          'KIMI_API_KEY is still required when Generate uses Qwen (spec resolver, repair, enrichment use Kimi until migrated).',
       });
     }
   } else if (!KIMI_API_KEY) {

@@ -1472,6 +1472,9 @@ export const Generate: React.FC<Props> = ({
     };
     const cls = classifyIntent(rawText);
     const response = getResponse(cls, rawText);
+    /** Enhance wraps the terminal in Goal / Context / DS; skip the redundant "did I get this right?" paraphrase. */
+    const isEnhanceStructuredPrompt =
+      /^\s*goal\s*:/im.test(rawText) && /\bcontext\s*:/i.test(rawText) && /\bds\s*:/i.test(rawText);
     const actionWithCredits = (action: string): string => {
       if (action === 'Generate now' || action === 'Apply change') {
         return `${action} (~${creditEstimate} cr)`;
@@ -1506,7 +1509,7 @@ export const Generate: React.FC<Props> = ({
       return;
     }
 
-    if (cls.intent === 'GENERATE_CLEAR' || cls.intent === 'EDIT') {
+    if ((cls.intent === 'GENERATE_CLEAR' || cls.intent === 'EDIT') && !isEnhanceStructuredPrompt) {
       appendConversationTurns([userTurn]);
       await pauseAssistantBriefly();
       const assistantTurns = response.bubbles.map((b, i) => ({
@@ -1550,6 +1553,13 @@ export const Generate: React.FC<Props> = ({
         event_type: 'generate_preflight_opened',
         payload: { variant: ev.variant },
       });
+      return;
+    }
+
+    if (isEnhanceStructuredPrompt && (cls.intent === 'GENERATE_CLEAR' || cls.intent === 'EDIT')) {
+      appendConversationTurns([userTurn]);
+      pendingOptimisticUserTurnIdRef.current = userTurn.id;
+      await runGeneratePipeline(rawText, { clearComposer: false });
       return;
     }
 
@@ -2187,12 +2197,12 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showLiveReasoning ? (
-                      <div className="mt-1 flex justify-start items-start gap-2 pl-0.5" aria-live="polite">
+                      <div className="mt-1 flex justify-start items-center gap-2 pl-0.5" aria-live="polite">
                         <span
-                          className="mt-0.5 inline-block size-5 shrink-0 rounded-sm border-2 border-black bg-[#ff90e8] animate-pulse"
+                          className="inline-block size-5 shrink-0 self-center rounded-sm border-2 border-black bg-[#ff90e8] animate-pulse"
                           aria-hidden
                         />
-                        <p className="max-w-[95%] min-w-0 flex-1 text-[10px] leading-snug text-gray-800">
+                        <p className="max-w-[95%] min-w-0 flex-1 self-center text-[10px] leading-snug text-gray-800">
                           {liveReasoningLines[liveReasoningLines.length - 1]}
                         </p>
                       </div>
@@ -2374,11 +2384,13 @@ export const Generate: React.FC<Props> = ({
                       variant="primary"
                       onClick={handleGen}
                       disabled={!hasContent || loading || (!canGenerate && !isPro) || dsGateBlocked}
-                      className="flex size-9 shrink-0 items-center justify-center rounded-none bg-white p-0 shadow-[2px_2px_0_0_#000]"
+                      className="flex size-9 shrink-0 items-center justify-center rounded-none bg-white p-0 leading-none shadow-[2px_2px_0_0_#000]"
                       aria-label={`Send (~${creditEstimate} credits)`}
                       title={`Estimated cost: ~${creditEstimate} credits`}
                     >
-                      ➤
+                      <span className="flex size-full items-center justify-center pb-px text-[15px] leading-none">
+                        ➤
+                      </span>
                     </Button>
                   </div>
                 </div>

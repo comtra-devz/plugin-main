@@ -118,7 +118,8 @@ function extractSpec(t: string): string {
   );
   if (!nounMatch) return 'the requested screen';
   let spec = nounMatch[0];
-  const forMatch = t.match(/(?:for|on|with)\s+([\w\s]{2,18})(?:\b|$)/);
+  // Only "for …" / "on …" (not "with …"): phrases like "screen with clear hierarchy" must not become "login for clear hierarchy".
+  const forMatch = t.match(/(?:\bfor\b|\bon\b)\s+([\w\s]{2,28})(?:\b|$)/);
   if (forMatch) spec += ` for ${forMatch[1].trim()}`;
   return spec;
 }

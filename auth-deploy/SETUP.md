@@ -46,13 +46,13 @@ Elenco di tutte le variabili usate (quelle già impostate insieme a te restano; 
 | `KIMI_GLOBAL_MAX_CONCURRENT` | (Opzionale) Max chiamate **Kimi in parallelo** su tutta l’istanza, se c’è **REDIS_URL** | Default **16**. Abbassa se vedi TPM troppo spesso; alza (es. 32–48) solo se Moonshot permette più throughput e Redis c’è. |
 | `KIMI_QUEUE_MAX_WAIT_MS` | Attesa massima in coda per un “slot” Kimi (ms) | Default **90000**. |
 | `KIMI_LEASE_MS` | Dopo quanto uno slot Redis scade se il worker muore (ms) | Default **180000**. |
-| `QWEN_API_KEY` | API key **DashScope International** (Model Studio) | Obbligatoria se `USE_QWEN_FOR_GENERATE=true`. |
+| `QWEN_API_KEY` | API key **DashScope International** (Model Studio) | Se valorizzata, **Generate** usa Qwen per il percorso principale (salvo opt-out sotto). |
 | `QWEN_BASE_URL` | Base OpenAI-compatible (senza `/chat/completions`) | Default: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
 | `QWEN_MODEL_TEXT` | Modello testo per Generate (create / modify senza screenshot) | Default: `qwen3.5-35b-a3b` |
 | `QWEN_MODEL_VL` | Modello vision quando c’è screenshot e `mode !== modify` | Default: `qwen3-vl-32b-instruct` |
 | `QWEN_API_TIMEOUT_MS` | Timeout HTTP Qwen (ms) | Default **120000**. |
-| `USE_QWEN_FOR_GENERATE` | `true` / `1` per usare Qwen sulle chiamate principali di `POST /api/agents/generate` | Default off. **Rollback:** `false` senza redeploy. Con Qwen attivo serve ancora **`KIMI_API_KEY`** (spec resolver, repair, enrichment). |
-| *(smoke)* `GET /api/health/qwen-config` | Risposta JSON con flag “key presente” (mai il valore) | Utile dopo aver impostato le env. |
+| `USE_QWEN_FOR_GENERATE` | `false` / `0` / `off` / `no` = **forza Kimi** sul main Generate anche se `QWEN_API_KEY` c’è. Se la variabile è assente o `true`, con key Qwen il main è **Qwen**. | Serve ancora **`KIMI_API_KEY`** per spec resolver, repair ed enrichment. |
+| *(smoke)* `GET /api/health/qwen-config` | JSON: `use_qwen_for_generate`, `use_qwen_explicitly_disabled`, modelli (mai secret) | Dopo deploy env. |
 
 Dopo ogni modifica alle variabili: **Redeploy**.
 
