@@ -528,6 +528,9 @@ export async function synthesizeProductImprovementsMarkdown(ctx) {
   }
 
   const cfg = getProductSourcesLlmConfig();
+  if (cfg.provider === 'openai') {
+    return '\n\n_(Fase 5 LLM: provider **OpenAI** disabilitato su questo deploy.)_\n';
+  }
   if (!cfg.apiKey) {
     return `\n\n_(Fase 5 LLM: nessuna API key — **Gemini** \`GEMINI_API_KEY\`; **Groq** \`GROQ_API_KEY\`; Moonshot \`KIMI_API_KEY\`; OpenAI \`OPENAI_API_KEY\`; oppure \`PRODUCT_SOURCES_LLM_EXECUTION=mcp\`.)_\n`;
   }

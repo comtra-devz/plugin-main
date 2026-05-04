@@ -33,6 +33,10 @@ import {
 import { getCreditsForIssue, ACTION_AUTO_FIX, getAutoFixCanvasKind } from './autoFixConfig';
 import { useToast } from '../../contexts/ToastContext';
 
+/** Align with `views/Generate.tsx`: break out of view padding so rules span full plugin width. */
+const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
+const FULL_BLEED_IN = 'px-3 sm:px-4';
+
 export interface FetchFigmaFileBody {
   file_key: string;
   scope?: string;
@@ -1891,7 +1895,7 @@ export const Audit: React.FC<Props> = ({
   );
 
   return (
-    <div className="p-4 flex flex-col gap-4 pb-16 relative">
+    <div className="relative flex flex-col gap-4 px-3 pb-16 pt-4 sm:px-4">
       {showConfetti && <Confetti />}
       {showSuccess && <SuccessModal score={score} onClose={() => setShowSuccess(false)} />}
       {showReceipt && (
@@ -1988,10 +1992,28 @@ export const Audit: React.FC<Props> = ({
         </div>
       )}
 
-      <div className="flex justify-center mb-2">
-        <div className={`transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}>
-          Credits: {creditsDisplay}
+      <div data-component="Audit: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
+        <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
+          <div className="mb-2 grid min-h-9 grid-cols-[1fr_auto_1fr] items-center gap-x-2">
+            <span className="min-w-0" aria-hidden />
+            <div
+              data-component="Audit: Credit Banner"
+              className={`justify-self-center transform -rotate-2 border-2 border-black px-3 py-1 text-[10px] font-black uppercase shadow-[3px_3px_0_0_#000] ${knownZeroCredits ? 'bg-red-100 text-red-600' : 'bg-[#ffc900] text-black'}`}
+            >
+              Credits: {creditsDisplay}
+            </div>
+            <div className="flex min-w-0 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPrivacyModal(true)}
+                className="shrink-0 text-right text-[10px] font-black uppercase tracking-wide text-gray-600 underline decoration-black/25 underline-offset-2 hover:text-black"
+              >
+                Privacy & Data
+              </button>
+            </div>
+          </div>
         </div>
+        <div className="h-[2px] w-full shrink-0 bg-black" aria-hidden />
       </div>
 
       <div className="grid grid-cols-2 border-2 border-black bg-white shadow-[4px_4px_0_0_#000]">

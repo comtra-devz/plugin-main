@@ -1,1 +1,17 @@
-{"name":"comtra-auth-deploy","private":true,"type":"module","dependencies":{"express":"^4.21.0","cors":"^2.8.5","cookie-parser":"^1.4.6","redis":"^4.6.0","postgres":"^3.4.4","jsonwebtoken":"^9.0.2","nodemailer":"^6.9.16"}}
+{
+  "name": "comtra-auth-deploy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed-fake-user": "node scripts/seed-fake-comtra-user.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "cookie-parser": "^1.4.6",
+    "redis": "^4.6.0",
+    "postgres": "^3.4.4",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.16"
+  }
+}

@@ -40,6 +40,8 @@ import {
   isCustomDsSource,
 } from './ds-loader.mjs';
 import { runGenerateDualCallPipeline } from './generation-swarm.mjs';
+import { routeQwenGenerate } from './qwen-router.mjs';
+import { callQwenChatCompletion } from './qwen-client.mjs';
 import {
   buildPreflightFromPack,
   formatDesignIntelligenceForPrompt,
@@ -1987,6 +1989,23 @@ async function figmaTokenValidForApi(figmaAuth) {
   return meRes.ok;
 }
 
+/**
+ * Smoke check for Qwen env (never returns secret values).
+ * GET /api/health/qwen-config
+ */
+app.get('/api/health/qwen-config', (_req, res) => {
+  res.json({
+    ok: true,
+    use_qwen_for_generate: useQwenForGenerateFromEnv(),
+    qwen: {
+      api_key_configured: Boolean(QWEN_API_KEY),
+      base_url_configured: Boolean(QWEN_BASE_URL),
+      model_text: QWEN_MODEL_TEXT,
+      model_vl: QWEN_MODEL_VL,
+    },
+  });
+});
+
 app.get('/api/figma/token-status', async (req, res) => {
   const userId = getUserIdFromToken(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -2131,6 +2150,18 @@ const KIMI_GENERATION_SPEC_MODEL =
   process.env.KIMI_MODEL_PRIMARY ||
   process.env.KIMI_MODEL ||
   DEFAULT_KIMI_MODEL;
+
+/** DashScope International (Qwen) for plugin Generate when USE_QWEN_FOR_GENERATE is true. */
+const QWEN_API_KEY = String(process.env.QWEN_API_KEY || '').trim();
+const QWEN_BASE_URL = String(
+  process.env.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+).replace(/\/$/, '');
+const QWEN_MODEL_TEXT = String(process.env.QWEN_MODEL_TEXT || 'qwen3.5-35b-a3b').trim();
+const QWEN_MODEL_VL = String(process.env.QWEN_MODEL_VL || 'qwen3-vl-32b-instruct').trim();
+
+function useQwenForGenerateFromEnv() {
+  return process.env.USE_QWEN_FOR_GENERATE === 'true' || process.env.USE_QWEN_FOR_GENERATE === '1';
+}
 
 function resolveGenerateChatModel(abVariant) {
   const primary = String(KIMI_GENERATE_MODEL_A || '').trim() || DEFAULT_KIMI_MODEL;
@@ -3529,6 +3560,8 @@ app.post('/api/agents/ds-audit', async (req, res) => {
 
 // --- Generate agent (Kimi): file_key + prompt → action plan JSON. A/B: 50% model A vs model B (see KIMI_GENERATE_MODEL_*)
 const GENERATE_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'generate-system.md');
+const GENERATE_QWEN_OVERLAY_PATH = path.join(__dirname, '..', 'prompts', 'generate-qwen-overlay.md');
+const GENERATE_QWEN_VL_OVERLAY_PATH = path.join(__dirname, '..', 'prompts', 'generate-qwen-vl-overlay.md');
 
 function normalizeScreenshotFromBody(body) {
   const raw =
@@ -4843,7 +4876,18 @@ app.post('/api/agents/generate', async (req, res) => {
     return res.status(400).json({ error: 'file_key/source_ref.doc_id or design_document required' });
   }
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
-  if (!KIMI_API_KEY) return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+  const useQwenForGenerate = useQwenForGenerateFromEnv();
+  if (useQwenForGenerate) {
+    if (!QWEN_API_KEY) return res.status(503).json({ error: 'QWEN_API_KEY not configured' });
+    if (!KIMI_API_KEY) {
+      return res.status(503).json({
+        error:
+          'KIMI_API_KEY is still required when USE_QWEN_FOR_GENERATE is on (spec resolver, repair, enrichment use Kimi).',
+      });
+    }
+  } else if (!KIMI_API_KEY) {
+    return res.status(503).json({ error: 'KIMI_API_KEY not configured' });
+  }
 
   const shot = normalizeScreenshotFromBody(body);
   if (shot.error) return res.status(400).json({ error: shot.error });
@@ -4857,6 +4901,32 @@ app.post('/api/agents/generate', async (req, res) => {
   let variant = abVariant;
   const generateChatModel = resolveGenerateChatModel(abVariant);
   const callKimiGenerate = (messages, maxTokens = 8192) => callKimi(messages, maxTokens, generateChatModel);
+
+  let cachedQwenMainRoute = null;
+  const getQwenMainRoute = () => {
+    if (!cachedQwenMainRoute) {
+      cachedQwenMainRoute = routeQwenGenerate(
+        { mode: String(mode || 'create'), hasScreenshot: Boolean(screenshotDataUrl) },
+        { textModel: QWEN_MODEL_TEXT, vlModel: QWEN_MODEL_VL },
+      );
+    }
+    return cachedQwenMainRoute;
+  };
+  const callMainGenerateLlm = async (messages, maxTokens = 8192) => {
+    if (!useQwenForGenerate) return callKimiGenerate(messages, maxTokens);
+    const route = getQwenMainRoute();
+    const capped = Math.min(maxTokens, route.maxTokens);
+    const out = await callQwenChatCompletion({
+      baseUrl: QWEN_BASE_URL,
+      apiKey: QWEN_API_KEY,
+      model: route.modelId,
+      messages,
+      maxTokens: capped,
+      temperature: route.temperature,
+    });
+    return { content: out.content, usage: out.usage };
+  };
+  const mainGenerateModelForLog = useQwenForGenerate ? getQwenMainRoute().modelId : generateChatModel;
 
   const startMs = Date.now();
   const generateBudgetMs = Math.max(120000, Number(process.env.GENERATE_REQUEST_BUDGET_MS || 240000));
@@ -4889,6 +4959,7 @@ app.post('/api/agents/generate', async (req, res) => {
   }
 
   try {
+    let systemPromptForLlm = systemPrompt;
     let fileJson;
     let resolvedDocKey = legacyFileKey || '';
     try {
@@ -5054,6 +5125,38 @@ app.post('/api/agents/generate', async (req, res) => {
           `ds_cache_hash: ${dsIndexHashLine}`,
         ].join('\n')
       : '';
+    const qwenRouteForPrompt = useQwenForGenerate
+      ? routeQwenGenerate(
+          { mode: String(mode || 'create'), hasScreenshot: Boolean(screenshotDataUrl) },
+          { textModel: QWEN_MODEL_TEXT, vlModel: QWEN_MODEL_VL },
+        )
+      : null;
+    if (useQwenForGenerate && qwenRouteForPrompt) {
+      let overlay = '';
+      let vlOverlay = '';
+      try {
+        overlay = readFileSync(GENERATE_QWEN_OVERLAY_PATH, 'utf8');
+      } catch (e) {
+        console.error('Generate: failed to read Qwen overlay', GENERATE_QWEN_OVERLAY_PATH, e?.message);
+      }
+      if (qwenRouteForPrompt.useVisionModel) {
+        try {
+          vlOverlay = readFileSync(GENERATE_QWEN_VL_OVERLAY_PATH, 'utf8');
+        } catch (e) {
+          console.error('Generate: failed to read Qwen VL overlay', GENERATE_QWEN_VL_OVERLAY_PATH, e?.message);
+        }
+      }
+      const qwenParts = [];
+      if (String(overlay || '').trim()) qwenParts.push(overlay.trim());
+      if (String(vlOverlay || '').trim()) qwenParts.push(vlOverlay.trim());
+      if (String(dsIndexBlock || '').trim()) qwenParts.push(dsIndexBlock.trim());
+      qwenParts.push(systemPrompt);
+      systemPromptForLlm = qwenParts.join('\n\n---\n\n');
+    }
+    const dsIndexBlockForUser =
+      useQwenForGenerate && String(dsIndexBlock || '').trim()
+        ? '\n[DS CONTEXT INDEX is included in full in the system message. Obey only keys and ids from that system block.]\n'
+        : dsIndexBlock;
     const slotCandidatePackBase =
       buildSlotCandidatePackFromGenerationSpec(dsIndexForValidation, generationSpec, prompt) ||
       buildSlotCandidatePack(dsIndexForValidation, inferredScreenArchetype, prompt);
@@ -5162,7 +5265,7 @@ app.post('/api/agents/generate', async (req, res) => {
       ...(qualityContractLine ? [qualityContractLine] : []),
       dsContextBlock,
       generationSpecBlock,
-      dsIndexBlock,
+      dsIndexBlockForUser,
       slotCandidateBlock,
       designIntelBlock,
       wizardSignalsBlock,
@@ -5176,11 +5279,11 @@ app.post('/api/agents/generate', async (req, res) => {
     if (useKimiDualSwarmPipeline && budgetLeftMs() > 100000) {
       try {
         const dual = await runGenerateDualCallPipeline({
-          callKimi: callKimiGenerate,
+          callKimi: callMainGenerateLlm,
           extractJsonFromContent,
           userPrompt: prompt,
           contextBlob,
-          actionPlanSystemPrompt: systemPrompt,
+          actionPlanSystemPrompt: systemPromptForLlm,
           screenshotDataUrl,
         });
         totalInputTokens += dual.usage.input;
@@ -5188,8 +5291,8 @@ app.post('/api/agents/generate', async (req, res) => {
         if (dual.actionPlan && typeof dual.actionPlan === 'object') {
           actionPlan = dual.actionPlan;
           dualPipelineSucceeded = true;
-          generationPipeline = 'kimi_dual_layout_mapper';
-    } else {
+          generationPipeline = useQwenForGenerate ? 'qwen_dual_layout_mapper' : 'kimi_dual_layout_mapper';
+        } else {
           console.error('Generate dual pipeline failed:', dual.stage);
         }
       } catch (dualErr) {
@@ -5205,18 +5308,20 @@ app.post('/api/agents/generate', async (req, res) => {
             { type: 'text', text: userText },
           ]
         : userText;
-      const { content, usage } = await callKimiGenerate(
-        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
+      const { content, usage } = await callMainGenerateLlm(
+        [{ role: 'system', content: systemPromptForLlm }, { role: 'user', content: userMessage }],
         8192,
       );
       totalInputTokens += Math.max(0, Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0));
       totalOutputTokens += Math.max(0, Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0));
       actionPlan = extractJsonFromContent(content);
-      if (!dualPipelineSucceeded) generationPipeline = 'legacy_direct_json';
+      if (!dualPipelineSucceeded) {
+        generationPipeline = useQwenForGenerate ? 'qwen_legacy_direct_json' : 'legacy_direct_json';
+      }
     }
 
     if (!actionPlan || typeof actionPlan !== 'object') {
-      console.error('Generate: invalid or missing JSON from Kimi');
+      console.error('Generate: invalid or missing JSON from model');
       return res.status(502).json({ error: 'Invalid response from AI' });
     }
     const afterModelMs = Date.now();
@@ -5283,7 +5388,7 @@ app.post('/api/agents/generate', async (req, res) => {
         if (budgetLeftMs() <= 70000) break;
         repairStats.repair_passes_attempted += 1;
         const repair = await repairActionPlanWithKimi(
-          systemPrompt,
+          systemPromptForLlm,
           actionPlan,
           repairPasses[pass],
           `User prompt: ${prompt}\n\n${contextBlob}`,
@@ -5334,7 +5439,7 @@ app.post('/api/agents/generate', async (req, res) => {
       repairStats.semantic_escape_hatch_attempted = true;
       const semanticOnlyErrors = semanticFitValidation.errors.map((e) => `semantic_fit: ${e}`);
       const semanticRepair = await repairActionPlanWithKimi(
-        systemPrompt,
+        systemPromptForLlm,
         actionPlan,
         [
           ...semanticOnlyErrors,
@@ -5576,7 +5681,8 @@ app.post('/api/agents/generate', async (req, res) => {
     const slotPackSummary = summarizeSlotPack(slotCandidatePack);
     actionPlan.metadata.generation_diagnostics = {
       pipeline: generationPipeline,
-      kimi_model: generateChatModel,
+      kimi_model: mainGenerateModelForLog,
+      llm_provider: useQwenForGenerate ? 'qwen' : 'kimi',
       generate_ab_variant: variant,
       phase_timers: phaseTimers,
       repair: repairStats,
@@ -5627,7 +5733,7 @@ app.post('/api/agents/generate', async (req, res) => {
     if (dbSql) {
       dbSql`
         INSERT INTO kimi_usage_log (action_type, input_tokens, output_tokens, size_band, model)
-        VALUES ('generate', ${totalInputTokens}, ${totalOutputTokens}, null, ${generateChatModel})
+        VALUES ('generate', ${totalInputTokens}, ${totalOutputTokens}, null, ${mainGenerateModelForLog})
       `.catch((err) => console.error('Kimi usage log generate failed', err.message));
 
       const learningSnapshot = JSON.stringify({
@@ -5647,7 +5753,7 @@ app.post('/api/agents/generate', async (req, res) => {
       });
       const ins = await dbSql`
         INSERT INTO generate_ab_requests (user_id, variant, input_tokens, output_tokens, credits_consumed, latency_ms, figma_file_key, ds_source, inferred_screen_archetype, inferred_pack_v2_archetype, kimi_enrichment_used, learning_snapshot, kimi_model, generation_route)
-        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs}, ${legacyFileKey || null}, ${String(dsSource)}, ${inferredScreenArchetype || null}, ${packV2ArchetypeId || null}, ${kimiEnrichmentUsed}, ${learningSnapshot}::jsonb, ${generateChatModel}, ${generationPipeline})
+        VALUES (${userId}, ${variant}, ${totalInputTokens}, ${totalOutputTokens}, ${creditsConsumed}, ${latencyMs}, ${legacyFileKey || null}, ${String(dsSource)}, ${inferredScreenArchetype || null}, ${packV2ArchetypeId || null}, ${kimiEnrichmentUsed}, ${learningSnapshot}::jsonb, ${mainGenerateModelForLog}, ${generationPipeline})
         RETURNING id
       `.catch(() => ({ rows: [] }));
       const requestId = ins?.rows?.[0]?.id ?? null;
@@ -5666,7 +5772,7 @@ app.post('/api/agents/generate', async (req, res) => {
       res.json({
         action_plan: actionPlan,
         variant,
-        kimi_model: generateChatModel,
+        kimi_model: mainGenerateModelForLog,
         generation_route: generationPipeline,
         request_id: requestId,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,
@@ -5688,7 +5794,7 @@ app.post('/api/agents/generate', async (req, res) => {
       res.json({
         action_plan: actionPlan,
         variant,
-        kimi_model: generateChatModel,
+        kimi_model: mainGenerateModelForLog,
         generation_route: generationPipeline,
         request_id: null,
         ds_id: dsPackage?.ds_id || resolvedDsId || null,

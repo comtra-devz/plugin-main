@@ -6,6 +6,25 @@ Come testare le integrazioni con il backend (auth.comtra.dev) e Supabase. **Appr
 
 ## Account di test e Supabase
 
+### Utente “finto” senza OAuth Figma (OAuth in pausa)
+
+`users.id` può essere un id interno `comtra_*` (come dopo magic link). Non serve Figma OAuth per avere una riga utente + JWT di API.
+
+1. **SQL** (Supabase → SQL Editor): incolla ed esegui [`auth-deploy/scripts/seed-fake-comtra-user.sql`](../auth-deploy/scripts/seed-fake-comtra-user.sql) (modifica email se è già occupata).
+
+2. **Script Node** (connection string + eventualmente JWT per provare le API):
+   ```bash
+   cd auth-deploy && npm install
+   DATABASE_URL='postgresql://...' JWT_SECRET='...' npm run seed-fake-user
+   ```
+   Oppure dalla root del plugin: `npm run seed:fake-user` (delega a `auth-deploy`).
+
+   `JWT_SECRET` deve coincidere con quello del progetto **auth-deploy** su Vercel. Il token stampato è lo stesso formato di `jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '365d' })` usato dopo magic link.
+
+3. **Plugin UI**: senza flusso di login attivo, il plugin non riceve automaticamente quel JWT — serve comunque un canale di login (magic link, PAT, ecc.) o incollare il token solo per test API (`curl`).
+
+---
+
 **Gli account di test** (vedi `constants.ts` → `TEST_USER_EMAILS`; attualmente vuoto) **finiscono già in Supabase** come tutti gli altri: al primo **Login with Figma** il callback OAuth crea/aggiorna la riga in `users`. Nessuna configurazione speciale: stessi flusso e stesse tabelle.
 
 Nel **frontend** le email in `TEST_USER_EMAILS` abilitano crediti “infiniti” e la voce “Simula Free Tier”; il backend non distingue i test user e li tratta come gli altri.
@@ -104,6 +123,22 @@ Per testare firma e formato del webhook (es. integrazione custom):
 2. Calcola HMAC-SHA256 del body con `LEMON_SQUEEZY_WEBHOOK_SECRET`, header `X-Signature`.  
 3. POST a `https://auth.comtra.dev/api/webhooks/lemonsqueezy`.  
 4. Verifica in DB `affiliates.total_referrals`.
+
+**Script nel repo (consigliato):** dalla root del plugin, con lo **stesso secret** configurato su Vercel:
+
+```bash
+LEMON_SQUEEZY_WEBHOOK_SECRET='il_tuo_secret' \
+BUYER_EMAIL='email_esatta_del_login_figma' \
+VARIANT_ID=1450304 \
+npm run simulate:lemon-order
+```
+
+- `BUYER_EMAIL` deve corrispondere a una riga in `users` (dopo almeno un login OAuth).  
+- `VARIANT_ID`: `1450263` (1w), `1450299` (1m), `1450304` (6m), `1450315` (1y).  
+- Opzionale: `AFF_CODE=CODICE_AFFILIATO` per simulare anche l’incremento referral.  
+- `DRY_RUN=1` stampa body e firma senza inviare nulla.
+
+Dopo il POST con successo, nel plugin fai refresh / riapri: dovresti vedere piano PRO e crediti aggiornati (come dopo un acquisto reale su Lemon). Il “ritorno automatico” nel plugin non è simulabile da CLI: qui si replica solo l’evento server-side.
 
 ---
 

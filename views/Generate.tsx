@@ -28,6 +28,7 @@ import {
   tierCreditHint,
 } from '../lib/generateConversationHelpers';
 import { classifyIntent, getResponse, type IntentId } from '../lib/intentClassifier';
+import * as Gps from '../lib/generatePipelineStatusCopy';
 import {
   safeLocalStorageGetItem,
   safeLocalStorageRemoveItem,
@@ -402,6 +403,8 @@ export const Generate: React.FC<Props> = ({
   const [refinementEstimates, setRefinementEstimates] = useState<Record<string, number>>({});
   const [lastDiagLine, setLastDiagLine] = useState<string | null>(null);
   const [liveReasoningLines, setLiveReasoningLines] = useState<string[]>([]);
+  /** Assistant turns whose primary CTAs (Generate / Apply) were used — hide buttons to avoid double-clicks. */
+  const [dismissedAssistantActionTurnIds, setDismissedAssistantActionTurnIds] = useState<Set<string>>(() => new Set());
   const liveReasoningTimersRef = useRef<number[]>([]);
   const clearLiveReasoningTimers = useCallback(() => {
     for (const timer of liveReasoningTimersRef.current) window.clearTimeout(timer);
@@ -1152,13 +1155,11 @@ export const Generate: React.FC<Props> = ({
       setLiveReasoningLines([]);
       scheduleLiveReasoning(
         [
-          'Understanding the request and preparing generation context...',
-          usesFileDs
-            ? 'Checking the imported Custom (Current) design-system snapshot.'
-            : `Checking ${selectedSystemDisplayName} as the active style reference.`,
-          hasSelection ? 'Selection detected: I will preserve structure and improve the selected layer.' : '',
-          screenshotAttachment ? 'Reference image detected: I will extract visual hierarchy before mapping components.' : '',
-          'Requesting file access and validating the current Figma document.',
+          Gps.GPS_UNDERSTAND_REQUEST,
+          usesFileDs ? Gps.GPS_DS_SNAPSHOT_CUSTOM : Gps.gpsDsSnapshotNamed(selectedSystemDisplayName),
+          hasSelection ? Gps.GPS_SELECTION_MODIFY : '',
+          screenshotAttachment ? Gps.GPS_SCREENSHOT_REF : '',
+          Gps.GPS_FILE_CONTEXT_VALIDATE,
         ],
         { stepDelayMs: 520 },
       );
@@ -1206,13 +1207,13 @@ export const Generate: React.FC<Props> = ({
       setGenerateStep('ai');
       scheduleLiveReasoning(
         [
-          'File context is ready. Now I am classifying the screen archetype.',
-          'Asking Kimi to resolve a generation spec when the request needs pattern judgment.',
-          'Retrieving the prompt-scoped DS components and tokens that match this request.',
-          'Planning layout structure first: regions, hierarchy, spacing, and visible content.',
-          'Mapping planned slots to real DS components where the catalog has semantic matches.',
-          'Asking the model for a structured action plan, not free-form visual guesses.',
-          'Preparing validation checks so weak layouts do not reach the canvas.',
+          Gps.GPS_CLASSIFY_ARCHETYPE,
+          Gps.GPS_KIMI_GENERATION_SPEC,
+          Gps.GPS_RETRIEVE_DS_COMPONENTS,
+          Gps.GPS_PLANNING_LAYOUT,
+          Gps.GPS_MAPPING_SLOTS,
+          Gps.GPS_STRUCTURED_ACTION_PLAN,
+          Gps.GPS_VALIDATION_PREP,
         ],
         { initialDelayMs: 150, stepDelayMs: 850 },
       );
@@ -1260,11 +1261,9 @@ export const Generate: React.FC<Props> = ({
         const slots = shape?.slot_candidates;
         scheduleLiveReasoning(
           [
-            slots?.archetype ? `Archetype resolved as ${slots.archetype}; checking ${slots.slots_total ?? 0} DS slot group(s).` : 'Archetype resolved; checking layout quality and DS fit.',
-            planShape
-              ? `Action plan received: ${planShape.actions_total ?? 0} action(s), ${planShape.create_frame ?? 0} frame(s), ${planShape.instance_component ?? 0} DS instance(s), ${planShape.create_text ?? 0} text node(s).`
-              : 'Action plan received; validating structure before canvas apply.',
-            'Server validation passed: schema, visible content, DS references, and layout contract are coherent.',
+            Gps.gpsArchetypeLine(slots ?? null),
+            Gps.gpsActionPlanShapeLine(planShape ?? null),
+            Gps.GPS_SERVER_VALIDATION_OK,
           ],
           { stepDelayMs: 480 },
         );
@@ -1280,10 +1279,10 @@ export const Generate: React.FC<Props> = ({
         setGenerateStep('canvas');
         scheduleLiveReasoning(
           [
-            'Applying the validated plan on the canvas.',
-            'Creating the root frame and nested auto-layout containers.',
-            'Resolving DS component instances and token references inside Figma.',
-            'Checking canvas apply result before I mark the turn complete.',
+            Gps.GPS_CANVAS_APPLY_START,
+            Gps.GPS_CANVAS_FRAMES,
+            Gps.GPS_CANVAS_DS_INSTANCES,
+            Gps.GPS_CANVAS_CHECK_RESULT,
           ],
           { initialDelayMs: 120, stepDelayMs: 620 },
         );
@@ -1319,9 +1318,9 @@ export const Generate: React.FC<Props> = ({
         setGenerateStep('credits');
         scheduleLiveReasoning(
           [
-            'Canvas apply succeeded. Now I am finalizing the credit transaction.',
-            'Saving diagnostics so this generation can be reviewed and improved.',
-            'Wrapping up the assistant response with what was generated.',
+            Gps.GPS_CREDITS_FINALIZE,
+            Gps.GPS_DIAGNOSTICS_SAVE,
+            Gps.GPS_WRAP_ASSISTANT_REPLY,
           ],
           { stepDelayMs: 420 },
         );
@@ -1576,10 +1575,13 @@ export const Generate: React.FC<Props> = ({
   }, [userId, genFileKey, dsScopeHash, fetchGenerationPluginEvent]);
 
   const handleIntentAction = useCallback(
-    (action: string, intent?: IntentId, prompt?: string) => {
+    (action: string, intent?: IntentId, prompt?: string, assistantTurnId?: string) => {
       const basePrompt = String(prompt || '').trim();
       if (!basePrompt && action !== 'Start over') return;
       if (action.startsWith('Generate now') || action.startsWith('Apply change')) {
+        if (assistantTurnId) {
+          setDismissedAssistantActionTurnIds((prev) => new Set([...prev, assistantTurnId]));
+        }
         const existingUserTurn = [...conversationTurns]
           .reverse()
           .find((turn) => turn.role === 'user' && turn.body.trim() === basePrompt.slice(0, 1200).trim());
@@ -1871,10 +1873,10 @@ export const Generate: React.FC<Props> = ({
   return (
     <div
       data-component="Generate: View Container"
-      className="relative flex min-h-0 flex-1 flex-col gap-0 px-3 pt-0 pb-0 sm:px-4 sm:pb-0"
+      className="relative flex min-h-0 flex-1 flex-col gap-0 px-3 pt-4 pb-0 sm:px-4 sm:pb-0"
     >
       <div data-component="Generate: Global header" className={`${FULL_BLEED_OUT} shrink-0`}>
-        <div className={`${FULL_BLEED_IN} pb-1 pt-1`}>
+        <div className={`${FULL_BLEED_IN} pb-1 pt-0`}>
           <div className="mb-2 grid min-h-9 grid-cols-[1fr_auto_1fr] items-center gap-x-2">
             <span className="min-w-0" aria-hidden />
             <div
@@ -2130,7 +2132,10 @@ export const Generate: React.FC<Props> = ({
                           >
                             {turn.body}
                           </div>
-                          {turn.role === 'assistant' && turn.actions && turn.actions.length > 0 ? (
+                          {turn.role === 'assistant' &&
+                          turn.actions &&
+                          turn.actions.length > 0 &&
+                          !dismissedAssistantActionTurnIds.has(turn.id) ? (
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               {turn.actions.map((action) => {
                                 const m = action.match(/^(.*)\s+\(~\s*(\d+)\s*cr\)$/i);
@@ -2141,7 +2146,9 @@ export const Generate: React.FC<Props> = ({
                                   <button
                                     key={`${turn.id}-${action}`}
                                     type="button"
-                                    onClick={() => handleIntentAction(action, turn.actionIntent, turn.actionPrompt)}
+                                    onClick={() =>
+                                      handleIntentAction(action, turn.actionIntent, turn.actionPrompt, turn.id)
+                                    }
                                     className={`inline-flex min-h-9 items-center gap-1.5 border-2 border-black px-3 py-1 text-[10px] font-black ${
                                       isConfirm
                                         ? 'relative bg-black pr-12 text-white shadow-[3px_3px_0_0_#ff90e8] hover:bg-neutral-900'
@@ -2180,17 +2187,14 @@ export const Generate: React.FC<Props> = ({
                       </div>
                     ) : null}
                     {showLiveReasoning ? (
-                      <div className="flex justify-start" aria-live="polite">
-                        <div className="max-w-[95%] bg-[#EBEBEB] px-2 py-1.5 text-[10px] leading-snug text-black">
-                          <p className="mb-1 font-black uppercase">Live reasoning</p>
-                          <div className="space-y-0.5">
-                            {liveReasoningLines.map((line, idx) => (
-                              <p key={`lr-${idx}`} className={idx === liveReasoningLines.length - 1 ? 'animate-pulse' : undefined}>
-                                - {line}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
+                      <div className="mt-1 flex justify-start items-start gap-2 pl-0.5" aria-live="polite">
+                        <span
+                          className="mt-0.5 inline-block size-5 shrink-0 rounded-sm border-2 border-black bg-[#ff90e8] animate-pulse"
+                          aria-hidden
+                        />
+                        <p className="max-w-[95%] min-w-0 flex-1 text-[10px] leading-snug text-gray-800">
+                          {liveReasoningLines[liveReasoningLines.length - 1]}
+                        </p>
                       </div>
                     ) : null}
                     {showRefinementChips && !refineChipsHiddenByComposer ? (
