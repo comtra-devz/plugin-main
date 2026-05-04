@@ -34,6 +34,8 @@ import {
   safeLocalStorageRemoveItem,
   safeLocalStorageSetItem,
 } from '../lib/safeWebStorage';
+import { useToast } from '../contexts/ToastContext';
+import { getGenerateErrorToastPayload, humanizeGenerateCanvasError } from '../lib/generateErrorCopy';
 
 /** Break out of view `p-3 sm:p-4` so black rules span the full plugin width. */
 const FULL_BLEED_OUT = '-mx-3 sm:-mx-4';
@@ -209,21 +211,6 @@ function getPlainTerminalText(el: HTMLDivElement | null): string {
   return normalizeTerminalText(clone.innerText);
 }
 
-function humanizeCanvasError(raw: string): string {
-  const msg = String(raw || '').trim();
-  if (!msg) return 'Canvas apply failed.';
-  if (msg.includes('CUSTOM_DS_INSTANCE_PREFLIGHT_FAILED')) {
-    return 'Generate: some design-system components cannot be resolved in this file (published keys or linked libraries). Enable the libraries your DS uses, re-run import from this screen, and try again.';
-  }
-  if (msg.includes('INSTANCE_UNRESOLVED')) {
-    return 'Some DS component instances are not resolvable in this file. Check DS import and linked libraries.';
-  }
-  if (msg.includes('VARIABLE_UNRESOLVED')) {
-    return 'Some DS variables are not available/importable in this file. Check linked libraries and token availability.';
-  }
-  return msg;
-}
-
 type ConversationTurn = {
   id: string;
   role: 'user' | 'assistant';
@@ -313,7 +300,26 @@ export const Generate: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   /** Position in the Generate pipeline (used while loading). */
   const [generateStep, setGenerateStep] = useState<'idle' | 'context' | 'ai' | 'canvas' | 'credits'>('idle');
-  const [genError, setGenError] = useState<string | null>(null);
+  const { showToast, dismissToast } = useToast();
+  const genErrorToastIdRef = useRef<string | null>(null);
+  /** Same messages as the old top banner; shown as `Toast` above the main tab bar (aligned with global snackbars). */
+  const setGenError = useCallback(
+    (msg: string | null) => {
+      if (genErrorToastIdRef.current) {
+        dismissToast(genErrorToastIdRef.current);
+        genErrorToastIdRef.current = null;
+      }
+      if (!msg) return;
+      const mapped = getGenerateErrorToastPayload(msg);
+      genErrorToastIdRef.current = showToast({
+        variant: mapped.variant,
+        title: mapped.title,
+        description: mapped.description,
+        dismissible: true,
+      });
+    },
+    [showToast, dismissToast],
+  );
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [lastVariant, setLastVariant] = useState<string | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -1197,7 +1203,7 @@ export const Generate: React.FC<Props> = ({
         clearLiveReasoningTimers();
         setLiveReasoningLines([]);
         const opts = getSystemToastOptions('file_link_unavailable');
-        setGenError(opts.description ?? opts.title);
+        setGenError(String(opts.description ?? opts.title));
         return;
       }
 
@@ -1295,14 +1301,14 @@ export const Generate: React.FC<Props> = ({
         if (!canvasResult.ok) {
           completeGenerateTurn(
             trimmed,
-            `Canvas: ${humanizeCanvasError(canvasResult.error || 'Canvas apply failed.')}`,
+            `Canvas: ${humanizeGenerateCanvasError(canvasResult.error || 'Canvas apply failed.')}`,
           );
           void fetchGenerationPluginEvent?.({
             event_type: 'generate_canvas_apply_failed',
             figma_file_key: fileKey,
             payload: { error: canvasResult.error, chip_id: opts?.chipId },
           });
-          setGenError(humanizeCanvasError(canvasResult.error || 'Canvas apply failed.'));
+          setGenError(canvasResult.error || 'Canvas apply failed.');
           setLoading(false);
           setGenerateStep('idle');
           return;
@@ -1366,7 +1372,7 @@ export const Generate: React.FC<Props> = ({
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        completeGenerateTurn(trimmed, `Error: ${humanizeCanvasError(msg)}`);
+        completeGenerateTurn(trimmed, `Error: ${humanizeGenerateCanvasError(msg)}`);
         void fetchGenerationPluginEvent?.({
           event_type: 'generate_chat_turn_failed',
           figma_file_key: fileKey,
@@ -1379,7 +1385,7 @@ export const Generate: React.FC<Props> = ({
             figma_file_key: fileKey,
           });
         }
-        setGenError(humanizeCanvasError(msg));
+        setGenError(msg);
       } finally {
         pipelineUiLockRef.current = false;
         setLoading(false);
@@ -1403,7 +1409,6 @@ export const Generate: React.FC<Props> = ({
       completeGenerateTurn,
       consumeCredits,
       fetchGenerationPluginEvent,
-      humanizeCanvasError,
       abortOptimisticUserTurn,
       beginOptimisticUserTurn,
       clearComposerInput,
@@ -1683,7 +1688,7 @@ export const Generate: React.FC<Props> = ({
     setCanvasBusy(true);
     try {
       const r = await runCanvasApply(plan, { modifyMode: lastApplyWasModifyRef.current });
-      if (!r.ok) setGenError(humanizeCanvasError(r.error || 'Canvas apply failed.'));
+      if (!r.ok) setGenError(r.error || 'Canvas apply failed.');
     } finally {
       setCanvasBusy(false);
     }
@@ -1908,14 +1913,6 @@ export const Generate: React.FC<Props> = ({
         </div>
         <div className="h-[2px] w-full shrink-0 bg-black" aria-hidden />
       </div>
-
-      {/* Error from generation or file context */}
-      {genError && (
-        <div className="mt-2 w-full border-2 border-black bg-red-50 p-3 text-[10px] font-bold text-red-900 shadow-[3px_3px_0_0_#000] flex justify-between items-start gap-2">
-          <span>{genError}</span>
-          <button type="button" onClick={() => setGenError(null)} className="font-bold shrink-0" aria-label="Dismiss">✕</button>
-        </div>
-      )}
 
       {usesFileDs && !showReport && (
         <div className={`min-h-0 shrink-0 ${catalogReady ? '' : 'mt-2'}`}>
@@ -2188,7 +2185,7 @@ export const Generate: React.FC<Props> = ({
                     {showLiveReasoning ? (
                       <div className="mt-1 flex justify-start items-center gap-2 pl-0.5" aria-live="polite">
                         <span
-                          className="inline-block size-5 shrink-0 self-center rounded-sm border-2 border-black bg-[#ff90e8] animate-pulse"
+                          className="inline-block size-5 shrink-0 self-center rounded-sm border-2 border-black bg-[#ff90e8] animate-pulse pb-0.5"
                           aria-hidden
                         />
                         <p className="max-w-[95%] min-w-0 flex-1 self-center text-[10px] leading-snug text-gray-800">

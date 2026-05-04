@@ -66,7 +66,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss:
   if (toasts.length === 0) return null;
   return (
     <div
-      className="fixed inset-x-0 z-[55] flex flex-col gap-2 px-3 sm:px-4 pointer-events-none"
+      className="fixed inset-x-0 z-[55] flex flex-col gap-2 overflow-visible px-3 pb-4 pt-0 sm:px-4 pointer-events-none"
       style={{ bottom: TOAST_BOTTOM }}
       aria-live="polite"
     >

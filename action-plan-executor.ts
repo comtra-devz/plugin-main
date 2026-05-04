@@ -293,12 +293,16 @@ function isModelSquarishJunkSize(w: unknown, h: unknown): boolean {
 function applyAutoLayoutChildSizing(node: SceneNode & LayoutMixin, parent: ChildrenMixin): void {
   if (!parentUsesAutoLayout(parent)) return;
   const pf = parent as FrameNode;
-  if (pf.layoutMode === 'VERTICAL') {
-    node.layoutSizingHorizontal = 'FILL';
-    node.layoutSizingVertical = 'HUG';
-  } else if (pf.layoutMode === 'HORIZONTAL') {
-    node.layoutSizingHorizontal = 'HUG';
-    node.layoutSizingVertical = 'FILL';
+  try {
+    if (pf.layoutMode === 'VERTICAL') {
+      node.layoutSizingHorizontal = 'FILL';
+      node.layoutSizingVertical = 'HUG';
+    } else if (pf.layoutMode === 'HORIZONTAL') {
+      node.layoutSizingHorizontal = 'HUG';
+      node.layoutSizingVertical = 'FILL';
+    }
+  } catch {
+    /* Alcuni nodi (es. alcune instance) possono rifiutare HUG/FILL finché il parent non è AL — skip silenzioso */
   }
 }
 
@@ -361,8 +365,14 @@ async function injectFallbackScaffold(
   }
   title.characters = String(frameSpec.name || 'Screen').slice(0, 100);
   title.fontSize = 22;
-  if (root.layoutMode !== 'NONE') title.layoutSizingHorizontal = 'FILL';
   root.appendChild(title);
+  if (root.layoutMode !== 'NONE') {
+    try {
+      title.layoutSizingHorizontal = 'FILL';
+    } catch {
+      /* sizing solo dopo appendChild */
+    }
+  }
 
   const body = figma.createText();
   try {
@@ -375,8 +385,14 @@ async function injectFallbackScaffold(
     'Describe buttons, fields, and links in your prompt for a richer layout.';
   body.fontSize = 13;
   body.opacity = 0.85;
-  if (root.layoutMode !== 'NONE') body.layoutSizingHorizontal = 'FILL';
   root.appendChild(body);
+  if (root.layoutMode !== 'NONE') {
+    try {
+      body.layoutSizingHorizontal = 'FILL';
+    } catch {
+      /* ignore */
+    }
+  }
 
   const row = figma.createFrame();
   row.name = 'Placeholders';
@@ -385,7 +401,6 @@ async function injectFallbackScaffold(
   row.primaryAxisSizingMode = 'AUTO';
   row.counterAxisSizingMode = 'AUTO';
   row.fills = [];
-  if (root.layoutMode !== 'NONE') row.layoutSizingHorizontal = 'FILL';
 
   const btn1 = figma.createRectangle();
   btn1.resize(280, 44);
@@ -400,6 +415,13 @@ async function injectFallbackScaffold(
   row.appendChild(btn1);
   row.appendChild(btn2);
   root.appendChild(row);
+  if (root.layoutMode !== 'NONE') {
+    try {
+      row.layoutSizingHorizontal = 'FILL';
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 const FIGMA_NODE_ID_RE = /^\d+:\d+$/;
@@ -944,12 +966,16 @@ async function appendMissingComponentWireframe(
   ph.paddingRight = 10;
   ph.primaryAxisSizingMode = 'AUTO';
   ph.counterAxisSizingMode = 'FIXED';
-  ph.layoutSizingHorizontal = 'FILL';
   ph.fills = [{ type: 'SOLID', color: { r: 0.96, g: 0.96, b: 0.98 } }];
   ph.strokes = [{ type: 'SOLID', color: { r: 0.65, g: 0.68, b: 0.75 } }];
   ph.strokeWeight = 1;
   ph.cornerRadius = 6;
   parent.appendChild(ph);
+  try {
+    ph.layoutSizingHorizontal = 'FILL';
+  } catch {
+    /* richiede parent auto-layout attivo */
+  }
 
   const bar = figma.createRectangle();
   bar.resize(280, 40);
@@ -968,8 +994,12 @@ async function appendMissingComponentWireframe(
     `Nessun componente nel file per “${label}”. Collega la libreria del DS o usa rettangoli/testo nel prompt.`;
   cap.fontSize = 10;
   cap.opacity = 0.75;
-  cap.layoutSizingHorizontal = 'FILL';
   ph.appendChild(cap);
+  try {
+    cap.layoutSizingHorizontal = 'FILL';
+  } catch {
+    /* testo come figlio di frame ad auto-layout */
+  }
   applyFillsToNode(cap, [], varMap, 'text');
 }
 

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed-fake-user": "node scripts/seed-fake-comtra-user.mjs"
+    "seed-fake-user": "node scripts/seed-fake-comtra-user.mjs",
+    "verify-qwen": "node scripts/verify-qwen-live.mjs"
   },
   "dependencies": {
     "express": "^4.21.0",

@@ -87,6 +87,8 @@ export const BRUTAL = {
   infoShelf: `w-full border-2 border-black bg-neutral-50 shadow-[3px_3px_0_0_#000]`,
   /** Warning / gap hints — same frame as info, amber fill. */
   snackbarWarning: `w-full border-2 border-black bg-amber-100 p-2.5 shadow-[3px_3px_0_0_#000]`,
+  /** Errors — same chrome as snackbarWarning, red fill (align with Toast variant `error`). */
+  snackbarError: `w-full border-2 border-black bg-red-100 p-2.5 shadow-[3px_3px_0_0_#000]`,
 };
 
 export const TIER_LIMITS: Record<string, number> = {

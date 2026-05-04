@@ -97,6 +97,7 @@ async function githubFetchRawText(owner, repo, path, ref, token) {
 
 function storiesFromMetadata(sb) {
   const out = [];
+  const seen = new Set();
   const raw = sb?.stories || sb?.components;
   const arr = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw) : [];
   for (const s of arr) {
@@ -105,6 +106,9 @@ function storiesFromMetadata(sb) {
     const title = String(s.title || '').trim();
     const name = String(s.name || '').trim();
     if (!id && !title) continue;
+    const k = `${id}::${title}::${name}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
     out.push({
       id: id || `${title}/${name}`,
       title,
@@ -162,12 +166,30 @@ function normalizeNameToken(s) {
     .replace(/[^a-z0-9]+/g, '');
 }
 
-function compositeNameScore(a, b) {
+function stripGenericAffixes(raw) {
+  const prefixes = ['components', 'component', 'ui', 'base', 'atoms', 'molecules', 'organisms', 'shared', 'common'];
+  const suffixes = ['default', 'primary', 'base', 'root', 'main'];
+  let t = String(raw || '').toLowerCase();
+  t = t.replace(/[\/._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const bits = t ? t.split(' ') : [];
+  const noPrefix = bits.filter((x, i) => !(i === 0 && prefixes.includes(x)));
+  const noSuffix = noPrefix.filter((x, i) => !(i === noPrefix.length - 1 && suffixes.includes(x)));
+  return noSuffix
+    .map((x) => (x.endsWith('s') && x.length > 3 ? x.slice(0, -1) : x))
+    .join(' ')
+    .trim();
+}
+
+function normalizeNamePhrase(s) {
+  const base = stripGenericAffixes(s);
+  return base.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function levenshteinScore(a, b) {
   const aa = normalizeNameToken(a);
   const bb = normalizeNameToken(b);
   if (!aa || !bb) return 0;
   if (aa === bb) return 1;
-  let dist = 0;
   const m = Math.max(aa.length, bb.length);
   const dp = [];
   for (let i = 0; i <= bb.length; i++) dp[i] = i;
@@ -180,15 +202,101 @@ function compositeNameScore(a, b) {
       dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
       prev = tmp;
     }
-    dist = dp[bb.length];
   }
-  const lev = 1 - dist / m;
-  const ta = new Set(aa.match(/.{1,3}/g) || []);
-  const tb = new Set(bb.match(/.{1,3}/g) || []);
+  return 1 - dp[bb.length] / m;
+}
+
+function jaccardTokenScore(a, b) {
+  const ta = new Set(normalizeNamePhrase(a).split(' ').filter(Boolean));
+  const tb = new Set(normalizeNamePhrase(b).split(' ').filter(Boolean));
+  if (!ta.size || !tb.size) return 0;
   let inter = 0;
   for (const x of ta) if (tb.has(x)) inter++;
-  const jac = inter / Math.max(1, ta.size + tb.size - inter);
-  return Math.min(0.95, lev * 0.4 + jac * 0.6);
+  return inter / Math.max(1, ta.size + tb.size - inter);
+}
+
+function compositeNameScore(a, b) {
+  const exactA = normalizeNamePhrase(a).replace(/\s+/g, '');
+  const exactB = normalizeNamePhrase(b).replace(/\s+/g, '');
+  if (!exactA || !exactB) return 0;
+  if (exactA === exactB) return 1;
+  const lev = levenshteinScore(a, b);
+  const jac = jaccardTokenScore(a, b);
+  return Math.max(0, Math.min(0.95, lev * 0.4 + jac * 0.6));
+}
+
+function extractStoryComponentKeysFromStory(story) {
+  const keys = new Set();
+  const walk = (v, depth) => {
+    if (depth > 8 || v == null) return;
+    if (typeof v === 'string') {
+      if (/^[0-9a-z]{40,}$/i.test(v)) keys.add(v);
+      return;
+    }
+    if (typeof v !== 'object') return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, depth + 1);
+      return;
+    }
+    for (const [k, val] of Object.entries(v)) {
+      if (/componentkey/i.test(k) && typeof val === 'string' && val.trim()) keys.add(val.trim());
+      walk(val, depth + 1);
+    }
+  };
+  walk(story.parameters, 0);
+  walk(story.args, 0);
+  return [...keys];
+}
+
+function extractVariantAxesFromStory(story) {
+  const out = new Set();
+  const argTypes = story?.argTypes && typeof story.argTypes === 'object' ? Object.keys(story.argTypes) : [];
+  const args = story?.args && typeof story.args === 'object' ? Object.keys(story.args) : [];
+  for (const k of [...argTypes, ...args]) out.add(String(k));
+  return [...out];
+}
+
+function scoreWithVariantBoost(figmaComp, story, score) {
+  const axes = figmaComp?.variantProperties && typeof figmaComp.variantProperties === 'object'
+    ? Object.keys(figmaComp.variantProperties)
+    : [];
+  if (!axes.length) return score;
+  const storyKeys = new Set(extractVariantAxesFromStory(story).map((x) => normalizeNameToken(x)));
+  let boost = 0;
+  for (const axis of axes) {
+    if (!axis) continue;
+    if (storyKeys.has(normalizeNameToken(axis))) boost += 0.05;
+  }
+  return Math.min(0.95, score + boost);
+}
+
+function derivePageName(syncSnapshot, pageId) {
+  const pages = Array.isArray(syncSnapshot?.pages) ? syncSnapshot.pages : [];
+  const hit = pages.find((p) => String(p?.id || '') === String(pageId || ''));
+  return hit?.name ? String(hit.name) : null;
+}
+
+function parseStoryFileInsight(path, text, stories) {
+  const titleMatch = text.match(/title\s*:\s*['"`]([^'"`]+)['"`]/);
+  const title = titleMatch ? titleMatch[1].trim() : '';
+  const importMatch = text.match(/import\s+[^'"]+\s+from\s+['"]([^'"]+)['"]/);
+  const componentImport = importMatch ? importMatch[1].trim() : null;
+  const exportNames = [];
+  const rgx = /export\s+const\s+([A-Za-z0-9_]+)/g;
+  let m;
+  while ((m = rgx.exec(text))) exportNames.push(m[1]);
+  const figmaNodeIds = [...new Set((text.match(/(\d+[:]\d+)|(\d+[-]\d+)/g) || []).map((x) => x.replace('-', ':')))];
+  const candidateStoryIds = stories
+    .filter((s) => (title && s.title === title) || exportNames.some((n) => normalizeNameToken(n) === normalizeNameToken(s.name)))
+    .map((s) => s.id);
+  return {
+    path,
+    title: title || null,
+    componentImport,
+    storyIds: candidateStoryIds,
+    figmaNodeIds,
+    excerpt: text.slice(0, 9000),
+  };
 }
 
 /**
@@ -254,6 +362,29 @@ function runAlgorithmicReconcile({ syncSnapshot, stories, comtraIdentities }) {
   }
 
   for (const c of comps) {
+    const ck = typeof c?.figmaComponentKey === 'string' && c.figmaComponentKey.trim() ? c.figmaComponentKey.trim() : null;
+    if (!ck || matches.some((m) => m.figma_node_id === String(c.key))) continue;
+    const st = stories.find((x) => extractStoryComponentKeysFromStory(x).includes(ck));
+    if (!st) continue;
+    usedStories.add(st.id);
+    matches.push({
+      figma_node_id: String(c.key),
+      story_id: st.id,
+      repo_path: null,
+      confidence: 1,
+      confidence_reason: 'Matched by Figma published component key',
+      confirmed_by: 'agent_high_confidence',
+      drift: {
+        has_drift: true,
+        drift_type: 'NAMING_ONLY',
+        description: 'Matched via componentKey from Storybook parameters.',
+        suggested_fix: 'Validate variants and args alignment.',
+        diff: null,
+      },
+    });
+  }
+
+  for (const c of comps) {
     if (matches.some((m) => m.figma_node_id === String(c.key))) continue;
     let best = null;
     let bestScore = 0;
@@ -263,7 +394,7 @@ function runAlgorithmicReconcile({ syncSnapshot, stories, comtraIdentities }) {
       const s1 = compositeNameScore(c.name, st.name);
       const s2 = compositeNameScore(c.name, label);
       const s3 = compositeNameScore(c.name, st.id.replace(/--/g, '/').replace(/-/g, ' '));
-      const sc = Math.max(s1, s2, s3);
+      const sc = scoreWithVariantBoost(c, st, Math.max(s1, s2, s3));
       if (sc > bestScore) {
         bestScore = sc;
         best = st;
@@ -320,6 +451,7 @@ function runAlgorithmicReconcile({ syncSnapshot, stories, comtraIdentities }) {
 
 function driftItemsFromReconcileResult({ result, storybookUrl, analysisMode }) {
   const items = [];
+  const itemDedup = new Set();
   let idx = 0;
   const matches = Array.isArray(result.matches) ? result.matches : [];
   for (const m of matches) {
@@ -336,6 +468,9 @@ function driftItemsFromReconcileResult({ result, storybookUrl, analysisMode }) {
     const diff = analysisMode === 'standard' ? null : m.drift?.diff ?? null;
     const driftType = String(m.drift?.drift_type || 'DRIFT');
     if (driftType === 'IN_SYNC' || m.drift?.has_drift === false) syncCategory = 'in_sync';
+    const dedupKey = `${syncCategory}|${fig}|${st}|${driftType}`;
+    if (itemDedup.has(dedupKey)) continue;
+    itemDedup.add(dedupKey);
     items.push({
       id: `reconcile-${idx++}`,
       name: String(fig),
@@ -358,7 +493,10 @@ function driftItemsFromReconcileResult({ result, storybookUrl, analysisMode }) {
       analysisMode,
     });
   }
-  for (const id of result.unmatched_figma || []) {
+  for (const id of [...new Set(result.unmatched_figma || [])]) {
+    const dedupKey = `unmatched_figma|${id}`;
+    if (itemDedup.has(dedupKey)) continue;
+    itemDedup.add(dedupKey);
     items.push({
       id: `unfig-${idx++}`,
       name: id,
@@ -370,7 +508,11 @@ function driftItemsFromReconcileResult({ result, storybookUrl, analysisMode }) {
       analysisMode,
     });
   }
-  for (const id of result.unmatched_stories || []) {
+  for (const id of [...new Set(result.unmatched_stories || [])]) {
+    const labelKey = normalizeNameToken(String(id).replace(/--/g, ' ').replace(/-/g, ' '));
+    const dedupKey = `unmatched_story|${labelKey || id}`;
+    if (itemDedup.has(dedupKey)) continue;
+    itemDedup.add(dedupKey);
     items.push({
       id: `unst-${idx++}`,
       name: id,
@@ -383,6 +525,44 @@ function driftItemsFromReconcileResult({ result, storybookUrl, analysisMode }) {
     });
   }
   return items;
+}
+
+function postProcessMatches({ parsed, stories, syncSnapshot }) {
+  const figmaIds = new Set((Array.isArray(syncSnapshot?.components) ? syncSnapshot.components : []).map((c) => String(c.key)));
+  const storyMap = new Map(stories.map((s) => [String(s.id), s]));
+  const out = [];
+  const seen = new Set();
+  for (const m of Array.isArray(parsed?.matches) ? parsed.matches : []) {
+    const figmaId = String(m?.figma_node_id || '').trim();
+    const storyId = String(m?.story_id || '').trim();
+    if (!figmaId || !storyId || !figmaIds.has(figmaId) || !storyMap.has(storyId)) continue;
+    const key = `${figmaId}|${storyId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const story = storyMap.get(storyId);
+    const explicitIds = extractFigmaNodeIdsFromStory(story || {});
+    const confidence = explicitIds.includes(figmaId) ? 1 : Math.max(0, Math.min(1, Number(m?.confidence) || 0));
+    if (confidence < 0.6) continue;
+    out.push({
+      ...m,
+      figma_node_id: figmaId,
+      story_id: storyId,
+      confidence,
+      confirmed_by: confidence >= 0.85 ? 'agent_high_confidence' : (confidence >= 0.6 ? 'agent_medium' : 'agent_low'),
+    });
+  }
+  const unmatchedFigma = [];
+  const matchedFigmaSet = new Set(out.map((m) => String(m.figma_node_id)));
+  for (const fid of figmaIds) {
+    if (!matchedFigmaSet.has(fid)) unmatchedFigma.push(fid);
+  }
+  const unmatchedStories = [...new Set((parsed?.unmatched_stories || []).map((x) => String(x || '').trim()).filter(Boolean))];
+  return {
+    matches: out,
+    unmatched_figma: unmatchedFigma,
+    unmatched_stories: unmatchedStories,
+    reasoning_summary: String(parsed?.reasoning_summary || ''),
+  };
 }
 
 function buildPrPayloads(matches) {
@@ -501,14 +681,16 @@ export async function runDeepSyncReconcile(opts) {
   const storyFiles = files
     .filter((p) => inBase(p) && /\.(stories|story)\.(js|jsx|ts|tsx|mdx)$/i.test(p))
     .sort((a, b) => a.length - b.length)
-    .slice(0, 24);
+    .slice(0, 40);
 
   const gh = parseGitHubRepoUrl(row.repo_url);
   const storySnippets = [];
+  const repoStoryMap = [];
   if (gh) {
     for (const p of storyFiles) {
       try {
         const txt = await githubFetchRawText(gh.owner, gh.repo, p, branch, token);
+        repoStoryMap.push(parseStoryFileInsight(p, txt, stories));
         storySnippets.push({
           path: p,
           excerpt: txt.slice(0, 9000),
@@ -530,8 +712,11 @@ Rules: Never invent story_id not present in STORYBOOK list. Use confidence 0-1. 
     FIGMA: comps.map((c) => ({
       id: c.key,
       name: c.name,
+      type: 'COMPONENT',
+      propertyKeys: c.variantProperties && typeof c.variantProperties === 'object' ? Object.keys(c.variantProperties) : [],
       variantAxes: c.variantProperties || null,
       pageId: c.pageId,
+      pageName: derivePageName(syncSnapshot, c.pageId),
       figmaComponentKey: c.figmaComponentKey || null,
       identity: comtraIdentities[c.key] || null,
     })),
@@ -539,8 +724,11 @@ Rules: Never invent story_id not present in STORYBOOK list. Use confidence 0-1. 
       id: s.id,
       title: s.title,
       name: s.name,
+      argsKeys: s.args && typeof s.args === 'object' ? Object.keys(s.args) : [],
+      argTypeKeys: s.argTypes && typeof s.argTypes === 'object' ? Object.keys(s.argTypes) : [],
       figmaHints: extractFigmaNodeIdsFromStory(s),
     })),
+    REPO_STORY_MAP: repoStoryMap,
     REPO_STORY_FILES: storySnippets,
     ANCHORS: comtraIdentities,
   };
@@ -578,7 +766,7 @@ Rules: Never invent story_id not present in STORYBOOK list. Use confidence 0-1. 
     }
   }
 
-  let core = parsed;
+  let core = parsed ? postProcessMatches({ parsed, stories, syncSnapshot }) : null;
   if (!core) {
     core = runAlgorithmicReconcile({ syncSnapshot, stories, comtraIdentities });
   }

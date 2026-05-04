@@ -15,21 +15,21 @@ interface Props {
 /** All toasts share the same black frame; only fill + text tone vary (no soft colored borders). */
 const variantStyles = {
   default: 'bg-white text-black',
-  error: 'bg-red-50 text-red-900',
+  error: 'bg-red-100 text-red-950',
   warning: 'bg-amber-100 text-black',
   info: 'bg-sky-100 text-sky-950',
 };
 
 const variantTextStyles = {
   default: 'text-black',
-  error: 'text-red-900',
+  error: 'text-red-950',
   warning: 'text-black',
   info: 'text-sky-950',
 };
 
 const variantDescStyles = {
   default: 'text-gray-800',
-  error: 'text-red-800',
+  error: 'text-red-900',
   warning: 'text-neutral-900',
   info: 'text-sky-900',
 };

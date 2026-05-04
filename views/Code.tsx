@@ -438,19 +438,16 @@ export const Code: React.FC<Props> = ({
         }
         setSyncFileKey(typeof snap.fileKey === 'string' && snap.fileKey.trim() ? snap.fileKey.trim() : null);
         (async () => {
-          if (!fetchSyncScan || !storybookUrl) {
+          if (!storybookUrl) {
             setIsSyncScanning(false);
             return;
           }
           try {
-            const sc = sourceConnectionRef.current;
-            const useDeep =
-              Boolean(
-                fetchSyncReconcile &&
-                  sc?.status === 'ready' &&
-                  sc?.hasToken &&
-                  isPro,
-              );
+            const useDeep = Boolean(fetchSyncReconcile && isPro);
+            if (!useDeep && !fetchSyncScan) {
+              setIsSyncScanning(false);
+              return;
+            }
             const result = useDeep
               ? await fetchSyncReconcile!({
                   sync_snapshot: snap,
@@ -477,7 +474,11 @@ export const Code: React.FC<Props> = ({
               setSyncReconcileMeta(null);
             }
             if (!syncScanPrepaidWithConsumeRef.current && logFreeAction) {
-              void logFreeAction(useDeep ? 'sync_reconcile' : 'scan_sync').catch(() => {});
+              const deepMode = useDeep && 'analysis_mode' in result ? result.analysis_mode : null;
+              const actionType = useDeep
+                ? (deepMode === 'standard' ? 'sync_reconcile_fallback' : 'sync_reconcile')
+                : 'scan_sync';
+              void logFreeAction(actionType).catch(() => {});
             }
             if (snap.fileKey && storybookUrl) {
               const payload: SyncCachedResult = { syncItems: result.items || [], scannedAt: new Date().toISOString() };
@@ -1341,7 +1342,8 @@ export const Code: React.FC<Props> = ({
   const handleSyncScan = async () => {
     if (isSyncScanning || pendingSyncScanRef.current) return;
     if (getRemainingTime('scan_sync')) return;
-    if (!storybookUrl || !fetchSyncScan) return;
+    if (!storybookUrl) return;
+    if (!fetchSyncReconcile && !fetchSyncScan) return;
     if (!isPro) {
       onUnlockRequest();
       return;
@@ -1562,9 +1564,7 @@ export const Code: React.FC<Props> = ({
             onStartSourceAuth={handleStartSourceAuth}
             lastSyncAllDate={lastSyncAllDate}
             syncScanVariant={
-              sourceConnection?.status === 'ready' && sourceConnection?.hasToken && fetchSyncReconcile
-                ? 'deep'
-                : 'legacy'
+              isPro && fetchSyncReconcile ? 'deep' : 'legacy'
             }
             syncReconcileMeta={syncReconcileMeta}
             openDeepSyncPr={openDeepSyncPr}

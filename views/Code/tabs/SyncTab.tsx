@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   SyncTabProps,
   BRUTAL,
@@ -129,6 +129,43 @@ const FILTER_LABELS: Record<SyncCategoryId, string> = {
   AUTO_FIXABLE: 'Auto-fixable',
   MANUAL: 'Manual',
 };
+
+const FILTER_ORDER: SyncCategoryId[] = ['ALL', 'MISSING', 'NAMING', 'VARIANTS', 'SOURCE', 'AUTO_FIXABLE', 'MANUAL'];
+
+const FILTER_DESC: Record<SyncCategoryId, string> = {
+  ALL: 'Every drift item, grouped by category below.',
+  MISSING: SYNC_CATEGORY_META.MISSING.desc,
+  NAMING: SYNC_CATEGORY_META.NAMING.desc,
+  VARIANTS: SYNC_CATEGORY_META.VARIANTS.desc,
+  SOURCE: SYNC_CATEGORY_META.SOURCE.desc,
+  AUTO_FIXABLE: 'Items with an automated apply action in Figma.',
+  MANUAL: 'Items that need a decision or a code-side change.',
+};
+
+const FILTER_SWATCH: Record<SyncCategoryId, string> = {
+  ALL: 'bg-neutral-400',
+  MISSING: 'bg-red-400',
+  NAMING: 'bg-blue-400',
+  VARIANTS: 'bg-purple-400',
+  SOURCE: 'bg-amber-400',
+  AUTO_FIXABLE: 'bg-green-500',
+  MANUAL: 'bg-gray-600',
+};
+
+function getSyncFilterCount(
+  filter: SyncCategoryId,
+  overview: {
+    total: number;
+    autoFixable: number;
+    manual: number;
+    sections: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]>;
+  },
+): number {
+  if (filter === 'ALL') return overview.total;
+  if (filter === 'AUTO_FIXABLE') return overview.autoFixable;
+  if (filter === 'MANUAL') return overview.manual + overview.sections.SOURCE.length;
+  return overview.sections[filter].length;
+}
 
 const MAX_ITEMS_PER_SECTION = 80;
 
@@ -331,9 +368,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [sourceTokenInput, setSourceTokenInput] = useState('');
   const [sourceScanDraft, setSourceScanDraft] = useState<SourceScanResult | null>(null);
   const [sourceWizardError, setSourceWizardError] = useState<string | null>(null);
-  const [collapsedSections, setCollapsedSections] = useState<
-    Partial<Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, boolean>>
-  >({});
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [deepLoaderIx, setDeepLoaderIx] = useState(0);
   const [syncDrawerOpen, setSyncDrawerOpen] = useState(false);
@@ -345,11 +379,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   const [prMergedBanner, setPrMergedBanner] = useState(false);
   const [dismissedReviewIds, setDismissedReviewIds] = useState<Set<string>>(() => new Set());
   const [localJustSyncedLayerIds, setLocalJustSyncedLayerIds] = useState<Set<string>>(() => new Set());
-  const filtersRowRef = useRef<HTMLDivElement | null>(null);
-  const draggingFiltersRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragStartScrollRef = useRef(0);
-
   const selectedPresetLabel = PRESET_STORYBOOKS.find((p) => p.value === connectInput)?.label ?? 'Custom URL…';
   const quickPickOptions = useMemo(() => {
     const recent = (rememberedStorybooksForFile || []).map((u) => ({
@@ -591,28 +620,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     setShowDisconnectConfirm(false);
   };
 
-  const startFiltersDrag = (clientX: number) => {
-    const el = filtersRowRef.current;
-    if (!el) return;
-    draggingFiltersRef.current = true;
-    dragStartXRef.current = clientX;
-    dragStartScrollRef.current = el.scrollLeft;
-    el.style.cursor = 'grabbing';
-  };
-
-  const moveFiltersDrag = (clientX: number) => {
-    const el = filtersRowRef.current;
-    if (!el || !draggingFiltersRef.current) return;
-    const delta = clientX - dragStartXRef.current;
-    el.scrollLeft = dragStartScrollRef.current - delta;
-  };
-
-  const endFiltersDrag = () => {
-    draggingFiltersRef.current = false;
-    const el = filtersRowRef.current;
-    if (el) el.style.cursor = 'grab';
-  };
-
   const resetSourceWizard = () => {
     setSourceWizardStep(0);
     setSourceProvider('github');
@@ -727,23 +734,13 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   };
 
   return (
-    <div className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] relative overflow-hidden animate-in slide-in-from-right-2">
+    <div className="relative overflow-hidden bg-white animate-in slide-in-from-right-2">
       <style>{`
         @keyframes fill-cta-bar {
           0% { width: 0%; }
           100% { width: 100%; }
         }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
       `}</style>
-      <div className="p-3 border-b-2 border-black bg-black text-white flex justify-between items-center">
-        <h3 className="font-bold uppercase text-xs">Deep Sync</h3>
-      </div>
       {prMergedBanner ? (
         <div className="border-b-2 border-green-600 bg-green-100 px-3 py-2 text-center text-[10px] font-black uppercase text-green-900">
           PR merged — refreshing scan…
@@ -752,7 +749,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
       {/* TEMPORARY: PRO gate disabled for Deep Sync until Lemon Squeezy store is live — see docs/TO-DO-BEFORE-GOING-LIVE.md "Restore PRO gate for Deep Sync". When restoring, show upgrade block when !isPro with copy: "Need to connect a private Storybook or one behind SSO? Book a call for an enterprise setup." (Calendly link: https://calendly.com/comtra-enterprise) */}
       <div>
-          <div className="grid grid-cols-3 border-b-2 border-black">
+          <div className="grid grid-cols-3 border-2 border-black shadow-[4px_4px_0px_0px_#000]">
             <button 
               onClick={() => setActiveSyncTab('SB')}
               className={`py-3 px-2 text-[10px] font-bold uppercase transition-colors ${activeSyncTab === 'SB' ? 'bg-[#ff90e8] text-black' : 'bg-white hover:bg-gray-100'}`}
@@ -774,7 +771,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           </div>
 
           {activeSyncTab === 'SB' && (
-            <div className="px-2 py-2 animate-in slide-in-from-left-2">
+            <div className="mt-2 animate-in slide-in-from-left-2">
               {!isSbConnected ? (
                 <div className="space-y-3">
                   <p className="text-xs font-medium">Pick a public Storybook or enter your own URL. We’ll check that it exposes the stories API.</p>
@@ -1142,7 +1139,14 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               <div className="text-[9px] font-black uppercase text-gray-500">Manual Review</div>
                               <div className="text-xl font-black leading-none">{syncOverview.manual}</div>
                             </div>
-                            <div className={`${BRUTAL.card} p-2`}>
+                            <div
+                              className={`${BRUTAL.card} p-2`}
+                              title={
+                                syncReconcileMeta?.avg_confidence == null
+                                  ? 'Media dei punteggi di confidenza (0–100%) solo sulle coppie Figma↔Storybook effettivamente mappate dal Deep Sync. Mostra N/A se lo scan è solo “classico”, oppure se il reconcile non ha prodotto match (solo voci non abbinate). Non è la “sicurezza” del singolo drift.'
+                                  : `Media confidenza sulle coppie mappate. ${syncReconcileMeta.reasoning_summary || ''}`.trim()
+                              }
+                            >
                               <div className="text-[9px] font-black uppercase text-gray-500">AI confidence</div>
                               <div
                                 className={`text-2xl font-black leading-none ${
@@ -1154,11 +1158,6 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                         ? 'text-amber-700'
                                         : 'text-red-600'
                                 }`}
-                                title={
-                                  syncReconcileMeta?.avg_confidence == null
-                                    ? 'N/A when only legacy scan ran'
-                                    : syncReconcileMeta.reasoning_summary || ''
-                                }
                               >
                                 {syncReconcileMeta?.avg_confidence == null
                                   ? 'N/A'
@@ -1166,6 +1165,53 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                               </div>
                             </div>
                           </div>
+
+                          <div className={`${BRUTAL.cardFlush} mb-3 overflow-hidden bg-white`}>
+                            <div className="flex items-center justify-between border-b-2 border-black bg-gray-50 px-2 py-1.5">
+                              <h3 className="text-[10px] font-black uppercase">Categories</h3>
+                              <span className="rounded-sm border border-black bg-black px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                {syncOverview.total} items
+                              </span>
+                            </div>
+                            <div>
+                              {FILTER_ORDER.map((filter) => {
+                                const count = getSyncFilterCount(filter, syncOverview);
+                                const isActive = activeFilter === filter;
+                                const pct = syncOverview.total > 0 ? Math.round((count / syncOverview.total) * 100) : 0;
+                                const countLabel = count > 9999 ? `${Math.round(count / 1000)}k` : String(count);
+                                return (
+                                  <button
+                                    key={filter}
+                                    type="button"
+                                    onClick={() => setActiveFilter(filter)}
+                                    className={`flex w-full cursor-pointer items-center justify-between border-b border-gray-100 p-2 text-left transition-colors last:border-b-0 ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
+                                  >
+                                    <div className="mr-4 flex min-w-0 items-center gap-2">
+                                      <div
+                                        className={`size-7 shrink-0 border-2 border-black shadow-[2px_2px_0_0_#000] ${FILTER_SWATCH[filter]}`}
+                                        aria-hidden
+                                      />
+                                      <div className="flex min-w-0 flex-col">
+                                        <span className="text-[10px] font-bold uppercase">{FILTER_LABELS[filter]}</span>
+                                        <span
+                                          className={`text-[9px] font-medium leading-snug ${isActive ? 'text-gray-300' : 'text-gray-600'}`}
+                                        >
+                                          {FILTER_DESC[filter]}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <span className={`font-mono text-[10px] ${isActive ? 'text-gray-400' : 'text-gray-500'}`}>{pct}%</span>
+                                      <span className="flex size-7 min-w-7 items-center justify-center rounded-full border border-black bg-white text-[9px] font-bold text-black">
+                                        {countLabel}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
                           {(deepBuckets.inSync.length > 0 ||
                             deepBuckets.needsReview.length > 0 ||
                             deepBuckets.unFigma.length > 0 ||
@@ -1176,7 +1222,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                   <summary className="cursor-pointer font-black uppercase">
                                     In sync ({deepBuckets.inSync.length})
                                   </summary>
-                                  <ul className="mt-1 max-h-28 overflow-y-auto font-mono text-[9px] text-green-800">
+                                  <ul className="mt-1 font-mono text-[9px] text-green-800">
                                     {deepBuckets.inSync.map((x) => (
                                       <li key={x.id}>
                                         {x.figmaName || x.name}
@@ -1231,12 +1277,12 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                     Unmatched (Figma {deepBuckets.unFigma.length} / Story {deepBuckets.unStory.length})
                                   </summary>
                                   <div className="mt-1 grid grid-cols-2 gap-2 font-mono text-[8px]">
-                                    <ul className="max-h-24 overflow-y-auto">
+                                    <ul>
                                       {deepBuckets.unFigma.map((x) => (
                                         <li key={x.id}>{x.layerId || x.name}</li>
                                       ))}
                                     </ul>
-                                    <ul className="max-h-24 overflow-y-auto">
+                                    <ul>
                                       {deepBuckets.unStory.map((x) => (
                                         <li key={x.id}>{x.storybookName || x.name}</li>
                                       ))}
@@ -1247,67 +1293,38 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                             </div>
                           )}
 
-                          <div
-                            ref={filtersRowRef}
-                            className="hide-scrollbar mb-3 flex gap-1 overflow-x-auto pb-1"
-                            style={{ cursor: 'grab' }}
-                            onMouseDown={(e) => startFiltersDrag(e.clientX)}
-                            onMouseMove={(e) => moveFiltersDrag(e.clientX)}
-                            onMouseUp={endFiltersDrag}
-                            onMouseLeave={endFiltersDrag}
-                            onTouchStart={(e) => startFiltersDrag(e.touches[0]?.clientX ?? 0)}
-                            onTouchMove={(e) => moveFiltersDrag(e.touches[0]?.clientX ?? 0)}
-                            onTouchEnd={endFiltersDrag}
-                          >
-                            {(Object.keys(FILTER_LABELS) as SyncCategoryId[]).map((filter) => {
-                              const count =
-                                filter === 'ALL'
-                                  ? syncOverview.total
-                                  : filter === 'AUTO_FIXABLE'
-                                    ? syncOverview.autoFixable
-                                    : filter === 'MANUAL'
-                                      ? syncOverview.manual + syncOverview.sections.SOURCE.length
-                                      : syncOverview.sections[filter].length;
-                              return (
-                                <button
-                                  key={filter}
-                                  type="button"
-                                  onClick={() => setActiveFilter(filter)}
-                                  className={`shrink-0 border-2 border-black px-2 py-1 text-[9px] font-black uppercase ${activeFilter === filter ? 'bg-[#ff90e8]' : 'bg-white hover:bg-[#ffc900]'}`}
-                                >
-                                  {FILTER_LABELS[filter]} <span className="font-mono">{count}</span>
-                                </button>
-                              );
-                            })}
+                          <div className="mb-1 flex items-center justify-between border-b-2 border-black/10 py-2">
+                            <h3 className="text-[10px] font-black uppercase">
+                              {activeFilter === 'ALL' ? 'Results by category' : FILTER_LABELS[activeFilter]}
+                            </h3>
+                            <span className="text-[9px] font-mono text-gray-600">
+                              {visibleSections.reduce((acc, [, list]) => acc + list.length, 0)} items
+                            </span>
                           </div>
 
-                          <div className="space-y-3 mb-4 max-h-[360px] overflow-y-auto pr-1">
+                          {visibleSections.length === 0 ? (
+                            <p className="mb-4 border border-dashed border-gray-300 bg-gray-50 py-6 text-center text-[10px] font-bold uppercase text-gray-500">
+                              No items in this view
+                            </p>
+                          ) : (
+                          <div className="mb-4 space-y-5">
                             {visibleSections.map(([categoryId, items]) => {
                               const meta = SYNC_CATEGORY_META[categoryId];
                               const visibleItems = items.slice(0, MAX_ITEMS_PER_SECTION);
                               const hiddenCount = Math.max(0, items.length - visibleItems.length);
-                              const collapsed = collapsedSections[categoryId] === true;
                               return (
-                                <section key={categoryId} className="border-2 border-black bg-white">
-                                  <div className={`border-b-2 border-black px-2 py-2 ${meta.tone}`}>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] font-black uppercase">{meta.label}</span>
-                                      <button
-                                        type="button"
-                                        className="inline-flex items-center gap-1 border border-black bg-white px-1.5 py-0.5 text-[9px] font-black text-black hover:bg-neutral-100"
-                                        aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${meta.label}`}
-                                        onClick={() =>
-                                          setCollapsedSections((prev) => ({ ...prev, [categoryId]: !collapsed }))
-                                        }
-                                      >
-                                        <span>{items.length}</span>
-                                        <span aria-hidden>{collapsed ? '▼' : '▲'}</span>
-                                      </button>
+                                <div key={categoryId} className="space-y-2">
+                                  <div className={`border-b-2 border-black px-0 py-1.5 ${meta.tone}`}>
+                                    <div className="flex items-end justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <h4 className="text-[10px] font-black uppercase">{meta.label}</h4>
+                                        <p className="mt-0.5 text-[9px] font-bold leading-snug opacity-80">{meta.desc}</p>
+                                      </div>
+                                      <span className="shrink-0 font-mono text-[10px]">{items.length}</span>
                                     </div>
-                                    <p className="mt-1 text-[9px] font-bold leading-snug opacity-80">{meta.desc}</p>
                                   </div>
 
-                                  {!collapsed ? <div className="space-y-2 p-2">
+                                  <div className="space-y-2">
                                     {visibleItems.map(item => {
                                       const isExpanded = expandedDriftId === item.id;
                                       return (
@@ -1419,11 +1436,12 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                         +{hiddenCount} more in this category
                                       </div>
                                     ) : null}
-                                  </div> : null}
-                                </section>
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>
+                          )}
                         </>
                       )}
 
