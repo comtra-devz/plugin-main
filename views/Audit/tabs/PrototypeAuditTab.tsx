@@ -304,7 +304,7 @@ export const PrototypeAuditTab: React.FC<Props> = ({
       ) : (
         <>
           {/* Categories */}
-          <div className={`${BRUTAL.card} p-0 overflow-hidden bg-white`}>
+          <div className={`${BRUTAL.cardFlush} overflow-hidden bg-white`}>
             <div className="border-b-2 border-black bg-gray-50 flex justify-between items-center px-2 py-1.5">
               <h3 className="font-bold uppercase text-xs">Categories</h3>
               <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm">

@@ -1583,6 +1583,45 @@ export default function AppTest() {
     [user?.authToken, handle503, AUTH_BACKEND_URL],
   );
 
+  const fetchSyncOpenPr = React.useCallback(
+    async (body: { sync_session_id: string; file_path?: string; user_confirmed: boolean }) => {
+      if (!user?.authToken) return { results: [] as Array<{ file_path?: string; pr_url?: string; pr_branch?: string }> };
+      const r = await fetch(`${AUTH_BACKEND_URL}/api/sync/open-pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          sync_session_id: body.sync_session_id,
+          file_path: body.file_path,
+          user_confirmed: body.user_confirmed,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((data.error as string) || `open-pr failed (${r.status})`);
+      return { results: Array.isArray(data.results) ? data.results : [] };
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
+  const fetchSyncPrStatus = React.useCallback(
+    async (q: { sync_session_id?: string; pr_url?: string | null }) => {
+      if (!user?.authToken) return { state: 'unknown' as const, should_rescan: false };
+      const u = new URL(`${AUTH_BACKEND_URL}/api/sync/pr-status`);
+      if (q.sync_session_id) u.searchParams.set('sync_session_id', q.sync_session_id);
+      if (q.pr_url) u.searchParams.set('pr_url', q.pr_url);
+      const r = await fetch(u.toString(), {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return { state: 'unknown' as const, should_rescan: false };
+      return {
+        state: typeof data.state === 'string' ? data.state : 'unknown',
+        should_rescan: data.should_rescan === true,
+      };
+    },
+    [user?.authToken, AUTH_BACKEND_URL],
+  );
+
   const fetchCheckStorybook = React.useCallback(async (storybookUrl: string, storybookToken?: string) => {
     if (!user?.authToken) return { ok: false as const, error: 'Unauthorized' };
     const r = await fetch(`${AUTH_BACKEND_URL}/api/agents/sync-check-storybook`, {
@@ -2894,6 +2933,8 @@ export default function AppTest() {
             logFreeAction={logFreeAction}
             fetchSyncScan={fetchSyncScan}
             fetchSyncReconcile={fetchSyncReconcile}
+            fetchSyncOpenPr={fetchSyncOpenPr}
+            fetchSyncPrStatus={fetchSyncPrStatus}
             fetchCheckStorybook={fetchCheckStorybook}
             fetchSourceConnection={fetchSourceConnection}
             fetchSyncScanCache={fetchSyncScanCache}

@@ -149,7 +149,7 @@ export const Documentation: React.FC<DocumentationProps> = ({ user }) => {
       {/* Interactive Guides Section */}
       <div>
         <h3 className="font-black uppercase text-sm mb-2 px-1">Interactive Guides</h3>
-        <div className={`${BRUTAL.card} p-0 bg-white overflow-hidden`}>
+        <div className={`${BRUTAL.cardFlush} bg-white overflow-hidden`}>
             {/* Tabs */}
             <div className="flex border-b-2 border-black bg-gray-50">
                 {Object.keys(TUTORIALS).map((key) => (

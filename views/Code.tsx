@@ -61,6 +61,15 @@ interface Props {
     avg_confidence?: number | null;
     sync_session_id?: string | null;
   }>;
+  fetchSyncOpenPr?: (body: {
+    sync_session_id: string;
+    file_path?: string;
+    user_confirmed: boolean;
+  }) => Promise<{ results: Array<{ file_path?: string; pr_url?: string; pr_branch?: string }> }>;
+  fetchSyncPrStatus?: (q: { sync_session_id?: string; pr_url?: string | null }) => Promise<{
+    state?: string;
+    should_rescan?: boolean;
+  }>;
   fetchCheckStorybook?: (url: string, token?: string) => Promise<{ ok: boolean; error?: string } & StorybookConnectionInfo>;
   fetchSourceConnection?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<SourceConnection | null>;
   fetchSyncScanCache?: (q: { figmaFileKey: string; storybookUrl: string }) => Promise<{ items: SyncDriftItem[]; scannedAt?: string | null } | null>;
@@ -201,7 +210,31 @@ const upsertSyncLinkedFile = (item: SyncLinkedFileOption) => {
 
 type Tab = 'TOKENS' | 'TARGET' | 'SYNC';
 
-export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, creditsRemaining, useInfiniteCreditsForTest, estimateCredits, consumeCredits, logFreeAction, fetchSyncScan, fetchSyncReconcile, fetchCheckStorybook, fetchSourceConnection, fetchSyncScanCache, fetchLatestSyncScanCacheForFile, saveSourceConnection, deleteSourceConnection, scanSourceConnection, startSourceAuth, fetchCodeGen, onNavigateToStats, selectedNode }) => {
+export const Code: React.FC<Props> = ({
+  plan,
+  userTier,
+  onUnlockRequest,
+  creditsRemaining,
+  useInfiniteCreditsForTest,
+  estimateCredits,
+  consumeCredits,
+  logFreeAction,
+  fetchSyncScan,
+  fetchSyncReconcile,
+  fetchSyncOpenPr,
+  fetchSyncPrStatus,
+  fetchCheckStorybook,
+  fetchSourceConnection,
+  fetchSyncScanCache,
+  fetchLatestSyncScanCacheForFile,
+  saveSourceConnection,
+  deleteSourceConnection,
+  scanSourceConnection,
+  startSourceAuth,
+  fetchCodeGen,
+  onNavigateToStats,
+  selectedNode,
+}) => {
   const [activeTab, setActiveTab] = useState<Tab>('TOKENS');
   
   // Cooldown State
@@ -281,6 +314,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
     restore: { storybookUrl?: string; syncItems?: SyncDriftItem[]; scannedAt?: string } | null;
   }) => void) | null>(null);
   const pendingSyncActionRef = useRef(new Map<string, (v: { ok: boolean; itemId?: string; error?: string; message?: string }) => void>());
+  const pendingComtraIdentityRef = useRef(new Map<string, (ok: boolean) => void>());
   const pendingCodeGenRef = useRef<((v: { root?: unknown; error?: string; fileKey?: string | null }) => void) | null>(null);
   /** True when this sync scan run already took credits via consume (FREE); PRO/test skip consume and use log-free XP on success. */
   const syncScanPrepaidWithConsumeRef = useRef(false);
@@ -365,6 +399,16 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
             error: msg.error ? String(msg.error) : undefined,
             message: msg.message ? String(msg.message) : undefined,
           });
+        }
+        return;
+      }
+
+      if (msg.type === 'comtra-node-identity-set') {
+        const nodeId = String(msg.nodeId || '');
+        const cb = nodeId ? pendingComtraIdentityRef.current.get(nodeId) : undefined;
+        if (cb) {
+          pendingComtraIdentityRef.current.delete(nodeId);
+          cb(msg.ok === true);
         }
         return;
       }
@@ -817,6 +861,68 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
       };
       window.parent.postMessage({ pluginMessage: { type: 'get-code-gen-subtree' } }, '*');
     });
+
+  const requestSetComtraNodeIdentity = (nodeId: string, identity: Record<string, unknown>) =>
+    new Promise<boolean>((resolve) => {
+      const id = String(nodeId || '').trim();
+      if (!id) {
+        resolve(false);
+        return;
+      }
+      pendingComtraIdentityRef.current.set(id, resolve);
+      window.parent.postMessage(
+        { pluginMessage: { type: 'set-comtra-node-identity', nodeId: id, identity } },
+        '*',
+      );
+      window.setTimeout(() => {
+        if (!pendingComtraIdentityRef.current.has(id)) return;
+        pendingComtraIdentityRef.current.delete(id);
+        resolve(false);
+      }, 18000);
+    });
+
+  const openDeepSyncPr = React.useCallback(
+    async (opts: { syncSessionId: string; filePath?: string | null }) => {
+      if (!fetchSyncOpenPr) return { ok: false, error: 'Deep Sync PR is not available.' };
+      const cost = 8;
+      if (!isPro && !useInfiniteCreditsForTest) {
+        if (creditsRemaining !== null && creditsRemaining < cost) {
+          onUnlockRequest();
+          return { ok: false, error: 'Insufficient credits' };
+        }
+        const cr = await consumeCredits({ action_type: 'sync_open_pr', credits_consumed: cost });
+        if (cr.error) {
+          if (cr.error === 'Insufficient credits') onUnlockRequest();
+          return { ok: false, error: cr.error };
+        }
+      }
+      try {
+        const out = await fetchSyncOpenPr({
+          sync_session_id: opts.syncSessionId,
+          file_path: opts.filePath || undefined,
+          user_confirmed: true,
+        });
+        const prUrls = (out.results || [])
+          .map((r) => r.pr_url)
+          .filter((u): u is string => typeof u === 'string' && u.length > 0);
+        return { ok: true, prUrls };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    [fetchSyncOpenPr, isPro, useInfiniteCreditsForTest, creditsRemaining, consumeCredits, onUnlockRequest],
+  );
+
+  const pollDeepSyncPrStatus = React.useCallback(
+    async (q: { syncSessionId?: string; prUrl?: string | null }) => {
+      if (!fetchSyncPrStatus) return { state: 'unknown', should_rescan: false };
+      return fetchSyncPrStatus({
+        sync_session_id: q.syncSessionId,
+        pr_url: q.prUrl ?? undefined,
+      });
+    },
+    [fetchSyncPrStatus],
+  );
 
   const requestSyncDriftAction = (item: SyncDriftItem) =>
     new Promise<{ ok: boolean; itemId?: string; error?: string; message?: string }>((resolve) => {
@@ -1324,8 +1430,7 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
   };
 
   const handleSyncAll = async () => {
-    setSyncScanError('Fix All will apply bulk actions in both directions (Figma and source code). Bulk execution is the next implementation step.');
-    setSyncScanUpgradeUrl(null);
+    /* Deep Sync: use Sync drawer + open PR in SyncTab when openDeepSyncPr is wired. */
     setLastSyncAllDate(new Date());
   };
 
@@ -1462,6 +1567,12 @@ export const Code: React.FC<Props> = ({ plan, userTier, onUnlockRequest, credits
                 : 'legacy'
             }
             syncReconcileMeta={syncReconcileMeta}
+            openDeepSyncPr={openDeepSyncPr}
+            pollDeepSyncPrStatus={pollDeepSyncPrStatus}
+            onSetComtraNodeIdentity={requestSetComtraNodeIdentity}
+            onDeepSyncPrMerged={() => {
+              void handleSyncScan();
+            }}
         />
       )}
 

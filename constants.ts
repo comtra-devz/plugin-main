@@ -77,6 +77,8 @@ export const COLORS = {
 
 export const BRUTAL = {
   card: `bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] p-4`,
+  /** Same chrome as `card` but no padding — use for category lists / tables so `p-0` is not overridden by `p-4` in the cascade. */
+  cardFlush: `bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000]`,
   btn: `border-2 border-black shadow-[4px_4px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_#000] transition-all font-bold uppercase tracking-wider px-4 py-2`,
   input: `w-full border-2 border-black p-3 font-mono focus:bg-[#ffc900] outline-none transition-colors`,
   /** Padded informational surface (import feed, notices) — full width, no radius. */

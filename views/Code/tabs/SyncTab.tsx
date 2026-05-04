@@ -17,6 +17,7 @@ import {
   brutalSelectOptionRowClass,
   brutalSelectOptionSelectedClass,
 } from '../../../components/ui/BrutalSelect';
+import { SyncConfirmationDrawer } from '../sync/SyncConfirmationDrawer';
 
 const PRESET_STORYBOOKS: { label: string; value: string }[] = [
   { label: 'Custom URL…', value: '' },
@@ -93,6 +94,8 @@ const DEEP_SYNC_LOADER_STEPS = [
   'Analyzing drift',
   'Generating sync plan',
 ] as const;
+
+const PR_TRACKER_STORAGE_KEY = 'comtra-sync-pr-tracker-v1';
 
 const SYNC_CATEGORY_META: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, { label: string; desc: string; tone: string }> = {
   MISSING: {
@@ -304,6 +307,10 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   lastSyncAllDate,
   syncScanVariant = 'legacy',
   syncReconcileMeta = null,
+  openDeepSyncPr,
+  pollDeepSyncPrStatus,
+  onSetComtraNodeIdentity,
+  onDeepSyncPrMerged,
 }) => {
   const [connectInput, setConnectInput] = useState(storybookUrl || '');
   const [tokenInput, setTokenInput] = useState(storybookToken || '');
@@ -329,6 +336,15 @@ export const SyncTab: React.FC<SyncTabProps> = ({
   >({});
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [deepLoaderIx, setDeepLoaderIx] = useState(0);
+  const [syncDrawerOpen, setSyncDrawerOpen] = useState(false);
+  const [syncDrawerPhase, setSyncDrawerPhase] = useState<'confirm' | 'tracker'>('confirm');
+  const [syncDrawerFile, setSyncDrawerFile] = useState<string | null>(null);
+  const [syncDrawerErr, setSyncDrawerErr] = useState<string | null>(null);
+  const [syncDrawerBusy, setSyncDrawerBusy] = useState(false);
+  const [trackerPrUrls, setTrackerPrUrls] = useState<string[]>([]);
+  const [prMergedBanner, setPrMergedBanner] = useState(false);
+  const [dismissedReviewIds, setDismissedReviewIds] = useState<Set<string>>(() => new Set());
+  const [localJustSyncedLayerIds, setLocalJustSyncedLayerIds] = useState<Set<string>>(() => new Set());
   const filtersRowRef = useRef<HTMLDivElement | null>(null);
   const draggingFiltersRef = useRef(false);
   const dragStartXRef = useRef(0);
@@ -368,6 +384,10 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     return () => window.clearInterval(t);
   }, [isSyncScanning, syncScanVariant]);
 
+  useEffect(() => {
+    setDismissedReviewIds(new Set());
+  }, [syncReconcileMeta?.sync_session_id]);
+
   const deepBuckets = useMemo(() => {
     const inSync: SyncDriftItem[] = [];
     const needsReview: SyncDriftItem[] = [];
@@ -375,6 +395,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     const unFigma: SyncDriftItem[] = [];
     const unStory: SyncDriftItem[] = [];
     for (const it of syncItems) {
+      if (it.syncCategory === 'needs_review' && dismissedReviewIds.has(it.id)) continue;
       const c = it.syncCategory;
       if (c === 'in_sync') inSync.push(it);
       else if (c === 'needs_review') needsReview.push(it);
@@ -384,7 +405,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       else drift.push(it);
     }
     return { inSync, needsReview, drift, unFigma, unStory };
-  }, [syncItems]);
+  }, [syncItems, dismissedReviewIds]);
 
   const syncOverview = useMemo(() => {
     const sections: Record<Exclude<SyncCategoryId, 'ALL' | 'AUTO_FIXABLE' | 'MANUAL'>, SyncDriftItem[]> = {
@@ -459,6 +480,105 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
   const handleScanClick = () => {
     handleSyncScan();
+  };
+
+  const openSyncDrawer = (filePath?: string | null) => {
+    setSyncDrawerErr(null);
+    if (!openDeepSyncPr || !syncReconcileMeta?.sync_session_id) {
+      setSyncDrawerErr('Run a Deep Sync scan with source connected first.');
+      setSyncDrawerPhase('confirm');
+      setTrackerPrUrls([]);
+      setSyncDrawerFile(null);
+      setSyncDrawerOpen(true);
+      return;
+    }
+    setSyncDrawerFile(filePath ?? null);
+    setSyncDrawerPhase('confirm');
+    setTrackerPrUrls([]);
+    setSyncDrawerOpen(true);
+  };
+
+  const closeSyncDrawer = () => {
+    setSyncDrawerOpen(false);
+    setSyncDrawerPhase('confirm');
+    setSyncDrawerBusy(false);
+    setSyncDrawerErr(null);
+  };
+
+  const confirmSyncDrawer = async () => {
+    if (!openDeepSyncPr || !syncReconcileMeta?.sync_session_id) return;
+    setSyncDrawerBusy(true);
+    setSyncDrawerErr(null);
+    const out = await openDeepSyncPr({
+      syncSessionId: syncReconcileMeta.sync_session_id,
+      filePath: syncDrawerFile,
+    });
+    setSyncDrawerBusy(false);
+    if (!out.ok) {
+      setSyncDrawerErr(out.error || 'PR could not be opened.');
+      return;
+    }
+    const urls = out.prUrls || [];
+    setTrackerPrUrls(urls);
+    setSyncDrawerPhase('tracker');
+    try {
+      localStorage.setItem(
+        PR_TRACKER_STORAGE_KEY,
+        JSON.stringify({ syncSessionId: syncReconcileMeta.sync_session_id, prUrls: urls }),
+      );
+    } catch {
+      /* noop */
+    }
+  };
+
+  const handlePrMergedBridge = () => {
+    try {
+      localStorage.removeItem(PR_TRACKER_STORAGE_KEY);
+    } catch {
+      /* noop */
+    }
+    setPrMergedBanner(true);
+    window.setTimeout(() => setPrMergedBanner(false), 10000);
+    onDeepSyncPrMerged?.();
+    window.setTimeout(() => closeSyncDrawer(), 1800);
+  };
+
+  const confirmNeedsReviewMatch = async (x: SyncDriftItem) => {
+    if (!onSetComtraNodeIdentity || !x.layerId) return;
+    const sid = String(x.storyId || x.storybookName || '').trim();
+    const label = String(x.storybookName || sid);
+    const segs = label.split('/').map((s) => s.trim()).filter(Boolean);
+    const storyTitle = segs.length > 1 ? segs.slice(0, -1).join('/') : segs[0] || sid;
+    const storyName = segs.length > 1 ? segs[segs.length - 1]! : sid;
+    const identity: Record<string, unknown> = {
+      storybookId: sid,
+      storyTitle,
+      storyName,
+      componentKey: null,
+      repoPath: x.repoPath ?? null,
+      storybookUrl: storybookUrl || '',
+      confirmedAt: new Date().toISOString(),
+      confirmedBy: 'user',
+      contentHash: '',
+      prUrl: null,
+      prStatus: null,
+    };
+    const ok = await onSetComtraNodeIdentity(x.layerId, identity);
+    if (ok) {
+      setDismissedReviewIds((prev) => new Set([...prev, x.id]));
+      setLocalJustSyncedLayerIds((prev) => new Set([...prev, x.layerId!]));
+      window.setTimeout(() => {
+        setLocalJustSyncedLayerIds((prev) => {
+          const n = new Set(prev);
+          n.delete(x.layerId!);
+          return n;
+        });
+      }, 10000);
+    }
+  };
+
+  const dismissNeedsReview = (id: string) => {
+    setDismissedReviewIds((prev) => new Set([...prev, id]));
   };
 
   const requestDisconnect = () => setShowDisconnectConfirm(true);
@@ -624,6 +744,11 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       <div className="p-3 border-b-2 border-black bg-black text-white flex justify-between items-center">
         <h3 className="font-bold uppercase text-xs">Deep Sync</h3>
       </div>
+      {prMergedBanner ? (
+        <div className="border-b-2 border-green-600 bg-green-100 px-3 py-2 text-center text-[10px] font-black uppercase text-green-900">
+          PR merged — refreshing scan…
+        </div>
+      ) : null}
 
       {/* TEMPORARY: PRO gate disabled for Deep Sync until Lemon Squeezy store is live — see docs/TO-DO-BEFORE-GOING-LIVE.md "Restore PRO gate for Deep Sync". When restoring, show upgrade block when !isPro with copy: "Need to connect a private Storybook or one behind SSO? Book a call for an enterprise setup." (Calendly link: https://calendly.com/comtra-enterprise) */}
       <div>
@@ -879,6 +1004,31 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           </span>
                         )}
                       </div>
+                      {openDeepSyncPr &&
+                      syncReconcileMeta?.sync_session_id &&
+                      (() => {
+                        try {
+                          const raw = localStorage.getItem(PR_TRACKER_STORAGE_KEY);
+                          if (!raw) return null;
+                          const j = JSON.parse(raw) as { syncSessionId?: string; prUrls?: string[] };
+                          if (j.syncSessionId !== syncReconcileMeta.sync_session_id) return null;
+                          return (
+                            <button
+                              type="button"
+                              className="mt-1 w-full border-2 border-black bg-white py-1.5 text-[9px] font-black uppercase hover:bg-[#ffc900]"
+                              onClick={() => {
+                                setTrackerPrUrls(Array.isArray(j.prUrls) ? j.prUrls : []);
+                                setSyncDrawerPhase('tracker');
+                                setSyncDrawerOpen(true);
+                              }}
+                            >
+                              Resume PR tracker
+                            </button>
+                          );
+                        } catch {
+                          return null;
+                        }
+                      })()}
                     </div>
                   )}
                   {syncScanError && (
@@ -1028,7 +1178,12 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                   </summary>
                                   <ul className="mt-1 max-h-28 overflow-y-auto font-mono text-[9px] text-green-800">
                                     {deepBuckets.inSync.map((x) => (
-                                      <li key={x.id}>{x.figmaName || x.name}</li>
+                                      <li key={x.id}>
+                                        {x.figmaName || x.name}
+                                        {x.layerId && localJustSyncedLayerIds.has(x.layerId) ? (
+                                          <span className="ml-1 text-[8px] font-black uppercase text-green-600">Just synced</span>
+                                        ) : null}
+                                      </li>
                                     ))}
                                   </ul>
                                 </details>
@@ -1038,14 +1193,33 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                   <div className="font-black uppercase text-amber-900">
                                     Needs review ({deepBuckets.needsReview.length})
                                   </div>
-                                  <ul className="mt-1 space-y-1">
+                                  <ul className="mt-1 space-y-2">
                                     {deepBuckets.needsReview.map((x) => (
                                       <li
                                         key={x.id}
-                                        className="flex flex-wrap justify-between gap-1 border-b border-amber-200 pb-1 font-mono text-[9px]"
+                                        className="border-b border-amber-200 pb-2 font-mono text-[9px] last:border-0"
                                       >
-                                        <span>{x.figmaName || x.layerId}</span>
-                                        <span className="text-gray-600">↔ {x.storybookName || x.storyId}</span>
+                                        <div className="flex flex-wrap justify-between gap-1">
+                                          <span>{x.figmaName || x.layerId}</span>
+                                          <span className="text-gray-600">↔ {x.storybookName || x.storyId}</span>
+                                        </div>
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                          <button
+                                            type="button"
+                                            className="border-2 border-black bg-black px-2 py-0.5 text-[8px] font-black uppercase text-white hover:bg-neutral-800"
+                                            onClick={() => void confirmNeedsReviewMatch(x)}
+                                            disabled={!onSetComtraNodeIdentity || !x.layerId}
+                                          >
+                                            Confirm
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="border-2 border-black bg-white px-2 py-0.5 text-[8px] font-black uppercase hover:bg-gray-100"
+                                            onClick={() => dismissNeedsReview(x.id)}
+                                          >
+                                            Not the same
+                                          </button>
+                                        </div>
                                       </li>
                                     ))}
                                   </ul>
@@ -1177,8 +1351,25 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                                         Open Storybook story
                                                       </a>
                                                     ) : null}
+                                                    {item.repoPath && sourceConnection?.repoUrl ? (
+                                                      <a
+                                                        href={`${String(sourceConnection.repoUrl)
+                                                          .replace(/\.git$/i, '')
+                                                          .replace(/\/+$/, '')}/blob/${encodeURIComponent(sourceConnection.branch || 'main')}/${item.repoPath
+                                                          .split('/')
+                                                          .map((seg) => encodeURIComponent(seg))
+                                                          .join('/')}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block font-bold underline hover:text-[#ff90e8]"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      >
+                                                        View file on GitHub
+                                                      </a>
+                                                    ) : null}
                                                   </div>
-                                                  <div className="flex gap-2">
+                                                  <div className="flex flex-col gap-2">
+                                                    <div className="flex gap-2">
                                                       <button
                                                           onClick={(e) => handleSelectLayer(item.id, item.layerId ?? null, e)}
                                                           disabled={!item.layerId}
@@ -1199,6 +1390,24 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                                                             <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm">-5 Credits</span>
                                                           ) : null}
                                                       </Button>
+                                                    </div>
+                                                    {openDeepSyncPr && syncReconcileMeta?.sync_session_id && item.repoPath ? (
+                                                      <Button
+                                                        variant="black"
+                                                        layout="row"
+                                                        size="sm"
+                                                        className="relative h-11 w-full"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          openSyncDrawer(item.repoPath ?? null);
+                                                        }}
+                                                      >
+                                                        <span className="uppercase">Sync</span>
+                                                        <span className="absolute bottom-0.5 right-1 text-[7px] bg-[#ffc900] text-black px-1 font-bold">
+                                                          {isPro ? 'Incl.' : '-8'}
+                                                        </span>
+                                                      </Button>
+                                                    ) : null}
                                                   </div>
                                               </div>
                                           )}
@@ -1229,18 +1438,33 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                           >
                             Refresh
                           </Button>
-                          <Button
-                            variant="primary"
-                            fullWidth
-                            layout="row"
-                            onClick={sourceConnection ? handleSyncAll : openSourceWizardFromEntry}
-                            className="relative h-12"
-                          >
-                            <span>Fix All</span>
-                            <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
-                              {sourceConnection ? 'Source Connected' : 'Connect Source'}
-                            </span>
-                          </Button>
+                          {openDeepSyncPr && sourceConnection?.status === 'ready' ? (
+                            <Button
+                              variant="black"
+                              fullWidth
+                              layout="row"
+                              onClick={() => openSyncDrawer(null)}
+                              className="relative h-12"
+                            >
+                              <span className="uppercase tracking-wide">Sync</span>
+                              <span className="absolute bottom-0.5 right-1 text-[8px] bg-[#ffc900] text-black px-1 font-bold rounded-sm border border-black">
+                                {isPro ? 'Included' : '-8 Credits'}
+                              </span>
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="primary"
+                              fullWidth
+                              layout="row"
+                              onClick={sourceConnection ? handleSyncAll : openSourceWizardFromEntry}
+                              className="relative h-12"
+                            >
+                              <span>Fix All</span>
+                              <span className="absolute bottom-0.5 right-1 text-[8px] bg-black text-white px-1 font-bold rounded-sm border border-black">
+                                {sourceConnection ? 'Source Connected' : 'Connect Source'}
+                              </span>
+                            </Button>
+                          )}
                           <button
                             type="button"
                             className="mt-3 block w-full text-center text-[10px] font-black uppercase text-red-700 underline"
@@ -1678,6 +1902,28 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             for an enterprise setup.
           </p>
         </div>
+
+      <SyncConfirmationDrawer
+        open={syncDrawerOpen && activeSyncTab === 'SB'}
+        phase={syncDrawerPhase}
+        onClose={closeSyncDrawer}
+        branchLabel={sourceConnection?.branch || 'main'}
+        analysisMode={syncReconcileMeta?.analysis_mode ?? null}
+        filePath={syncDrawerFile}
+        costCredits={8}
+        isPro={isPro}
+        isSubmitting={syncDrawerBusy}
+        error={syncDrawerErr}
+        onConfirm={() => void confirmSyncDrawer()}
+        syncSessionId={syncReconcileMeta?.sync_session_id ?? null}
+        prUrls={trackerPrUrls}
+        pollPrStatus={(o) =>
+          pollDeepSyncPrStatus
+            ? pollDeepSyncPrStatus({ syncSessionId: o.syncSessionId, prUrl: o.prUrl })
+            : Promise.resolve({ state: 'unknown', should_rescan: false })
+        }
+        onPrMerged={handlePrMergedBridge}
+      />
     </div>
   );
 };

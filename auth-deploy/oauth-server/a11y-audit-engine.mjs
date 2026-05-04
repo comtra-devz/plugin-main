@@ -245,10 +245,10 @@ function distance(cx1, cy1, cx2, cy2) {
 function collectTouchIssues(fileJson, issues, idGen) {
   const candidates = getInteractiveNodesWithBox(fileJson);
   const candidateIdSet = new Set(candidates.map(({ node }) => node.id));
-  const centers = new Map();
-  for (const { node, box } of candidates) {
-    centers.set(node.id, { cx: box.x + box.width / 2, cy: box.y + box.height / 2, box });
-  }
+  /** Only targets that are not already ≥24×24 on both axes — spacing pairs only matter between these. */
+  const smallTargets = candidates.filter(
+    ({ box }) => !(box.width >= TOUCH_MIN_AA && box.height >= TOUCH_MIN_AA),
+  );
 
   for (const { node, box, pageName, ancestors } of candidates) {
     const w = box.width;
@@ -264,11 +264,10 @@ function collectTouchIssues(fileJson, issues, idGen) {
     if (isUndersizedAA) {
       if (isContainedInLargerInteractiveAncestor(ancestors || [], candidateIdSet)) continue;
       let spacingOk = true;
-      for (const { node: other, box: ob } of candidates) {
+      for (const { node: other, box: ob } of smallTargets) {
         if (other.id === node.id) continue;
         const ow = ob.width;
         const oh = ob.height;
-        if (ow >= TOUCH_MIN_AA && oh >= TOUCH_MIN_AA) continue;
         const ocx = ob.x + ow / 2;
         const ocy = ob.y + oh / 2;
         if (distance(cx, cy, ocx, ocy) < TOUCH_MIN_AA) {
@@ -500,9 +499,12 @@ function collectOKLCHIssues(fileJson, issues, idGen) {
 
 // --- Main
 /** Whole-file / multi-page payloads (REST overview or large exports): strict cap — avoids server timeouts. */
-const A11Y_NODE_CAP_MULTI_PAGE = 6000;
-/** Single-page slice from plugin (`CANVAS` root) or REST page fetch (`DOCUMENT` with one canvas): user already narrowed scope. */
-const A11Y_NODE_CAP_SINGLE_PAGE = 22000;
+const A11Y_NODE_CAP_MULTI_PAGE = 8000;
+/**
+ * Single-page slice from plugin (`CANVAS` root) or REST page fetch (`DOCUMENT` with one canvas).
+ * Raised for dense DS / marketing pages; A11Y route has generous `maxDuration` on Vercel.
+ */
+const A11Y_NODE_CAP_SINGLE_PAGE = 75000;
 let idCounter = 0;
 function nextId() {
   idCounter += 1;

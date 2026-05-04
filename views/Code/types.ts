@@ -176,7 +176,21 @@ export interface SyncTabProps {
   handleSelectLayer: (id: string, layerId: string | null | undefined, e: React.MouseEvent) => void;
   layerSelectionFeedback: string | null;
   handleSyncItem: (item: SyncDriftItem, e?: React.MouseEvent) => void;
+  /** Legacy / placeholder; Deep Sync uses openDeepSyncPr + drawer when provided. */
   handleSyncAll: () => void;
+  /** Open GitHub PR(s) for current reconcile session (consumes credits on non‑Pro). */
+  openDeepSyncPr?: (opts: { syncSessionId: string; filePath?: string | null }) => Promise<{
+    ok: boolean;
+    error?: string;
+    prUrls?: string[];
+  }>;
+  pollDeepSyncPrStatus?: (opts: { syncSessionId?: string; prUrl?: string | null }) => Promise<{
+    state?: string;
+    should_rescan?: boolean;
+  }>;
+  onSetComtraNodeIdentity?: (nodeId: string, identity: Record<string, unknown>) => Promise<boolean>;
+  /** After PR merged: trigger a new scan. */
+  onDeepSyncPrMerged?: () => void;
   sourceConnection: SourceConnection | null;
   sourceConnectionLoading: boolean;
   sourceConnectionSaving: boolean;
