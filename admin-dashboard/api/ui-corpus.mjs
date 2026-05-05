@@ -351,10 +351,12 @@ async function handlePost(req, res) {
       });
     }
     const mode = normText(body.mode || '', 24).toLowerCase(); // auto|single
+    const forceWholeFile = mode === 'auto';
+    const effectiveNodeId = forceWholeFile ? null : parsed.nodeId;
     const projectMeta =
       body.project && typeof body.project === 'object' && !Array.isArray(body.project) ? body.project : {};
-    const figmaApiUrl = parsed.nodeId
-      ? `https://api.figma.com/v1/files/${parsed.fileKey}/nodes?ids=${encodeURIComponent(parsed.nodeId)}`
+    const figmaApiUrl = effectiveNodeId
+      ? `https://api.figma.com/v1/files/${parsed.fileKey}/nodes?ids=${encodeURIComponent(effectiveNodeId)}`
       : `https://api.figma.com/v1/files/${parsed.fileKey}`;
     const fr = await fetch(figmaApiUrl, { method: 'GET', headers });
     if (!fr.ok) {
@@ -366,9 +368,13 @@ async function handlePost(req, res) {
     }
     const fj = await fr.json();
     const toInsert = [];
-    if (parsed.nodeId) {
-      const node = fj?.nodes?.[parsed.nodeId]?.document;
-      if (!node) return res.status(404).json({ error: 'Node not found in Figma file' });
+    if (effectiveNodeId) {
+      const node = fj?.nodes?.[effectiveNodeId]?.document;
+      if (!node) {
+        return res.status(404).json({
+          error: 'Node not found in Figma file. Try mode=auto to import the whole file.',
+        });
+      }
       const mapped = nodeToCorpusSummary(node);
       toInsert.push({
         title: mapped.title,
@@ -376,7 +382,7 @@ async function handlePost(req, res) {
         figma_url: figmaUrl,
         metadata: {
           figma_file_key: parsed.fileKey,
-          figma_node_id: parsed.nodeId,
+          figma_node_id: effectiveNodeId,
           figma_node_type: String(node?.type || ''),
           project: projectMeta,
         },
@@ -412,7 +418,7 @@ async function handlePost(req, res) {
     return res.status(200).json({
       ok: true,
       inserted: out.length,
-      mode: parsed.nodeId ? 'node' : mode || 'auto',
+      mode: effectiveNodeId ? 'node' : mode || 'auto',
       file_key: parsed.fileKey,
       items: out,
     });

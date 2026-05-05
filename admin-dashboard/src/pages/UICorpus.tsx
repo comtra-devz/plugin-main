@@ -482,12 +482,19 @@ export default function UICorpus() {
               <li>Apri Figma dal browser con il tuo account.</li>
               <li>Vai su Settings → Security (o Account settings).</li>
               <li>Cerca la sezione Personal access tokens.</li>
-              <li>Clicca Generate new token, dai un nome e conferma.</li>
+              <li>
+                Clicca Generate new token e crea un <strong>Personal Access Token (PAT)</strong> (non serve OAuth per
+                questo flusso).
+              </li>
+              <li>
+                Nella lista scopes abilita almeno: <code>file_content:read</code> e <code>file_metadata:read</code>.
+              </li>
+              <li>Scegli una scadenza adatta (es. 30 o 90 giorni) e genera il token.</li>
               <li>Copia il token (di solito inizia con <code>figd_</code>).</li>
               <li>Incollalo nel campo "Figma token (personal)" e importa il link.</li>
             </ol>
             <p style={{ color: 'var(--muted)', marginTop: '0.75rem' }}>
-              Nota: il token segue i tuoi permessi. Se non hai accesso a un file, quell'import fallira.
+              Nota: il token usa i tuoi permessi reali. Se non vedi un file in Figma, non potrai importarlo qui.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="button" className="brutal-btn" onClick={() => setShowTokenHelp(false)}>
