@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import {
   fetchUICorpus,
   ingestUICorpusFromFigma,
+  setUICorpusStatusBulk,
   setUICorpusStatus,
   type UICorpusItem,
 } from '../api';
 
 type CorpusStatus = 'draft' | 'approved' | 'rejected' | 'archived' | '';
+type DsState = 'connected' | 'inferred' | 'unknown' | 'none';
 
 function splitTags(input: string): string[] {
   return input
@@ -17,27 +20,72 @@ function splitTags(input: string): string[] {
     .slice(0, 32);
 }
 
+function parseFigmaLinkPreview(raw: string): {
+  valid: boolean;
+  message: string;
+  fileKey?: string;
+  nodeId?: string | null;
+  kind?: 'file' | 'node';
+} {
+  const s = raw.trim();
+  if (!s) return { valid: false, message: 'Incolla un link Figma per iniziare.' };
+  let u: URL;
+  try {
+    u = new URL(s);
+  } catch {
+    return { valid: false, message: 'URL non valido.' };
+  }
+  if (!/figma\.com$/i.test(u.hostname) && !/\.figma\.com$/i.test(u.hostname)) {
+    return { valid: false, message: 'Il link deve essere su figma.com.' };
+  }
+  const m = u.pathname.match(/\/(?:file|design)\/([a-zA-Z0-9]+)/);
+  if (!m?.[1]) return { valid: false, message: 'Non trovo il file key nel link.' };
+  const fileKey = m[1];
+  const nodeId = (u.searchParams.get('node-id') || '').trim() || null;
+  if (nodeId) {
+    return {
+      valid: true,
+      fileKey,
+      nodeId,
+      kind: 'node',
+      message: `Rilevato frame specifico (node-id: ${nodeId}). Import: 1 schermata.`,
+    };
+  }
+  return {
+    valid: true,
+    fileKey,
+    nodeId: null,
+    kind: 'file',
+    message: 'Rilevato file intero. Import: molte schermate (auto).',
+  };
+}
+
 export default function UICorpus() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<UICorpusItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [migrationNeeded, setMigrationNeeded] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<CorpusStatus>('draft');
   const [archetype, setArchetype] = useState('');
 
   const [figmaUrl, setFigmaUrl] = useState('');
+  const [figmaToken, setFigmaToken] = useState('');
+  const [showTokenHelp, setShowTokenHelp] = useState(false);
   const [importMode, setImportMode] = useState<'auto' | 'single'>('auto');
   const [projectId, setProjectId] = useState('');
   const [projectName, setProjectName] = useState('');
   const [siteDomain, setSiteDomain] = useState('');
   const [brandKey, setBrandKey] = useState('');
   const [designSystemId, setDesignSystemId] = useState('');
-  const [dsState, setDsState] = useState<'connected' | 'inferred' | 'unknown' | 'none'>('unknown');
+  const [dsState, setDsState] = useState<DsState>('unknown');
   const [quickTags, setQuickTags] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const reload = async () => {
     setLoading(true);
@@ -71,6 +119,12 @@ export default function UICorpus() {
     }
     return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   }, [items]);
+  const figmaPreview = useMemo(() => parseFigmaLinkPreview(figmaUrl), [figmaUrl]);
+  const draftItems = useMemo(() => items.filter((x) => x.status === 'draft'), [items]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => items.some((x) => x.id === id)));
+  }, [items]);
 
   const onImportFigma = async () => {
     const figma = figmaUrl.trim();
@@ -81,7 +135,8 @@ export default function UICorpus() {
     try {
       const out = await ingestUICorpusFromFigma({
         figma_url: figma,
-        mode: importMode,
+        figma_token: figmaToken.trim() || undefined,
+        mode: figmaPreview.kind === 'node' ? 'single' : importMode,
         project: {
           project_id: projectId.trim() || undefined,
           project_name: projectName.trim() || undefined,
@@ -94,6 +149,7 @@ export default function UICorpus() {
       });
       setOkMsg(`Import completato: ${out.inserted} schermate in draft.`);
       await reload();
+      setStep(2);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore import da Figma');
     } finally {
@@ -113,14 +169,43 @@ export default function UICorpus() {
     }
   };
 
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const selectAllDrafts = () => {
+    setSelectedIds(draftItems.map((x) => x.id));
+  };
+
+  const clearSelection = () => setSelectedIds([]);
+
+  const bulkUpdate = async (next: Exclude<CorpusStatus, ''>) => {
+    if (selectedIds.length === 0) return;
+    setError(null);
+    setOkMsg(null);
+    try {
+      const out = await setUICorpusStatusBulk(selectedIds, next);
+      setOkMsg(`Aggiornati ${out.updated} elementi a "${next}".`);
+      setSelectedIds([]);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Errore bulk update');
+    }
+  };
+
   return (
     <>
       <PageHeader
-        title="UI Corpus"
+        title="Generate · UI Corpus · Import"
         actions={
-          <button type="button" className="brutal-btn" onClick={() => void reload()}>
-            Refresh
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="brutal-btn" onClick={() => navigate('/generate-corpus')}>
+              Back to recap
+            </button>
+            <button type="button" className="brutal-btn" onClick={() => void reload()}>
+              Refresh
+            </button>
+          </div>
         }
       />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
@@ -140,6 +225,27 @@ export default function UICorpus() {
           Incolla un link file/frame Figma. Il sistema legge il file e crea automaticamente le schermate del corpus.
         </p>
         <div style={{ display: 'grid', gap: '0.65rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
+            <button
+              type="button"
+              className="brutal-btn"
+              onClick={() => setStep(1)}
+              style={{ opacity: step === 1 ? 1 : 0.65 }}
+            >
+              1) Import
+            </button>
+            <button
+              type="button"
+              className="brutal-btn"
+              onClick={() => setStep(2)}
+              style={{ opacity: step === 2 ? 1 : 0.65 }}
+            >
+              2) Review
+            </button>
+          </div>
+
+          {step === 1 ? (
+            <>
           <label className="brutal-label">Figma link (required)</label>
           <input
             className="brutal-input"
@@ -147,6 +253,54 @@ export default function UICorpus() {
             onChange={(e) => setFigmaUrl(e.target.value)}
             placeholder="https://www.figma.com/file/... or ...?node-id=..."
           />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <label className="brutal-label" style={{ marginBottom: 0 }}>
+                Figma token (personal)
+              </label>
+              <button
+                type="button"
+                className="brutal-btn"
+                onClick={() => setShowTokenHelp(true)}
+                style={{ padding: '0.05rem 0.45rem', lineHeight: 1.2 }}
+                aria-label="Come recuperare il token Figma"
+                title="Come recuperare il token Figma"
+              >
+                i
+              </button>
+            </div>
+            <input
+              className="brutal-input"
+              type="password"
+              value={figmaToken}
+              onChange={(e) => setFigmaToken(e.target.value)}
+              placeholder="figd_... (il tuo personal access token)"
+              autoComplete="off"
+            />
+          </div>
+          <div
+            style={{
+              border: '2px solid #000',
+              background: figmaPreview.valid ? '#ecfccb' : '#fef2f2',
+              color: '#111',
+              fontSize: '0.86rem',
+              padding: '0.5rem 0.65rem',
+              boxShadow: '3px 3px 0 0 #000',
+            }}
+          >
+            {figmaPreview.message}
+            {figmaPreview.fileKey ? (
+              <div style={{ marginTop: 4, color: '#334155' }}>
+                file_key: <code>{figmaPreview.fileKey}</code>
+                {figmaPreview.nodeId ? (
+                  <>
+                    {' '}
+                    · node_id: <code>{figmaPreview.nodeId}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.65rem' }}>
             <div>
@@ -180,10 +334,16 @@ export default function UICorpus() {
           </details>
 
           <div>
-            <button type="button" className="brutal-btn" onClick={() => void onImportFigma()} disabled={saving}>
+            <button type="button" className="brutal-btn primary" onClick={() => void onImportFigma()} disabled={saving}>
               {saving ? 'Importing…' : 'Import from Figma'}
             </button>
           </div>
+            </>
+          ) : (
+            <div style={{ color: 'var(--muted)', fontSize: '0.92rem' }}>
+              Hai importato? Passa alla Review queue qui sotto per approvare/rifiutare in blocco.
+            </div>
+          )}
         </div>
       </div>
 
@@ -203,6 +363,20 @@ export default function UICorpus() {
             Apply
           </button>
         </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.8rem' }}>
+          <button type="button" className="brutal-btn" onClick={selectAllDrafts}>
+            Select all drafts ({draftItems.length})
+          </button>
+          <button type="button" className="brutal-btn" onClick={clearSelection}>
+            Clear selection
+          </button>
+          <button type="button" className="brutal-btn" onClick={() => void bulkUpdate('approved')} disabled={selectedIds.length === 0}>
+            Approve selected ({selectedIds.length})
+          </button>
+          <button type="button" className="brutal-btn" onClick={() => void bulkUpdate('rejected')} disabled={selectedIds.length === 0}>
+            Reject selected
+          </button>
+        </div>
 
         {loading ? (
           <p className="loading">Loading…</p>
@@ -212,6 +386,7 @@ export default function UICorpus() {
           <table className="table">
             <thead>
               <tr>
+                <th />
                 <th>Title</th>
                 <th>Archetype</th>
                 <th>Platform</th>
@@ -224,6 +399,14 @@ export default function UICorpus() {
             <tbody>
               {items.map((it) => (
                 <tr key={it.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(it.id)}
+                      onChange={() => toggleSelection(it.id)}
+                      aria-label={`Select ${it.title || it.id}`}
+                    />
+                  </td>
                   <td>
                     <div style={{ maxWidth: 320 }}>
                       <div style={{ fontWeight: 700 }}>{it.title || '(untitled)'}</div>
@@ -260,6 +443,41 @@ export default function UICorpus() {
           </div>
         ) : null}
       </div>
+      {showTokenHelp ? (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="figma-token-help-title"
+          onClick={() => setShowTokenHelp(false)}
+        >
+          <div
+            className="brutal-card"
+            style={{ maxWidth: 680, width: '100%', background: '#fff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="figma-token-help-title" style={{ marginTop: 0, marginBottom: '0.75rem' }}>
+              Come recuperare il token da Figma
+            </h3>
+            <ol style={{ marginTop: 0, paddingLeft: '1.1rem' }}>
+              <li>Apri Figma dal browser con il tuo account.</li>
+              <li>Vai su Settings → Security (o Account settings).</li>
+              <li>Cerca la sezione Personal access tokens.</li>
+              <li>Clicca Generate new token, dai un nome e conferma.</li>
+              <li>Copia il token (di solito inizia con <code>figd_</code>).</li>
+              <li>Incollalo nel campo "Figma token (personal)" e importa il link.</li>
+            </ol>
+            <p style={{ color: 'var(--muted)', marginTop: '0.75rem' }}>
+              Nota: il token segue i tuoi permessi. Se non hai accesso a un file, quell'import fallira.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" className="brutal-btn" onClick={() => setShowTokenHelp(false)}>
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

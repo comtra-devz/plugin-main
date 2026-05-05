@@ -5247,6 +5247,201 @@ app.post('/api/agents/generate', async (req, res) => {
     const comtraTovRes = resolveComtraTovResolution(wizardSignalsBlock, adminPromptOverrides);
     const comtraTovBlock = comtraTovRes.block;
     const comtraTovSource = comtraTovRes.source;
+    const tokenize = (text, max = 48) => {
+      const out = [];
+      const seen = new Set();
+      const parts = String(text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s_-]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 4);
+      for (const p of parts) {
+        if (seen.has(p)) continue;
+        seen.add(p);
+        out.push(p);
+        if (out.length >= max) break;
+      }
+      return out;
+    };
+    const overlapCount = (a, bSet) => {
+      let n = 0;
+      for (const x of a) if (bSet.has(x)) n += 1;
+      return n;
+    };
+    let uiCorpusReferenceBlock = '';
+    let uiCorpusReferenceSummary = {
+      considered: 0,
+      used: 0,
+      ids: [],
+      archetype_match_count: 0,
+      same_file_count: 0,
+      same_ds_count: 0,
+      same_project_count: 0,
+    };
+    let productConsistencyBlock = '';
+    let productConsistencySummary = {
+      enabled: false,
+      screen_vocab_hits: 0,
+      known_archetypes: [],
+      source_file_key: null,
+    };
+    const fetchUiCorpusReferences = async () => {
+      if (!dbSql) return;
+      try {
+        const arch = inferredScreenArchetype ? String(inferredScreenArchetype).trim().toLowerCase() : null;
+        const plat = contextProfile?.platform ? String(contextProfile.platform).trim().toLowerCase() : null;
+        const fileKey = String(legacyFileKey || '').trim() || null;
+        const dsId = String(resolvedDsId || dsPackage?.ds_id || '').trim().toLowerCase() || null;
+        let inferredProjectId = null;
+        if (fileKey) {
+          try {
+            const projectProbe = await dbSql`
+              SELECT project_id
+              FROM ui_corpus_examples
+              WHERE status = 'approved'
+                AND (
+                  metadata->>'figma_file_key' = ${fileKey}
+                  OR source_url ILIKE ${`%${fileKey}%`}
+                )
+                AND project_id IS NOT NULL
+                AND project_id <> ''
+              ORDER BY updated_at DESC
+              LIMIT 1
+            `;
+            inferredProjectId = String(projectProbe?.rows?.[0]?.project_id || '').trim() || null;
+          } catch (projectErr) {
+            const projectErrMsg = String(projectErr?.message || projectErr || '');
+            if (!/ui_corpus_examples|does not exist|relation|column/i.test(projectErrMsg)) {
+              console.error('ui corpus project probe failed', projectErrMsg);
+            }
+          }
+        }
+        const rows = await dbSql`
+          SELECT
+            id::text,
+            title,
+            archetype,
+            platform,
+            quality_score,
+            tags,
+            sections,
+            anti_patterns,
+            keywords,
+            source_url,
+            project_id,
+            design_system_id,
+            metadata->>'figma_file_key' AS figma_file_key
+          FROM ui_corpus_examples
+          WHERE status = 'approved'
+            AND (${arch}::text IS NULL OR lower(archetype) = ${arch} OR lower(archetype) LIKE ${arch ? `${arch}%` : null})
+            AND (${plat}::text IS NULL OR lower(platform) = ${plat} OR lower(platform) = 'unknown')
+          ORDER BY updated_at DESC
+          LIMIT 120
+        `;
+        const corpus = Array.isArray(rows?.rows) ? rows.rows : [];
+        if (corpus.length === 0) return;
+        const promptTokens = tokenize([prompt, retrievalPrompt, packV2ArchetypeId || '', inferredScreenArchetype || ''].join(' '), 56);
+        const promptSet = new Set(promptTokens);
+        const scored = corpus.map((it) => {
+          const kw = Array.isArray(it.keywords) ? it.keywords : [];
+          const sections = Array.isArray(it.sections) ? it.sections : [];
+          const tags = Array.isArray(it.tags) ? it.tags : [];
+          const refTokens = tokenize(
+            [it.title || '', it.archetype || '', it.platform || '', ...kw, ...sections, ...tags].join(' '),
+            64,
+          );
+          const ov = overlapCount(refTokens, promptSet);
+          const archMatch =
+            arch && String(it.archetype || '').trim().toLowerCase() === arch ? 1 : 0;
+          const platMatch = plat && String(it.platform || '').trim().toLowerCase() === plat ? 1 : 0;
+          const refFileKey = String(it.figma_file_key || '').trim();
+          const sameFile =
+            fileKey &&
+            (refFileKey === fileKey || String(it.source_url || '').toLowerCase().includes(String(fileKey).toLowerCase()))
+              ? 1
+              : 0;
+          const refDs = String(it.design_system_id || '').trim().toLowerCase();
+          const sameDs = dsId && refDs && refDs === dsId ? 1 : 0;
+          const refProject = String(it.project_id || '').trim();
+          const sameProject = inferredProjectId && refProject && refProject === inferredProjectId ? 1 : 0;
+          const quality = Number(it.quality_score);
+          const qScore = Number.isFinite(quality) ? Math.max(0, Math.min(5, quality)) : 0;
+          const score = ov * 3 + archMatch * 8 + platMatch * 3 + qScore + sameFile * 24 + sameDs * 12 + sameProject * 8;
+          return { it, score, ov, archMatch, sameFile, sameDs, sameProject };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const top = scored.slice(0, 6);
+        if (top.length === 0) return;
+        uiCorpusReferenceSummary = {
+          considered: scored.length,
+          used: top.length,
+          ids: top.map((x) => x.it.id),
+          archetype_match_count: top.filter((x) => x.archMatch === 1).length,
+          same_file_count: top.filter((x) => x.sameFile === 1).length,
+          same_ds_count: top.filter((x) => x.sameDs === 1).length,
+          same_project_count: top.filter((x) => x.sameProject === 1).length,
+        };
+        uiCorpusReferenceBlock = [
+          '',
+          '[UI_CORPUS_REFERENCES]',
+          ...top.map((x, idx) => {
+            const ref = x.it;
+            const sec = Array.isArray(ref.sections) ? ref.sections.slice(0, 6).join(', ') : '';
+            const tg = Array.isArray(ref.tags) ? ref.tags.slice(0, 6).join(', ') : '';
+            return `#${idx + 1} ${String(ref.title || 'Untitled reference').slice(0, 140)} | archetype=${ref.archetype || 'n/a'} | platform=${ref.platform || 'unknown'} | quality=${ref.quality_score ?? 'n/a'} | sections=[${sec}] | tags=[${tg}] | same_file=${x.sameFile} | same_ds=${x.sameDs} | same_project=${x.sameProject}`;
+          }),
+          'Use references as style/layout constraints; do not clone literally. Prioritize DS-consistent composition, icon integrity (no stretched icon instances), and slot relevance for the requested archetype.',
+          '[END UI_CORPUS_REFERENCES]',
+        ].join('\n');
+        if (fileKey) {
+          try {
+            const vocabRows = await dbSql`
+              SELECT archetype, frame_name, ds_compliance_score
+              FROM product_screen_vocabulary
+              WHERE figma_file_key = ${fileKey}
+              ORDER BY updated_at DESC
+              LIMIT 24
+            `;
+            const vocab = Array.isArray(vocabRows?.rows) ? vocabRows.rows : [];
+            const knownArchetypes = [...new Set(vocab.map((r) => String(r.archetype || '').trim()).filter(Boolean))].slice(
+              0,
+              8,
+            );
+            const topFrames = vocab
+              .slice(0, 8)
+              .map((r) => `${String(r.frame_name || 'Untitled').slice(0, 60)}:${String(r.archetype || 'unknown')}`);
+            productConsistencySummary = {
+              enabled: true,
+              screen_vocab_hits: vocab.length,
+              known_archetypes: knownArchetypes,
+              source_file_key: fileKey,
+            };
+            if (vocab.length > 0) {
+              productConsistencyBlock = [
+                '',
+                '[PRODUCT_CONSISTENCY_CONTRACT]',
+                `File memory available for this file_key=${fileKey}.`,
+                `Known archetypes in this product: ${knownArchetypes.join(', ') || 'n/a'}.`,
+                `Recent screens: ${topFrames.join(' | ') || 'n/a'}.`,
+                'Keep cross-screen consistency for spacing rhythm, icon sizing behavior, top/bottom navigation patterns, and CTA hierarchy.',
+                '[END PRODUCT_CONSISTENCY_CONTRACT]',
+              ].join('\n');
+            }
+          } catch (vocabErr) {
+            const vocabMsg = String(vocabErr?.message || vocabErr || '');
+            if (!/product_screen_vocabulary|does not exist|relation/i.test(vocabMsg)) {
+              console.error('product screen vocabulary retrieval failed', vocabMsg);
+            }
+          }
+        }
+      } catch (corpusErr) {
+        const msg = String(corpusErr?.message || corpusErr || '');
+        if (!/ui_corpus_examples|does not exist|relation/i.test(msg)) {
+          console.error('ui corpus retrieval failed', msg);
+        }
+      }
+    };
+    await fetchUiCorpusReferences();
 
     let kimiEnrichmentBlock = '';
     let kimiEnrichmentUsed = false;
@@ -5332,6 +5527,8 @@ app.post('/api/agents/generate', async (req, res) => {
       dsIndexBlockForUser,
       slotCandidateBlock,
       designIntelBlock,
+      uiCorpusReferenceBlock,
+      productConsistencyBlock,
       wizardSignalsBlock,
       kimiEnrichmentBlock,
       comtraTovBlock,
@@ -5781,6 +5978,8 @@ app.post('/api/agents/generate', async (req, res) => {
         generation_spec_hit: Boolean(generationSpecCacheHit),
         ds_prompt_scoped_index_hit: Boolean(dsPromptIndexCacheHit),
       },
+      ui_corpus_refs: uiCorpusReferenceSummary,
+      product_consistency: productConsistencySummary,
       comtra_tov: { source: comtraTovSource },
     };
 

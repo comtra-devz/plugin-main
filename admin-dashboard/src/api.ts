@@ -1060,6 +1060,12 @@ export interface UICorpusItem {
   sections: string[];
   anti_patterns: string[];
   keywords: string[];
+  project_id: string | null;
+  project_name: string | null;
+  site_domain: string | null;
+  brand_key: string | null;
+  design_system_id: string | null;
+  ds_state: 'connected' | 'inferred' | 'unknown' | 'none';
   metadata: Record<string, unknown>;
   created_by: string | null;
   created_at: string;
@@ -1148,6 +1154,7 @@ export async function ingestUICorpusBatch(
 
 export async function ingestUICorpusFromFigma(input: {
   figma_url: string;
+  figma_token?: string;
   mode?: 'auto' | 'single';
   project?: {
     project_id?: string;
@@ -1181,4 +1188,18 @@ export async function setUICorpusStatus(
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
   return data as { ok: boolean };
+}
+
+export async function setUICorpusStatusBulk(
+  ids: string[],
+  status: 'draft' | 'approved' | 'rejected' | 'archived',
+): Promise<{ ok: boolean; updated: number }> {
+  const r = await fetch(uiCorpusUrl(), {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ action: 'set_status_bulk', ids, status }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  return data as { ok: boolean; updated: number };
 }

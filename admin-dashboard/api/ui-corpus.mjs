@@ -16,6 +16,24 @@ function toJsonArray(value) {
   return value.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 64);
 }
 
+function parseProjectMeta(payload, metadata) {
+  const projectObj =
+    payload.project && typeof payload.project === 'object' && !Array.isArray(payload.project)
+      ? payload.project
+      : metadata.project && typeof metadata.project === 'object' && !Array.isArray(metadata.project)
+        ? metadata.project
+        : {};
+  const projectId = normText(payload.project_id || projectObj.project_id || projectObj.id, 120) || null;
+  const projectName = normText(payload.project_name || projectObj.project_name || projectObj.name, 180) || null;
+  const siteDomain = normText(payload.site_domain || projectObj.site_domain || projectObj.domain, 180) || null;
+  const brandKey = normText(payload.brand_key || projectObj.brand_key, 120) || null;
+  const designSystemId =
+    normText(payload.design_system_id || projectObj.design_system_id || projectObj.ds_id, 120) || null;
+  const dsStateRaw = normText(payload.ds_state || projectObj.ds_state, 24).toLowerCase();
+  const dsState = ['connected', 'inferred', 'unknown', 'none'].includes(dsStateRaw) ? dsStateRaw : 'unknown';
+  return { projectId, projectName, siteDomain, brandKey, designSystemId, dsState };
+}
+
 function inferArchetype(text) {
   const t = text.toLowerCase();
   if (/\b(checkout|payment|cart|order summary|pay now)\b/.test(t)) return 'checkout_summary_mobile';
@@ -77,8 +95,10 @@ function parseFigmaUrlParts(rawUrl) {
   return { ok: true, fileKey, nodeId };
 }
 
-function figmaAuthHeaders() {
+function figmaAuthHeaders(tokenOverride) {
+  const fromRequest = normText(tokenOverride || '', 800);
   const token =
+    fromRequest ||
     normText(process.env.FIGMA_ACCESS_TOKEN || '', 800) ||
     normText(process.env.FIGMA_API_TOKEN || '', 800) ||
     normText(process.env.FIGMA_PAT || '', 800);
@@ -155,6 +175,12 @@ async function handleGet(req, res) {
       sections,
       anti_patterns,
       keywords,
+      project_id,
+      project_name,
+      site_domain,
+      brand_key,
+      design_system_id,
+      ds_state,
       metadata,
       created_by,
       created_at,
@@ -233,6 +259,7 @@ async function insertOne(payload, req) {
     payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
       ? payload.metadata
       : {};
+  const projectMeta = parseProjectMeta(payload, metadata);
   const rawPayload =
     payload.raw_payload && typeof payload.raw_payload === 'object' && !Array.isArray(payload.raw_payload)
       ? payload.raw_payload
@@ -254,6 +281,12 @@ async function insertOne(payload, req) {
       sections,
       anti_patterns,
       keywords,
+      project_id,
+      project_name,
+      site_domain,
+      brand_key,
+      design_system_id,
+      ds_state,
       metadata,
       raw_payload,
       created_by
@@ -272,6 +305,12 @@ async function insertOne(payload, req) {
       ${JSON.stringify(sections)}::jsonb,
       ${JSON.stringify(antiPatterns)}::jsonb,
       ${JSON.stringify(keywords)}::jsonb,
+      ${projectMeta.projectId},
+      ${projectMeta.projectName},
+      ${projectMeta.siteDomain},
+      ${projectMeta.brandKey},
+      ${projectMeta.designSystemId},
+      ${projectMeta.dsState},
       ${JSON.stringify(metadata)}::jsonb,
       ${JSON.stringify(rawPayload)}::jsonb,
       ${createdBy}
@@ -304,11 +343,11 @@ async function handlePost(req, res) {
     const figmaUrl = normText(body.figma_url || body.url, 1200);
     const parsed = parseFigmaUrlParts(figmaUrl);
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });
-    const headers = figmaAuthHeaders();
+    const headers = figmaAuthHeaders(body.figma_token);
     if (!headers) {
       return res.status(503).json({
         error:
-          'Figma token not configured on admin backend (set FIGMA_ACCESS_TOKEN / FIGMA_API_TOKEN / FIGMA_PAT).',
+          'Figma token missing. Add token in the form or configure backend env (FIGMA_ACCESS_TOKEN / FIGMA_API_TOKEN / FIGMA_PAT).',
       });
     }
     const mode = normText(body.mode || '', 24).toLowerCase(); // auto|single
@@ -393,6 +432,25 @@ async function handlePost(req, res) {
     `;
     if (!up.rows?.[0]) return res.status(404).json({ error: 'not found' });
     return res.status(200).json({ ok: true, item: up.rows[0] });
+  }
+  if (action === 'set_status_bulk') {
+    const ids = Array.isArray(body.ids)
+      ? body.ids.map((x) => normText(x, 64)).filter(Boolean).slice(0, 500)
+      : [];
+    const status = normText(body.status, 24).toLowerCase();
+    if (ids.length === 0) return res.status(400).json({ error: 'ids[] required' });
+    if (!['draft', 'approved', 'rejected', 'archived'].includes(status)) {
+      return res.status(400).json({ error: 'invalid status' });
+    }
+    const up = await sql`
+      UPDATE ui_corpus_examples
+      SET status = ${status}, updated_at = now()
+      WHERE id IN (
+        SELECT x::uuid FROM jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) AS t(x)
+      )
+      RETURNING id::text
+    `;
+    return res.status(200).json({ ok: true, updated: up.rows?.length || 0 });
   }
 
   return res.status(400).json({ error: 'unknown action' });

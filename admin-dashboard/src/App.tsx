@@ -24,6 +24,7 @@ import ExternalDesignSystems from './pages/ExternalDesignSystems';
 import GenerateConversations from './pages/GenerateConversations';
 import GenerateGovernance from './pages/GenerateGovernance';
 import UICorpus from './pages/UICorpus';
+import UICorpusOverview from './pages/UICorpusOverview';
 import AIModels from './pages/AIModels';
 import { InactivityTimerBadge } from './components/InactivityTimerBadge';
 import { touchAdminActivity } from './lib/adminIdle';
@@ -125,7 +126,8 @@ export default function App() {
           <Route path="/design-systems/external" element={<ExternalDesignSystems />} />
           <Route path="/generate-conversations" element={<GenerateConversations />} />
           <Route path="/generate-governance" element={<GenerateGovernance />} />
-          <Route path="/generate-corpus" element={<UICorpus />} />
+          <Route path="/generate-corpus" element={<UICorpusOverview />} />
+          <Route path="/generate-corpus/import" element={<UICorpus />} />
           <Route path="/ai-models" element={<AIModels />} />
           <Route path="/executions" element={<Executions />} />
           <Route path="/discounts" element={<Discounts />} />
