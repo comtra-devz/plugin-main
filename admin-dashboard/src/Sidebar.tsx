@@ -60,6 +60,9 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/generate-governance" className={({ isActive }) => (isActive ? 'active' : '')}>
           Generate · governance
         </NavLink>
+        <NavLink to="/generate-corpus" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Generate · UI corpus
+        </NavLink>
         <span className="sidebar-group" aria-hidden="true">Altro</span>
         <NavLink to="/brand-awareness" className={({ isActive }) => (isActive ? 'active' : '')}>
           Brand awareness

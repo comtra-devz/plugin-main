@@ -1043,3 +1043,119 @@ export async function postGenerateGovernance(body: {
   if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
   return data as { ok: boolean; id?: string };
 }
+
+// --- UI Corpus (ingestion + curation for Generate references)
+export interface UICorpusItem {
+  id: string;
+  source_kind: string;
+  source_license: string;
+  source_url: string | null;
+  title: string | null;
+  archetype: string;
+  platform: string;
+  locale: string | null;
+  quality_score: number | null;
+  status: 'draft' | 'approved' | 'rejected' | 'archived';
+  tags: string[];
+  sections: string[];
+  anti_patterns: string[];
+  keywords: string[];
+  metadata: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UICorpusListResponse {
+  items: UICorpusItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  migration_needed?: boolean;
+  stats: {
+    by_status: Array<{ status: string; c: number }>;
+    top_archetypes: Array<{ archetype: string; c: number }>;
+  };
+}
+
+function uiCorpusUrl(params?: Record<string, string | number>) {
+  const q = new URLSearchParams(
+    params
+      ? Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)]))
+      : {},
+  );
+  return `${BASE}/api/ui-corpus${q.toString() ? `?${q}` : ''}`;
+}
+
+export async function fetchUICorpus(params?: {
+  q?: string;
+  status?: 'draft' | 'approved' | 'rejected' | 'archived' | '';
+  archetype?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<UICorpusListResponse> {
+  const p: Record<string, string | number> = {};
+  if (params?.q?.trim()) p.q = params.q.trim();
+  if (params?.status) p.status = params.status;
+  if (params?.archetype?.trim()) p.archetype = params.archetype.trim().toLowerCase();
+  if (params?.limit != null) p.limit = Math.floor(params.limit);
+  if (params?.offset != null) p.offset = Math.floor(params.offset);
+  const r = await fetchWithRetry(uiCorpusUrl(p), { headers: headers() });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Non autorizzato' : `Errore ${r.status}`);
+  return r.json();
+}
+
+export async function ingestUICorpusExample(example: {
+  title?: string;
+  source_url?: string;
+  figma_url?: string;
+  prompt_summary?: string;
+  notes?: string;
+  archetype?: string;
+  platform?: string;
+  locale?: string;
+  quality_score?: number;
+  tags?: string[];
+  sections?: string[];
+  anti_patterns?: string[];
+  keywords?: string[];
+  metadata?: Record<string, unknown>;
+  source_kind?: string;
+  source_license?: string;
+}): Promise<{ ok: boolean; item?: { id: string } }> {
+  const r = await fetch(uiCorpusUrl(), {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ action: 'ingest_example', example }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  return data as { ok: boolean; item?: { id: string } };
+}
+
+export async function ingestUICorpusBatch(
+  examples: Array<Record<string, unknown>>,
+): Promise<{ ok: boolean; inserted: number }> {
+  const r = await fetch(uiCorpusUrl(), {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ action: 'ingest_batch', examples }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  return data as { ok: boolean; inserted: number };
+}
+
+export async function setUICorpusStatus(
+  id: string,
+  status: 'draft' | 'approved' | 'rejected' | 'archived',
+): Promise<{ ok: boolean }> {
+  const r = await fetch(uiCorpusUrl(), {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ action: 'set_status', id, status }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data as { error?: string }).error || `Errore ${r.status}`);
+  return data as { ok: boolean };
+}

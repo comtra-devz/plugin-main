@@ -289,17 +289,57 @@ function isModelSquarishJunkSize(w: unknown, h: unknown): boolean {
   return false;
 }
 
-/** In autolayout: larghezza fill + altezza hug così istanze/testi non restano quadrati fissi. */
+/**
+ * Icon / chip / avatar instances must not get axis FILL or vectors stretch to full row/column (deformed “waves”).
+ * Heuristic: small square-ish instance by master bounds, or name hints (Untitled UI etc. use “Lead icon”, “Trailing”, …).
+ */
+function isLikelyCompactOrIconInstance(node: SceneNode): boolean {
+  if (node.type !== 'INSTANCE') return false;
+  const inst = node as InstanceNode;
+  const w = inst.width;
+  const h = inst.height;
+  const nm = `${inst.name || ''}`.toLowerCase();
+  if (
+    /\b(icon|icons|glyph|avatar|badge|dot|star|check|close|chevron|arrow|caret|lead|trail|trailing|social)\b/.test(nm)
+  ) {
+    return true;
+  }
+  if (
+    Number.isFinite(w) &&
+    Number.isFinite(h) &&
+    w > 0 &&
+    h > 0 &&
+    w <= 96 &&
+    h <= 96 &&
+    Math.max(w, h) / Math.min(w, h) <= 3
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** In autolayout: fill lungo l’asse principale dove serve leggibilità; icone/compact → HUG×HUG così non si stirano. */
 function applyAutoLayoutChildSizing(node: SceneNode & LayoutMixin, parent: ChildrenMixin): void {
   if (!parentUsesAutoLayout(parent)) return;
   const pf = parent as FrameNode;
+  const compactIcon = isLikelyCompactOrIconInstance(node);
   try {
     if (pf.layoutMode === 'VERTICAL') {
-      node.layoutSizingHorizontal = 'FILL';
-      node.layoutSizingVertical = 'HUG';
+      if (compactIcon) {
+        node.layoutSizingHorizontal = 'HUG';
+        node.layoutSizingVertical = 'HUG';
+      } else {
+        node.layoutSizingHorizontal = 'FILL';
+        node.layoutSizingVertical = 'HUG';
+      }
     } else if (pf.layoutMode === 'HORIZONTAL') {
-      node.layoutSizingHorizontal = 'HUG';
-      node.layoutSizingVertical = 'FILL';
+      if (compactIcon) {
+        node.layoutSizingHorizontal = 'HUG';
+        node.layoutSizingVertical = 'HUG';
+      } else {
+        node.layoutSizingHorizontal = 'HUG';
+        node.layoutSizingVertical = 'FILL';
+      }
     }
   } catch {
     /* Alcuni nodi (es. alcune instance) possono rifiutare HUG/FILL finché il parent non è AL — skip silenzioso */
