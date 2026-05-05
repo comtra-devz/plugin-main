@@ -451,9 +451,7 @@ async function handlePost(req, res) {
     const up = await sql`
       UPDATE ui_corpus_examples
       SET status = ${status}, updated_at = now()
-      WHERE id IN (
-        SELECT x::uuid FROM jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) AS t(x)
-      )
+      WHERE id IN (SELECT x::uuid FROM unnest(${ids}::text[]) AS t(x))
       RETURNING id::text
     `;
     return res.status(200).json({ ok: true, updated: up.rows?.length || 0 });
