@@ -2,6 +2,5 @@
   "rewrites": [
     { "source": "/auth/verify", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "functions": {}
+  ]
 }
