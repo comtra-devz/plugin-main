@@ -1,6 +1,6 @@
 # Admin dashboard — Costi & Controlli (idee future)
 
-Documento di **parcheggio** per feature non ancora implementate nella dashboard admin, concentrate su costi, consumo crediti/Kimi e controlli di utilizzo.
+Documento di **parcheggio** per feature non ancora implementate nella dashboard admin, concentrate su costi, consumo crediti/AI models (Qwen + Kimi legacy) e controlli di utilizzo.
 
 ---
 
@@ -8,8 +8,8 @@ Documento di **parcheggio** per feature non ancora implementate nella dashboard 
 
 Estensioni possibili rispetto alla v1 già presente in `Crediti e costi`:
 
-- **Cassa Kimi stimata (reale)**:
-  - Lettura automatica del saldo Kimi via API ufficiale (se disponibile) **oppure** input manuale del saldo attuale.
+- **Cassa AI stimata (reale)**:
+  - Lettura automatica del saldo provider (Qwen/Kimi) via API ufficiale (se disponibile) **oppure** input manuale del saldo attuale.
   - Calcolo **“giorni di autonomia”** = saldo / (costo medio giornaliero degli ultimi 30 giorni).
   - Semaforo verde/giallo/rosso in base a:
     - >30 giorni ⇒ ok.
@@ -17,7 +17,7 @@ Estensioni possibili rispetto alla v1 già presente in `Crediti e costi`:
     - <15 giorni ⇒ critico.
 - **Costo medio per credito target**:
   - Aggiungere un campo configurabile `COSTO_PER_CREDITO_TARGET` (es. da doc `COST-ESTIMATE-DS-AUDIT.md`) per confronto diretto tra costo reale/credito e target.
-  - Alert se il costo reale per credito (dai dati Kimi) > target.
+  - Alert se il costo reale per credito (dai dati AI) > target.
 
 ---
 
@@ -54,12 +54,12 @@ Vista dedicata (tab o sezione in `Crediti e costi` / `Storico utilizzo`) focaliz
 
 ## 3. Azioni ad alto costo (per funzione/band)
 
-Estensione della sezione “Token Kimi (chiamate e costo)” già esistente.
+Estensione della sezione “Token AI (chiamate e costo)” gia esistente.
 
 - **Metrica di redditività per band**:
   - Per ogni riga di `by_action` e `by_size_band`, calcolare:
     - `ricavo_teorico` = crediti consumati × prezzo_per_credito (input configurabile, es. da doc costi).
-    - `costo_kimi` = cost_usd (già calcolato).
+    - `costo_ai` = cost_usd (gia calcolato).
     - `margine` = ricavo_teorico − costo_kimi.
   - Evidenziare in rosso le band **non redditizie** (margine < 0).
 
@@ -68,7 +68,7 @@ Estensione della sezione “Token Kimi (chiamate e costo)” già esistente.
     - tipo azione (`ds_audit_small/medium/large/200k+`, `ux_audit`, `generate`, ecc.),
     - richieste ultime 24h / 7gg,
     - crediti totali consumati,
-    - costo Kimi stimato,
+    - costo AI stimato,
     - margine (o % di margine).
   - Uso: capire rapidamente dove si concentrano i costi e se c’è qualche band da ritarare (crediti o prompt).
 
@@ -107,7 +107,7 @@ Vista per individuare utenti con consumo molto alto, per controlli e opportuni i
 Il sistema notifiche è già in produzione (campanella + `/notifications`). Possibili estensioni:
 
 - **Nuovi tipi di alert**:
-  - “Buffer Kimi < X giorni” (quando cassa Kimi reale sarà collegata).
+  - “Buffer AI < X giorni” (quando la cassa reale sara collegata).
   - “N FREE bloccati oggi per limite consumo” (integrazione con guardrails).
   - “Band DS Audit Large in perdita nel periodo” (integrazione con redditività per band).
 

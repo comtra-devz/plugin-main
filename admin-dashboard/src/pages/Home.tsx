@@ -5,6 +5,7 @@ import DualLineChart from '../components/DualLineChart';
 import HealthBadge from '../components/HealthBadge';
 import NotificationsBell from '../components/NotificationsBell';
 import { type UpdateCategory } from '../data/weeklyUpdates';
+import { CORE_MODELS } from '../lib/aiPricing';
 
 const WEEKLY_UPDATES_PREVIEW = 3;
 const CATEGORY_BADGE_STYLE: Record<string, { bg: string }> = {
@@ -306,10 +307,22 @@ export default function Home() {
         )}
       </section>
 
-      {/* Costi Kimi — cumulativi (tutte le funzioni); dettaglio per funzione in Crediti e costi */}
+      {/* Costi AI — Qwen evidenziato su Generate, Kimi su flussi legacy */}
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Costi Kimi</h2>
-        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>Costo cumulativo (tutte le chiamate Kimi). Dettaglio per funzione e per size nella pagina Crediti e costi.</p>
+        <h2 className="section-title">Costi AI (Qwen-first)</h2>
+        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
+          Generate usa Qwen come default (text + vision). Kimi resta attivo sui flussi legacy.
+          I costi cumulativi storici sono ancora mostrati sotto per continuita operativa.
+        </p>
+        <div className="brutal-card" style={{ marginBottom: '0.75rem' }}>
+          <p style={{ margin: 0, fontSize: '0.85rem' }}>
+            <strong>Modelli core monitorati:</strong>{' '}
+            {CORE_MODELS.map((m) => m.modelId).join(' · ')}
+          </p>
+          <Link to="/ai-models" style={{ display: 'inline-block', marginTop: '0.5rem', fontWeight: 700 }}>
+            Apri AI models & pricing →
+          </Link>
+        </div>
         <div className="grid grid-3">
           <div className={`brutal-card ${kimi.cost_alert ? 'alert' : ''}`}>
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo (30d)</h3>

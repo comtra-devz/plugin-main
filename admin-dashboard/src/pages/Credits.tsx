@@ -176,11 +176,11 @@ export default function Credits() {
         )}
       </section>
 
-      {/* Token Kimi — costo cumulativo + dettaglio per funzione */}
+      {/* Token AI — costo cumulativo + dettaglio per funzione */}
       <section style={{ marginBottom: '2rem' }}>
-        <h2 className="section-title">Token Kimi (chiamate e costo)</h2>
+        <h2 className="section-title">Token AI (chiamate e costo)</h2>
         <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-          I totali sopra sono <strong>cumulativi</strong> (tutte le funzioni). Qui sotto: dettaglio per tipo azione e, per DS Audit, per size band. Input $0.40/1M · Output $2/1M.
+          I totali sopra sono <strong>cumulativi</strong> (tutte le funzioni). Qui sotto: dettaglio per tipo azione e, per DS Audit, per size band. Per il breakdown aggiornato Qwen/Kimi vai su <strong>AI models & pricing</strong>.
         </p>
         {tokenUsage ? (
           <>
@@ -265,7 +265,7 @@ export default function Credits() {
 
             {tokenUsage.by_day.length > 0 && (
               <div className="brutal-card">
-                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>Kimi per giorno</h3>
+                <h3 className="section-title" style={{ marginBottom: '0.75rem' }}>AI per giorno</h3>
                 <div className="brutal-table-wrap">
                   <table className="brutal-table" style={{ minWidth: 320 }}>
                     <thead>
@@ -295,7 +295,7 @@ export default function Credits() {
 
             {tokenUsage.totals.count === 0 && (
               <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
-                Nessun dato Kimi nel periodo. La tabella <code>kimi_usage_log</code> viene popolata a ogni chiamata Kimi dopo il deploy.
+                Nessun dato AI nel periodo. La tabella <code>kimi_usage_log</code> viene popolata a ogni chiamata AI tracciata dopo il deploy.
               </p>
             )}
           </>

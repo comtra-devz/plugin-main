@@ -105,8 +105,8 @@ Il “guadagno futuro” è quindi il risparmio cumulativo sui rinnovi successiv
 
 ## 5. Impatto sul ricavo (lato business)
 
-- **Netto per vendita 1y senza sconto** (da COST-ESTIMATE): ~**€162,53** (dopo Kimi, LS, tasse).
-- Con sconto livello il **ricavo lordo** scende; il **netto** scende in proporzione (costi Kimi/LS circa invariati per utente, la riduzione è sul prezzo pagato).
+- **Netto per vendita 1y senza sconto** (da COST-ESTIMATE): ~**€162,53** (dopo costi AI, LS, tasse).
+- Con sconto livello il **ricavo lordo** scende; il **netto** scende in proporzione (costi AI/LS circa invariati per utente, la riduzione e sul prezzo pagato).
 
 Stima netto con sconto (stessa struttura di costi):
 

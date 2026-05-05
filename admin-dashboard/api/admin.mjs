@@ -479,30 +479,6 @@ async function handleNotifications(req, res) {
     }
   } catch (_) {}
 
-  // --- Ultimo run fonti prodotto (Notion) in errore
-  try {
-    const run = await sql`
-      SELECT status, error_message, ran_at
-      FROM product_sources_cron_runs
-      ORDER BY ran_at DESC
-      LIMIT 1
-    `;
-    const row = run.rows?.[0];
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    if (row && row.status && row.status !== 'ok' && row.ran_at && new Date(row.ran_at) >= weekAgo) {
-      const em = row.error_message || 'Errore sconosciuto';
-      const msg = em.slice(0, 120);
-      notifications.push({
-        id: 'product-sources-last-run-fail',
-        created_at: now.toISOString(),
-        severity: 'warning',
-        title: 'Ultimo run fonti prodotto (Notion) non ok',
-        description: `${msg}${em.length > 120 ? '…' : ''}`,
-        target_path: '/content/product-improvement',
-      });
-    }
-  } catch (_) {}
-
   const rank = { critical: 0, warning: 1, info: 2 };
   notifications.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
 

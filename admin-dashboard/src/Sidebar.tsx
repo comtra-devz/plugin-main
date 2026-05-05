@@ -63,6 +63,9 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <NavLink to="/generate-corpus" className={({ isActive }) => (isActive ? 'active' : '')}>
           Generate · UI corpus
         </NavLink>
+        <NavLink to="/ai-models" className={({ isActive }) => (isActive ? 'active' : '')}>
+          AI models & pricing
+        </NavLink>
         <span className="sidebar-group" aria-hidden="true">Altro</span>
         <NavLink to="/brand-awareness" className={({ isActive }) => (isActive ? 'active' : '')}>
           Brand awareness
@@ -82,9 +85,6 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <span className="sidebar-group" aria-hidden="true">Content Management</span>
         <NavLink to="/content/documentation" className={({ isActive }) => (isActive ? 'active' : '')}>
           Documentation
-        </NavLink>
-        <NavLink to="/content/product-improvement" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Migliorie prodotto (Notion)
         </NavLink>
       </nav>
       <div style={{ marginTop: 'auto', padding: '1rem' }}>

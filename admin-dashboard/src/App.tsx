@@ -17,7 +17,6 @@ import Discounts from './pages/Discounts';
 import ABTests from './pages/ABTests';
 import GenerateABTest from './pages/GenerateABTest';
 import DocContent from './pages/DocContent';
-import ProductImprovement from './pages/ProductImprovement';
 import BrandAwareness from './pages/BrandAwareness';
 import TouchpointFunnel from './pages/TouchpointFunnel';
 import Notifications from './pages/Notifications';
@@ -25,6 +24,7 @@ import ExternalDesignSystems from './pages/ExternalDesignSystems';
 import GenerateConversations from './pages/GenerateConversations';
 import GenerateGovernance from './pages/GenerateGovernance';
 import UICorpus from './pages/UICorpus';
+import AIModels from './pages/AIModels';
 import { InactivityTimerBadge } from './components/InactivityTimerBadge';
 import { touchAdminActivity } from './lib/adminIdle';
 import { useIdleAutoLogout } from './useIdleAutoLogout';
@@ -126,6 +126,7 @@ export default function App() {
           <Route path="/generate-conversations" element={<GenerateConversations />} />
           <Route path="/generate-governance" element={<GenerateGovernance />} />
           <Route path="/generate-corpus" element={<UICorpus />} />
+          <Route path="/ai-models" element={<AIModels />} />
           <Route path="/executions" element={<Executions />} />
           <Route path="/discounts" element={<Discounts />} />
           <Route path="/ab-tests" element={<ABTests />}>
@@ -133,7 +134,6 @@ export default function App() {
             <Route path="generate" element={<GenerateABTest />} />
           </Route>
           <Route path="/content/documentation" element={<DocContent />} />
-          <Route path="/content/product-improvement" element={<ProductImprovement />} />
           <Route path="/brand-awareness" element={<BrandAwareness />} />
           <Route path="/brand-awareness/funnel" element={<TouchpointFunnel />} />
         </Routes>

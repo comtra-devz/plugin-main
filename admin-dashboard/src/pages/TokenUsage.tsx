@@ -25,9 +25,9 @@ export default function TokenUsage() {
 
   return (
     <>
-      <h1 className="page-title">Uso token Kimi</h1>
+      <h1 className="page-title">Uso token AI</h1>
       <p style={{ color: 'var(--muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-        Dati anonimi raccolti dal backend a ogni chiamata Kimi. Nessun dato utente/file. Vedi <code>docs/TOKEN-USAGE-TELEMETRY.md</code>.
+        Dati anonimi raccolti dal backend a ogni chiamata AI tracciata (Qwen/Kimi a seconda della route). Nessun dato utente/file. Vedi <code>docs/TOKEN-USAGE-TELEMETRY.md</code>.
       </p>
 
       <div style={{ marginBottom: '1.5rem' }}>
@@ -62,7 +62,7 @@ export default function TokenUsage() {
           <div className="brutal-card">
             <h3 className="section-title" style={{ marginBottom: '0.25rem' }}>Costo stimato (USD)</h3>
             <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>${totals.cost_usd.toFixed(3)}</div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Input $0.40/1M · Output $2/1M</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Tariffe dipendenti dal modello (vedi AI models & pricing).</p>
           </div>
         </div>
       </section>
@@ -159,7 +159,7 @@ export default function TokenUsage() {
 
       {totals.count === 0 && (
         <p style={{ color: 'var(--muted)' }}>
-          Nessun dato nel periodo. La tabella <code>kimi_usage_log</code> viene popolata a ogni DS Audit (e future azioni Kimi) dopo il deploy con lo schema aggiornato.
+          Nessun dato nel periodo. La tabella <code>kimi_usage_log</code> viene popolata a ogni azione AI tracciata dal backend dopo il deploy con lo schema aggiornato.
         </p>
       )}
     </>

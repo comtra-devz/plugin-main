@@ -1,6 +1,6 @@
 # Comtra — Admin Dashboard
 
-Interfaccia **riservata al team** per vedere cosa succede nel prodotto: utenti, crediti, richieste, contenuti e — da poco — la **pipeline “fonti da Notion”** (link, report, opzionale LLM).
+Interfaccia **riservata al team** per vedere cosa succede nel prodotto: utenti, crediti, richieste, contenuti e monitoraggio AI (**Generate su Qwen**, flussi legacy su Kimi).
 
 Le **API** girano **nello stesso progetto Vercel** della dashboard (cartella `admin-dashboard/` nel monorepo). Così non appesantiscono il limite di funzioni su altri deploy (es. auth).
 
@@ -17,8 +17,8 @@ Le **API** girano **nello stesso progetto Vercel** della dashboard (cartella `ad
 | **Supporto & sicurezza** | Richieste, log sensibili, health check. |
 | **Esecuzioni** | Traccia run degli agenti / job lato server. |
 | **A/B test (Generate)** | Esperimenti sulla tab Generate. |
+| **AI models & pricing** | Breakdown costi per modello (Qwen/Kimi), con riferimento ai prezzi ufficiali. |
 | **Contenuti → Documentazione** | Testi/help editabili serviti al plugin (se configurato). |
-| **Contenuti → Migliorie prodotto (Notion)** | Estrae **link** da una pagina/database Notion, opzionalmente arricchisce (LinkedIn, web, doc interne, **sintesi LLM**), salva **report Markdown** in database e può avvisare **Discord**. |
 | **Brand awareness** | Metriche e funnel touchpoint (se attivi). |
 
 Nessuna delle funzioni sopra **apre PR su GitHub da sola**: il passaggio “metto il report nel repo” resta **manuale** (sicurezza), con guida in `docs/PRODUCT-SOURCES-GIT-WORKFLOW.md` nel monorepo plugin.
@@ -146,4 +146,4 @@ npm run build
 
 ## Riepilogo
 
-La dashboard è il **pannello operativo** del backend Comtra; la parte **Notion** aggiunge un flusso automatico/manuale per **raccogliere fonti**, **generare un documento Markdown**, opzionalmente **sintetizzarlo con un LLM** (es. Gemini o Groq), e **tracciare** su DB/Discord/Git **senza** modificare il repo da sola. Per il resto delle funzioni, usa le voci menu e la documentazione linkata sopra.
+La dashboard e il **pannello operativo** del backend Comtra; le sezioni principali coprono monitoraggio utenti/crediti e osservabilita AI con focus Qwen per Generate. Per il resto delle funzioni, usa le voci menu e la documentazione linkata sopra.
