@@ -48,7 +48,8 @@ function parseFigmaLinkPreview(raw: string): {
       fileKey,
       nodeId,
       kind: 'node',
-      message: `Rilevato frame specifico (node-id: ${nodeId}). Import: 1 schermata.`,
+      message:
+        'Hai incollato un link a una schermata specifica (node-id presente). Se vuoi importare tutto il file, seleziona "Auto".',
     };
   }
   return {
@@ -56,8 +57,18 @@ function parseFigmaLinkPreview(raw: string): {
     fileKey,
     nodeId: null,
     kind: 'file',
-    message: 'Rilevato file intero. Import: molte schermate (auto).',
+    message: 'Link file completo rilevato. Con modalità "Auto" importeremo tutte le schermate trovate.',
   };
+}
+
+function stripNodeIdFromFigmaUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    u.searchParams.delete('node-id');
+    return u.toString();
+  } catch {
+    return raw;
+  }
 }
 
 export default function UICorpus() {
@@ -133,10 +144,14 @@ export default function UICorpus() {
     setError(null);
     setOkMsg(null);
     try {
+      const wantsWholeFile = importMode === 'auto';
+      const effectiveUrl =
+        figmaPreview.kind === 'node' && wantsWholeFile ? stripNodeIdFromFigmaUrl(figma) : figma;
+      const effectiveMode = wantsWholeFile ? 'auto' : 'single';
       const out = await ingestUICorpusFromFigma({
-        figma_url: figma,
+        figma_url: effectiveUrl,
         figma_token: figmaToken.trim() || undefined,
-        mode: figmaPreview.kind === 'node' ? 'single' : importMode,
+        mode: effectiveMode,
         project: {
           project_id: projectId.trim() || undefined,
           project_name: projectName.trim() || undefined,
@@ -147,7 +162,11 @@ export default function UICorpus() {
           tags: splitTags(quickTags),
         },
       });
-      setOkMsg(`Import completato: ${out.inserted} schermate in draft.`);
+      setOkMsg(
+        effectiveMode === 'auto'
+          ? `Import completo riuscito: ${out.inserted} schermate aggiunte in bozza.`
+          : `Import singolo riuscito: ${out.inserted} schermata aggiunta in bozza.`,
+      );
       await reload();
       setStep(2);
     } catch (e) {
@@ -209,7 +228,7 @@ export default function UICorpus() {
         }
       />
       <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-        Ingest automatico di interfacce con classificazione archetype/platform e review queue.
+        Importa interfacce da Figma, poi revisionale e approvale in coda.
       </p>
       {migrationNeeded ? (
         <p className="error">
@@ -222,7 +241,7 @@ export default function UICorpus() {
       <div className="brutal-card" style={{ marginBottom: '1rem' }}>
         <h3 className="section-title">Import from Figma</h3>
         <p style={{ color: 'var(--muted)', marginTop: 0 }}>
-          Incolla un link file/frame Figma. Il sistema legge il file e crea automaticamente le schermate del corpus.
+          Incolla un link Figma. In modalità Auto importiamo tutte le schermate del file, in modalità Single ne importiamo una sola.
         </p>
         <div style={{ display: 'grid', gap: '0.65rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
@@ -306,8 +325,8 @@ export default function UICorpus() {
             <div>
               <label className="brutal-label">Import mode</label>
               <select className="brutal-input" value={importMode} onChange={(e) => setImportMode(e.target.value as 'auto' | 'single')}>
-                <option value="auto">Auto (many screens from file)</option>
-                <option value="single">Single screen</option>
+                <option value="auto">Auto (importa tutto il file)</option>
+                <option value="single">Single (una schermata)</option>
               </select>
             </div>
             <div>
