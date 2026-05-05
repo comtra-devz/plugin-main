@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExecutions, fetchThrottleEvents, fetchDiscountsStats, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem, type FunctionExecution, type ThrottleEventsResponse, type DiscountsStats } from '../api';
+import { fetchStats, fetchCreditsTimeline, fetchWeeklyUpdates, fetchFunctionExecutions, fetchThrottleEvents, fetchDiscountsStats, fetchGenerateABStats, type AdminStats, type CreditsTimeline, type WeeklyUpdateItem, type FunctionExecution, type ThrottleEventsResponse, type DiscountsStats, type GenerateABStatsResponse } from '../api';
 import DualLineChart from '../components/DualLineChart';
 import HealthBadge from '../components/HealthBadge';
 import NotificationsBell from '../components/NotificationsBell';
 import { type UpdateCategory } from '../data/weeklyUpdates';
-import { CORE_MODELS } from '../lib/aiPricing';
+import { CORE_MODELS, estimateCostUsd, getModelPricing } from '../lib/aiPricing';
 
 const WEEKLY_UPDATES_PREVIEW = 3;
 const CATEGORY_BADGE_STYLE: Record<string, { bg: string }> = {
@@ -25,6 +25,7 @@ export default function Home() {
   const [recentExecutions, setRecentExecutions] = useState<FunctionExecution[]>([]);
   const [throttleEvents, setThrottleEvents] = useState<ThrottleEventsResponse | null>(null);
   const [discountsStats, setDiscountsStats] = useState<DiscountsStats | null>(null);
+  const [modelMix, setModelMix] = useState<GenerateABStatsResponse | null>(null);
   const [chartPeriod, setChartPeriod] = useState(30);
   /** Filtro piano per il grafico timeline (scan/crediti per giorno). Kimi resta globale solo con “Tutti”. */
   const [timelinePlan, setTimelinePlan] = useState<'' | 'PRO' | 'FREE'>('');
@@ -40,6 +41,8 @@ export default function Home() {
   const [loadingExecutions, setLoadingExecutions] = useState(true);
   const [loadingThrottle, setLoadingThrottle] = useState(true);
   const [loadingDiscounts, setLoadingDiscounts] = useState(true);
+  const [loadingModelMix, setLoadingModelMix] = useState(true);
+  const [errorModelMix, setErrorModelMix] = useState<string | null>(null);
 
   const loadStats = () => {
     setErrorStats(null);
@@ -123,6 +126,18 @@ export default function Home() {
     loadDiscounts();
   }, []);
 
+  const loadModelMix = () => {
+    setErrorModelMix(null);
+    setLoadingModelMix(true);
+    fetchGenerateABStats(30)
+      .then((d) => { setModelMix(d); setErrorModelMix(null); })
+      .catch((e) => setErrorModelMix(e.message || 'Errore caricamento mix modelli'))
+      .finally(() => setLoadingModelMix(false));
+  };
+  useEffect(() => {
+    loadModelMix();
+  }, []);
+
   if (loading && !data && !errorStats) return <p className="loading">Caricamento…</p>;
   if (errorStats && !data) {
     return (
@@ -138,6 +153,30 @@ export default function Home() {
 
   const { users, credits, kimi, affiliates, funnel } = data;
   const recentUpdates = weeklyUpdates.slice(0, WEEKLY_UPDATES_PREVIEW);
+  const modelRows = modelMix?.by_kimi_model ?? [];
+  const providerSummary = modelRows.reduce(
+    (acc, row) => {
+      const slug = String(row.kimi_model || '').toLowerCase();
+      const pricing = getModelPricing(slug);
+      const provider: 'qwen' | 'kimi' | 'other' =
+        pricing?.provider ?? (slug.includes('qwen') ? 'qwen' : slug.includes('kimi') || slug.includes('moonshot') ? 'kimi' : 'other');
+      const cost = pricing ? estimateCostUsd(row.input_tokens, row.output_tokens, pricing) : 0;
+      const target = acc[provider];
+      target.calls += row.count ?? 0;
+      target.input += row.input_tokens ?? 0;
+      target.output += row.output_tokens ?? 0;
+      target.cost += cost;
+      target.latencyWeight += (row.avg_latency_ms ?? 0) * (row.count ?? 0);
+      return acc;
+    },
+    {
+      qwen: { calls: 0, input: 0, output: 0, cost: 0, latencyWeight: 0 },
+      kimi: { calls: 0, input: 0, output: 0, cost: 0, latencyWeight: 0 },
+      other: { calls: 0, input: 0, output: 0, cost: 0, latencyWeight: 0 },
+    },
+  );
+  const qwenAvgLatency = providerSummary.qwen.calls > 0 ? Math.round(providerSummary.qwen.latencyWeight / providerSummary.qwen.calls) : null;
+  const kimiAvgLatency = providerSummary.kimi.calls > 0 ? Math.round(providerSummary.kimi.latencyWeight / providerSummary.kimi.calls) : null;
 
   return (
     <>
@@ -345,6 +384,35 @@ export default function Home() {
               {kimi.cost_alert ? '⚠ Verifica saldo Kimi' : 'Ok'}
             </div>
           </div>
+        </div>
+        <div className="brutal-card" style={{ marginTop: '0.75rem' }}>
+          <h3 className="section-title" style={{ marginBottom: '0.35rem' }}>Controllo user-centered (Generate, ultimi 30 giorni)</h3>
+          {loadingModelMix ? (
+            <p style={{ margin: 0, color: 'var(--muted)' }}>Caricamento mix Qwen/Kimi…</p>
+          ) : errorModelMix ? (
+            <div>
+              <p className="error" style={{ marginTop: 0 }}>{errorModelMix}</p>
+              <button type="button" className="brutal-btn" onClick={loadModelMix}>Riprova</button>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                    <strong>Qwen</strong> — {providerSummary.qwen.calls} call · ${providerSummary.qwen.cost.toFixed(2)} · latenza media {qwenAvgLatency ?? '—'} ms
+                  </p>
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                    <strong>Kimi (legacy)</strong> — {providerSummary.kimi.calls} call · ${providerSummary.kimi.cost.toFixed(2)} · latenza media {kimiAvgLatency ?? '—'} ms
+                  </p>
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+                Focus pratico: se Qwen ha latenza peggiore o costo/token anomalo, verifica route e modello in <Link to="/ai-models">AI models & pricing</Link>. Se Kimi cresce, controlla i flussi legacy ancora attivi.
+              </p>
+            </>
+          )}
         </div>
       </section>
 

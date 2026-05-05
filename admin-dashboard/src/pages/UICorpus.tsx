@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import {
   fetchUICorpus,
-  ingestUICorpusBatch,
-  ingestUICorpusExample,
+  ingestUICorpusFromFigma,
   setUICorpusStatus,
   type UICorpusItem,
 } from '../api';
@@ -30,16 +29,15 @@ export default function UICorpus() {
   const [status, setStatus] = useState<CorpusStatus>('draft');
   const [archetype, setArchetype] = useState('');
 
-  const [title, setTitle] = useState('');
   const [figmaUrl, setFigmaUrl] = useState('');
-  const [summary, setSummary] = useState('');
-  const [notes, setNotes] = useState('');
-  const [quality, setQuality] = useState('4');
-  const [tags, setTags] = useState('');
-  const [sections, setSections] = useState('');
-  const [platform, setPlatform] = useState('');
-
-  const [batchText, setBatchText] = useState('');
+  const [importMode, setImportMode] = useState<'auto' | 'single'>('auto');
+  const [projectId, setProjectId] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [siteDomain, setSiteDomain] = useState('');
+  const [brandKey, setBrandKey] = useState('');
+  const [designSystemId, setDesignSystemId] = useState('');
+  const [dsState, setDsState] = useState<'connected' | 'inferred' | 'unknown' | 'none'>('unknown');
+  const [quickTags, setQuickTags] = useState('');
 
   const reload = async () => {
     setLoading(true);
@@ -74,48 +72,30 @@ export default function UICorpus() {
     return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   }, [items]);
 
-  const onIngestOne = async () => {
-    if (!summary.trim() && !title.trim()) {
-      setError('Inserisci almeno titolo o summary.');
-      return;
-    }
+  const onImportFigma = async () => {
+    const figma = figmaUrl.trim();
+    if (!figma) return setError('Il link Figma e obbligatorio.');
     setSaving(true);
     setError(null);
     setOkMsg(null);
     try {
-      const qNum = Number(quality);
-      await ingestUICorpusExample({
-        title: title.trim(),
-        figma_url: figmaUrl.trim(),
-        prompt_summary: summary.trim(),
-        notes: notes.trim(),
-        quality_score: Number.isFinite(qNum) ? qNum : undefined,
-        tags: splitTags(tags),
-        sections: splitTags(sections),
-        platform: platform.trim().toLowerCase(),
+      const out = await ingestUICorpusFromFigma({
+        figma_url: figma,
+        mode: importMode,
+        project: {
+          project_id: projectId.trim() || undefined,
+          project_name: projectName.trim() || undefined,
+          site_domain: siteDomain.trim() || undefined,
+          brand_key: brandKey.trim() || undefined,
+          design_system_id: designSystemId.trim() || undefined,
+          ds_state: dsState,
+          tags: splitTags(quickTags),
+        },
       });
-      setOkMsg('Esempio ingestito in draft con tagging automatico.');
+      setOkMsg(`Import completato: ${out.inserted} schermate in draft.`);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Errore ingest');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const onIngestBatch = async () => {
-    if (!batchText.trim()) return setError('Incolla un JSON array per il batch ingest.');
-    setSaving(true);
-    setError(null);
-    setOkMsg(null);
-    try {
-      const parsed = JSON.parse(batchText);
-      if (!Array.isArray(parsed)) throw new Error('Il JSON deve essere un array di esempi.');
-      const out = await ingestUICorpusBatch(parsed as Array<Record<string, unknown>>);
-      setOkMsg(`Batch ingest completato: ${out.inserted} esempi.`);
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Errore ingest batch');
+      setError(e instanceof Error ? e.message : 'Errore import da Figma');
     } finally {
       setSaving(false);
     }
@@ -155,63 +135,55 @@ export default function UICorpus() {
       {okMsg && <p style={{ color: 'var(--ok)', fontWeight: 700 }}>{okMsg}</p>}
 
       <div className="brutal-card" style={{ marginBottom: '1rem' }}>
-        <h3 className="section-title">Ingest singolo (auto-tag)</h3>
+        <h3 className="section-title">Import from Figma</h3>
+        <p style={{ color: 'var(--muted)', marginTop: 0 }}>
+          Incolla un link file/frame Figma. Il sistema legge il file e crea automaticamente le schermate del corpus.
+        </p>
         <div style={{ display: 'grid', gap: '0.65rem' }}>
-          <label className="brutal-label">Title</label>
-          <input className="brutal-input" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <label className="brutal-label">Figma link (required)</label>
+          <input
+            className="brutal-input"
+            value={figmaUrl}
+            onChange={(e) => setFigmaUrl(e.target.value)}
+            placeholder="https://www.figma.com/file/... or ...?node-id=..."
+          />
 
-          <label className="brutal-label">Figma URL (optional)</label>
-          <input className="brutal-input" value={figmaUrl} onChange={(e) => setFigmaUrl(e.target.value)} />
-
-          <label className="brutal-label">Summary / Prompt</label>
-          <textarea className="brutal-input" rows={4} value={summary} onChange={(e) => setSummary(e.target.value)} />
-
-          <label className="brutal-label">Notes (optional)</label>
-          <textarea className="brutal-input" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.65rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.65rem' }}>
             <div>
-              <label className="brutal-label">Quality 0..5</label>
-              <input className="brutal-input" value={quality} onChange={(e) => setQuality(e.target.value)} />
+              <label className="brutal-label">Import mode</label>
+              <select className="brutal-input" value={importMode} onChange={(e) => setImportMode(e.target.value as 'auto' | 'single')}>
+                <option value="auto">Auto (many screens from file)</option>
+                <option value="single">Single screen</option>
+              </select>
             </div>
             <div>
-              <label className="brutal-label">Platform override</label>
-              <input className="brutal-input" value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="mobile/desktop" />
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <label className="brutal-label">Tags (comma separated)</label>
-              <input className="brutal-input" value={tags} onChange={(e) => setTags(e.target.value)} />
+              <label className="brutal-label">DS state</label>
+              <select className="brutal-input" value={dsState} onChange={(e) => setDsState(e.target.value as any)}>
+                <option value="unknown">unknown</option>
+                <option value="connected">connected</option>
+                <option value="inferred">inferred</option>
+                <option value="none">none</option>
+              </select>
             </div>
           </div>
 
-          <label className="brutal-label">Sections (comma separated)</label>
-          <input className="brutal-input" value={sections} onChange={(e) => setSections(e.target.value)} />
+          <details>
+            <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Project metadata (optional)</summary>
+            <div style={{ display: 'grid', gap: '0.65rem', marginTop: '0.6rem' }}>
+              <input className="brutal-input" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="project_id (es. acme_checkout_revamp)" />
+              <input className="brutal-input" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="project_name" />
+              <input className="brutal-input" value={siteDomain} onChange={(e) => setSiteDomain(e.target.value)} placeholder="site_domain (es. acme.com)" />
+              <input className="brutal-input" value={brandKey} onChange={(e) => setBrandKey(e.target.value)} placeholder="brand_key (optional)" />
+              <input className="brutal-input" value={designSystemId} onChange={(e) => setDesignSystemId(e.target.value)} placeholder="design_system_id (optional)" />
+              <input className="brutal-input" value={quickTags} onChange={(e) => setQuickTags(e.target.value)} placeholder="quick tags (comma separated)" />
+            </div>
+          </details>
 
           <div>
-            <button type="button" className="brutal-btn" onClick={() => void onIngestOne()} disabled={saving}>
-              {saving ? 'Saving…' : 'Ingest in draft'}
+            <button type="button" className="brutal-btn" onClick={() => void onImportFigma()} disabled={saving}>
+              {saving ? 'Importing…' : 'Import from Figma'}
             </button>
           </div>
-        </div>
-      </div>
-
-      <div className="brutal-card" style={{ marginBottom: '1rem' }}>
-        <h3 className="section-title">Batch ingest (JSON array)</h3>
-        <p style={{ color: 'var(--muted)', marginTop: 0 }}>
-          Incolla un array JSON di esempi. Ogni item puo includere: title, figma_url/source_url, prompt_summary, notes, tags, sections.
-        </p>
-        <textarea
-          className="brutal-input"
-          rows={8}
-          value={batchText}
-          onChange={(e) => setBatchText(e.target.value)}
-          placeholder='[{"title":"Checkout A","prompt_summary":"Mobile checkout with sticky CTA"}]'
-          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
-        />
-        <div style={{ marginTop: '0.75rem' }}>
-          <button type="button" className="brutal-btn" onClick={() => void onIngestBatch()} disabled={saving}>
-            {saving ? 'Processing…' : 'Run batch ingest'}
-          </button>
         </div>
       </div>
 

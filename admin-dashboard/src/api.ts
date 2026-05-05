@@ -1146,6 +1146,29 @@ export async function ingestUICorpusBatch(
   return data as { ok: boolean; inserted: number };
 }
 
+export async function ingestUICorpusFromFigma(input: {
+  figma_url: string;
+  mode?: 'auto' | 'single';
+  project?: {
+    project_id?: string;
+    project_name?: string;
+    site_domain?: string;
+    brand_key?: string;
+    design_system_id?: string;
+    ds_state?: 'connected' | 'inferred' | 'unknown' | 'none';
+    tags?: string[];
+  };
+}): Promise<{ ok: boolean; inserted: number; file_key?: string }> {
+  const r = await fetch(uiCorpusUrl(), {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ action: 'ingest_from_figma', ...input }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data as { error?: string; details?: string }).details || (data as { error?: string }).error || `Errore ${r.status}`);
+  return data as { ok: boolean; inserted: number; file_key?: string };
+}
+
 export async function setUICorpusStatus(
   id: string,
   status: 'draft' | 'approved' | 'rejected' | 'archived',

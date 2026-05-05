@@ -58,6 +58,65 @@ function inferKeywords(text) {
   return [...uniq];
 }
 
+function parseFigmaUrlParts(rawUrl) {
+  const input = normText(rawUrl, 1200);
+  if (!input) return { ok: false, error: 'figma_url required' };
+  let u;
+  try {
+    u = new URL(input);
+  } catch {
+    return { ok: false, error: 'Invalid Figma URL' };
+  }
+  if (!/figma\.com$/i.test(u.hostname) && !/\.figma\.com$/i.test(u.hostname)) {
+    return { ok: false, error: 'URL must be a figma.com link' };
+  }
+  const m = u.pathname.match(/\/(?:file|design)\/([a-zA-Z0-9]+)/);
+  if (!m?.[1]) return { ok: false, error: 'Could not extract Figma file key from URL' };
+  const fileKey = m[1];
+  const nodeId = normText(u.searchParams.get('node-id') || '', 80) || null;
+  return { ok: true, fileKey, nodeId };
+}
+
+function figmaAuthHeaders() {
+  const token =
+    normText(process.env.FIGMA_ACCESS_TOKEN || '', 800) ||
+    normText(process.env.FIGMA_API_TOKEN || '', 800) ||
+    normText(process.env.FIGMA_PAT || '', 800);
+  if (!token) return null;
+  return { 'X-Figma-Token': token };
+}
+
+function nodeToCorpusSummary(node) {
+  const name = normText(node?.name || '', 180);
+  const t = normText(node?.type || '', 30).toUpperCase();
+  const children = Array.isArray(node?.children) ? node.children : [];
+  const childNames = children
+    .map((c) => normText(c?.name || '', 80))
+    .filter(Boolean)
+    .slice(0, 10);
+  const summary = [t ? `Type: ${t}` : '', childNames.length ? `Children: ${childNames.join(', ')}` : '']
+    .filter(Boolean)
+    .join('. ');
+  return { title: name || t || 'Untitled screen', summary };
+}
+
+function collectFrameNodes(root, out = [], max = 120) {
+  if (!root || out.length >= max) return out;
+  const children = Array.isArray(root.children) ? root.children : [];
+  for (const child of children) {
+    if (!child || out.length >= max) break;
+    const type = String(child.type || '').toUpperCase();
+    if (type === 'FRAME' || type === 'COMPONENT' || type === 'COMPONENT_SET') {
+      out.push(child);
+      continue;
+    }
+    if (Array.isArray(child.children) && child.children.length > 0) {
+      collectFrameNodes(child, out, max);
+    }
+  }
+  return out;
+}
+
 function parseBody(req) {
   if (!req.body) return {};
   if (typeof req.body === 'string') {
@@ -240,6 +299,84 @@ async function handlePost(req, res) {
       if (row) out.push(row);
     }
     return res.status(200).json({ ok: true, inserted: out.length, items: out });
+  }
+  if (action === 'ingest_from_figma') {
+    const figmaUrl = normText(body.figma_url || body.url, 1200);
+    const parsed = parseFigmaUrlParts(figmaUrl);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    const headers = figmaAuthHeaders();
+    if (!headers) {
+      return res.status(503).json({
+        error:
+          'Figma token not configured on admin backend (set FIGMA_ACCESS_TOKEN / FIGMA_API_TOKEN / FIGMA_PAT).',
+      });
+    }
+    const mode = normText(body.mode || '', 24).toLowerCase(); // auto|single
+    const projectMeta =
+      body.project && typeof body.project === 'object' && !Array.isArray(body.project) ? body.project : {};
+    const figmaApiUrl = parsed.nodeId
+      ? `https://api.figma.com/v1/files/${parsed.fileKey}/nodes?ids=${encodeURIComponent(parsed.nodeId)}`
+      : `https://api.figma.com/v1/files/${parsed.fileKey}`;
+    const fr = await fetch(figmaApiUrl, { method: 'GET', headers });
+    if (!fr.ok) {
+      const tx = await fr.text();
+      return res.status(fr.status >= 500 ? 502 : 400).json({
+        error: `Figma API error ${fr.status}`,
+        details: tx.slice(0, 240),
+      });
+    }
+    const fj = await fr.json();
+    const toInsert = [];
+    if (parsed.nodeId) {
+      const node = fj?.nodes?.[parsed.nodeId]?.document;
+      if (!node) return res.status(404).json({ error: 'Node not found in Figma file' });
+      const mapped = nodeToCorpusSummary(node);
+      toInsert.push({
+        title: mapped.title,
+        prompt_summary: mapped.summary,
+        figma_url: figmaUrl,
+        metadata: {
+          figma_file_key: parsed.fileKey,
+          figma_node_id: parsed.nodeId,
+          figma_node_type: String(node?.type || ''),
+          project: projectMeta,
+        },
+        raw_payload: { figma_node: node },
+      });
+    } else {
+      const doc = fj?.document;
+      if (!doc || typeof doc !== 'object') return res.status(400).json({ error: 'Invalid Figma file document' });
+      const frames = collectFrameNodes(doc, [], 160);
+      const picked = mode === 'single' ? frames.slice(0, 1) : frames.slice(0, 60);
+      if (picked.length === 0) return res.status(400).json({ error: 'No frame-like nodes found in file' });
+      for (const f of picked) {
+        const mapped = nodeToCorpusSummary(f);
+        toInsert.push({
+          title: mapped.title,
+          prompt_summary: mapped.summary,
+          figma_url: `https://www.figma.com/file/${parsed.fileKey}?node-id=${encodeURIComponent(String(f.id || ''))}`,
+          metadata: {
+            figma_file_key: parsed.fileKey,
+            figma_node_id: String(f.id || ''),
+            figma_node_type: String(f.type || ''),
+            project: projectMeta,
+          },
+          raw_payload: { figma_node: f },
+        });
+      }
+    }
+    const out = [];
+    for (const item of toInsert) {
+      const row = await insertOne(item, req);
+      if (row) out.push(row);
+    }
+    return res.status(200).json({
+      ok: true,
+      inserted: out.length,
+      mode: parsed.nodeId ? 'node' : mode || 'auto',
+      file_key: parsed.fileKey,
+      items: out,
+    });
   }
   if (action === 'set_status') {
     const id = normText(body.id, 64);
